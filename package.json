@@ -1,7 +1,7 @@
 {
 	"name": "iracing-screenshot-tool",
 	"productName": "iracing screenshot tool",
-	"version": "0.0.0",
+	"version": "0.0.1-0",
 	"description": "A tool for taking screenshots in iRacing",
 	"license": "MIT",
 	"repository": "svglol/iracing-screenshot-tool",
@@ -17,8 +17,7 @@
 		"start": "electron .",
 		"pack": "electron-builder --dir",
 		"dist": "electron-builder --windows",
-		"release": "np",
-		"postinstall": "electron-builder install-app-deps"
+		"release": "np"
 	},
 	"dependencies": {
 		"electron-context-menu": "^0.15.0",
@@ -54,8 +53,10 @@
 	"build": {
 		"appId": "com.svglol.iracingscreenshottool",
 		"win": {
-      "icon" : "build/icon.png",
-      "target": ["portable"]
-    }
+			"icon": "build/icon.png",
+			"target": [
+				"portable"
+			]
+		}
 	}
 }
