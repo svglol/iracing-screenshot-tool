@@ -17,7 +17,6 @@ document.getElementById("trigger").addEventListener("click", function(){
 			}
 		}
 	});
-
 	ipcRenderer.send("screenshot",value);
 });
 
@@ -99,30 +98,4 @@ async function fullscreenScreenshot(callback, imageFormat) {
 			_this.handleError(e);
 		}
 	}
-	// desktopCapturer.getSources({ types: ['window', 'screen'] }).then(async sources => {
-	// 	// for (const source of sources) {
-	// 		var source = iRacingWindowSource;
-	// 		if ((source.name === "iRacing.com Simulator")) {
-	// 			// console.log('test')
-	// 			try{
-	// 				const stream = await navigator.mediaDevices.getUserMedia({
-	// 					audio: false,
-	// 					video: {
-	// 						mandatory: {
-	// 							chromeMediaSource: 'desktop',
-	// 							chromeMediaSourceId: source.id,
-	// 							minWidth: 1280,
-	// 							maxWidth: 10000,
-	// 							minHeight: 720,
-	// 							maxHeight: 10000
-	// 						}
-	// 					}
-	// 				});
-	// 				_this.handleStream(stream);
-	// 			} catch (e) {
-	// 				_this.handleError(e);
-	// 			}
-	// 		}
-	// 	// }
-	// });
 }
