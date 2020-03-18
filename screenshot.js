@@ -3,9 +3,9 @@ const iracing = require('./node-irsdk').getInstance();
 
 module.exports ={
 	screenshot: async function(w,h,mainWindow){
-		iracing.camControls.setState(8)
 		this.resize(w,h);
-		await wait(1000);
+		await wait(2000);
+		iracing.camControls.setState(8)
 		mainWindow.webContents.send('screenshot',"");
 	},
 	resize: function(width,height){
