@@ -1,13 +1,12 @@
-var robot = require("robotjs");
-var ffi = require('ffi-napi');
-var iracing = require('./node-irsdk').getInstance();
+const robot = require("robotjs");
+const ffi = require('ffi-napi');
+const iracing = require('./node-irsdk').getInstance();
 
 module.exports ={
   screenshot: async function(w,h){
     iracing.camControls.setState(8)
     this.resize(w,h);
     await wait(1000);
-    //
     robot.keyToggle('alt', 'down');
     robot.keyToggle('shift', 'down');
     robot.keyToggle('control', 'down');

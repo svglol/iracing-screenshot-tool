@@ -42,6 +42,9 @@
 		"envs": [
 			"node",
 			"browser"
+		],
+		"ignores": [
+			"node-irsdk"
 		]
 	},
 	"np": {
