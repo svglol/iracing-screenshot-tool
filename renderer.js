@@ -1,6 +1,8 @@
 const ipcRenderer = require('electron').ipcRenderer;
 const {desktopCapturer} = require('electron');
 
+var iRacingWindowSource = null;
+
 ipcRenderer.on("updateMemory",function (event, arg) {
 	document.getElementById("memory-free").innerText = arg.free;
 });
@@ -8,6 +10,14 @@ ipcRenderer.on("updateMemory",function (event, arg) {
 document.getElementById("trigger").addEventListener("click", function(){
 	var resolution = document.getElementById('resolution');
 	var value = resolution.options[resolution.selectedIndex].value;
+	desktopCapturer.getSources({ types: ['window', 'screen'] }).then(async sources => {
+		for (const source of sources) {
+			if ((source.name === "iRacing.com Simulator")) {
+				iRacingWindowSource = source;
+			}
+		}
+	});
+
 	ipcRenderer.send("screenshot",value);
 });
 
@@ -18,7 +28,7 @@ ipcRenderer.on("screenshot",function (event, arg) {
 	},'image/png');
 },false);
 
-function fullscreenScreenshot(callback, imageFormat) {
+async function fullscreenScreenshot(callback, imageFormat) {
 	var _this = this;
 	this.callback = callback;
 	imageFormat = imageFormat || 'image/jpeg';
@@ -67,30 +77,52 @@ function fullscreenScreenshot(callback, imageFormat) {
 		console.log(e);
 	};
 
-	desktopCapturer.getSources({ types: ['window', 'screen'] }).then(async sources => {
-		for (const source of sources) {
-			// Filter: main screen
-			if ((source.name === "iRacing.com Simulator")) {
-				try{
-					const stream = await navigator.mediaDevices.getUserMedia({
-						audio: false,
-						video: {
-							mandatory: {
-								chromeMediaSource: 'desktop',
-								chromeMediaSourceId: source.id,
-								minWidth: 1280,
-								maxWidth: 10000,
-								minHeight: 720,
-								maxHeight: 10000
-							}
-						}
-					});
-
-					_this.handleStream(stream);
-				} catch (e) {
-					_this.handleError(e);
+	var source = iRacingWindowSource;
+	if ((source.name === "iRacing.com Simulator")) {
+		// console.log('test')
+		try{
+			const stream = await navigator.mediaDevices.getUserMedia({
+				audio: false,
+				video: {
+					mandatory: {
+						chromeMediaSource: 'desktop',
+						chromeMediaSourceId: source.id,
+						minWidth: 1280,
+						maxWidth: 10000,
+						minHeight: 720,
+						maxHeight: 10000
+					}
 				}
-			}
+			});
+			_this.handleStream(stream);
+		} catch (e) {
+			_this.handleError(e);
 		}
-	});
+	}
+	// desktopCapturer.getSources({ types: ['window', 'screen'] }).then(async sources => {
+	// 	// for (const source of sources) {
+	// 		var source = iRacingWindowSource;
+	// 		if ((source.name === "iRacing.com Simulator")) {
+	// 			// console.log('test')
+	// 			try{
+	// 				const stream = await navigator.mediaDevices.getUserMedia({
+	// 					audio: false,
+	// 					video: {
+	// 						mandatory: {
+	// 							chromeMediaSource: 'desktop',
+	// 							chromeMediaSourceId: source.id,
+	// 							minWidth: 1280,
+	// 							maxWidth: 10000,
+	// 							minHeight: 720,
+	// 							maxHeight: 10000
+	// 						}
+	// 					}
+	// 				});
+	// 				_this.handleStream(stream);
+	// 			} catch (e) {
+	// 				_this.handleError(e);
+	// 			}
+	// 		}
+	// 	// }
+	// });
 }
