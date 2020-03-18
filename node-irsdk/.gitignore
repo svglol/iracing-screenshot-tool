@@ -1,0 +1,17 @@
+# Visual Studio
+
+*.njsproj
+*.vcxproj.filters
+*.sln
+*.vcxproj
+.ntvs_analysis.dat
+*.sdf
+*.suo
+*.vcxproj.user
+
+# Misc
+.vscode
+node_modules/
+build/
+prebuilds/
+npm-debug.log

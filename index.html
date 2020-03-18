@@ -7,12 +7,21 @@
 	</head>
 	<body>
 		<div class="container">
-			<header>
-				<h1>iracing screenshot tool</h1>
-				<p></p>
-			</header>
-			<section class="main"></section>
-			<footer></footer>
+			<select id="resolution">
+		    <option value="1080p">1080p</option>
+		    <option value="2k">2k</option>
+		    <option value="4k">4k</option>
+		    <option value="5k">5K</option>
+		    <option value="6k">6K</option>
+		    <option value="7k">7K</option>
+		    <option value="8k">8K</option>
+		  </select>
+
+		  <button type="submit" id="screen-shot">Take Screenshot</button>
+
+		  <div id='memory-free'>0mb</div>
+		  <img src="" id="screenshot" style="width:85vw"/>
 		</div>
+		 <script src="./renderer.js"></script>
 	</body>
 </html>

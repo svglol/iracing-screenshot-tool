@@ -1,0 +1,56 @@
+{
+  "name": "node-irsdk",
+  "version": "2.1.6",
+  "description": "iRacing SDK implementation for Node.js",
+  "main": "src/node-irsdk.js",
+  "scripts": {
+    "install": "prebuild-install || node-gyp rebuild",
+    "prebuild": "prebuild --all --strip",
+    "prebuild-upload": "prebuild --all --strip -u %GH_TOKEN%",
+    "test": "npm run lint && npm run mocha",
+    "mocha": "mocha src/**/*-spec.js",
+    "lint": "standard",
+    "doc": "jsdoc2md -d 3 -t src/doc/README.hbs --partial src/doc/examples.hbs -m none -g none src/node-irsdk.js src/JsIrSdk.js src/IrSdkConsts.js > README.md",
+    "ready": "npm test && node test/smoke-test.js && npm run doc",
+    "release-notes": "node_modules/.bin/changelog node-irsdk latest"
+  },
+  "keywords": [
+    "iracing"
+  ],
+  "author": "Antti Pihlaja",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apihlaja/node-irsdk.git"
+  },
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "js-yaml": "3.*",
+    "nan": "2.14.0",
+    "prebuild-install": "^5.0.0"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "changelog": "1.*",
+    "electron-rebuild": "^1.10.0",
+    "jsdoc-to-markdown": "^5.0.0",
+    "mocha": "^6.1.4",
+    "moment": "^2.19.3",
+    "prebuild": "9.0.1",
+    "sandboxed-module": "2.0.*",
+    "sinon": "^7.3.2",
+    "sinon-chai": "3.*",
+    "standard": "8.6.0"
+  },
+  "standard": {
+    "globals": [
+      "it",
+      "describe",
+      "beforeEach",
+      "afterEach",
+      "sinon"
+    ]
+  }
+}

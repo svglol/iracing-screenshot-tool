@@ -1,0 +1,23 @@
+# Visual Studio
+
+*.njsproj
+*.vcxproj.filters
+*.sln
+*.vcxproj
+.ntvs_analysis.dat
+*.sdf
+*.suo
+*.vcxproj.user
+
+# Misc
+
+prebuilds/
+build/
+sample-data/
+utils/
+test/
+src/doc
+.eslintrc
+appveyor.yml
+npm-debug.log
+.vscode
