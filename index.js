@@ -170,7 +170,6 @@ function getFileNameString() {
 	var trackName = iracing.sessionInfo.data.WeekendInfo.TrackDisplayShortName;
 	var driverName = ""
 	iracing.sessionInfo.data.DriverInfo.Drivers.forEach((item, i) => {
-		console.log(item)
 		if(iracing.telemetry.values.CamCarIdx === item.CarIdx){
 			driverName = item.UserName;
 		}
