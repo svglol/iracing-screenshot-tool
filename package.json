@@ -13,11 +13,12 @@
 	"scripts": {
 		"postinstall": "electron-builder install-app-deps",
 		"lint": "xo",
-		"test": "npm run lint",
+		"test": "",
 		"start": "electron .",
 		"pack": "electron-builder --dir",
-		"dist": "electron-builder --macos --linux --windows",
-		"release": "np"
+		"dist": "electron-builder --windows",
+		"release": "np",
+		"postinstall": "electron-builder install-app-deps"
 	},
 	"dependencies": {
 		"electron-context-menu": "^0.15.0",
@@ -34,7 +35,6 @@
 	"devDependencies": {
 		"electron": "^7.1.1",
 		"electron-builder": "^21.2.0",
-		"electron-rebuild": "^1.10.1",
 		"np": "^5.0.3",
 		"xo": "^0.25.3"
 	},
@@ -52,32 +52,10 @@
 		"releaseDraft": false
 	},
 	"build": {
-		"appId": "com.svglol.iracing-screenshot-tool",
-		"mac": {
-			"category": "public.app-category.social-networking",
-			"darkModeSupport": true
-		},
-		"dmg": {
-			"iconSize": 160,
-			"contents": [
-				{
-					"x": 180,
-					"y": 170
-				},
-				{
-					"x": 480,
-					"y": 170,
-					"type": "link",
-					"path": "/Applications"
-				}
-			]
-		},
-		"linux": {
-			"target": [
-				"AppImage",
-				"deb"
-			],
-			"category": "Network;Chat"
-		}
+		"appId": "com.svglol.iracingscreenshottool",
+		"win": {
+      "icon" : "build/icon.png",
+      "target": ["portable"]
+    }
 	}
 }
