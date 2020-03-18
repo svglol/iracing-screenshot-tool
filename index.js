@@ -16,7 +16,7 @@ const { width, height } = require("screenz");
 // debug();
 // contextMenu();
 
-app.setAppUserModelId(packageJson.build.appId);
+// app.setAppUserModelId(packageJson.build.appId);
 
 // Uncomment this before publishing your first version.
 // It's commented out as it throws an error if there are no published versions.
@@ -149,7 +149,7 @@ function wait(timer) {
   });
 };
 
-var dir = './screenshots';
+var dir = homedir+'/Pictures/Screenshots/';
 
 if (!fs.existsSync(dir)){
     fs.mkdirSync(dir);
@@ -157,7 +157,7 @@ if (!fs.existsSync(dir)){
 
 fs.watch(homedir+'/Documents/iRacing/screenshots', (eventType, filename) => {
   if(eventType == 'change'){
-    fs.rename(homedir+'/Documents/iRacing/screenshots/'+filename, './screenshots/'+filename, function (err) {
+    fs.rename(homedir+'/Documents/iRacing/screenshots/'+filename, dir+filename, function (err) {
       if (err) {
         if (err.code === 'EXDEV') {
           copy();
@@ -170,7 +170,7 @@ fs.watch(homedir+'/Documents/iRacing/screenshots', (eventType, filename) => {
       // callback();
 
       screenshot.resize(width,height);
-      mainWindow.webContents.send('newScreenshot', './screenshots/'+filename);
+      mainWindow.webContents.send('newScreenshot', dir+filename);
     });
   }
 
