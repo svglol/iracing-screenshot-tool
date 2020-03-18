@@ -11,6 +11,7 @@ const menu = require('./menu');
 const packageJson = require('./package.json');
 const fs = require('fs')
 const { width, height } = require("screenz");
+const iracing = require('./node-irsdk').getInstance();
 
 // unhandled();
 // debug();
@@ -98,81 +99,76 @@ const wsi = require('wmic-sys-info');
 const homedir = require('os').homedir();
 
 ipcMain.on("screenshot",function (event, arg) {
-  var w = 1920;
-  var h = 1080;
-  switch(arg){
-    case '1080p':
-    w = 1920;
-    h = 1080;
-    break;
-    case '2k':
-    w = 2560;
-    h = 1440;
-    break;
-    case '4k':
-    w = 3840;
-    h = 2160;
-    break;
-    case '5k':
-    w = 5120;
-    h = 2880;
-    break;
-    case '6k':
-    w = 6400;
-    h = 3600;
-    break;
-    case '7k':
-    w = 7168;
-    h = 4032;
-    break;
-    case '8k':
-    w = 7680;
-    h = 4320;
-    break;
-  }
-  screenshot.screenshot(w,h);
+	var w = 1920;
+	var h = 1080;
+	switch(arg){
+		case '1080p':
+		w = 1920;
+		h = 1080;
+		break;
+		case '2k':
+		w = 2560;
+		h = 1440;
+		break;
+		case '4k':
+		w = 3840;
+		h = 2160;
+		break;
+		case '5k':
+		w = 5120;
+		h = 2880;
+		break;
+		case '6k':
+		w = 6400;
+		h = 3600;
+		break;
+		case '7k':
+		w = 7168;
+		h = 4032;
+		break;
+		case '8k':
+		w = 7680;
+		h = 4320;
+		break;
+	}
+	screenshot.screenshot(w,h,mainWindow);
 });
 
 let repeat = (ms, func) => new Promise(r => (setInterval(func, ms), wait(ms).then(r)));
 
 repeat(2000, () => Promise.all([wsi.getNvidiaSmi()])
 .then(data => {
-  mainWindow.webContents.send('updateMemory', data[0][data[0].length-1].gpu.fb_memory_usage);
+	mainWindow.webContents.send('updateMemory', data[0][data[0].length-1].gpu.fb_memory_usage);
 }));
 
 function wait(timer) {
-  return new Promise(resolve => {
-    timer = timer || 2000;
-    setTimeout(function () {
-      resolve();
-    }, timer);
-  });
+	return new Promise(resolve => {
+		timer = timer || 2000;
+		setTimeout(function () {
+			resolve();
+		}, timer);
+	});
 };
 
 var dir = homedir+'/Pictures/Screenshots/';
 
 if (!fs.existsSync(dir)){
-    fs.mkdirSync(dir);
+	fs.mkdirSync(dir);
 }
 
-fs.watch(homedir+'/Documents/iRacing/screenshots', (eventType, filename) => {
-  if(eventType == 'change'){
-    fs.rename(homedir+'/Documents/iRacing/screenshots/'+filename, dir+filename, function (err) {
-      if (err) {
-        if (err.code === 'EXDEV') {
-          copy();
-        } else {
-          // callback(err);
-          throw err;
-        }
-        return;
-      }
-      // callback();
+ipcMain.on("newScreenshot",function (event, arg) {
+	var base64Data = arg.replace(/^data:image\/png;base64,/, "");
 
-      screenshot.resize(width,height);
-      mainWindow.webContents.send('newScreenshot', dir+filename);
-    });
-  }
+	require("fs").writeFile(dir+getFileNameString(), base64Data, 'base64', function(err) {
+		if(err) console.log(err);
+		screenshot.resize(width,height);
+	});
 
+});
 
-})
+function getFileNameString() {
+	var trackName = iracing.sessionInfo.data.WeekendInfo.TrackDisplayShortName;
+	var driverName = iracing.sessionInfo.data.DriverInfo.Drivers[0].UserName;
+	var now = new Date();
+	return trackName+'-'+driverName+'-'+now.getTime() +'.png';
+}

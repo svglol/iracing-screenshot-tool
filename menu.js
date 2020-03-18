@@ -18,11 +18,11 @@ const showPreferences = () => {
 const helpSubmenu = [
 	openUrlMenuItem({
 		label: 'Website',
-		url: 'https://github.com/svglol/undefined'
+		url: 'https://github.com/svglol/iracing-screenshot-tool'
 	}),
 	openUrlMenuItem({
 		label: 'Source Code',
-		url: 'https://github.com/svglol/undefined'
+		url: 'https://github.com/svglol/iracing-screenshot-tool'
 	}),
 	{
 		label: 'Report an Issue…',
