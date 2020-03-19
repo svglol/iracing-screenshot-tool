@@ -1,6 +1,10 @@
 const ipcRenderer = require('electron').ipcRenderer;
 const {desktopCapturer} = require('electron');
 
+const remote = require('electron').remote;
+
+const win = remote.getCurrentWindow();
+
 var iRacingWindowSource = null;
 
 ipcRenderer.on("updateMemory",function (event, arg) {
@@ -23,9 +27,68 @@ document.getElementById("trigger").addEventListener("click", function(){
 ipcRenderer.on("screenshot",function (event, arg) {
 	fullscreenScreenshot(function(base64data){
 		ipcRenderer.send("newScreenshot",base64data);
-		document.getElementById("screenshot").setAttribute("src", base64data);
 	},'image/png');
 },false);
+
+ipcRenderer.on("galleryAdd",function (event, args) {
+	addImageToGallery(args);
+});
+
+function addImageToGallery(src){
+	var image = document.createElement("img");
+
+	image.setAttribute("src", src);
+	image.setAttribute("class","img m-1");
+	image.setAttribute("width","200px");
+	image.setAttribute("style","object-fit:contain;cursor: pointer;");
+	image.addEventListener("click",function(){
+	selectImage(src);
+	})
+	document.getElementById("gallery").prepend(image);
+
+	selectImage(src);
+}
+
+const shell = require('electron').shell;
+const path = require('path');
+const sizeOf = require('image-size');
+
+function selectImage(arg){
+
+	var dimensions = sizeOf(arg);
+	document.getElementById("screenshot").setAttribute("src", arg);
+
+	document.getElementById("file-name").innerHTML = arg.split(/[\\\/]/).pop()
+	document.getElementById("file-resolution").innerHTML = dimensions.width +" x "+ dimensions.height
+	recreateNode(document.getElementById("open-ps"));
+	recreateNode(document.getElementById("open-external"));
+	recreateNode(document.getElementById("open-folder"));
+	recreateNode(document.getElementById("delete"));
+	document.getElementById("open-ps").addEventListener("click", function(){
+		console.log('click');
+	});
+	document.getElementById("open-external").addEventListener("click", function(){
+		shell.openItem(arg);
+	});
+	document.getElementById("open-folder").addEventListener("click", function(){
+		shell.showItemInFolder(arg);
+	});
+	document.getElementById("delete").addEventListener("click", function(){
+
+	});
+
+}
+
+function recreateNode(el, withChildren) {
+	if (withChildren) {
+		el.parentNode.replaceChild(el.cloneNode(true), el);
+	}
+	else {
+		var newEl = el.cloneNode(false);
+		while (el.hasChildNodes()) newEl.appendChild(el.firstChild);
+		el.parentNode.replaceChild(newEl, el);
+	}
+}
 
 async function fullscreenScreenshot(callback, imageFormat) {
 	var _this = this;
@@ -96,6 +159,52 @@ async function fullscreenScreenshot(callback, imageFormat) {
 			_this.handleStream(stream);
 		} catch (e) {
 			_this.handleError(e);
+		}
+	}
+}
+
+// When document has loaded, initialise
+document.onreadystatechange = (event) => {
+	if (document.readyState == "complete") {
+		handleWindowControls();
+	}
+};
+
+window.onbeforeunload = (event) => {
+	/* If window is reloaded, remove win event listeners
+	(DOM element listeners get auto garbage collected but not
+	Electron win listeners as the win is not dereferenced unless closed) */
+	win.removeAllListeners();
+}
+
+function handleWindowControls() {
+	// Make minimise/maximise/restore/close buttons work when they are clicked
+	document.getElementById('min-button').addEventListener("click", event => {
+		win.minimize();
+	});
+
+	document.getElementById('max-button').addEventListener("click", event => {
+		win.maximize();
+	});
+
+	document.getElementById('restore-button').addEventListener("click", event => {
+		win.unmaximize();
+	});
+
+	document.getElementById('close-button').addEventListener("click", event => {
+		win.close();
+	});
+
+	// Toggle maximise/restore buttons when maximisation/unmaximisation occurs
+	toggleMaxRestoreButtons();
+	win.on('maximize', toggleMaxRestoreButtons);
+	win.on('unmaximize', toggleMaxRestoreButtons);
+
+	function toggleMaxRestoreButtons() {
+		if (win.isMaximized()) {
+			document.body.classList.add('maximized');
+		} else {
+			document.body.classList.remove('maximized');
 		}
 	}
 }

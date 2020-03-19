@@ -1,28 +1,95 @@
 <!doctype html>
+<base href="./">
 <html>
 <head>
 	<meta charset="utf-8">
 	<title>iRacing Screenshot Tool</title>
+	<link rel="stylesheet" href="./static/bootstrap/css/bootstrap.min.css" />
 	<link rel="stylesheet" href="index.css">
 </head>
 <body>
-	<div class="container">
-		<select id="resolution">
-			<option value="1080p">1080p</option>
-			<option value="2k">2k</option>
-			<option value="4k">4k</option>
-			<option value="5k">5K</option>
-			<option value="6k">6K</option>
-			<option value="7k">7K</option>
-			<option value="8k">8K</option>
-		</select>
+	<header id="titlebar">
+		<div id="drag-region">
 
-		<input id="trigger" value="Screenshot" type="button"/>
+			<div id="window-title">
+				<img class="icon" src="./static/icon.png" style="max-height:20px;margin-right:5px"/>
+				iRacing Screenshot Tool
+			</div>
 
-		<div id='memory-free'>0mb</div>
-		<img src="" id="screenshot" style="width:85vw"/>
+			<div id="window-controls">
+
+				<div class="button" id="min-button">
+					<img class="icon" srcset="./static/icons/min-w-10.png 1x, ./static/icons/min-w-12.png 1.25x, ./static/icons/min-w-15.png 1.5x, ./static/icons/min-w-15.png 1.75x, ./static/icons/min-w-20.png 2x, ./static/icons/min-w-20.png 2.25x, ./static/icons/min-w-24.png 2.5x, ./static/icons/min-w-30.png 3x, ./static/icons/min-w-30.png 3.5x" draggable="false" />
+				</div>
+				<div class="button" id="max-button">
+					<img class="icon" srcset="./static/icons/max-w-10.png 1x, ./static/icons/max-w-12.png 1.25x, ./static/icons/max-w-15.png 1.5x, ./static/icons/max-w-15.png 1.75x, ./static/icons/max-w-20.png 2x, ./static/icons/max-w-20.png 2.25x, ./static/icons/max-w-24.png 2.5x, ./static/icons/max-w-30.png 3x, ./static/icons/max-w-30.png 3.5x" draggable="false" />
+				</div>
+				<div class="button" id="restore-button">
+					<img class="icon" srcset="./static/icons/restore-w-10.png 1x, ./static/icons/restore-w-12.png 1.25x, ./static/icons/restore-w-15.png 1.5x, ./static/icons/restore-w-15.png 1.75x, ./static/icons/restore-w-20.png 2x, ./static/icons/restore-w-20.png 2.25x, ./static/icons/restore-w-24.png 2.5x, ./static/icons/restore-w-30.png 3x, ./static/icons/restore-w-30.png 3.5x" draggable="false" />
+				</div>
+				<div class="button" id="close-button">
+					<img class="icon" srcset="./static/icons/close-w-10.png 1x, ./static/icons/close-w-12.png 1.25x, ./static/icons/close-w-15.png 1.5x, ./static/icons/close-w-15.png 1.75x, ./static/icons/close-w-20.png 2x, ./static/icons/close-w-20.png 2.25x, ./static/icons/close-w-24.png 2.5x, ./static/icons/close-w-30.png 3x, ./static/icons/close-w-30.png 3.5x" draggable="false" />
+				</div>
+
+			</div>
+		</div>
+	</header>
+
+	<div id="main" class="row">
+		<div id="navbar" class="col-2 h-100">
+			<div class="d-flex flex-column h-100">
+				<div class="p-2">
+					<div class="input-group">
+						<select id="resolution" class="form-control">>
+							<option value="1080p">1080p</option>
+							<option value="2k">2k</option>
+							<option value="4k">4k</option>
+							<option value="5k">5K</option>
+							<option value="6k">6K</option>
+							<option value="7k">7K</option>
+							<option value="8k">8K</option>
+						</select>
+						<span class="input-group-btn">
+							<input id="trigger" value="" type="image"src="./static/icons/camera.png" class="btn btn-primary" style="height:38px;border-top-left-radius: 0px;border-bottom-left-radius: 0px;"/>
+						</span>
+					</div>
+				</div>
+				<div class="p-2 flex-grow-1">	<span id='memory-free'></span></div>
+
+				<div class="p-2">
+					<h7 id="file-name">File name</h7>
+					<p class="p-2" id="file-resolution">Resolution</p>
+					<input id="open-external" value="" type="image" src="./static/icons/external.png" height="20px" width="auto" class="m-1"/>
+					<input id="open-ps" value="" type="image" src="./static/icons/photoshop.png" height="20px" width="auto" class="m-1"/>
+					<input id="open-folder" value="" type="image" src="./static/icons/folder.png" height="20px" width="auto" class="m-1"/>
+					<input id="delete" value="" type="image" src="./static/icons/delete.png" height="20px" width="auto" class="m-1"/>
+				</div>
+			</div>
+		</div>
+		<div class="col-10 h-100 w-100">
+			<img src="" id="screenshot" class="h-75 p-2" align="center" />
+			<div id="gallery" class="d-flex h-25">
+
+			</div>
+		</div>
 	</div>
 
 	<script src="./renderer.js"></script>
+	<script>
+	(function () {
+		function scrollH(e) {
+			e = window.event || e;
+			var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
+			document.getElementById('gallery').scrollLeft -= (delta * 100);
+			e.preventDefault();
+		}
+		if (window.addEventListener) {
+			document.getElementById('gallery').addEventListener("mousewheel", scrollH, false);
+			document.getElementById('gallery').addEventListener("DOMMouseScroll", scrollH, false);
+		} else {
+			document.getElementById('gallery').attachEvent("onmousewheel", scrollH);
+		}
+	})();
+</script>
 </body>
 </html>

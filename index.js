@@ -12,6 +12,7 @@ const packageJson = require('./package.json');
 const fs = require('fs')
 const { width, height } = require("screenz");
 const iracing = require('./node-irsdk').getInstance();
+const windowStateKeeper = require('electron-window-state');
 
 // unhandled();
 // debug();
@@ -34,14 +35,25 @@ const iracing = require('./node-irsdk').getInstance();
 let mainWindow;
 
 const createMainWindow = async () => {
+	let mainWindowState = windowStateKeeper({
+		defaultWidth: 1280,
+		defaultHeight: 720
+	});
+
 	const win = new BrowserWindow({
 		title: app.name,
 		show: false,
-		width: 600,
-		height: 400,
+		x: mainWindowState.x,
+		y: mainWindowState.y,
+		width: mainWindowState.width,
+		height: mainWindowState.height,
+		minWidth:1280,
+		minHeight:720,
 		webPreferences: {
 			nodeIntegration: true
-		}
+		},
+		frame: false,
+		backgroundColor: '#FFF',
 	});
 
 	win.on('ready-to-show', () => {
@@ -90,7 +102,7 @@ app.on('activate', () => {
 	await app.whenReady();
 	Menu.setApplicationMenu(menu);
 	mainWindow = await createMainWindow();
-
+	loadGallery();
 })();
 
 const {ipcMain} = require('electron'); // include the ipc module to communicate with render process ie to receive the message from render process
@@ -136,10 +148,13 @@ ipcMain.on("screenshot",function (event, arg) {
 
 let repeat = (ms, func) => new Promise(r => (setInterval(func, ms), wait(ms).then(r)));
 
-repeat(2000, () => Promise.all([wsi.getNvidiaSmi()])
-.then(data => {
-	mainWindow.webContents.send('updateMemory', data[0][data[0].length-1].gpu.fb_memory_usage);
-}));
+// repeat(2000, () => Promise.all([wsi.getNvidiaSmi()])
+// .then(data => {
+// 	if(mainWindow != null){
+// 		mainWindow.webContents.send('updateMemory', data[0][data[0].length-1].gpu.fb_memory_usage);
+// 		data = null;
+// 	}
+// }));
 
 function wait(timer) {
 	return new Promise(resolve => {
@@ -158,10 +173,12 @@ if (!fs.existsSync(dir)){
 
 ipcMain.on("newScreenshot",function (event, arg) {
 	var base64Data = arg.replace(/^data:image\/png;base64,/, "");
-
-	require("fs").writeFile(dir+getFileNameString(), base64Data, 'base64', function(err) {
+	var fileName =  dir+getFileNameString();
+	require("fs").writeFile(fileName, base64Data, 'base64', function(err) {
 		if(err) console.log(err);
+		mainWindow.webContents.send('galleryAdd', fileName);
 		screenshot.resize(width,height);
+
 	});
 
 });
@@ -178,3 +195,28 @@ function getFileNameString() {
 	var now = new Date();
 	return trackName+'-'+driverName+'-'+now.getTime() +'.png';
 }
+
+var Jimp = require('jimp');
+
+function loadGallery(){
+	//load images from screenshots Folder
+
+	fs.readdir(dir, function(err, files){
+		files = files.map(function (fileName) {
+			return {
+				name: fileName,
+				time: fs.statSync(dir + '/' + fileName).mtime.getTime()
+			};
+		})
+		.sort(function (a, b) {
+			return a.time - b.time; })
+			.map(function (v) {
+				return v.name; });
+
+				files.forEach(function (file) {
+					if(file.split('.').pop() == "png"){
+						mainWindow.webContents.send('galleryAdd', dir+file);
+					}
+				});
+			});
+		}
