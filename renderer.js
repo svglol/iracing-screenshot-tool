@@ -37,7 +37,7 @@ ipcRenderer.on("galleryAdd",function (event, args) {
 function addImageToGallery(src){
 	var image = document.createElement("img");
 
-	image.setAttribute("src", src);
+	image.setAttribute("src", src.src);
 	image.setAttribute("class","img m-1");
 	image.setAttribute("width","200px");
 	image.setAttribute("style","object-fit:contain;cursor: pointer;");
@@ -55,10 +55,10 @@ const sizeOf = require('image-size');
 
 function selectImage(arg){
 
-	var dimensions = sizeOf(arg);
-	document.getElementById("screenshot").setAttribute("src", arg);
+	var dimensions = sizeOf(arg.file);
+	document.getElementById("screenshot").setAttribute("src", arg.src);
 
-	document.getElementById("file-name").innerHTML = arg.split(/[\\\/]/).pop()
+	document.getElementById("file-name").innerHTML = arg.file.split(/[\\\/]/).pop()
 	document.getElementById("file-resolution").innerHTML = dimensions.width +" x "+ dimensions.height
 	recreateNode(document.getElementById("open-ps"));
 	recreateNode(document.getElementById("open-external"));
@@ -68,10 +68,10 @@ function selectImage(arg){
 		console.log('click');
 	});
 	document.getElementById("open-external").addEventListener("click", function(){
-		shell.openItem(arg);
+		shell.openItem(arg.file);
 	});
 	document.getElementById("open-folder").addEventListener("click", function(){
-		shell.showItemInFolder(arg);
+		shell.showItemInFolder(arg.file);
 	});
 	document.getElementById("delete").addEventListener("click", function(){
 

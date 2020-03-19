@@ -176,7 +176,7 @@ ipcMain.on("newScreenshot",function (event, arg) {
 	var fileName =  dir+getFileNameString();
 	require("fs").writeFile(fileName, base64Data, 'base64', function(err) {
 		if(err) console.log(err);
-		mainWindow.webContents.send('galleryAdd', fileName);
+		addImage(fileName);
 		screenshot.resize(width,height);
 
 	});
@@ -196,7 +196,20 @@ function getFileNameString() {
 	return trackName+'-'+driverName+'-'+now.getTime() +'.png';
 }
 
-var Jimp = require('jimp');
+const sharp = require('sharp');
+
+function addImage(file){
+
+	sharp(file)
+	.resize(1500)
+	.toFormat('jpeg')
+	.toBuffer()
+	.then( data => {
+		var base64 = `data:image/png;base64,${data.toString('base64')}`;
+		mainWindow.webContents.send('galleryAdd', {"file":file,"src":base64})
+	})
+	.catch( err => {  });
+}
 
 function loadGallery(){
 	//load images from screenshots Folder
@@ -215,7 +228,7 @@ function loadGallery(){
 
 				files.forEach(function (file) {
 					if(file.split('.').pop() == "png"){
-						mainWindow.webContents.send('galleryAdd', dir+file);
+						addImage(dir+file);
 					}
 				});
 			});
