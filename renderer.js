@@ -1,118 +1,129 @@
-const ipcRenderer = require('electron').ipcRenderer;
+const {ipcRenderer} = require('electron');
 const {desktopCapturer} = require('electron');
 
-const remote = require('electron').remote;
+const {remote} = require('electron');
 
 const win = remote.getCurrentWindow();
 
-var iRacingWindowSource = null;
+let iRacingWindowSource = null;
 
-ipcRenderer.on("updateMemory",function (event, arg) {
-	document.getElementById("memory-free").innerText = arg.free;
+ipcRenderer.on('updateMemory', (event, arg) => {
+	document.querySelector('#memory-free').textContent = arg.free;
 });
 
-document.getElementById("trigger").addEventListener("click", function(){
-	var resolution = document.getElementById('resolution');
-	var value = resolution.options[resolution.selectedIndex].value;
-	desktopCapturer.getSources({ types: ['window', 'screen'] }).then(async sources => {
-		for (const source of sources) {
-			if ((source.name === "iRacing.com Simulator")) {
-				iRacingWindowSource = source;
+document.querySelector('#trigger').addEventListener('click', () => {
+	const resolution = document.querySelector('#resolution');
+	const {value} = resolution.options[resolution.selectedIndex];
+	desktopCapturer
+		.getSources({types: ['window', 'screen']})
+		.then(async sources => {
+			for (const source of sources) {
+				if (source.name === 'iRacing.com Simulator') {
+					iRacingWindowSource = source;
+				}
 			}
-		}
-	});
-	ipcRenderer.send("screenshot",value);
+		});
+	ipcRenderer.send('screenshot', value);
 });
 
-ipcRenderer.on("screenshot",function (event, arg) {
-	fullscreenScreenshot(function(base64data){
-		ipcRenderer.send("newScreenshot",base64data);
-	},'image/png');
-},false);
+ipcRenderer.on('screenshot', (event, arg) => {
+	fullscreenScreenshot(base64data => {
+		ipcRenderer.send('newScreenshot', base64data);
+	}, 'image/png');
+},
+false
+);
 
-ipcRenderer.on("galleryAdd",function (event, args) {
+ipcRenderer.on('galleryAdd', (event, args) => {
 	addImageToGallery(args);
 });
 
-function addImageToGallery(src){
-	var image = document.createElement("img");
+function addImageToGallery(src) {
+	const image = document.createElement('img');
 
-	image.setAttribute("src", src.src);
-	image.setAttribute("class","img m-1");
-	image.setAttribute("width","200px");
-	image.setAttribute("style","object-fit:contain;cursor: pointer;");
-	image.addEventListener("click",function(){
-	selectImage(src);
-	})
-	document.getElementById("gallery").prepend(image);
+	image.setAttribute('src', src.src);
+	image.setAttribute('class', 'img m-1');
+	image.setAttribute('width', '200px');
+	image.setAttribute('style', 'object-fit:contain;cursor: pointer;');
+	image.addEventListener('click', () => {
+		selectImage(src);
+	});
 
+	document.querySelector('#gallery').prepend(image);
 	selectImage(src);
 }
 
-const shell = require('electron').shell;
-const path = require('path');
+const {shell} = require('electron');
 const sizeOf = require('image-size');
 
-function selectImage(arg){
+function selectImage(arg) {
+	const dimensions = sizeOf(arg.file);
+	document.querySelector('#screenshot').setAttribute('src', arg.src);
 
-	var dimensions = sizeOf(arg.file);
-	document.getElementById("screenshot").setAttribute("src", arg.src);
+	document.querySelector('#file-name').innerHTML = arg.file
+		.split(/[\\/]/)
+		.pop();
+	document.querySelector('#file-resolution').innerHTML =
+	dimensions.width + ' x ' + dimensions.height;
+	recreateNode(document.querySelector('#open-ps'));
+	recreateNode(document.querySelector('#open-external'));
+	recreateNode(document.querySelector('#open-folder'));
+	recreateNode(document.querySelector('#delete'));
+	document.querySelector('#open-ps').addEventListener('click', () => {
+		const child = require('child_process').execFile;
+		const executablePath =
+		'C:\\Program Files\\Adobe\\Adobe Photoshop 2020\\Photoshop.exe';
+		const parameters = [arg.file];
 
-	document.getElementById("file-name").innerHTML = arg.file.split(/[\\\/]/).pop()
-	document.getElementById("file-resolution").innerHTML = dimensions.width +" x "+ dimensions.height
-	recreateNode(document.getElementById("open-ps"));
-	recreateNode(document.getElementById("open-external"));
-	recreateNode(document.getElementById("open-folder"));
-	recreateNode(document.getElementById("delete"));
-	document.getElementById("open-ps").addEventListener("click", function(){
-		console.log('click');
+		child(executablePath, parameters, err => {
+			console.log(err);
+		});
 	});
-	document.getElementById("open-external").addEventListener("click", function(){
+	document.querySelector('#open-external').addEventListener('click', () => {
 		shell.openItem(arg.file);
 	});
-	document.getElementById("open-folder").addEventListener("click", function(){
+	document.querySelector('#open-folder').addEventListener('click', () => {
 		shell.showItemInFolder(arg.file);
 	});
-	document.getElementById("delete").addEventListener("click", function(){
-
-	});
-
+	document.querySelector('#delete').addEventListener('click', () => {});
 }
 
 function recreateNode(el, withChildren) {
 	if (withChildren) {
 		el.parentNode.replaceChild(el.cloneNode(true), el);
-	}
-	else {
-		var newEl = el.cloneNode(false);
-		while (el.hasChildNodes()) newEl.appendChild(el.firstChild);
+	} else {
+		const newEl = el.cloneNode(false);
+		while (el.hasChildNodes()) {
+			newEl.append(el.firstChild);
+		}
+
 		el.parentNode.replaceChild(newEl, el);
 	}
 }
 
 async function fullscreenScreenshot(callback, imageFormat) {
-	var _this = this;
+	const _this = this;
 	this.callback = callback;
 	imageFormat = imageFormat || 'image/jpeg';
 
-	this.handleStream = (stream) => {
+	this.handleStream = stream => {
 		// Create hidden video tag
-		var video = document.createElement('video');
+		const video = document.createElement('video');
 		video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
 
 		// Event connected to stream
-		video.onloadedmetadata = function () {
+		video.addEventListener('loadedmetadata', function () {
 			// Set video ORIGINAL height (screenshot)
-			video.style.height = this.videoHeight + 'px'; // videoHeight
-			video.style.width = this.videoWidth + 'px'; // videoWidth
+			video.style.height = this.videoHeight + 'px'; // VideoHeight
+			video.style.width = this.videoWidth + 'px'; // VideoWidth
 
 			video.play();
 
 			// Create canvas
-			var canvas = document.createElement('canvas');
+			const canvas = document.createElement('canvas');
 			canvas.width = this.videoWidth;
 			canvas.height = this.videoHeight;
-			var ctx = canvas.getContext('2d');
+			const ctx = canvas.getContext('2d');
 			// Draw video on canvas
 			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
@@ -128,21 +139,23 @@ async function fullscreenScreenshot(callback, imageFormat) {
 			try {
 				// Destroy connect to stream
 				stream.getTracks()[0].stop();
-			} catch (e) {}
-		}
+			} catch (error) {
+				console.log(error);
+			}
+		});
 
 		video.srcObject = stream;
-		document.body.appendChild(video);
+		document.body.append(video);
 	};
 
-	this.handleError = function(e) {
+	this.handleError = function (e) {
 		console.log(e);
 	};
 
-	var source = iRacingWindowSource;
-	if ((source.name === "iRacing.com Simulator")) {
-		// console.log('test')
-		try{
+	const source = iRacingWindowSource;
+	if (source.name === 'iRacing.com Simulator') {
+		// Console.log('test')
+		try {
 			const stream = await navigator.mediaDevices.getUserMedia({
 				audio: false,
 				video: {
@@ -157,41 +170,41 @@ async function fullscreenScreenshot(callback, imageFormat) {
 				}
 			});
 			_this.handleStream(stream);
-		} catch (e) {
-			_this.handleError(e);
+		} catch (error) {
+			_this.handleError(error);
 		}
 	}
 }
 
 // When document has loaded, initialise
-document.onreadystatechange = (event) => {
-	if (document.readyState == "complete") {
+document.onreadystatechange = event => {
+	if (document.readyState === 'complete') {
 		handleWindowControls();
 	}
 };
 
-window.onbeforeunload = (event) => {
+window.addEventListener('beforeunload', event => {
 	/* If window is reloaded, remove win event listeners
 	(DOM element listeners get auto garbage collected but not
 	Electron win listeners as the win is not dereferenced unless closed) */
 	win.removeAllListeners();
-}
+});
 
 function handleWindowControls() {
 	// Make minimise/maximise/restore/close buttons work when they are clicked
-	document.getElementById('min-button').addEventListener("click", event => {
+	document.querySelector('#min-button').addEventListener('click', event => {
 		win.minimize();
 	});
 
-	document.getElementById('max-button').addEventListener("click", event => {
+	document.querySelector('#max-button').addEventListener('click', event => {
 		win.maximize();
 	});
 
-	document.getElementById('restore-button').addEventListener("click", event => {
+	document.querySelector('#restore-button').addEventListener('click', event => {
 		win.unmaximize();
 	});
 
-	document.getElementById('close-button').addEventListener("click", event => {
+	document.querySelector('#close-button').addEventListener('click', event => {
 		win.close();
 	});
 

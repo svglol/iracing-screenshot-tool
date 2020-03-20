@@ -13,7 +13,7 @@
 	"scripts": {
 		"postinstall": "electron-builder install-app-deps",
 		"lint": "xo",
-		"test": "",
+		"test": "npm run lint",
 		"start": "electron .",
 		"pack": "electron-builder --dir",
 		"dist": "electron-builder --windows",
@@ -46,7 +46,8 @@
 			"browser"
 		],
 		"ignores": [
-			"node-irsdk"
+			"node-irsdk",
+			"screenshot.js"
 		]
 	},
 	"np": {
