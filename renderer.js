@@ -45,24 +45,26 @@ function addImageToGallery(src) {
 	image.setAttribute('class', 'img m-1');
 	image.setAttribute('width', '200px');
 	image.setAttribute('style', 'object-fit:contain;cursor: pointer;');
+	// Image.onload=function(){$(img).fadeIn(500);}
 	image.addEventListener('click', () => {
-		selectImage(src);
+		selectImage(src, image);
 	});
 
 	document.querySelector('#gallery').prepend(image);
-	selectImage(src);
+	selectImage(src, image);
 }
 
 const {shell} = require('electron');
 const sizeOf = require('image-size');
 
-function selectImage(arg) {
+function selectImage(arg, image) {
 	const dimensions = sizeOf(arg.file);
 	document.querySelector('#screenshot').setAttribute('src', arg.src);
 
 	document.querySelector('#file-name').innerHTML = arg.file
 		.split(/[\\/]/)
 		.pop();
+
 	document.querySelector('#file-resolution').innerHTML =
 	dimensions.width + ' x ' + dimensions.height;
 	recreateNode(document.querySelector('#open-ps'));
@@ -83,11 +85,18 @@ function selectImage(arg) {
 		shell.openItem(arg.file);
 	});
 	document.querySelector('#open-folder').addEventListener('click', () => {
-		const file = arg.file.replace('/', '\\')
+		const file = arg.file.replace('/', '\\');
 		shell.showItemInFolder(file);
 	});
 	document.querySelector('#delete').addEventListener('click', () => {
+		const file = arg.file.replace('/', '\\');
 
+		if (image.nextSibling !== null) {
+			image.nextSibling.dispatchEvent(new MouseEvent('click'));
+		}
+
+		image.remove();
+		shell.moveItemToTrash(file);
 	});
 }
 
