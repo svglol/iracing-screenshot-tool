@@ -84,7 +84,6 @@ function selectImage(arg) {
 	});
 	document.querySelector('#open-folder').addEventListener('click', () => {
 		const file = arg.file.replace('/', '\\')
-		console.log(file);
 		shell.showItemInFolder(file);
 	});
 	document.querySelector('#delete').addEventListener('click', () => {
