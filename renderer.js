@@ -108,6 +108,8 @@ function selectImage(arg, image) {
 		image.remove();
 		shell.moveItemToTrash(file);
 	});
+
+	document.querySelector('#info-controls').style.visibility = 'visible';
 }
 
 function recreateNode(el, withChildren) {
