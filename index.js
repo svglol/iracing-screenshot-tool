@@ -19,6 +19,8 @@ const screenshot = require('./screenshot.js');
 const homedir = require('os').homedir();
 const sharp = require('sharp');
 
+const Jimp = require('jimp');
+
 const dir = homedir + '\\Pictures\\Screenshots\\';
 
 // Unhandled();
@@ -174,13 +176,63 @@ ipcMain.on('screenshot', (event, arg) => {
 ipcMain.on('newScreenshot', (event, arg) => {
 	const base64Data = arg.replace(/^data:image\/png;base64,/, '');
 	const fileName = dir + getFileNameString();
+
 	require('fs').writeFile(fileName, base64Data, 'base64', err => {
 		if (err) {
 			console.log(err);
 		}
 
-		addImage(fileName);
-		screenshot.resize(width, height);
+		Jimp.read(fileName, (err, image) => {
+			if (err) {
+				throw err;
+			}
+
+			const origW = image.bitmap.width;
+			const origH = image.bitmap.height;
+			let w = 0;
+			let h = 0;
+			switch (image.bitmap.width) {
+				case 7680:
+					w = 7626;
+					h = 4290;
+					break;
+				case 7168:
+					w = 7114;
+					h = 4002;
+					break;
+				case 6400:
+					w = 6346;
+					h = 3570;
+					break;
+				case 5120:
+					w = 5066;
+					h = 2850;
+					break;
+				case 3840:
+					w = 3788;
+					h = 2130;
+					break;
+				case 2560:
+					w = 2508;
+					h = 1410;
+					break;
+				default:
+					w = 1866;
+					h = 1050;
+			}
+
+			image
+				.crop(0, 0, w, h)
+				.resize(origW, origH)
+				.write(fileName, () => {
+					addImage(fileName);
+					screenshot.resize(width, height);
+				});
+		});
+
+		// AddImage(fileName);
+		// iracing.playbackControls.pause();
+		// screenshot.resize(width, height);
 	});
 });
 
@@ -199,7 +251,7 @@ function getFileNameString() {
 
 function addImage(file) {
 	mainWindow.webContents.send('galleryAdd', {file, src: file});
-	// sharp(file)
+	// Sharp(file)
 	// 	.resize(1500)
 	// 	.toFormat('jpeg')
 	// 	.toBuffer()
