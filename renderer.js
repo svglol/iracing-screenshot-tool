@@ -38,14 +38,24 @@ ipcRenderer.on('galleryAdd', (event, args) => {
 	addImageToGallery(args);
 });
 
+const screenshot = document.getElementById('screenshot');
+screenshot.addEventListener('load', () => {
+	screenshot.style.visibility = 'visible';
+	screenshot.style.opacity = 1;
+});
+
 function addImageToGallery(src) {
 	const image = document.createElement('img');
 
 	image.setAttribute('src', src.src);
 	image.setAttribute('class', 'img m-1');
 	image.setAttribute('width', '200px');
-	image.setAttribute('style', 'object-fit:contain;cursor: pointer;');
-	// Image.onload=function(){$(img).fadeIn(500);}
+	image.setAttribute('style', 'object-fit:contain;cursor: pointer;  opacity: 0; -webkit-transition: opacity 0.5s ease;-moz-transition: opacity 0.5s ease;-ms-transition: opacity 0.5s ease;-o-transition: opacity 0.5s ease;transition: opacity 0.5s ease;');
+	image.style.visibility = 'hidden';
+	image.addEventListener('load', () => {
+		image.style.visibility = 'visible';
+		image.style.opacity = 1;
+	});
 	image.addEventListener('click', () => {
 		selectImage(src, image);
 	});
