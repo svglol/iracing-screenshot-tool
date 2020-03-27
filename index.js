@@ -19,7 +19,7 @@ const screenshot = require('./screenshot.js');
 const homedir = require('os').homedir();
 const sharp = require('sharp');
 
-const dir = homedir + '/Pictures/Screenshots/';
+const dir = homedir + '\\Pictures\\Screenshots\\';
 
 // Unhandled();
 // debug();

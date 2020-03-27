@@ -83,9 +83,13 @@ function selectImage(arg) {
 		shell.openItem(arg.file);
 	});
 	document.querySelector('#open-folder').addEventListener('click', () => {
-		shell.showItemInFolder(arg.file);
+		const file = arg.file.replace('/', '\\')
+		console.log(file);
+		shell.showItemInFolder(file);
 	});
-	document.querySelector('#delete').addEventListener('click', () => {});
+	document.querySelector('#delete').addEventListener('click', () => {
+
+	});
 }
 
 function recreateNode(el, withChildren) {
@@ -154,7 +158,6 @@ async function fullscreenScreenshot(callback, imageFormat) {
 
 	const source = iRacingWindowSource;
 	if (source.name === 'iRacing.com Simulator') {
-		// Console.log('test')
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({
 				audio: false,
