@@ -37,9 +37,10 @@
 
 	<div id="main" class="row">
 		<div id="navbar" class="col-2 h-100">
-			<div class="d-flex flex-column h-100">
-				<div class="p-2">
-					<div class="input-group">
+			<div class="d-flex flex-column h-100" style="padding-top:1em;">
+				<div class="form-group row">
+					<label for="resolution" class="col-5 col-form-label">Resolution</label>
+					<div class="col-7">
 						<select id="resolution" class="form-control">>
 							<option value="1080p">1080p</option>
 							<option value="2k">2k</option>
@@ -49,11 +50,24 @@
 							<option value="7k">7K</option>
 							<option value="8k">8K</option>
 						</select>
-						<span class="input-group-btn">
-							<input id="trigger" value="" type="image"src="./static/icons/camera.png" class="btn btn-primary" style="height:38px;border-top-left-radius: 0px;border-bottom-left-radius: 0px;"/>
-						</span>
 					</div>
 				</div>
+				<div class="form-group row">
+					<label for="crop" class="col-9 col-form-label">
+						Crop Watermark
+					</label>
+					<div class="col-3 col-form-label">
+						<input type="checkbox" id="crop" checked="true" >
+					</div>
+				</div>
+
+				<span class="input-group-btn">
+					<input id="screenshot-button" value="" type="image"src="./static/icons/camera.png" class="btn btn-primary" style="width: 100%;height:38px;object-fit:contain;"/>
+				</span>
+
+				<input id="motion" value="motion" type="text" class="btn btn-primary" style="height:38px;border-top-left-radius: 0px;border-bottom-left-radius: 0px; visibility:hidden"/>
+
+
 				<div class="p-2 flex-grow-1">	<span id='memory-free'></span></div>
 
 				<div class="p-2" id="info-controls" style="visibility:hidden">

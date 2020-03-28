@@ -2,11 +2,11 @@ const ffi = require('ffi-napi');
 const iracing = require('./node-irsdk').getInstance();
 
 module.exports = {
-	async screenshot(w, h, mainWindow) {
+	async screenshot(w, h,crop, mainWindow) {
 		this.resize(w, h);
 		await wait(1000);
 		iracing.camControls.setState(8);
-		mainWindow.webContents.send('screenshot', '');
+		mainWindow.webContents.send('screenshot', crop);
 	},
 	resize(width, height) {
 		const user32 = new ffi.Library('user32', {

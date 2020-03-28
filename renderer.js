@@ -11,9 +11,11 @@ ipcRenderer.on('updateMemory', (event, arg) => {
 	document.querySelector('#memory-free').textContent = arg.free;
 });
 
-document.querySelector('#trigger').addEventListener('click', () => {
+document.querySelector('#screenshot-button').addEventListener('click', () => {
 	const resolution = document.querySelector('#resolution');
+	const crop = document.querySelector('#crop').checked;
 	const {value} = resolution.options[resolution.selectedIndex];
+	const args = {resolution: value, crop};
 	desktopCapturer
 		.getSources({types: ['window', 'screen']})
 		.then(async sources => {
@@ -23,12 +25,36 @@ document.querySelector('#trigger').addEventListener('click', () => {
 				}
 			}
 		});
-	ipcRenderer.send('screenshot', value);
+	ipcRenderer.send('screenshot', args);
+});
+
+document.querySelector('#motion').addEventListener('click', () => {
+	desktopCapturer
+		.getSources({types: ['window', 'screen']})
+		.then(async sources => {
+			for (const source of sources) {
+				if (source.name === 'iRacing.com Simulator') {
+					iRacingWindowSource = source;
+				}
+			}
+		});
+	motionScreenshot(base64data => {
+		base64data.forEach((item, i) => {
+			const base64Data = item.replace(/^data:image\/png;base64,/, '');
+			const fileName = 'C:\\Users\\savag\\Pictures\\Screenshots\\' + i + '.png';
+			require('fs').writeFile(fileName, base64Data, 'base64', err => {
+				if (err) {
+					console.log(err);
+				}
+			});
+		});
+	}, 'image/png');
+	ipcRenderer.send('motion');
 });
 
 ipcRenderer.on('screenshot', (event, arg) => {
 	fullscreenScreenshot(base64data => {
-		ipcRenderer.send('newScreenshot', base64data);
+		ipcRenderer.send('newScreenshot', {image: base64data, crop: arg});
 	}, 'image/png');
 },
 false
@@ -38,7 +64,7 @@ ipcRenderer.on('galleryAdd', (event, args) => {
 	addImageToGallery(args);
 });
 
-const screenshot = document.getElementById('screenshot');
+const screenshot = document.querySelector('#screenshot');
 screenshot.addEventListener('load', () => {
 	screenshot.style.visibility = 'visible';
 	screenshot.style.opacity = 1;
@@ -100,7 +126,8 @@ function selectImage(arg, image) {
 	});
 	document.querySelector('#delete').addEventListener('click', () => {
 		const file = arg.file.replace('/', '\\');
-
+		document.querySelector('#screenshot').setAttribute('src', '');
+		document.querySelector('#info-controls').style.visibility = 'hidden';
 		if (image.nextSibling !== null) {
 			image.nextSibling.dispatchEvent(new MouseEvent('click'));
 		}
@@ -122,6 +149,86 @@ function recreateNode(el, withChildren) {
 		}
 
 		el.parentNode.replaceChild(newEl, el);
+	}
+}
+
+async function motionScreenshot(callback, imageFormat) {
+	const _this = this;
+	this.callback = callback;
+	imageFormat = imageFormat || 'image/jpeg';
+
+	this.handleStream = stream => {
+		// Create hidden video tag
+		const video = document.createElement('video');
+		video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+
+		// Event connected to stream
+		video.addEventListener('loadedmetadata', function () {
+			// Set video ORIGINAL height (screenshot)
+			video.style.height = this.videoHeight + 'px'; // VideoHeight
+			video.style.width = this.videoWidth + 'px'; // VideoWidth
+
+			video.play();
+
+			// Create canvas
+			const canvas = document.createElement('canvas');
+			canvas.width = this.videoWidth;
+			canvas.height = this.videoHeight;
+			const ctx = canvas.getContext('2d');
+			// Draw video on canvas
+			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+			const array = [];
+			for (let i = 0; i < 5; i++) {
+				array.push(canvas.toDataURL(imageFormat));
+				ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+			}
+
+			if (_this.callback) {
+				// Save screenshot to base64
+				_this.callback(array);
+			} else {
+				console.log('Need callback!');
+			}
+
+			// Remove hidden video tag
+			video.remove();
+			try {
+				// Destroy connect to stream
+				stream.getTracks()[0].stop();
+			} catch (error) {
+				console.log(error);
+			}
+		});
+
+		video.srcObject = stream;
+		document.body.append(video);
+	};
+
+	this.handleError = function (e) {
+		console.log(e);
+	};
+
+	const source = iRacingWindowSource;
+	if (source.name === 'iRacing.com Simulator') {
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({
+				audio: false,
+				video: {
+					mandatory: {
+						chromeMediaSource: 'desktop',
+						chromeMediaSourceId: source.id,
+						minWidth: 1280,
+						maxWidth: 10000,
+						minHeight: 720,
+						maxHeight: 10000
+					}
+				}
+			});
+			_this.handleStream(stream);
+		} catch (error) {
+			_this.handleError(error);
+		}
 	}
 }
 
@@ -200,13 +307,13 @@ async function fullscreenScreenshot(callback, imageFormat) {
 }
 
 // When document has loaded, initialise
-document.onreadystatechange = event => {
+document.onreadystatechange = () => {
 	if (document.readyState === 'complete') {
 		handleWindowControls();
 	}
 };
 
-window.addEventListener('beforeunload', event => {
+window.addEventListener('beforeunload', () => {
 	/* If window is reloaded, remove win event listeners
 	(DOM element listeners get auto garbage collected but not
 	Electron win listeners as the win is not dereferenced unless closed) */
@@ -215,19 +322,19 @@ window.addEventListener('beforeunload', event => {
 
 function handleWindowControls() {
 	// Make minimise/maximise/restore/close buttons work when they are clicked
-	document.querySelector('#min-button').addEventListener('click', event => {
+	document.querySelector('#min-button').addEventListener('click', () => {
 		win.minimize();
 	});
 
-	document.querySelector('#max-button').addEventListener('click', event => {
+	document.querySelector('#max-button').addEventListener('click', () => {
 		win.maximize();
 	});
 
-	document.querySelector('#restore-button').addEventListener('click', event => {
+	document.querySelector('#restore-button').addEventListener('click', () => {
 		win.unmaximize();
 	});
 
-	document.querySelector('#close-button').addEventListener('click', event => {
+	document.querySelector('#close-button').addEventListener('click', () => {
 		win.close();
 	});
 
