@@ -16,9 +16,8 @@ const dir = homedir + '\\Pictures\\Screenshots\\';
 
 let iRacingWindowSource = null;
 
-const worker = new Worker('jimp-worker.js');
-
-worker.addEventListener('message', e => {
+const jimpWorker = new Worker('jimp-worker.js');
+jimpWorker.addEventListener('message', e => {
 	addImage(e.data);
 });
 
@@ -95,7 +94,7 @@ function saveImage(base64data, crop) {
 		}
 
 		if (crop) {
-			worker.postMessage(fileName);
+			jimpWorker.postMessage(fileName);
 		} else {
 			addImage(fileName);
 		}
