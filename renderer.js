@@ -10,12 +10,17 @@ const {width, height} = require('screenz');
 
 const homedir = require('os').homedir();
 
-const Jimp = require('jimp');
 const fs = require('fs');
 
 const dir = homedir + '\\Pictures\\Screenshots\\';
 
 let iRacingWindowSource = null;
+
+const worker = new Worker('jimp-worker.js');
+
+worker.addEventListener('message', e => {
+	addImage(e.data);
+});
 
 loadGallery();
 
@@ -90,52 +95,7 @@ function saveImage(base64data, crop) {
 		}
 
 		if (crop) {
-			Jimp.read(fileName, (err, image) => {
-				if (err) {
-					throw err;
-				}
-
-				const origW = image.bitmap.width;
-				const origH = image.bitmap.height;
-				let w = 0;
-				let h = 0;
-				switch (image.bitmap.width) {
-					case 7680:
-						w = 7626;
-						h = 4290;
-						break;
-					case 7168:
-						w = 7114;
-						h = 4002;
-						break;
-					case 6400:
-						w = 6346;
-						h = 3570;
-						break;
-					case 5120:
-						w = 5066;
-						h = 2850;
-						break;
-					case 3840:
-						w = 3788;
-						h = 2130;
-						break;
-					case 2560:
-						w = 2508;
-						h = 1410;
-						break;
-					default:
-						w = 1866;
-						h = 1050;
-				}
-
-				image
-					.crop(0, 0, w, h)
-					.resize(origW, origH)
-					.writeAsync(fileName).then(() => {
-						addImage(fileName);
-					});
-			});
+			worker.postMessage(fileName);
 		} else {
 			addImage(fileName);
 		}
@@ -376,7 +336,6 @@ async function fullscreenScreenshot(callback, imageFormat) {
 			canvas.height = this.videoHeight;
 			const ctx = canvas.getContext('2d');
 			// Draw video on canvas
-			iracing.camControls.setState(8);
 			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
 			if (_this.callback) {

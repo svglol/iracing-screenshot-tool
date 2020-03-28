@@ -47,7 +47,8 @@ const createMainWindow = async () => {
 		minWidth: 1280,
 		minHeight: 720,
 		webPreferences: {
-			nodeIntegration: true
+			nodeIntegration: true,
+			nodeIntegrationInWorker: true
 		},
 		frame: false,
 		backgroundColor: '#FFF'
