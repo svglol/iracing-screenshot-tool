@@ -4,19 +4,31 @@ const {desktopCapturer} = require('electron');
 const {remote} = require('electron');
 
 const win = remote.getCurrentWindow();
+const screenshotHelper = require('./screenshot.js');
+const iracing = require('./node-irsdk').getInstance();
+const {width, height} = require('screenz');
+
+const homedir = require('os').homedir();
+
+const Jimp = require('jimp');
+const fs = require('fs');
+
+const dir = homedir + '\\Pictures\\Screenshots\\';
 
 let iRacingWindowSource = null;
+
+loadGallery();
 
 ipcRenderer.on('updateMemory', (event, arg) => {
 	document.querySelector('#memory-free').textContent = arg.free;
 });
 
-document.querySelector('#screenshot-button').addEventListener('click', () => {
+document.querySelector('#screenshot-button').addEventListener('click', async () => {
 	const resolution = document.querySelector('#resolution');
 	const crop = document.querySelector('#crop').checked;
 	const {value} = resolution.options[resolution.selectedIndex];
 	const args = {resolution: value, crop};
-	desktopCapturer
+	await	desktopCapturer
 		.getSources({types: ['window', 'screen']})
 		.then(async sources => {
 			for (const source of sources) {
@@ -25,8 +37,128 @@ document.querySelector('#screenshot-button').addEventListener('click', () => {
 				}
 			}
 		});
-	ipcRenderer.send('screenshot', args);
+
+	let w = 1920;
+	let h = 1080;
+	switch (args.resolution) {
+		case '1080p':
+			w = 1920;
+			h = 1080;
+			break;
+		case '2k':
+			w = 2560;
+			h = 1440;
+			break;
+		case '4k':
+			w = 3840;
+			h = 2160;
+			break;
+		case '5k':
+			w = 5120;
+			h = 2880;
+			break;
+		case '6k':
+			w = 6400;
+			h = 3600;
+			break;
+		case '7k':
+			w = 7168;
+			h = 4032;
+			break;
+		case '8k':
+			w = 7680;
+			h = 4320;
+			break;
+		default:
+			w = 1920;
+			h = 1080;
+	}
+
+	screenshotHelper.screenshot(w, h);
+	fullscreenScreenshot(base64data => {
+		saveImage(base64data, args.crop);
+	}, 'image/png');
 });
+
+function saveImage(base64data, crop) {
+	const base64Data = base64data.replace(/^data:image\/png;base64,/, '');
+	const fileName = dir + getFileNameString();
+
+	require('fs').writeFile(fileName, base64Data, 'base64', err => {
+		if (err) {
+			console.log(err);
+		}
+
+		if (crop) {
+			Jimp.read(fileName, (err, image) => {
+				if (err) {
+					throw err;
+				}
+
+				const origW = image.bitmap.width;
+				const origH = image.bitmap.height;
+				let w = 0;
+				let h = 0;
+				switch (image.bitmap.width) {
+					case 7680:
+						w = 7626;
+						h = 4290;
+						break;
+					case 7168:
+						w = 7114;
+						h = 4002;
+						break;
+					case 6400:
+						w = 6346;
+						h = 3570;
+						break;
+					case 5120:
+						w = 5066;
+						h = 2850;
+						break;
+					case 3840:
+						w = 3788;
+						h = 2130;
+						break;
+					case 2560:
+						w = 2508;
+						h = 1410;
+						break;
+					default:
+						w = 1866;
+						h = 1050;
+				}
+
+				image
+					.crop(0, 0, w, h)
+					.resize(origW, origH)
+					.writeAsync(fileName).then(() => {
+						addImage(fileName);
+					});
+			});
+		} else {
+			addImage(fileName);
+		}
+	});
+}
+
+function addImage(fileName) {
+	screenshotHelper.resize(width, height);
+	addImageToGallery(fileName);
+}
+
+function getFileNameString() {
+	const trackName = iracing.sessionInfo.data.WeekendInfo.TrackDisplayShortName;
+	let driverName = '';
+	iracing.sessionInfo.data.DriverInfo.Drivers.forEach(item => {
+		if (iracing.telemetry.values.CamCarIdx === item.CarIdx) {
+			driverName = item.UserName;
+		}
+	});
+
+	const now = new Date();
+	return trackName + '-' + driverName + '-' + now.getTime() + '.png';
+}
 
 document.querySelector('#motion').addEventListener('click', () => {
 	desktopCapturer
@@ -52,18 +184,6 @@ document.querySelector('#motion').addEventListener('click', () => {
 	ipcRenderer.send('motion');
 });
 
-ipcRenderer.on('screenshot', (event, arg) => {
-	fullscreenScreenshot(base64data => {
-		ipcRenderer.send('newScreenshot', {image: base64data, crop: arg});
-	}, 'image/png');
-},
-false
-);
-
-ipcRenderer.on('galleryAdd', (event, args) => {
-	addImageToGallery(args);
-});
-
 const screenshot = document.querySelector('#screenshot');
 screenshot.addEventListener('load', () => {
 	screenshot.style.visibility = 'visible';
@@ -73,7 +193,7 @@ screenshot.addEventListener('load', () => {
 function addImageToGallery(src) {
 	const image = document.createElement('img');
 
-	image.setAttribute('src', src.src);
+	image.setAttribute('src', src);
 	image.setAttribute('class', 'img m-1');
 	image.setAttribute('width', '200px');
 	image.setAttribute('style', 'object-fit:contain;cursor: pointer;  opacity: 0; -webkit-transition: opacity 0.5s ease;-moz-transition: opacity 0.5s ease;-ms-transition: opacity 0.5s ease;-o-transition: opacity 0.5s ease;transition: opacity 0.5s ease;');
@@ -94,10 +214,10 @@ const {shell} = require('electron');
 const sizeOf = require('image-size');
 
 function selectImage(arg, image) {
-	const dimensions = sizeOf(arg.file);
-	document.querySelector('#screenshot').setAttribute('src', arg.src);
+	const dimensions = sizeOf(arg);
+	document.querySelector('#screenshot').setAttribute('src', arg);
 
-	document.querySelector('#file-name').innerHTML = arg.file
+	document.querySelector('#file-name').innerHTML = arg
 		.split(/[\\/]/)
 		.pop();
 
@@ -111,21 +231,21 @@ function selectImage(arg, image) {
 		const child = require('child_process').execFile;
 		const executablePath =
 		'C:\\Program Files\\Adobe\\Adobe Photoshop 2020\\Photoshop.exe';
-		const parameters = [arg.file];
+		const parameters = [arg];
 
 		child(executablePath, parameters, err => {
 			console.log(err);
 		});
 	});
 	document.querySelector('#open-external').addEventListener('click', () => {
-		shell.openItem(arg.file);
+		shell.openItem(arg);
 	});
 	document.querySelector('#open-folder').addEventListener('click', () => {
-		const file = arg.file.replace('/', '\\');
+		const file = arg.replace('/', '\\');
 		shell.showItemInFolder(file);
 	});
 	document.querySelector('#delete').addEventListener('click', () => {
-		const file = arg.file.replace('/', '\\');
+		const file = arg.replace('/', '\\');
 		document.querySelector('#screenshot').setAttribute('src', '');
 		document.querySelector('#info-controls').style.visibility = 'hidden';
 		if (image.nextSibling !== null) {
@@ -256,6 +376,7 @@ async function fullscreenScreenshot(callback, imageFormat) {
 			canvas.height = this.videoHeight;
 			const ctx = canvas.getContext('2d');
 			// Draw video on canvas
+			iracing.camControls.setState(8);
 			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
 			if (_this.callback) {
@@ -350,4 +471,36 @@ function handleWindowControls() {
 			document.body.classList.remove('maximized');
 		}
 	}
+}
+
+async function loadGallery() {
+	if (!fs.existsSync(dir)) {
+		fs.mkdirSync(dir);
+	}
+
+	// Load images from screenshots Folder
+	await fs.readdir(dir, (err, files) => {
+		if (err) {
+			console.log(err);
+		}
+
+		files = files.map(fileName => {
+			return {
+				name: fileName,
+				time: fs.statSync(dir + '/' + fileName).mtime.getTime()
+			};
+		})
+			.sort((a, b) => {
+				return a.time - b.time;
+			})
+			.map(v => {
+				return v.name;
+			});
+
+		files.forEach(async file => {
+			if (file.split('.').pop() === 'png') {
+				addImageToGallery(dir + file);
+			}
+		});
+	});
 }
