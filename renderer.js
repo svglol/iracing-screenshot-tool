@@ -1,6 +1,6 @@
 const {ipcRenderer} = require('electron');
 const {desktopCapturer} = require('electron');
-
+const $ = require('jquery');
 const {remote} = require('electron');
 
 const win = remote.getCurrentWindow();
@@ -32,6 +32,7 @@ document.querySelector('#screenshot-button').addEventListener('click', async () 
 	const crop = document.querySelector('#crop').checked;
 	const {value} = resolution.options[resolution.selectedIndex];
 	const args = {resolution: value, crop};
+	iRacingWindowSource = null;
 	await	desktopCapturer
 		.getSources({types: ['window', 'screen']})
 		.then(async sources => {
@@ -78,11 +79,20 @@ document.querySelector('#screenshot-button').addEventListener('click', async () 
 			h = 1080;
 	}
 
-	screenshotHelper.screenshot(w, h);
-	fullscreenScreenshot(base64data => {
-		saveImage(base64data, args.crop);
-	}, 'image/png');
+	if (iRacingWindowSource === null) {
+		showError('iRacing Not Running!');
+	} else {
+		screenshotHelper.screenshot(w, h);
+		fullscreenScreenshot(base64data => {
+			saveImage(base64data, args.crop);
+		}, 'image/png');
+	}
 });
+
+function showError(errorMessage) {
+	document.querySelector('#error-message').innerHTML = errorMessage;
+	$('#errorModal').modal('show');
+}
 
 function saveImage(base64data, crop) {
 	const base64Data = base64data.replace(/^data:image\/png;base64,/, '');
@@ -193,7 +203,9 @@ function selectImage(arg, image) {
 		const parameters = [arg];
 
 		child(executablePath, parameters, err => {
-			console.log(err);
+			if (err) {
+				console.log(err);
+			}
 		});
 	});
 	document.querySelector('#open-external').addEventListener('click', () => {
