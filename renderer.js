@@ -217,16 +217,11 @@ function selectImage(arg, image) {
 	recreateNode(document.querySelector('#open-folder'));
 	recreateNode(document.querySelector('#delete'));
 	document.querySelector('#open-ps').addEventListener('click', () => {
-		const child = require('child_process').execFile;
+		const {exec} = require('child_process');
 		const executablePath =
-		'C:\\Program Files\\Adobe\\Adobe Photoshop 2020\\Photoshop.exe';
+		'C:\\Program Files\\Adobe\\Adobe Photoshop 2020\\';
 		const parameters = [arg];
-
-		child(executablePath, parameters, err => {
-			if (err) {
-				console.log(err);
-			}
-		});
+		exec('cd ' + executablePath + ' && start Photoshop.exe ' + parameters);
 	});
 	document.querySelector('#open-external').addEventListener('click', () => {
 		shell.openItem(arg);
