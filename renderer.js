@@ -463,6 +463,10 @@ function handleWindowControls() {
 	}
 }
 
+$(() => {
+	$('[data-toggle="tooltip"]').tooltip();
+});
+
 async function loadGallery() {
 	if (!fs.existsSync(dir)) {
 		fs.mkdirSync(dir);

@@ -8,7 +8,7 @@
 	<script>
 	window.jQuery = window.$ = require('jquery');
 </script>
-<script type="text/javascript" src="./static/bootstrap/js/bootstrap.js"></script>
+<script type="text/javascript" src="./static/bootstrap/js/bootstrap.bundle.js"></script>
 
 <link rel="stylesheet" href="index.css">
 </head>
@@ -75,12 +75,13 @@
 							<input type="number" id="custom-height" min="0" class="form-control" aria-describedby="height-addon">
 						</div>
 					</div>
-
-					<label for="crop" class="col-9 col-form-label">
-						Crop Watermark
-					</label>
-					<div class="col-3 col-form-label">
-						<input type="checkbox" id="crop" checked="true" >
+					<div class="input-group"data-toggle="tooltip" data-html="true" title="Minimize iRacing UI - Ctrl+PgDn"  data-placement="right">
+						<label for="crop" class="col-9 col-form-label">
+							Crop Watermark
+						</label>
+						<div class="col-3 col-form-label">
+							<input type="checkbox" id="crop" checked="true">
+						</div>
 					</div>
 				</div>
 
