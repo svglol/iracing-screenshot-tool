@@ -218,8 +218,8 @@ function addImageToGallery(src) {
 
 	document.querySelector('#gallery').prepend(image);
 
-	selectImage(src, image);
 	imageLoaderWorker.postMessage(src);
+	selectImage(src, image);
 }
 
 const {shell} = require('electron');
@@ -227,10 +227,10 @@ const sizeOf = require('image-size');
 
 function selectImage(arg, image) {
 	const dimensions = sizeOf(arg);
-	document.querySelector('#screenshot').src = '';
-	document.querySelector('#screenshot').style.visibility = 'hidden';
-	document.querySelector('#screenshot').style.opacity = 0;
-
+	// document.querySelector('#screenshot').src = arg;
+	// document.querySelector('#screenshot').style.visibility = 'hidden';
+	// document.querySelector('#screenshot').style.opacity = 0;
+	//
 	document.querySelector('#screenshot').dataset.src = arg;
 	imageLoaderWorker.postMessage(arg);
 
