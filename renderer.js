@@ -154,7 +154,7 @@ function saveImage(base64data, crop) {
 
 function addImage(fileName) {
 	screenshotHelper.resize(width, height);
-	addImageToGallery(fileName);
+	addImageToGallery(fileName.replace(/\\/g, '/'));
 }
 
 function getFileNameString() {
@@ -255,7 +255,7 @@ function selectImage(arg, image) {
 		shell.openItem(arg);
 	});
 	document.querySelector('#open-folder').addEventListener('click', () => {
-		const file = arg.replace('/', '\\');
+		const file = arg.replace(/\//g, '\\');
 		shell.showItemInFolder(file);
 	});
 	document.querySelector('#delete').addEventListener('click', () => {
