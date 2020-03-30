@@ -6,11 +6,11 @@
 	<title>iRacing Screenshot Tool</title>
 	<link rel="stylesheet" href="./static/bootstrap/css/bootstrap.min.css" />
 	<script>
-    window.jQuery = window.$ = require('jquery');
+	window.jQuery = window.$ = require('jquery');
 </script>
-	<script type="text/javascript" src="./static/bootstrap/js/bootstrap.js"></script>
+<script type="text/javascript" src="./static/bootstrap/js/bootstrap.js"></script>
 
-	<link rel="stylesheet" href="index.css">
+<link rel="stylesheet" href="index.css">
 </head>
 <body>
 	<header id="titlebar">
@@ -54,10 +54,28 @@
 							<option value="6k">6K</option>
 							<option value="7k">7K</option>
 							<option value="8k">8K</option>
+							<option value="Custom">Custom</option>
 						</select>
 					</div>
 				</div>
 				<div class="form-group row">
+
+					<div id="custom-resolution" class="px-3" style="display:none">
+						<div class="input-group mb-3">
+							<div class="input-group-prepend">
+								<span class="input-group-text" id="width-addon">Width</span>
+							</div>
+							<input type="number" id="custom-width" class="form-control" aria-describedby="width-addon">
+						</div>
+
+						<div class="input-group mb-3">
+							<div class="input-group-prepend">
+								<span class="input-group-text" id="height-addon">Height</span>
+							</div>
+							<input type="number" id="custom-height" class="form-control" aria-describedby="height-addon">
+						</div>
+					</div>
+
 					<label for="crop" class="col-9 col-form-label">
 						Crop Watermark
 					</label>
@@ -93,16 +111,16 @@
 		</div>
 
 		<div class="modal fade" tabindex="-1" role="dialog" aria-hidden="true" id="errorModal">
-		  <div class="modal-dialog modal-sm" style="margin-top:50px">
-		    <div class="modal-content p-2">
+			<div class="modal-dialog modal-sm" style="margin-top:50px">
+				<div class="modal-content p-2">
 					<div class="flex">
-		      <span class="text-danger text-center font-weight-bold" id="error-message"></span>
-					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">×</span>
+						<span class="text-danger text-center font-weight-bold" id="error-message"></span>
+						<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+							<span aria-hidden="true">×</span>
+						</div>
+					</button>
 				</div>
-        </button>
-		    </div>
-		  </div>
+			</div>
 		</div>
 
 	</div>

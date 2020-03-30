@@ -43,8 +43,9 @@ document.querySelector('#screenshot-button').addEventListener('click', async () 
 			}
 		});
 
-	let w = 1920;
-	let h = 1080;
+	let w = 0;
+	let h = 0;
+
 	switch (args.resolution) {
 		case '1080p':
 			w = 1920;
@@ -74,9 +75,18 @@ document.querySelector('#screenshot-button').addEventListener('click', async () 
 			w = 7680;
 			h = 4320;
 			break;
+		case 'Custom':
+			w = parseInt(document.querySelector('#custom-width').value, 10);
+			h = parseInt(document.querySelector('#custom-height').value, 10);
+			break;
 		default:
 			w = 1920;
 			h = 1080;
+	}
+
+	if (crop) {
+		w += 54;
+		h += 30;
 	}
 
 	if (iRacingWindowSource === null) {
@@ -88,6 +98,16 @@ document.querySelector('#screenshot-button').addEventListener('click', async () 
 		}, 'image/png');
 	}
 });
+
+document.querySelector('#resolution').addEventListener('change', () => {
+	const resolution = document.querySelector('#resolution');
+	const {value} = resolution.options[resolution.selectedIndex];
+	if (value === 'Custom') {
+		$('#custom-resolution').show();
+	} else {
+		$('#custom-resolution').hide();
+	}
+}, false);
 
 function showError(errorMessage) {
 	document.querySelector('#error-message').innerHTML = errorMessage;
