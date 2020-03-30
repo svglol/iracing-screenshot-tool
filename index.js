@@ -6,10 +6,9 @@ const {is} = require('electron-util');
 // Const unhandled = require('electron-unhandled');
 // const debug = require('electron-debug');
 // const contextMenu = require('electron-context-menu');
-// const config = require('./config');
+const config = require('./config');
 const menu = require('./menu');
 // Const packageJson = require('./package.json');
-const windowStateKeeper = require('electron-window-state');
 
 // Unhandled();
 // debug();
@@ -32,18 +31,13 @@ const windowStateKeeper = require('electron-window-state');
 let mainWindow;
 
 const createMainWindow = async () => {
-	const mainWindowState = windowStateKeeper({
-		defaultWidth: 1280,
-		defaultHeight: 720
-	});
-
 	const win = new BrowserWindow({
 		title: app.name,
 		show: false,
-		x: mainWindowState.x,
-		y: mainWindowState.y,
-		width: mainWindowState.width,
-		height: mainWindowState.height,
+		x: config.get('winPosX'),
+		y: config.get('winPosY'),
+		width: config.get('winWidth'),
+		height: config.get('winHeight'),
 		minWidth: 1280,
 		minHeight: 720,
 		webPreferences: {
@@ -63,6 +57,14 @@ const createMainWindow = async () => {
 		// For multiple windows store them in an array
 		mainWindow = undefined;
 	});
+
+	win.on('close', () => {
+		const {x, y, width, height} = win.getBounds();
+		config.set('winPosX', x);
+		config.set('winPosY', y);
+		config.set('winWidth', width);
+		config.set('winHeight', height);
+	})
 
 	await win.loadFile(path.join(__dirname, 'index.html'));
 

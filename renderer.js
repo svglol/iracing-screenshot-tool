@@ -1,6 +1,7 @@
 const {ipcRenderer, desktopCapturer, remote} = require('electron');
 const $ = require('jquery');
 const {screen} = remote;
+const config = require('./config');
 
 const win = remote.getCurrentWindow();
 const screenshotHelper = require('./screenshot.js');
@@ -19,6 +20,35 @@ const jimpWorker = new Worker('jimp-worker.js');
 jimpWorker.addEventListener('message', e => {
 	addImage(e.data);
 });
+
+loadState();
+
+document.querySelector('#resolution').addEventListener('change', () => {
+	resolutionChange();
+}, false);
+
+function resolutionChange() {
+	const resolution = document.querySelector('#resolution');
+	const {value} = resolution.options[resolution.selectedIndex];
+	config.set('resolution', resolution.selectedIndex);
+	if (value === 'Custom') {
+		$('#custom-resolution').show();
+	} else {
+		$('#custom-resolution').hide();
+	}
+}
+
+document.querySelector('#crop').addEventListener('change', () => {
+	config.set('crop', document.querySelector('#crop').checked);
+}, false);
+
+document.querySelector('#custom-width').addEventListener('change', e => {
+	config.set('customWidth', e.target.value);
+}, false);
+
+document.querySelector('#custom-height').addEventListener('change', e => {
+	config.set('customHeight', e.target.value);
+}, false);
 
 loadGallery();
 
@@ -97,16 +127,6 @@ document.querySelector('#screenshot-button').addEventListener('click', async () 
 		}, 'image/png');
 	}
 });
-
-document.querySelector('#resolution').addEventListener('change', () => {
-	const resolution = document.querySelector('#resolution');
-	const {value} = resolution.options[resolution.selectedIndex];
-	if (value === 'Custom') {
-		$('#custom-resolution').show();
-	} else {
-		$('#custom-resolution').hide();
-	}
-}, false);
 
 function showError(errorMessage) {
 	document.querySelector('#error-message').innerHTML = errorMessage;
@@ -460,6 +480,14 @@ function handleWindowControls() {
 $(() => {
 	$('[data-toggle="tooltip"]').tooltip();
 });
+
+function loadState() {
+	document.querySelector('#resolution').selectedIndex = config.get('resolution');
+	resolutionChange();
+	document.querySelector('#crop').checked = config.get('crop');
+	document.querySelector('#custom-width').value = config.get('customWidth');
+	document.querySelector('#custom-height').value = config.get('customHeight');
+}
 
 async function loadGallery() {
 	if (!fs.existsSync(dir)) {
