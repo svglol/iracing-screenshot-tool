@@ -259,7 +259,7 @@ function selectImage(arg, image) {
 		shell.showItemInFolder(file);
 	});
 	document.querySelector('#delete').addEventListener('click', () => {
-		const file = arg.replace('/', '\\');
+		const file = arg.replace(/\//g, '\\');
 		document.querySelector('#screenshot').setAttribute('src', '');
 		document.querySelector('#info-controls').style.visibility = 'hidden';
 		if (image.nextSibling !== null) {
