@@ -1,12 +1,11 @@
-const {ipcRenderer} = require('electron');
-const {desktopCapturer} = require('electron');
+const {ipcRenderer, desktopCapturer, remote} = require('electron');
 const $ = require('jquery');
-const {remote} = require('electron');
+const {screen} = remote;
 
 const win = remote.getCurrentWindow();
 const screenshotHelper = require('./screenshot.js');
 const iracing = require('./node-irsdk').getInstance();
-const {width, height} = require('screenz');
+const {width, height} = screen.getPrimaryDisplay().bounds;
 
 const homedir = require('os').homedir();
 
