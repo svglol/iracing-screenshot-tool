@@ -227,7 +227,12 @@ const sizeOf = require('image-size');
 
 function selectImage(arg, image) {
 	const dimensions = sizeOf(arg);
+	document.querySelector('#screenshot').src = '';
+	document.querySelector('#screenshot').style.visibility = 'hidden';
+	document.querySelector('#screenshot').style.opacity = 0;
+
 	document.querySelector('#screenshot').dataset.src = arg;
+	imageLoaderWorker.postMessage(arg);
 
 	document.querySelector('#file-name').innerHTML = arg
 		.split(/[\\/]/)
