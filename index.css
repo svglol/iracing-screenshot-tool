@@ -223,3 +223,7 @@ body {
 input, button, textarea, :focus {
     outline: none;
 }
+
+.form-control{
+	padding: .35rem .35rem;
+}
