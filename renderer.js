@@ -16,7 +16,9 @@ const dir = homedir + '\\Pictures\\Screenshots\\';
 
 let iRacingWindowSource = null;
 
-const jimpWorker = new Worker('jimp-worker.js');
+const jimpWorker = new Worker('./workers/jimp-worker.js');
+const imageLoaderWorker = new Worker('./workers/image-loader.worker.js');
+
 jimpWorker.addEventListener('message', e => {
 	addImage(e.data);
 });
@@ -201,7 +203,7 @@ screenshot.addEventListener('load', () => {
 function addImageToGallery(src) {
 	const image = document.createElement('img');
 
-	image.setAttribute('src', src);
+	image.dataset.src = src;
 	image.setAttribute('class', 'img m-1');
 	image.setAttribute('width', '200px');
 	image.setAttribute('style', 'object-fit:contain;cursor: pointer;  opacity: 0; -webkit-transition: opacity 0.5s ease;-moz-transition: opacity 0.5s ease;-ms-transition: opacity 0.5s ease;-o-transition: opacity 0.5s ease;transition: opacity 0.5s ease;');
@@ -215,7 +217,9 @@ function addImageToGallery(src) {
 	});
 
 	document.querySelector('#gallery').prepend(image);
+
 	selectImage(src, image);
+	imageLoaderWorker.postMessage(src);
 }
 
 const {shell} = require('electron');
@@ -223,7 +227,7 @@ const sizeOf = require('image-size');
 
 function selectImage(arg, image) {
 	const dimensions = sizeOf(arg);
-	document.querySelector('#screenshot').setAttribute('src', arg);
+	document.querySelector('#screenshot').dataset.src = arg;
 
 	document.querySelector('#file-name').innerHTML = arg
 		.split(/[\\/]/)
@@ -515,8 +519,25 @@ async function loadGallery() {
 
 		files.forEach(async file => {
 			if (file.split('.').pop() === 'png') {
-				addImageToGallery(dir + file);
+				let url = dir + file;
+				url = url.replace(/\\/g, '/');
+				addImageToGallery(url);
 			}
 		});
 	});
 }
+
+imageLoaderWorker.addEventListener('message', event => {
+	const imageData = event.data;
+	const imageElements = document.querySelectorAll('img[data-src="' + event.data.imageURL + '"]');
+
+	const objectURL = URL.createObjectURL(imageData.blob);
+	imageElements.forEach(imageElement => {
+		imageElement.addEventListener('load', () => {
+			imageElement.removeAttribute('data-src');
+			URL.revokeObjectURL(objectURL);
+		});
+
+		imageElement.setAttribute('src', objectURL);
+	});
+});

@@ -64,7 +64,7 @@ const createMainWindow = async () => {
 		config.set('winPosY', y);
 		config.set('winWidth', width);
 		config.set('winHeight', height);
-	})
+	});
 
 	await win.loadFile(path.join(__dirname, 'index.html'));
 
