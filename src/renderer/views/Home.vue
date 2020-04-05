@@ -141,6 +141,7 @@ export default Vue.extend({
       mounted() {
         ipcRenderer.on('screenshot-response', (event, arg) => {
           this.items.unshift(arg);
+          clipboard.write({ image: arg });
         });
         loadGallery(this.items);
       },
