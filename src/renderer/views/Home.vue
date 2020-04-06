@@ -272,4 +272,8 @@ export default Vue.extend({
     .toolbar li a:hover {
       opacity: 0.5;
     }
+
+    .carousel .carousel-indicator.has-custom{
+      overflow-x: scroll!important;
+    }
     </style>
