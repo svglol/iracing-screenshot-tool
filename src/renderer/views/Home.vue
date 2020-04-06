@@ -14,8 +14,10 @@
     <div style="padding: 0.5rem;" v-if="currentURL != ''">
       <div class="columns is-gapless" style="margin-bottom: 0.15rem;">
         <div class="column is-9">
-          <span style="font-weight: bold;">{{ fileName }}</span>
-          <span style="color: #b3b3b3;">{{ resolution }}</span>
+          <div class="control">
+            <span style="font-weight: bold;">{{ fileName }}</span>
+            <b-tag type="is-info">{{ resolution }}</b-tag>
+          </div>
         </div>
         <div class="column" style="margin-left: 5rem;">
           <ul class="toolbar">
