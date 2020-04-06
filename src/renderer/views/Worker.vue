@@ -1,10 +1,10 @@
 <template>
-	<h1>This is a Worker Process</h1>
+  <h1>This is a Worker Process</h1>
 </template>
 
 <script>
 const { ipcRenderer, remote, desktopCapturer } = require('electron');
-const Jimp = require('jimp');
+const sharp = require('sharp');
 
 let iRacingWindowSource;
 const homedir = require('os').homedir();
@@ -12,143 +12,142 @@ const dir = homedir + '\\Pictures\\Screenshots\\';
 let sessionInfo, telemetry;
 
 export default {
-	methods: {},
-	mounted() {
-		ipcRenderer.on('screenshot-request', (event, input) => {
-			console.log(input);
+  methods: {},
+  mounted() {
+    ipcRenderer.on('screenshot-request', (event, input) => {
+      console.log(input);
 
-			fullscreenScreenshot((base64data) => {
-				saveImage(base64data, input.crop);
-			});
-		});
-		ipcRenderer.on('session-info', (event, arg) => {
-			sessionInfo = arg;
-		});
-		ipcRenderer.on('telemetry', (event, arg) => {
-			telemetry = arg;
-		});
+      fullscreenScreenshot((base64data) => {
+        saveImage(base64data, input.crop);
+      });
+    });
+    ipcRenderer.on('session-info', (event, arg) => {
+      sessionInfo = arg;
+    });
+    ipcRenderer.on('telemetry', (event, arg) => {
+      telemetry = arg;
+    });
 
-		ipcRenderer.send('worker-ready');
-	},
+    ipcRenderer.send('worker-ready');
+  },
 };
 
 async function saveImage(base64data, crop) {
-	base64data = base64data.replace(/^data:image\/png;base64,/, '');
-	const fileName = dir + getFileNameString();
+  base64data = base64data.replace(/^data:image\/png;base64,/, '');
+  const fileName = dir + getFileNameString();
 
-	const buff = await Buffer.from(base64data, 'base64');
-	Jimp.read(buff, (err, image) => {
-		if (err) {
-			throw err;
-		}
-		if (crop) {
-			const w = image.bitmap.width - 54;
-			const h = image.bitmap.height - 30;
-			image
-				.crop(0, 0, w, h)
-				.writeAsync(fileName)
-				.then(() => {
-					ipcRenderer.send('screenshot-response', fileName);
-				});
-		} else {
-			image.writeAsync(fileName).then(() => {
-				ipcRenderer.send('screenshot-response', fileName);
-			});
-		}
-	});
+  const buff = await Buffer.from(base64data, 'base64');
+
+  if(crop){
+    const image = sharp(buff);
+    image
+    .metadata()
+    .then(function(metadata) {
+      return image
+      .extract({ left: 0, top: 0, width: metadata.width-54, height: metadata.height-30 })
+      .toFile(fileName)
+    })
+    .then(function(data) {
+      ipcRenderer.send('screenshot-response', fileName);
+    });
+  }else{
+    sharp(buff)
+    .toFile(fileName)
+    .then(info => {  ipcRenderer.send('screenshot-response', fileName); });
+  }
 }
 
 function getFileNameString() {
-	const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
-	let driverName = '';
-	sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-		if (telemetry.values.CamCarIdx === item.CarIdx) {
-			driverName = item.UserName;
-		}
-	});
-	const now = new Date();
-	return trackName + '-' + driverName + '-' + now.getTime() + '.png';
-	return now.getTime() + '.png';
+  const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
+  let driverName = '';
+  sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
+    if (telemetry.values.CamCarIdx === item.CarIdx) {
+      driverName = item.UserName;
+    }
+  });
+  const now = new Date();
+  return trackName + '-' + driverName + '-' + now.getTime() + '.png';
+  return now.getTime() + '.png';
 }
 
 async function fullscreenScreenshot(callback) {
-	let imageFormat = 'image/png';
+  let imageFormat = 'image/png';
 
-	await desktopCapturer
-		.getSources({ types: ['window', 'screen'] })
-		.then(async (sources) => {
-			for (const source of sources) {
-				if (source !== null) {
-					if (source.name === 'iRacing.com Simulator') {
-						iRacingWindowSource = source;
-					}
-				}
-			}
-		});
+  await desktopCapturer
+  .getSources({ types: ['window', 'screen'] })
+  .then(async (sources) => {
+    for (const source of sources) {
+      if (source !== null) {
+        if (source.name === 'iRacing.com Simulator') {
+          iRacingWindowSource = source;
+        }
+      }
+    }
+  });
 
-	//
-	var handleStream = (stream) => {
-		// Create hidden video tag
-		const video = document.createElement('video');
-		video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+  //
+  var handleStream = (stream) => {
+    // Create hidden video tag
+    const video = document.createElement('video');
+    video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
 
-		// Event connected to stream
-		video.addEventListener('loadedmetadata', function () {
-			// Set video ORIGINAL height (screenshot)
-			video.style.height = this.videoHeight + 'px'; // VideoHeight
-			video.style.width = this.videoWidth + 'px'; // VideoWidth
+    // Event connected to stream
+    video.addEventListener('loadedmetadata', function () {
+      // Set video ORIGINAL height (screenshot)
+      video.style.height = this.videoHeight + 'px'; // VideoHeight
+      video.style.width = this.videoWidth + 'px'; // VideoWidth
 
-			video.play();
+      video.play();
 
-			// Create canvas
-			const canvas = document.createElement('canvas');
-			canvas.width = this.videoWidth;
-			canvas.height = this.videoHeight;
-			const ctx = canvas.getContext('2d');
-			// Draw video on canvas
-			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Create canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = this.videoWidth;
+      canvas.height = this.videoHeight;
+      const ctx = canvas.getContext('2d');
+      // Draw video on canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-			// Save screenshot to base64
-			callback(canvas.toDataURL(imageFormat));
+      // Save screenshot to base64
+      callback(canvas.toDataURL(imageFormat));
 
-			// Remove hidden video tag
-			video.remove();
-			try {
-				// Destroy connect to stream
-				stream.getTracks()[0].stop();
-			} catch (error) {
-				console.log(error);
-			}
-		});
+      // Remove hidden video tag
+      video.remove();
+      try {
+        // Destroy connect to stream
+        stream.getTracks()[0].stop();
+      } catch (error) {
+        console.log(error);
+      }
+    });
 
-		video.srcObject = stream;
-		document.body.append(video);
-	};
+    video.srcObject = stream;
+    document.body.append(video);
+  };
 
-	var handleError = function (e) {
-		console.log(e);
-	};
+  var handleError = function (e) {
+    console.log(e);
+  };
 
-	const source = iRacingWindowSource;
-	if (source.name === 'iRacing.com Simulator') {
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: false,
-				video: {
-					mandatory: {
-						chromeMediaSource: 'desktop',
-						chromeMediaSourceId: source.id,
-						minWidth: 1280,
-						maxWidth: 10000,
-						minHeight: 720,
-						maxHeight: 10000,
-					},
-				},
-			});
-			handleStream(stream);
-		} catch (error) {
-			handleError(error);
-		}
-	}
+  const source = iRacingWindowSource;
+  if (source.name === 'iRacing.com Simulator') {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: source.id,
+            minWidth: 1280,
+            maxWidth: 10000,
+            minHeight: 720,
+            maxHeight: 10000,
+          },
+        },
+      });
+      handleStream(stream);
+    } catch (error) {
+      handleError(error);
+    }
+  }
 }
 </script>
