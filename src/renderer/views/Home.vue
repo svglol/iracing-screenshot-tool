@@ -56,9 +56,8 @@
       <b-carousel-item v-for="(item, i) in items" :key="i">
         <figure class="al image" :draggable="false">
           <img
-          contain
           :src="items[i]"
-          style="max-height: 75vh;"
+          style="max-height: 75vh;object-fit: contain;"
           />
         </figure>
       </b-carousel-item>
