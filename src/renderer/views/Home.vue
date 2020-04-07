@@ -22,7 +22,7 @@
         <div class="column" style="margin-left: 5rem;">
           <ul class="toolbar">
             <li>
-              <a @click="deleteFile"><i class="mdi mdi-delete" /></a>
+              <a @click="deleteFile" v-shortkey="['del']"@shortkey="deleteFile"><i class="mdi mdi-delete" /></a>
             </li>
             <li>
               <a @click="openFolder"><i class="mdi mdi-folder" /></a>
@@ -137,7 +137,7 @@ export default Vue.extend({
           if (index !== -1) this.items.splice(index, 1);
         },
         scroll(){
-          console.log('test')
+
         }
       },
       mounted() {
@@ -149,7 +149,12 @@ export default Vue.extend({
       },
       watch: {
         items() {
-          this.currentURL = this.items[0];
+          if(this.items.length !== 0){
+            this.currentURL = this.items[0];
+          }
+          else{
+            this.currentURL = '';
+          }
 
           if (this.items.length != 0) {
 
@@ -177,9 +182,11 @@ export default Vue.extend({
           }
         },
         currentURL: function () {
-          this.fileName = this.currentURL.split(/[\\/]/).pop();
-          const dimensions = sizeOf(this.currentURL);
-          this.resolution = dimensions.width + ' x ' + dimensions.height;
+          if(this.currentURL !== ''){
+            this.fileName = this.currentURL.split(/[\\/]/).pop();
+            const dimensions = sizeOf(this.currentURL);
+            this.resolution = dimensions.width + ' x ' + dimensions.height;
+          }
         },
       },
     });
