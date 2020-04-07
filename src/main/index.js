@@ -181,6 +181,10 @@ function createWindow() {
       resize(data.width, data.height);
     });
 
+    ipcMain.on('screenshot-error', (event, data) => {
+      mainWindow.webContents.send('screenshot-error',data);
+    });
+
     globalShortcut.register('CommandOrControl+PrintScreen', () => {
       mainWindow.webContents.send('hotkey-screenshot', '');
     })

@@ -15,8 +15,6 @@ export default {
   methods: {},
   mounted() {
     ipcRenderer.on('screenshot-request', (event, input) => {
-      console.log(input);
-
       fullscreenScreenshot((base64data) => {
         saveImage(base64data, input.crop);
       });
@@ -38,23 +36,30 @@ async function saveImage(base64data, crop) {
 
   const buff = await Buffer.from(base64data, 'base64');
 
-  if(crop){
-    const image = sharp(buff);
-    image
-    .metadata()
-    .then(function(metadata) {
-      return image
-      .extract({ left: 0, top: 0, width: metadata.width-54, height: metadata.height-30 })
-      .toFile(fileName)
-    })
-    .then(function(data) {
-      ipcRenderer.send('screenshot-response', fileName);
-    });
-  }else{
-    sharp(buff)
-    .toFile(fileName)
-    .then(info => {  ipcRenderer.send('screenshot-response', fileName); });
-  }
+  const image = sharp(buff);
+  image
+  .metadata()
+  .then(function(metadata) {
+    if(metadata.width < 54){
+      return Error('image is too small');
+    }else{
+      if(crop){
+        return image
+        .extract({ left: 0, top: 0, width: metadata.width-54, height: metadata.height-30 })
+        .toFile(fileName)
+      }
+      else{
+        return image
+        .toFile(fileName)
+      }
+    }
+  })
+  .then(data => {
+    ipcRenderer.send('screenshot-response', fileName);
+  })
+  .catch(err => {
+    ipcRenderer.send('screenshot-error', err);
+  });
 }
 
 function getFileNameString() {
@@ -126,11 +131,13 @@ async function fullscreenScreenshot(callback) {
 
   var handleError = function (e) {
     console.log(e);
+    ipcRenderer.send('screenshot-error', e);
   };
 
-  const source = iRacingWindowSource;
-  if (source.name === 'iRacing.com Simulator') {
-    try {
+  try {
+    const source = iRacingWindowSource;
+    if(source === undefined) throw Error('Can\'t find iRacing Window');
+    if (source.name === 'iRacing.com Simulator') {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -145,9 +152,9 @@ async function fullscreenScreenshot(callback) {
         },
       });
       handleStream(stream);
-    } catch (error) {
-      handleError(error);
     }
+  } catch (error) {
+    handleError(error);
   }
 }
 </script>
