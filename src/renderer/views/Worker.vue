@@ -7,8 +7,7 @@ const { ipcRenderer, remote, desktopCapturer } = require('electron');
 const sharp = require('sharp');
 
 let iRacingWindowSource;
-const homedir = require('os').homedir();
-const dir = homedir + '\\Pictures\\Screenshots\\';
+const config = require('../../utilities/config');
 let sessionInfo, telemetry;
 
 export default {
@@ -32,8 +31,8 @@ export default {
 
 async function saveImage(base64data, crop) {
   base64data = base64data.replace(/^data:image\/png;base64,/, '');
-  const fileName = dir + getFileNameString();
 
+  const fileName = config.get('screenshotFolder') + getFileNameString();
   const buff = await Buffer.from(base64data, 'base64');
 
   const image = sharp(buff);

@@ -90,9 +90,8 @@ const mainWindow = remote.getCurrentWindow();
 const { width, height } = screen.getPrimaryDisplay().bounds;
 const fs = require('fs');
 import Vue from 'vue';
-const homedir = require('os').homedir();
-const dir = homedir + '\\Pictures\\Screenshots\\';
-let sessionInfo, telemetry;
+const config = require('../../utilities/config');
+const dir = config.get('screenshotFolder');
 
 let iRacingWindowSource = null;
 

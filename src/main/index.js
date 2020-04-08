@@ -185,7 +185,7 @@ function createWindow() {
       mainWindow.webContents.send('screenshot-error',data);
     });
 
-    globalShortcut.register('CommandOrControl+PrintScreen', () => {
+    globalShortcut.register(config.get('screenshotKeybind'), () => {
       mainWindow.webContents.send('hotkey-screenshot', '');
     })
   });

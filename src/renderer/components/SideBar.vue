@@ -166,8 +166,8 @@ export default {
   },
   updated() {
     config.set('crop', this.crop);
-    config.set('customWidth', this.customWidth);
-    config.set('customHeight', this.customHeight);
+    config.set('customWidth', parseInt(this.customWidth));
+    config.set('customHeight', parseInt(this.customHeight));
     config.set('resolution', this.resolution);
   },
 };
