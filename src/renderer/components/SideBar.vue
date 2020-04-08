@@ -26,12 +26,23 @@
       ></b-input>
     </b-field>
 
+
+    <b-message  v-if="resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k' || resolution == 'Custom'"type="is-warning" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
+      <strong> High resoultions may crash iRacing if you run out of VRAM. Certain tracks/car combinations will require more VRAM.</strong>
+    </b-message>
+
+
     <b-switch
     dense
     v-model="crop"
-    style="padding-top: 0.5rem; padding-bottom: 1rem;"
+    style="padding-top: 0.5rem; padding-bottom: .5rem;"
     >Crop Watermark</b-switch
     >
+
+    <b-message v-if="crop" type="is-info" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
+      <strong>Shrink iRacing UI to as small as possible with Ctrl+PgDwn</strong>
+    </b-message>
+
     <b-button
     type="is-primary"
     icon-left="camera"
@@ -39,8 +50,8 @@
     :loading="takingScreenshot"
     :disabled="!iracingOpen || takingScreenshot"
     @click="takeScreenshot"
-    >Screenshot</b-button
-    >
+    style="margin-top:.5rem"
+    >Screenshot</b-button>
   </div>
 </template>
 
@@ -173,4 +184,12 @@ export default {
 };
 </script>
 
-<style scoped></style>
+<style >
+.message.is-warning .message-body{
+  color:#ffdd57!important;
+}
+
+.message.is-info .message-body{
+  color:rgb(50, 152, 220)!important;
+}
+</style>
