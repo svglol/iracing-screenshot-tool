@@ -9,10 +9,11 @@
     "
     >
     <SideBar v-on:click="screenshot" />
+    <Settings />
   </div>
   <div class="column">
     <div style="padding: 0.5rem;" v-if="currentURL != ''">
-      <div class="columns is-gapless" style="margin-bottom: 0.15rem;">
+      <div class="columns is-gapless" style="margin-bottom: 0.15rem;height:5vh">
         <div class="column is-9">
           <div class="control">
             <span style="font-weight: bold;">{{ fileName }}</span>
@@ -81,6 +82,7 @@
 const electron = window.require ? window.require('electron') : null;
 
 import SideBar from '../components/SideBar.vue';
+import Settings from '../components/Settings.vue';
 const { ipcRenderer, remote, desktopCapturer, clipboard } = require('electron');
 const { exec } = require('electron').remote.require('child_process');
 const { shell } = require('electron');
@@ -97,7 +99,7 @@ let iRacingWindowSource = null;
 
 export default Vue.extend({
   name: 'Home',
-  components: { SideBar },
+  components: { SideBar, Settings },
   data() {
     return {
       items: [],
@@ -235,11 +237,11 @@ export default Vue.extend({
     }
 
     body {
+      background: rgb(0, 0, 0);
       background-image: url('../../../static/bg.png');
       background-position: center;
       background-repeat: no-repeat;
       background-size: cover;
-
       /* background: rgb(42, 46, 91);
       background: linear-gradient(
       153deg,
@@ -283,5 +285,16 @@ export default Vue.extend({
 
     .carousel .carousel-indicator.has-custom{
       overflow-x: scroll!important;
+      margin-top: auto;
+    }
+
+    .carousel-tems{
+
+    }
+
+    .carousel {
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
     }
     </style>
