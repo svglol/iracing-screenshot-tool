@@ -49,24 +49,23 @@ const ModalForm = {
   },
   template: `
   <form action="">
-  <div class="modal-card" style="width: 80vh">
-  <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.6); border-bottom: 1px solid black;">
+  <div class="modal-card" style="width: 80vh;border: 1px solid rgba(255, 255, 255, .1);border-radius: 5px;">
+  <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.4); border-bottom: 1px solid black;">
   <p class="modal-card-title" style="color:white">Settings</p>
   </header>
-  <section class="modal-card-body" style="background-color: rgba(0, 0, 0, 0.7);">
+  <section class="modal-card-body" style="background-color: rgba(0, 0, 0, 0.6);">
 
-  <b-field label="Screenshot Folder">
-  <b-input
-  disabled
-  type="text"
-  style="width:50vw; margin-left:2rem"
-  :value="screenshotFolder">
-  </b-input>
-  <b-button type="is-primary" @click="openFolderDialog">Select Folder</b-button>
-  </b-field>
+  <b-field label="Screenshot Folder" />
+
+  <b-field label="">
+       <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
+       <p class="control">
+           <b-button class="button is-primary" @click="openFolderDialog">Select Folder</b-button>
+       </p>
+   </b-field>
 
   </section>
-  <footer class="modal-card-foot" style="background-color: rgba(0, 0, 0, 0.6);border-top: 1px solid black;">
+  <footer class="modal-card-foot" style="background-color: rgba(0, 0, 0, 0.4);border-top: 1px solid black;">
   <button class="button is-dark" type="button" @click="$parent.close()">Close</button>
   <button class="button is-primary" @click="save">Save</button>
   </footer>
