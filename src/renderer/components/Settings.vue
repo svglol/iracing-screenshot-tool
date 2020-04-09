@@ -18,13 +18,15 @@
 
 <script>
 const config = require('../../utilities/config');
-
+const { ipcRenderer } = require('electron');
 const {dialog} = require('electron').remote;
 
 const ModalForm = {
   data() {
     return {
       screenshotFolder: config.get('screenshotFolder'),
+      screenshotKeybind: config.get('screenshotKeybind'),
+      bindingKey: false
     }
   },
   methods: {
@@ -41,8 +43,42 @@ const ModalForm = {
       });
     },
     save(){
-      config.set('screenshotFolder',this.screenshotFolder+'\\');
+      if(config.get('screenshotFolder') !== this.screenshotFolder){
+        config.set('screenshotFolder',this.screenshotFolder+'\\');
+      }
+      ipcRenderer.send('screenshotKeybind-change',{newValue: this.screenshotKeybind,oldValue:config.get('screenshotKeybind')});
+      config.set('screenshotKeybind',this.screenshotKeybind);
       this.$parent.close()
+    },
+    bindScreenshotKeybind(){
+      let _this = this;
+      this.bindingKey = true;
+      let keys = [];
+      let keysReleased = [];
+      var keydown = window.addEventListener("keydown", function keydown (e) {
+        if(_this.bindingKey){
+          if(!keys.includes(e.key)){
+            keys.push(e.key);
+            _this.screenshotKeybind = keys.join('+')
+          }
+        }
+        else{
+          window.removeEventListener("keydown",keydown);
+        }
+      });
+      window.addEventListener("keyup",  function keyup (e) {
+        if(_this.bindingKey){
+          if(!keys.includes(e.key)){
+            keys.push(e.key);
+            _this.screenshotKeybind = keys.join('+')
+          }
+          keysReleased.push(e.key);
+          if(keysReleased.length == keys.length){
+            _this.bindingKey = false;
+            window.removeEventListener("keyup",keyup);
+          }
+        }
+      });
     }
   },
   watch: {
@@ -58,11 +94,19 @@ const ModalForm = {
   <b-field label="Screenshot Folder" />
 
   <b-field label="">
-       <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
-       <p class="control">
-           <b-button class="button is-primary" @click="openFolderDialog">Select Folder</b-button>
-       </p>
-   </b-field>
+  <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
+  <p class="control">
+  <b-button class="button is-primary" @click="openFolderDialog">Select Folder</b-button>
+  </p>
+  </b-field>
+
+  <b-field label="Screenshot Keybind" />
+  <b-field label="">
+  <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
+  <p class="control">
+  <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Bind</b-button>
+  </p>
+  </b-field>
 
   </section>
   <footer class="modal-card-foot" style="background-color: rgba(0, 0, 0, 0.4);border-top: 1px solid black;">
@@ -93,7 +137,7 @@ export default {
 .settings{
   margin-top: auto;
   /* padding: 1rem; */
-  background-color: rgba(0, 0, 0, 0.3);
+  /* background-color: rgba(0, 0, 0, 0.3); */
   margin-bottom: 1.5rem;
 }
 
@@ -108,7 +152,7 @@ export default {
   float: left;
   margin-left: 0.3rem;
   margin-right: 0.3rem;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 
 .toolbar li a {

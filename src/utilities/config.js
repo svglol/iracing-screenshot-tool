@@ -42,7 +42,7 @@ const schema = {
   },
   screenshotKeybind: {
     type: 'string',
-    default: 'CommandOrControl+PrintScreen',
+    default: 'Control+PrintScreen',
   }
 };
 

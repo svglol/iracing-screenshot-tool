@@ -185,6 +185,13 @@ function createWindow() {
       mainWindow.webContents.send('screenshot-error',data);
     });
 
+    ipcMain.on('screenshotKeybind-change', (event,data) => {
+      globalShortcut.unregister(data.oldValue);
+      globalShortcut.register(data.newValue, () => {
+        mainWindow.webContents.send('hotkey-screenshot', '');
+      })
+    });
+
     globalShortcut.register(config.get('screenshotKeybind'), () => {
       mainWindow.webContents.send('hotkey-screenshot', '');
     })
