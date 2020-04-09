@@ -103,7 +103,7 @@ const { width, height } = screen.getPrimaryDisplay().bounds;
 const fs = require('fs');
 import Vue from 'vue';
 const config = require('../../utilities/config');
-const dir = config.get('screenshotFolder');
+let dir = config.get('screenshotFolder');
 
 let iRacingWindowSource = null;
 
@@ -157,6 +157,11 @@ export default Vue.extend({
           }
         });
         loadGallery(this.items);
+
+        config.onDidChange('screenshotFolder', (newValue,oldValue) => {
+          dir = newValue;
+          loadGallery(this.items);
+        });
       },
       watch: {
         items() {
@@ -207,6 +212,7 @@ export default Vue.extend({
     });
 
     async function loadGallery(items) {
+      items.splice(0,items.length)
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir);
       }
@@ -298,12 +304,12 @@ export default Vue.extend({
       scroll-behavior: smooth;
     }
 
-     .is-active img{
-       filter:
-           drop-shadow(0 -2px 0 #ec202a)
-           drop-shadow(0 2px 0 #ec202a)
-           drop-shadow(-2px 0 0 #ec202a)
-           drop-shadow(2px 0 0 #ec202a);
+    .is-active img{
+      filter:
+      drop-shadow(0 -2px 0 #ec202a)
+      drop-shadow(0 2px 0 #ec202a)
+      drop-shadow(-2px 0 0 #ec202a)
+      drop-shadow(2px 0 0 #ec202a);
     }
 
     .indicator-item img:hover{
