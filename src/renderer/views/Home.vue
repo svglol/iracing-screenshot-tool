@@ -296,6 +296,17 @@ export default Vue.extend({
       scroll-behavior: smooth;
     }
 
+     .is-active img{
+       filter:
+           drop-shadow(0 -2px 0 #ec202a)
+           drop-shadow(0 2px 0 #ec202a)
+           drop-shadow(-2px 0 0 #ec202a)
+           drop-shadow(2px 0 0 #ec202a);
+    }
+
+    .indicator-item img:hover{
+      opacity: .8;
+    }
 
     .carousel {
       height: calc(100vh - 41px - 27px);
