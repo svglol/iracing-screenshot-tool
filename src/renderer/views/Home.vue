@@ -186,7 +186,7 @@ export default Vue.extend({
                 function scrollH(e) {
                   e = window.event || e;
                   var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-                  value.scrollLeft -= (delta * 80);
+                  value.scrollLeft -= (delta * 200);
                 }
                 if (window.addEventListener) {
                   window.addEventListener("wheel", scrollH, false);
@@ -293,6 +293,7 @@ export default Vue.extend({
       overflow-x: scroll !important;
       margin-top: auto;
       background-color: rgba(0,0,0,.2);
+      scroll-behavior: smooth;
     }
 
 
