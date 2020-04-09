@@ -8,6 +8,9 @@ import 'buefy/dist/buefy.css';
 import './assets/style/animations.scss';
 import './assets/style/main.scss';
 import Buefy from 'buefy';
+import VueLazyload from 'vue-lazyload'
+
+Vue.use(VueLazyload)
 
 Vue.use(Buefy);
 Vue.use(require('vue-shortkey'));

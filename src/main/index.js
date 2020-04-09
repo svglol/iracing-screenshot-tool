@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, globalShortcut } = require('electron');
+const { app, BrowserWindow, screen, globalShortcut, Menu } = require('electron');
 const { ipcMain } = require('electron');
 const ffi = require('ffi-napi');
 const config = require('../utilities/config');
@@ -93,8 +93,10 @@ function createWindow() {
         webSecurity: false,
       },
       frame: false,
-      backgroundColor: '#2a2e5b',
+      backgroundColor: '#252525',
     });
+
+    Menu.setApplicationMenu(null)
 
     // eslint-disable-next-line
 

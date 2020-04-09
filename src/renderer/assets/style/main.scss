@@ -127,8 +127,8 @@ textarea {
 }
 
 ::-webkit-scrollbar {
-	width: 10px;
-	height: 10px;
+	width: 8px!important;
+	height: 8px!important;
 }
 
 ::-webkit-scrollbar-track {
@@ -147,3 +147,7 @@ textarea {
 @import 'https://fonts.googleapis.com/css?family=Material+Icons';
 @import 'https://use.fontawesome.com/releases/v5.2.0/css/all.css';
 @import 'https://cdn.materialdesignicons.com/2.5.94/css/materialdesignicons.min.css';
+
+.shadow {
+    box-shadow: 0 1rem 1rem rgba(0,0,0,.175)!important;
+}
