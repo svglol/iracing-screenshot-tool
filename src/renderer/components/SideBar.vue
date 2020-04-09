@@ -1,5 +1,5 @@
 <template>
-  <div style="padding: 1rem;">
+  <div style="padding: 1rem; padding-top:.5rem">
     <b-field label="Resolution">
       <b-select expanded placeholder="Resolution" v-model="resolution">
         <option v-for="option in items" :value="option" :key="option">
