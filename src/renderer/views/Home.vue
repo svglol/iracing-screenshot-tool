@@ -261,7 +261,9 @@ export default Vue.extend({
       color: white !important;
     }
     .indicator-item {
-      flex: 0 0 15% !important;
+      flex: 0 0 calc(100vh/6) !important;
+      margin-left: .25rem;
+      margin-right: .25rem;
     }
 
     .toolbar {
