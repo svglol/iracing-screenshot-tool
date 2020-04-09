@@ -85,6 +85,7 @@ img {
 	height: 24px;
 	background-color: rgba(0, 0, 0, 0);
 	border: 0px solid transparent;
+  border-radius: 0px;
 }
 .button > span {
 	flex-grow: 1;
@@ -93,7 +94,7 @@ img {
 	color: white;
 }
 .button:hover {
-	background-color: rgba(255, 255, 255, 0.3);
+	background-color: rgba(255, 255, 255, 0.1);
 }
 .close:hover {
 	background-color: red;
