@@ -111,7 +111,7 @@ const ModalForm = {
   </section>
   <footer class="modal-card-foot" style="background-color: rgba(0, 0, 0, 0.4);border-top: 1px solid black;">
   <button class="button is-dark" type="button" @click="$parent.close()">Close</button>
-  <button class="button is-primary" @click="save">Save</button>
+  <b-button class="button is-primary" @click="save">Save</b-button>
   </footer>
   </div>
   </form>
