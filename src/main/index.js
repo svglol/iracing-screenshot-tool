@@ -85,8 +85,8 @@ function createWindow() {
       y: config.get('winPosY'),
       width: config.get('winWidth'),
       height: config.get('winHeight'),
-      minWidth: 1280,
-      minHeight: 720,
+      minWidth: 1000,
+      minHeight: 600,
       webPreferences: {
         nodeIntegration: true,
         nodeIntegrationInWorker: true,
@@ -100,7 +100,6 @@ function createWindow() {
 
     // eslint-disable-next-line
 
-    // ipcMain.on('worker-ready', (event, data) => {
     if (isDev) {
       mainWindow.loadURL('http://localhost:9080');
     } else {
@@ -110,7 +109,6 @@ function createWindow() {
       .join(__dirname, '/static')
       .replace(/\\/g, '\\\\');
     }
-    // })
     // load root file/url
 
     // Show when loaded

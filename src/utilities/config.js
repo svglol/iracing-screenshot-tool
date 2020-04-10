@@ -30,11 +30,11 @@ const schema = {
   },
   winWidth: {
     type: 'number',
-    default: 1280,
+    default: 1000,
   },
   winHeight: {
     type: 'number',
-    default: 720,
+    default: 600,
   },
   screenshotFolder: {
     type: 'string',
