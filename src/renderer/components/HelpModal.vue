@@ -8,18 +8,22 @@
       </header>
       <section class="modal-card-body" style="background-color: rgba(0, 0, 0, 0.6);">
         <span class="heading">iRacing Settings</span>
-        <p>iRacing must be running in Windowed Borderless for the best result</br>
-        At least 8GB of VRAM is recommended for screenshots of 8k resoultion or higher</br>
-        Newer tracks and cars will require more VRAM</p>
-        <span class="heading">Screenshot Folder</span>
-        <p>Screenshots will be saved by default to "C:\Users\user\Pictures\Screenshots" this can be changed in the settings.</p>
-        <span class="heading">Screenshot Hotkey</span>
-        <p>By default  "Control + PrintScreen" will take a screenshot with the current settings, this can be changed in the settings.</p>
-        <span class="heading">Issues</span>
-        <p>If you have any issues please report them on the <a @click="openDiscord">Discord</a> </p>
-      </section>
-    </div>
-  </form>
+        <ul>
+          <li>iRacing must be running in Windowed Borderless for the best result</li>
+          <li>At least 8GB of VRAM is recommended for screenshots of 8k resoultion or higher</li>
+          <li>Newer tracks and cars will require more VRAM</li>
+          <li>Shrink the UI to the smallest it can go before taking a screenshot if using the Crop Watermark option, "Control+PageDown" will shrink it, if this doesnt work you may need to reset your UI Zoom in the iRacing settings</li>
+        </ul>
+      </p>
+      <span class="heading">Screenshot Folder</span>
+      <p>Screenshots will be saved by default to "C:\Users\user\Pictures\Screenshots" this can be changed in the settings</p>
+      <span class="heading">Screenshot Hotkey</span>
+      <p>By default  "Control + PrintScreen" will take a screenshot with the current settings, this can be changed in the settings.</p>
+      <span class="heading">Issues</span>
+      <p>If you have any issues please report them on the <a @click="openDiscord">Discord</a> </p>
+    </section>
+  </div>
+</form>
 </template>
 
 <script>
@@ -65,6 +69,6 @@ button {
   padding-bottom: 1.25rem;
   text-align: left;
   height: 20px;
-      margin-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 </style>
