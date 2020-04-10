@@ -5,6 +5,7 @@
 <script>
 const { ipcRenderer, remote, desktopCapturer } = require('electron');
 const sharp = require('sharp');
+const app = remote.app;
 
 let iRacingWindowSource;
 const config = require('../../utilities/config');
@@ -32,7 +33,8 @@ export default {
 async function saveImage(base64data, crop) {
   base64data = base64data.replace(/^data:image\/png;base64,/, '');
 
-  const fileName = config.get('screenshotFolder') + getFileNameString();
+  const file = getFileNameString();
+  const fileName = config.get('screenshotFolder') + file + '.png';
   const buff = await Buffer.from(base64data, 'base64');
 
   const image = sharp(buff);
@@ -54,7 +56,14 @@ async function saveImage(base64data, crop) {
     }
   })
   .then(data => {
-    ipcRenderer.send('screenshot-response', fileName);
+    const thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
+    sharp(fileName)
+    .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
+    .toFile(thumb, (err, info) => {
+      ipcRenderer.send('screenshot-response', fileName);
+    });
+
+
   })
   .catch(err => {
     ipcRenderer.send('screenshot-error', err);
@@ -70,8 +79,7 @@ function getFileNameString() {
     }
   });
   const now = new Date();
-  return trackName + '-' + driverName + '-' + now.getTime() + '.png';
-  return now.getTime() + '.png';
+  return trackName + '-' + driverName + '-' + now.getTime();
 }
 
 async function fullscreenScreenshot(callback) {

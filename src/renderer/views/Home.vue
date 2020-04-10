@@ -13,7 +13,7 @@
   </div>
 
   <div class="column">
-    <div v-if="currentURL != ''">
+    <div v-if="currentURL !== ''">
       <div
       class="columns is-gapless"
       style="margin-bottom: 0.15rem;
@@ -67,17 +67,18 @@
     <b-carousel-item v-for="(item, i) in items" :key="i">
       <figure class="al image" :draggable="false">
         <img
-        v-lazy="items[i]"
+        :draggable="false"
+        v-lazy="items[i].thumb"
         style="max-height: calc(100vh - 41px - 24px - 95px); object-fit: contain;padding:1rem"
         />
       </figure>
     </b-carousel-item>
-    <template slot="indicators" slot-scope="props">
+    <template slot="indicators" slot-scope="props" >
       <figure class="al image" :draggable="false">
         <img
         :draggable="false"
-        v-lazy="items[props.i]"
-        @click="selectImage(items[props.i])"
+        v-lazy="items[props.i].thumb"
+        @click="selectImage(items[props.i].file)"
         style="max-height: 70px; object-fit: contain;"
         />
       </figure>
@@ -101,6 +102,9 @@ const { screen } = remote;
 const mainWindow = remote.getCurrentWindow();
 const { width, height } = screen.getPrimaryDisplay().bounds;
 const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
+const app = remote.app;
 import Vue from 'vue';
 const config = require('../../utilities/config');
 let dir = config.get('screenshotFolder');
@@ -114,6 +118,8 @@ export default Vue.extend({
     return {
       items: [],
       currentURL: '',
+      fileName: '',
+      resolution: ''
     };
   },
   methods: {
@@ -144,15 +150,21 @@ export default Vue.extend({
       deleteFile() {
         const file = this.currentURL.replace(/\//g, '\\');
           shell.moveItemToTrash(file);
-          var index = this.items.indexOf(this.currentURL);
-          if (index !== -1) this.items.splice(index, 1);
+          var index = 0;
+          for(var i = this.items.length - 1; i >= 0; i--) {
+            if(this.items[i].file === this.currentURL){
+              this.$delete(this.items, i)
+              loadGallery(this.items)
+            }
+          }
         },
-        scroll() {},
       },
       mounted() {
         ipcRenderer.on('screenshot-response', (event, arg) => {
           if (fs.existsSync(arg)) {
-            this.items.unshift(arg);
+            var file =  path.parse(arg).name;
+            var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
+            this.items.unshift({file:arg, thumb:thumb});
             clipboard.write({ image: arg });
           }
         });
@@ -166,9 +178,9 @@ export default Vue.extend({
       watch: {
         items() {
           if (this.items.length !== 0) {
-            this.currentURL = this.items[0];
+            this.currentURL = this.items[0].file;
           } else {
-            this.currentURL = '';
+            this.currentURL = "";
           }
 
           if (this.items.length != 0) {
@@ -241,7 +253,19 @@ export default Vue.extend({
           if (file.split('.').pop() === 'png') {
             let url = dir + file;
             url = url.replace(/\\/g, '/');
-            items.unshift(url);
+
+            var file =  path.parse(file).name;
+            var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
+
+            if (!fs.existsSync(thumb)) {
+              await sharp(url)
+              .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
+              .toFile(thumb, (err, info) => {
+                items.unshift({file:url,thumb:thumb});
+              });
+            }else{
+              items.unshift({file:url,thumb:thumb});
+            }
           }
         });
       });
