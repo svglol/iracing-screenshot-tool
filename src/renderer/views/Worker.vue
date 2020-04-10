@@ -26,10 +26,10 @@ export default {
       telemetry = arg;
     });
 
-    ipcRenderer.on('screenshot-get-window',async (event,arg) =>{
-      await desktopCapturer
+    ipcRenderer.on('screenshot-get-window',(event,arg) =>{
+      desktopCapturer
       .getSources({types: ['window', 'screen']})
-      .then(async sources => {
+      .then(sources => {
         for (const source of sources) {
           if (source.name === 'iRacing.com Simulator') {
             iRacingWindowSource = source;
