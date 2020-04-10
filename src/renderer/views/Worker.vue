@@ -26,6 +26,18 @@ export default {
       telemetry = arg;
     });
 
+    ipcRenderer.on('screenshot-get-window',async (event,arg) =>{
+      await desktopCapturer
+      .getSources({types: ['window', 'screen']})
+      .then(async sources => {
+        for (const source of sources) {
+          if (source.name === 'iRacing.com Simulator') {
+            iRacingWindowSource = source;
+          }
+        }
+      });
+    });
+
     ipcRenderer.send('worker-ready');
   },
 };
@@ -85,19 +97,6 @@ function getFileNameString() {
 async function fullscreenScreenshot(callback) {
   let imageFormat = 'image/png';
 
-  await desktopCapturer
-  .getSources({ types: ['window', 'screen'] })
-  .then(async (sources) => {
-    for (const source of sources) {
-      if (source !== null) {
-        if (source.name === 'iRacing.com Simulator') {
-          iRacingWindowSource = source;
-        }
-      }
-    }
-  });
-
-  //
   var handleStream = (stream) => {
     // Create hidden video tag
     const video = document.createElement('video');

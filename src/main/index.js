@@ -169,6 +169,8 @@ function createWindow() {
     });
 
     ipcMain.on('resize-screenshot', async (event, data) => {
+      workerWindow.webContents.send('screenshot-get-window', data);
+      await wait(100);
       resize(data.width, data.height);
       await wait(1000);
       iracing.camControls.setState(8);
