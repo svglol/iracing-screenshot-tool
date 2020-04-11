@@ -63,7 +63,7 @@ async function restartElectron() {
 }
 
 function startMain() {
-  const webpackSetup = webpack([mainConfig, workersConfig])
+  const webpackSetup = webpack([mainConfig])
 
   webpackSetup.compilers.forEach((compiler) => {
     const { name } = compiler
