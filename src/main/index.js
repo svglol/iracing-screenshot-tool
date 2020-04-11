@@ -23,7 +23,6 @@ var iracing = irsdk.getInstance();
 
 let mainWindow, workerWindow;
 
-
 // only allow single instance of application
 if (!isDev) {
   Sentry.init({dsn: 'https://b80e45fd34c54ebe94691e27445740b1@o376188.ingest.sentry.io/5196735'});
@@ -172,10 +171,9 @@ function createWindow() {
     });
 
     ipcMain.on('resize-screenshot', async (event, data) => {
-      resize(data.width, data.height);
-      await wait(1000);
       iracing.camControls.setState(8);
-      workerWindow.webContents.send('screenshot-request', data);
+      var id = resize(data.width, data.height);
+      workerWindow.webContents.send('screenshot-request', {width:data.width,height:data.height,crop:data.crop,windowID:id});
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
       workerWindow.webContents.send('telemetry', iracing.telemetry);
     });
@@ -232,15 +230,6 @@ if (process.env.NODE_ENV === 'production') autoUpdater.checkForUpdates()
 })
 */
 
-function wait(timer) {
-  return new Promise((resolve) => {
-    timer = timer || 2000;
-    setTimeout(() => {
-      resolve();
-    }, timer);
-  });
-}
-
 function resize(width, height) {
   const user32 = new ffi.Library('user32', {
     GetTopWindow: ['long', ['long']],
@@ -277,4 +266,5 @@ function resize(width, height) {
   user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
   user32.SetFocus(winToSetOnTop);
   user32.SetActiveWindow(winToSetOnTop);
+  return winToSetOnTop;
 }

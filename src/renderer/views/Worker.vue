@@ -9,15 +9,20 @@ const sharp = require('sharp');
 const app = remote.app;
 
 const config = require('../../utilities/config');
-let sessionInfo, telemetry;
+let sessionInfo, telemetry,windowID;
 
 export default {
   methods: {},
   mounted() {
     ipcRenderer.on('screenshot-request', (event, input) => {
-      fullscreenScreenshot((base64data) => {
-        saveImage(base64data, input.crop);
-      });
+      windowID = input.windowID;
+      if(windowID === undefined){
+        ipcRenderer.send('screenshot-error', 'iRacing window not found');
+      }else{
+        fullscreenScreenshot((base64data) => {
+          saveImage(base64data, input.crop);
+        });
+      }
     });
     ipcRenderer.on('session-info', (event, arg) => {
       sessionInfo = arg;
@@ -126,30 +131,28 @@ async function fullscreenScreenshot(callback) {
     ipcRenderer.send('screenshot-error', e);
   };
 
-  desktopCapturer.getSources({ types: ['window'] }).then(async sources => {
-    for (const source of sources) {
-      if (source.name === 'iRacing.com Simulator') {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-              mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: source.id,
-                minWidth: 1280,
-                maxWidth: 10000,
-                minHeight: 720,
-                maxHeight: 10000
-              }
-            }
-          })
-          handleStream(stream)
-        } catch (e) {
-          handleError(e)
+  await delay(1000);
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: 'window:'+windowID+':0',
+          minWidth: 1280,
+          maxWidth: 10000,
+          minHeight: 720,
+          maxHeight: 10000
         }
-        return
       }
-    }
-  });
+    })
+    handleStream(stream)
+  } catch (e) {
+    handleError(e)
+  }
+  // if(!found) ipcRenderer.send('screenshot-error', 'iRacing window not found');
 }
+
+const delay = ms => new Promise(res => setTimeout(res, ms));
 </script>
