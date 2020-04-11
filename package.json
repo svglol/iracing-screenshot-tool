@@ -57,6 +57,7 @@
     "jimp": "^0.10.0",
     "mini-css-extract-plugin": "^0.9.0",
     "node-loader": "^0.6.0",
+    "np": "^6.2.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^2.0.2",
     "sass": "^1.26.3",
@@ -87,16 +88,19 @@
     "jest:coverage": "jest --collect-coverage",
     "jest:watch": "jest --watch",
     "lint": "eslint --fix --ext .js,.ts,.vue ./",
-    "pack": "run-p pack:main pack:renderer pack:workers",
+    "pack": "run-p pack:main pack:renderer",
     "pack:main": "webpack --mode=production --env.NODE_ENV=production --hide-modules --config _scripts/webpack.main.config.js",
     "pack:renderer": "webpack --mode=production --env.NODE_ENV=production --hide-modules --config _scripts/webpack.renderer.config.js",
-    "pack:workers": "webpack --mode=production --env.NODE_ENV=production --hide-modules --config _scripts/webpack.workers.config.js",
     "postinstall": "electron-builder install-app-deps",
     "prettier": "prettier --write \"{src,_scripts}/**/*.{js,ts,vue}\"",
     "rebuild:electron": "run-s electron-builder-install electron-rebuild",
     "rebuild:node": "npm rebuild",
-    "release": "run-s test build",
+    "release": "np",
     "test": "run-s rebuild:node pack:workers jest",
     "test:watch": "run-s rebuild:node pack:workers jest:watch"
-  }
+  },
+  "np": {
+		"publish": false,
+		"releaseDraft": false
+	}
 }

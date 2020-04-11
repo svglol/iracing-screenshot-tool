@@ -26,7 +26,7 @@ const config = {
   files: ['static/icon.*', './dist/**/*', '!./dist/web/**/*'],
   win: {
     icon: 'static/icon.png',
-    target: ['nsis', 'portable'],
+    target: ['nsis'],
   },
   nsis: {
     allowToChangeInstallationDirectory: true,

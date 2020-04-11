@@ -12,7 +12,6 @@ const { spawn } = require('child_process')
 
 const mainConfig = require('./webpack.main.config')
 const rendererConfig = require('./webpack.renderer.config')
-const workersConfig = require('./webpack.workers.config')
 
 let electronProcess = null
 let manualRestart = null
