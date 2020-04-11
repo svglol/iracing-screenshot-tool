@@ -96,8 +96,8 @@
     "rebuild:electron": "run-s electron-builder-install electron-rebuild",
     "rebuild:node": "npm rebuild",
     "release": "np",
-    "test": "run-s rebuild:node pack:workers jest",
-    "test:watch": "run-s rebuild:node pack:workers jest:watch"
+    "test": "run-s rebuild:node jest",
+    "test:watch": "run-s rebuild:node jest:watch"
   },
   "np": {
 		"publish": false,
