@@ -4,10 +4,10 @@
 
 <script>
 const { ipcRenderer, remote, desktopCapturer } = require('electron');
+const fs = require('fs');
 const sharp = require('sharp');
 const app = remote.app;
 
-let iRacingWindowSource;
 const config = require('../../utilities/config');
 let sessionInfo, telemetry;
 
@@ -25,20 +25,6 @@ export default {
     ipcRenderer.on('telemetry', (event, arg) => {
       telemetry = arg;
     });
-
-    ipcRenderer.on('screenshot-get-window',(event,arg) =>{
-      desktopCapturer
-      .getSources({types: ['window', 'screen']})
-      .then(sources => {
-        for (const source of sources) {
-          if (source.name === 'iRacing.com Simulator') {
-            iRacingWindowSource = source;
-          }
-        }
-      });
-    });
-
-    ipcRenderer.send('worker-ready');
   },
 };
 
@@ -46,9 +32,9 @@ async function saveImage(base64data, crop) {
   base64data = base64data.replace(/^data:image\/png;base64,/, '');
 
   const file = getFileNameString();
-  const fileName = config.get('screenshotFolder') + file + '.png';
+  var fileName = config.get('screenshotFolder')+ file + '.png';
   const buff = await Buffer.from(base64data, 'base64');
-
+  await fs.writeFileSync(fileName, '');
   const image = sharp(buff);
   image
   .metadata()
@@ -75,9 +61,9 @@ async function saveImage(base64data, crop) {
       ipcRenderer.send('screenshot-response', fileName);
     });
 
-
   })
   .catch(err => {
+    console.log(err)
     ipcRenderer.send('screenshot-error', err);
   });
 }
@@ -99,7 +85,7 @@ async function fullscreenScreenshot(callback) {
 
   var handleStream = (stream) => {
     // Create hidden video tag
-    const video = document.createElement('video');
+    var video = document.createElement('video');
     video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
 
     // Event connected to stream
@@ -136,31 +122,34 @@ async function fullscreenScreenshot(callback) {
   };
 
   var handleError = function (e) {
-    console.log(e);
+    throw e;
     ipcRenderer.send('screenshot-error', e);
   };
 
-  try {
-    const source = iRacingWindowSource;
-    if(source === undefined) throw Error('Can\'t find iRacing Window');
-    if (source.name === 'iRacing.com Simulator') {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: source.id,
-            minWidth: 1280,
-            maxWidth: 10000,
-            minHeight: 720,
-            maxHeight: 10000,
-          },
-        },
-      });
-      handleStream(stream);
+  desktopCapturer.getSources({ types: ['window'] }).then(async sources => {
+    for (const source of sources) {
+      if (source.name === 'iRacing.com Simulator') {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: source.id,
+                minWidth: 1280,
+                maxWidth: 10000,
+                minHeight: 720,
+                maxHeight: 10000
+              }
+            }
+          })
+          handleStream(stream)
+        } catch (e) {
+          handleError(e)
+        }
+        return
+      }
     }
-  } catch (error) {
-    handleError(error);
-  }
+  });
 }
 </script>
