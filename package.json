@@ -54,6 +54,7 @@
     "fibers": "^4.0.2",
     "file-loader": "^6.0.0",
     "html-webpack-plugin": "^4.0.3",
+    "jest": "^25.3.0",
     "jimp": "^0.10.0",
     "mini-css-extract-plugin": "^0.9.0",
     "node-loader": "^0.6.0",
@@ -96,11 +97,11 @@
     "rebuild:electron": "run-s electron-builder-install electron-rebuild",
     "rebuild:node": "npm rebuild",
     "release": "np",
-    "test": "run-s rebuild:node jest",
-    "test:watch": "run-s rebuild:node jest:watch"
+    "test": "jest --passWithNoTests",
+    "test:watch": "run-s rebuild:node jest:watch --passWithNoTests"
   },
   "np": {
-		"publish": false,
-		"releaseDraft": false
-	}
+    "publish": false,
+    "releaseDraft": false
+  }
 }
