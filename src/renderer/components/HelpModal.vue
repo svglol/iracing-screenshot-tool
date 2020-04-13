@@ -55,7 +55,7 @@ ul{
 
 p{
   margin-bottom: 1rem;
-  color:grey;
+  color:#aaaaaa;
 }
 
 button {
