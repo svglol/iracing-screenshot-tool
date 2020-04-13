@@ -89,13 +89,13 @@ function createWindow() {
       height: config.get('winHeight'),
       minWidth: 1000,
       minHeight: 600,
+      backgroundColor: '#252525',
       webPreferences: {
         nodeIntegration: true,
         nodeIntegrationInWorker: true,
         webSecurity: false,
       },
       frame: false,
-      backgroundColor: '#252525',
     });
 
     Menu.setApplicationMenu(null)

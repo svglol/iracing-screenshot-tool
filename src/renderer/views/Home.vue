@@ -280,11 +280,14 @@ export default Vue.extend({
       padding: 0px !important;
     }
 
+    html{
+      background-color: transparent!important;
+    }
     body {
       background-position: center;
       background-repeat: no-repeat;
       background-size: cover;
-      background: rgb(37,37,37);
+      background: rgb(37,37,37)!important;
       background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
       height: 100vh;
       color: white !important;
