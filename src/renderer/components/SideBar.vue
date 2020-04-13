@@ -189,6 +189,10 @@ export default {
   color:#ffdd57!important;
 }
 
+.control-label{
+  font-weight: 700;
+}
+
 .message.is-info .message-body{
   color:rgb(50, 152, 220)!important;
 }
