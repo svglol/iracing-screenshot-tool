@@ -65,6 +65,7 @@
     :has-drag="false"
     indicator-custom
     :indicator-inside="false"
+    v-model="selected"
     >
     <b-carousel-item v-for="(item, i) in items" :key="i">
       <figure class="al image" :draggable="false">
@@ -79,7 +80,7 @@
       <figure class="al image" :draggable="false">
         <img
         :draggable="false"
-        v-lazy="items[props.i].thumb"
+        v-lazy="getImageUrl(items[props.i])"
         @click="selectImage(items[props.i].file)"
         style="max-height: 70px; object-fit: contain;"
         />
@@ -121,20 +122,17 @@ export default Vue.extend({
       items: [],
       currentURL: '',
       fileName: '',
-      resolution: ''
+      resolution: '',
+      selected: 0
     };
   },
   methods: {
+    getImageUrl(item){
+      if(item != undefined)
+      return item.thumb;
+    },
     screenshot(data) {
       ipcRenderer.send('resize-screenshot', data);
-    },
-    switchGallery(value) {
-      this.gallery = value;
-      if (value) {
-        return document.documentElement.classList.add('is-clipped');
-      } else {
-        return document.documentElement.classList.remove('is-clipped');
-      }
     },
     selectImage(item) {
       this.currentURL = item;
@@ -156,7 +154,7 @@ export default Vue.extend({
           for(var i = this.items.length - 1; i >= 0; i--) {
             if(this.items[i].file === this.currentURL){
               this.$delete(this.items, i)
-              loadGallery(this.items)
+              if(this.selected == this.items.length) this.selected--;
             }
           }
         },
@@ -350,6 +348,10 @@ export default Vue.extend({
       margin-top: auto;
       background-color: rgba(0,0,0,.2);
       scroll-behavior: smooth;
+    }
+
+    .indicator-item{
+      padding-right: .5rem;
     }
 
     .is-active img{
