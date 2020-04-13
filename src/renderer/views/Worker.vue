@@ -38,7 +38,7 @@ async function saveImage(base64data, crop) {
 
   const file = getFileNameString();
   var fileName = config.get('screenshotFolder')+ file + '.png';
-  const buff = await Buffer.from(base64data, 'base64');
+  var buff = await Buffer.from(base64data, 'base64');
   await fs.writeFileSync(fileName, '');
   const image = sharp(buff);
   image
@@ -64,6 +64,9 @@ async function saveImage(base64data, crop) {
     .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
     .toFile(thumb, (err, info) => {
       ipcRenderer.send('screenshot-response', fileName);
+      buff = null;
+      base64data = null;
+      global.gc();
     });
 
   })
@@ -130,6 +133,8 @@ async function fullscreenScreenshot(callback) {
       try {
         // Destroy connect to stream
         stream.getTracks()[0].stop();
+        video = null;
+        stream = null;
       } catch (error) {
         console.log(error);
       }

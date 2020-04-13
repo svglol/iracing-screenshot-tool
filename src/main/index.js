@@ -11,6 +11,7 @@ let takingScreenshot = false;
 app.name = productName;
 // to hide deprecation message
 app.allowRendererProcessReuse = true;
+app.commandLine.appendSwitch('js-flags', '--expose_gc');
 
 // disable electron warning
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
