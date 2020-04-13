@@ -166,6 +166,7 @@ export default Vue.extend({
             var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
             this.items.unshift({file:arg, thumb:thumb});
             clipboard.write({ image: arg });
+            this.selected = 0;
           }
         });
         loadGallery(this.items);
