@@ -62,6 +62,7 @@ img {
 	display: flex;
 }
 .dragregion {
+  margin-top: 2px;
 	flex-grow: 1;
 	text-align: left;
 	vertical-align: middle;
