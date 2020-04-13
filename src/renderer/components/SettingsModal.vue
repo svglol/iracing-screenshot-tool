@@ -3,52 +3,54 @@
     <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0px;">
       <p class="modal-card-title" style="color:white; font-weight:700">Settings</p>
     </header>
-    <section class="modal-card-body" style="background-color: transparent; max-width:600px; margin:auto">
-      <b-field label="Screenshot Folder" />
+    <section class="modal-card-body" style="background-color: transparent; ">
+      <div style=" max-width:600px; margin:auto;padding-bottom:1rem">
+        <b-field label="Screenshot Folder" />
 
-      <b-field label="">
-        <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
-        <p class="control">
-          <b-button class="button is-primary" @click="openFolderDialog" style="width:130px">Select Folder</b-button>
-        </p>
-      </b-field>
-      <hr />
-      <b-field label="Screenshot Keybind" />
-      <b-field label="">
-        <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
-        <p class="control">
-          <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey" style="width:130px">Edit Bind</b-button>
-        </p>
-      </b-field>
-      <hr />
-      <b-field>
-        <div>
-          <span class="label" style="margin-bottom:0px;">Disable Tooltips</span>
-          <span class="description">Leave me alone, I know what I'm doing</span>
+        <b-field label="">
+          <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
+          <p class="control">
+            <b-button class="button is-primary" @click="openFolderDialog" style="width:130px">Select Folder</b-button>
+          </p>
+        </b-field>
+        <hr />
+        <b-field label="Screenshot Keybind" />
+        <b-field label="">
+          <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
+          <p class="control">
+            <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey" style="width:130px">Edit Bind</b-button>
+          </p>
+        </b-field>
+        <hr />
+        <b-field>
+          <div>
+            <span class="label" style="margin-bottom:0px;">Disable Tooltips</span>
+            <span class="description">Leave me alone, I know what I'm doing</span>
+          </div>
+          <b-switch v-model="disableTooltips" style="margin-left:auto"></b-switch>
+        </b-field>
+        <hr />
+        <b-field>
+          <div>
+            <span class="label" style="margin-bottom:0px;">Monitor Size</span>
+            <span class="description">Height and width to resize iRacing window to after taking screenshot. Useful for people using an Ultrawide or Nvidia Surround</span>
+          </div>
+        </b-field>
+        <div class="columns">
+          <div class="column">
+            <b-field label="Width">
+              <b-input type="number" min="1280" max="3840" v-model="screenWidth"></b-input>
+            </b-field>
+          </div>
+          <div class="column">
+            <b-field label="Height">
+              <b-input type="number" v-model="screenHeight" min="720" max="2160" ></b-input>
+            </b-field>
+          </div>
         </div>
-        <b-switch v-model="disableTooltips" style="margin-left:auto"></b-switch>
-      </b-field>
-      <hr />
-      <b-field>
-        <div>
-          <span class="label" style="margin-bottom:0px;">Monitor Size</span>
-          <span class="description">Height and width to resize iRacing window to after taking screenshot. Useful for people using an Ultrawide or Nvidia Surround</span>
-        </div>
-      </b-field>
-      <div class="columns">
-        <div class="column">
-          <b-field label="Width">
-            <b-input type="number" min="1280" max="3840" v-model="screenWidth"></b-input>
-          </b-field>
-        </div>
-        <div class="column">
-          <b-field label="Height">
-            <b-input type="number" v-model="screenHeight" min="720" max="2160" ></b-input>
-          </b-field>
-        </div>
-      </div>
-      <hr />
-    </span>
+        <hr />
+      </span>
+    </div>
   </section>
 </div>
 </template>
