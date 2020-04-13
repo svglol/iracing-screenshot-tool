@@ -27,10 +27,9 @@
     </b-field>
 
 
-    <b-message  v-if="resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k' || resolution == 'Custom'"type="is-warning" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
+    <b-message  v-if="(resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k' || resolution == 'Custom')&& !disableTooltips "type="is-warning" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
       <strong> High resoultions may crash iRacing if you run out of VRAM. Certain track/car combinations will require more VRAM</strong>
     </b-message>
-
 
     <b-switch
     dense
@@ -39,7 +38,7 @@
     >Crop Watermark</b-switch
     >
 
-    <b-message v-if="crop" type="is-info" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
+    <b-message v-if="crop && !disableTooltips" type="is-info" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
       <strong>Shrink iRacing UI to as small as possible with Ctrl+PgDwn before taking screenshot</strong>
     </b-message>
 
@@ -71,6 +70,7 @@ export default {
       customHeight: '0',
       iracingOpen: false,
       takingScreenshot: false,
+      disableTooltips: config.get('disableTooltips')
     };
   },
   methods: {
@@ -163,6 +163,10 @@ export default {
       });
       ipcRenderer.send('request-iracing-status', '');
     })
+
+    config.onDidChange('disableTooltips', (newValue,oldValue) =>{
+      this.disableTooltips = newValue;
+    });
   },
   computed: {
     disabled() {

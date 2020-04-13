@@ -1,27 +1,38 @@
 <template>
-    <div class="modal-card" style="width: auto; height:100vh">
-      <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0px;">
-        <p class="modal-card-title" style="color:white; font-weight:700">Settings</p>
-      </header>
-      <section class="modal-card-body" style="background-color: transparent; max-width:600px; margin:auto">
-        <b-field label="Screenshot Folder" />
+  <div class="modal-card" style="width: auto; height:100vh">
+    <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0px;">
+      <p class="modal-card-title" style="color:white; font-weight:700">Settings</p>
+    </header>
+    <section class="modal-card-body" style="background-color: transparent; max-width:600px; margin:auto">
+      <b-field label="Screenshot Folder" />
 
-        <b-field label="">
-          <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
-          <p class="control">
-            <b-button class="button is-primary" @click="openFolderDialog">Select Folder</b-button>
-          </p>
-        </b-field>
+      <b-field label="">
+        <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
+        <p class="control">
+          <b-button class="button is-primary" @click="openFolderDialog">Select Folder</b-button>
+        </p>
+      </b-field>
+      <hr />
+      <b-field label="Screenshot Keybind" />
+      <b-field label="">
+        <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
+        <p class="control">
+          <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Bind</b-button>
+        </p>
+      </b-field>
+      <hr />
+      <b-field>
+        <div>
+          <span class="label" style="margin-bottom:0px;">Disable Tooltips</span>
+          <span class="description">Leave me alone, I know what I'm doing</span>
+        </div>
+        <b-switch v-model="disableTooltips" style="margin-left:auto"></b-switch>
+      </b-field>
 
-        <b-field label="Screenshot Keybind" />
-        <b-field label="">
-          <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
-          <p class="control">
-            <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Bind</b-button>
-          </p>
-        </b-field>
-      </section>
-    </div>
+      <hr />
+    </span>
+  </section>
+</div>
 </template>
 
 <script>
@@ -34,7 +45,8 @@ export default {
     return {
       screenshotFolder: config.get('screenshotFolder'),
       screenshotKeybind: config.get('screenshotKeybind'),
-      bindingKey: false
+      bindingKey: false,
+      disableTooltips:config.get('disableTooltips')
     }
   },
   methods: {
@@ -93,7 +105,27 @@ export default {
         }
         config.set('screenshotFolder',folder);
       }
+    },
+    disableTooltips(){
+      config.set('disableTooltips',this.disableTooltips);
     }
   }
 }
 </script>
+
+<style scoped>
+
+hr{
+  margin: 0;
+  margin-top: .25rem;
+  margin-bottom: .25rem;
+  height:1px;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.description{
+  font-size: .8rem;
+  color:#aaaaaa;
+}
+
+</style>

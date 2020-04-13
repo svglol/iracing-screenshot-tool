@@ -43,6 +43,10 @@ const schema = {
   screenshotKeybind: {
     type: 'string',
     default: 'Control+PrintScreen',
+  },
+  disableTooltips:{
+    type: 'boolean',
+    default: false,
   }
 };
 
