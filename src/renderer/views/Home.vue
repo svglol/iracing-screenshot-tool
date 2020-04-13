@@ -6,7 +6,8 @@
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
-     min-width:220px
+    min-width:240px;
+    max-width:240px
     "
     >
     <SideBar v-on:click="screenshot" />
