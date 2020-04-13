@@ -1,7 +1,7 @@
 <template>
   <div class="modal-card" style="width: auto; height:100vh">
-    <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0px;">
-      <p class="modal-card-title" style="color:white;font-weight:700">Help</p>
+    <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0;">
+      <p class="modal-card-title" style="color:white;font-weight:700;  margin-bottom: 0rem;">Help</p>
     </header>
     <section class="modal-card-body" style="background-color: transparent;">
       <div style=" max-width:600px; margin:auto;padding-bottom:1rem">
