@@ -28,7 +28,25 @@
         </div>
         <b-switch v-model="disableTooltips" style="margin-left:auto"></b-switch>
       </b-field>
-
+      <hr />
+      <b-field>
+        <div>
+          <span class="label" style="margin-bottom:0px;">Monitor Size</span>
+          <span class="description">Height and width to resize iRacing window to after taking screenshot. Useful for people using an Ultrawide or Nvidia Surround</span>
+        </div>
+      </b-field>
+      <div class="columns">
+        <div class="column">
+          <b-field label="Width">
+            <b-input type="number" min="1280" max="3840" v-model="screenWidth"></b-input>
+          </b-field>
+        </div>
+        <div class="column">
+          <b-field label="Height">
+            <b-input type="number" v-model="screenHeight" min="720" max="2160" ></b-input>
+          </b-field>
+        </div>
+      </div>
       <hr />
     </span>
   </section>
@@ -46,7 +64,9 @@ export default {
       screenshotFolder: config.get('screenshotFolder'),
       screenshotKeybind: config.get('screenshotKeybind'),
       bindingKey: false,
-      disableTooltips:config.get('disableTooltips')
+      disableTooltips:config.get('disableTooltips'),
+      screenWidth: config.get('defaultScreenWidth'),
+      screenHeight: config.get('defaultScreenHeight')
     }
   },
   methods: {
@@ -108,6 +128,20 @@ export default {
     },
     disableTooltips(){
       config.set('disableTooltips',this.disableTooltips);
+    }
+  },
+  beforeDestroy(){
+    if(config.get('defaultScreenHeight') !== parseInt(this.screenHeight)){
+      if(this.screenHeight > 720 && this.screenHeight < 2160){
+        config.set('defaultScreenHeight',parseInt(this.screenHeight));
+        ipcRenderer.send('defaultScreenHeight',parseInt(this.screenHeight));
+      }
+    }
+    if(config.get('defaultScreenWidth') !== parseInt(this.screenWidth)){
+      if(this.screenWidth > 1280 && this.screenWidth < 3840){
+        ipcRenderer.send('defaultScreenWidth',parseInt(this.screenWidth));
+        config.set('defaultScreenWidth',parseInt(this.screenWidth));
+      }
     }
   }
 }

@@ -5,6 +5,7 @@ const config = require('../utilities/config');
 import { productName } from '../../package.json';
 import * as Sentry from '@sentry/electron';
 let width, height;
+let takingScreenshot = false;
 
 // set app name
 app.name = productName;
@@ -136,8 +137,18 @@ function createWindow() {
   app.on('ready', () => {
     createWindow();
 
-    width = screen.getPrimaryDisplay().bounds.width;
-    height = screen.getPrimaryDisplay().bounds.height;
+    width = config.get('defaultScreenWidth');
+    height = config.get('defaultScreenHeight');
+
+    if(config.get('defaultScreenWidth') === 0){
+      config.set('defaultScreenWidth',screen.getPrimaryDisplay().bounds.width);
+      width = screen.getPrimaryDisplay().bounds.width;
+    }
+
+    if(config.get('defaultScreenHeight') === 0){
+      config.set('defaultScreenHeight',screen.getPrimaryDisplay().bounds.height);
+      height = screen.getPrimaryDisplay().bounds.height;
+    }
 
     if (isDev) {
       installDevTools();
@@ -153,6 +164,7 @@ function createWindow() {
     ipcMain.on('screenshot-response', (event, output) => {
       resize(width, height);
       mainWindow.webContents.send('screenshot-response', output);
+      takingScreenshot = false;
     });
 
     ipcMain.on('request-iracing-status', (event) => {
@@ -171,6 +183,7 @@ function createWindow() {
     });
 
     ipcMain.on('resize-screenshot', async (event, data) => {
+      takingScreenshot = true;
       iracing.camControls.setState(8);
       var id = resize(data.width, data.height);
       workerWindow.webContents.send('screenshot-request', {width:data.width,height:data.height,crop:data.crop,windowID:id});
@@ -183,6 +196,7 @@ function createWindow() {
     });
 
     ipcMain.on('screenshot-error', (event, data) => {
+      takingScreenshot = false;
       mainWindow.webContents.send('screenshot-error',data);
     });
 
@@ -196,6 +210,20 @@ function createWindow() {
     globalShortcut.register(config.get('screenshotKeybind'), () => {
       mainWindow.webContents.send('hotkey-screenshot', '');
     })
+
+    ipcMain.on('defaultScreenHeight', (event,data) => {
+      height = data;
+      if(!takingScreenshot){
+        resize(width,height);
+      }
+    });
+
+    ipcMain.on('defaultScreenWidth', (event,data) => {
+      width = data;
+      if(!takingScreenshot){
+        resize(width,height);
+      }
+    });
   });
 
   app.on('window-all-closed', () => {
@@ -260,8 +288,9 @@ function resize(width, height) {
     foregroundHWnd,
     null
   );
-  user32.ShowWindow(winToSetOnTop, 9);
+
   user32.SetWindowPos(winToSetOnTop, -2, 0, 0, width, height, 0);
+  user32.ShowWindow(winToSetOnTop, 9);
   user32.SetForegroundWindow(winToSetOnTop);
   user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
   user32.SetFocus(winToSetOnTop);

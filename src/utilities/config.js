@@ -47,6 +47,14 @@ const schema = {
   disableTooltips:{
     type: 'boolean',
     default: false,
+  },
+  defaultScreenWidth:{
+    type:'number',
+    default: 0
+  },
+  defaultScreenHeight:{
+    type:'number',
+    default: 0
   }
 };
 
