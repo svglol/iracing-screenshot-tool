@@ -9,7 +9,7 @@
       <b-field label="">
         <b-input disabled type="text" :value="screenshotFolder" style="width:100vw"></b-input>
         <p class="control">
-          <b-button class="button is-primary" @click="openFolderDialog">Select Folder</b-button>
+          <b-button class="button is-primary" @click="openFolderDialog" style="width:130px">Select Folder</b-button>
         </p>
       </b-field>
       <hr />
@@ -17,7 +17,7 @@
       <b-field label="">
         <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
         <p class="control">
-          <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Edit Bind</b-button>
+          <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey" style="width:130px">Edit Bind</b-button>
         </p>
       </b-field>
       <hr />
