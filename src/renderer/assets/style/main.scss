@@ -132,7 +132,7 @@ textarea {
 }
 
 ::-webkit-scrollbar-track {
-	background-color: rgba(0, 0, 0, 0.5);
+	background-color: rgba(0, 0, 0, 0.5)!important;
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
@@ -150,4 +150,17 @@ textarea {
 
 .shadow {
     box-shadow: 0 1rem 1rem rgba(0,0,0,.175)!important;
+}
+
+.modal-close{
+   top: 34px!important;
+}
+
+.modal.is-full-screen > .animation-content, .modal.is-full-screen > .animation-content > .modal-card{
+  background: rgb(37,37,37);
+  background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
+}
+
+:focus {
+    outline: -webkit-focus-ring-color auto 0px;
 }

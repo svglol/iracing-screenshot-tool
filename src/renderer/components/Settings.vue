@@ -10,18 +10,12 @@
     </ul>
 
     <b-modal :active.sync="showSettings"
-    has-modal-card
-    trap-focus
-    aria-role="dialog"
-    aria-modal>
+    has-modal-card full-screen :can-cancel="true">
     <SettingsModal />
   </b-modal>
 
   <b-modal :active.sync="showHelp"
-  has-modal-card
-  trap-focus
-  aria-role="dialog"
-  aria-modal>
+has-modal-card full-screen :can-cancel="true">
   <HelpModal/>
 </b-modal>
 
@@ -55,6 +49,11 @@ export default {
   /* padding: 1rem; */
   /* background-color: rgba(0, 0, 0, 0.3); */
   margin-bottom: 1.5rem;
+}
+
+.modal{
+  margin-top: 24px;
+  border: 0px;
 }
 
 .toolbar {

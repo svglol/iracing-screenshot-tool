@@ -1,11 +1,9 @@
 <template>
-  <form action="">
-    <div class="modal-card" style="width: 80vh;border: 1px solid rgba(255, 255, 255, .1);border-radius: 5px;">
-      <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.4); border-bottom: 1px solid black;">
-        <p class="modal-card-title" style="color:white">Settings</p>
+    <div class="modal-card" style="width: auto; height:100vh">
+      <header class="modal-card-head" style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0px;">
+        <p class="modal-card-title" style="color:white; font-weight:700">Settings</p>
       </header>
-      <section class="modal-card-body" style="background-color: rgba(0, 0, 0, 0.6);">
-
+      <section class="modal-card-body" style="background-color: transparent; max-width:600px; margin:auto">
         <b-field label="Screenshot Folder" />
 
         <b-field label="">
@@ -22,14 +20,8 @@
             <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Bind</b-button>
           </p>
         </b-field>
-
       </section>
-      <footer class="modal-card-foot" style="background-color: rgba(0, 0, 0, 0.4);border-top: 1px solid black;">
-        <button class="button is-dark" type="button" @click="$parent.close()">Close</button>
-        <b-button class="button is-primary" @click="save">Save</b-button>
-      </footer>
     </div>
-  </form>
 </template>
 
 <script>
@@ -58,14 +50,6 @@ export default {
         console.log(err)
       });
     },
-    save(){
-      if(config.get('screenshotFolder') !== this.screenshotFolder){
-        config.set('screenshotFolder',this.screenshotFolder+'\\');
-      }
-      ipcRenderer.send('screenshotKeybind-change',{newValue: this.screenshotKeybind,oldValue:config.get('screenshotKeybind')});
-      config.set('screenshotKeybind',this.screenshotKeybind);
-      this.$parent.close()
-    },
     bindScreenshotKeybind(){
       let _this = this;
       this.bindingKey = true;
@@ -91,11 +75,25 @@ export default {
           keysReleased.push(e.key);
           if(keysReleased.length == keys.length){
             _this.bindingKey = false;
+            ipcRenderer.send('screenshotKeybind-change',{newValue: _this.screenshotKeybind,oldValue:config.get('screenshotKeybind')});
+            config.set('screenshotKeybind',_this.screenshotKeybind);
             window.removeEventListener("keyup",keyup);
           }
         }
       });
     }
   },
+  watch:{
+    screenshotFolder(){
+      let folder = this.screenshotFolder;
+      if(config.get('screenshotFolder') !== folder){
+        if(folder.slice(-1) !== '\\'){
+          folder += '\\';
+          this.screenshotFolder = folder;
+        }
+        config.set('screenshotFolder',folder);
+      }
+    }
+  }
 }
 </script>
