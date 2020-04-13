@@ -17,7 +17,7 @@
       <b-field label="">
         <b-input disabled type="text" :value="screenshotKeybind" style="width:100vw"></b-input>
         <p class="control">
-          <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Bind</b-button>
+          <b-button class="button is-primary" @click="bindScreenshotKeybind" :loading="bindingKey">Edit Bind</b-button>
         </p>
       </b-field>
       <hr />
