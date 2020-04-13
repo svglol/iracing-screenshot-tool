@@ -81,8 +81,21 @@ function getFileNameString() {
       driverName = item.UserName;
     }
   });
-  const now = new Date();
-  return trackName + '-' + driverName + '-' + now.getTime();
+
+  var unique = false;
+  var count = 0;
+  var file = trackName + '-' + driverName + '-' + count;
+  var screenshotFolder = config.get('screenshotFolder')
+  while(!unique){
+    if (fs.existsSync(screenshotFolder+file+'.png')) {
+      count++;
+      file = trackName + '-' + driverName + '-' + count;
+    }
+    else{
+      unique = true;
+    }
+  }
+  return file;
 }
 
 async function fullscreenScreenshot(callback) {
