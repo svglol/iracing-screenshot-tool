@@ -271,6 +271,25 @@ export default Vue.extend({
           }
         });
       });
+
+      //Clear unused thumbnail cache
+      var thumbDir = app.getPath('userData')+'\\Cache\\';
+      await fs.readdir(thumbDir, (err, files) => {
+        files.forEach(async (file) => {
+          var fullFile = thumbDir + file;
+          if (file.split('.').pop() === 'webp') {
+            var deleteItem = true;
+            items.forEach((item, i) => {
+              if(item.thumb === fullFile){
+                deleteItem = false;
+              }
+            });
+            if(deleteItem){
+              fs.unlinkSync(fullFile);
+            }
+          }
+        });
+      });
     }
     </script>
 
