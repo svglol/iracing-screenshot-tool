@@ -88,8 +88,8 @@ function createWindow() {
       y: config.get('winPosY'),
       width: config.get('winWidth'),
       height: config.get('winHeight'),
-      minWidth: 1000,
-      minHeight: 600,
+      minWidth: 1100,
+      minHeight: 655,
       backgroundColor: '#252525',
       webPreferences: {
         nodeIntegration: true,
