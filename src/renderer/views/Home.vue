@@ -82,7 +82,7 @@
         :draggable="false"
         v-lazy="getImageUrl(items[props.i])"
         @click="selectImage(items[props.i].file)"
-        style="max-height: 70px; object-fit: contain;"
+        style="max-height: 70px; object-fit: contain;height:70px"
         />
       </figure>
     </template>
