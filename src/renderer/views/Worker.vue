@@ -79,11 +79,22 @@ async function saveImage(base64data, crop) {
 function getFileNameString() {
   const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
   let driverName = '';
-  sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-    if (telemetry.values.CamCarIdx === item.CarIdx) {
-      driverName = item.UserName;
-    }
-  });
+  console.log(sessionInfo.data)
+
+  if(sessionInfo.data.WeekendInfo.TeamRacing == 1){
+    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
+        if(sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx){
+          driverName = item.TeamName;
+        }
+    });
+  }
+  else{
+    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
+      if (telemetry.values.CamCarIdx === item.CarIdx) {
+        driverName = item.UserName;
+      }
+    });
+  }
 
   var unique = false;
   var count = 0;
