@@ -164,6 +164,7 @@ function createWindow() {
 
     ipcMain.on('screenshot-response', (event, output) => {
       resize(width, height);
+      iracing.camControls.setState(4); //reopen camera edit
       mainWindow.webContents.send('screenshot-response', output);
       takingScreenshot = false;
     });
