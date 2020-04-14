@@ -55,6 +55,10 @@ ul{
   margin-left: 2rem;
 }
 
+li{
+  color:#aaaaaa;
+}
+
 p{
   margin-bottom: 1rem;
   color:#aaaaaa;
