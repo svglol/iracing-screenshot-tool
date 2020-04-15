@@ -217,8 +217,9 @@ export default Vue.extend({
         currentURL: function () {
           if (this.currentURL !== '') {
             this.fileName = this.currentURL.split(/[\\/]/).pop();
-            const dimensions = sizeOf(this.currentURL);
+            var dimensions = sizeOf(this.currentURL);
             this.resolution = dimensions.width + ' x ' + dimensions.height;
+            dimensions = null;
           }
         },
       },
