@@ -142,6 +142,10 @@ export default Vue.extend({
     },
     copy() {
       clipboard.write({ image: this.currentURL });
+      this.$buefy.notification.open({
+        message: this.fileName + ' copied to clipboard',
+        type:"is-dark",
+      })
     },
     openFolder() {
       const file = this.currentURL.replace(/\//g, '\\');
