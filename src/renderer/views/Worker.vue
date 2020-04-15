@@ -33,59 +33,64 @@ export default {
   },
 };
 
-async function saveImage(base64data, crop) {
-  base64data = base64data.replace(/^data:image\/png;base64,/, '');
+function saveImage(blob, crop) {
+  var base64data = '';
+  let reader = new FileReader();
+  reader.readAsDataURL(blob);
+  reader.onload = async function() {
+    base64data = reader.result;
+    base64data = base64data.replace(/^data:image\/png;base64,/, '');
 
-  const file = getFileNameString();
-  var fileName = config.get('screenshotFolder')+ file + '.png';
-  var buff = await Buffer.from(base64data, 'base64');
-  await fs.writeFileSync(fileName, '');
-  const image = sharp(buff);
-  image
-  .metadata()
-  .then(function(metadata) {
-    if(metadata.width < 54){
-      return Error('image is too small');
-    }else{
-      if(crop){
-        return image
-        .extract({ left: 0, top: 0, width: metadata.width-54, height: metadata.height-30 })
-        .toFile(fileName)
+    const file = getFileNameString();
+    var fileName = config.get('screenshotFolder')+ file + '.png';
+    var buff = await Buffer.from(base64data, 'base64');
+    await fs.writeFileSync(fileName, '');
+    const image = sharp(buff);
+    image
+    .metadata()
+    .then(function(metadata) {
+      if(metadata.width < 54){
+        return Error('image is too small');
+      }else{
+        if(crop){
+          return image
+          .extract({ left: 0, top: 0, width: metadata.width-54, height: metadata.height-30 })
+          .toFile(fileName)
+        }
+        else{
+          return image
+          .toFile(fileName)
+        }
       }
-      else{
-        return image
-        .toFile(fileName)
-      }
-    }
-  })
-  .then(data => {
-    const thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
-    sharp(fileName)
-    .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
-    .toFile(thumb, (err, info) => {
-      ipcRenderer.send('screenshot-response', fileName);
-      buff = null;
-      base64data = null;
-      global.gc();
+    })
+    .then(data => {
+      const thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
+      sharp(fileName)
+      .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
+      .toFile(thumb, (err, info) => {
+        ipcRenderer.send('screenshot-response', fileName);
+        buff = null;
+        base64data = null;
+        global.gc();
+      });
+
+    })
+    .catch(err => {
+      console.log(err)
+      ipcRenderer.send('screenshot-error', err);
     });
-
-  })
-  .catch(err => {
-    console.log(err)
-    ipcRenderer.send('screenshot-error', err);
-  });
+  };
 }
 
 function getFileNameString() {
   const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
   let driverName = '';
-  console.log(sessionInfo.data)
 
   if(sessionInfo.data.WeekendInfo.TeamRacing == 1){
     sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-        if(sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx){
-          driverName = item.TeamName;
-        }
+      if(sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx){
+        driverName = item.TeamName;
+      }
     });
   }
   else{
@@ -127,19 +132,24 @@ async function fullscreenScreenshot(callback) {
       video.style.width = this.videoWidth + 'px'; // VideoWidth
 
       video.play();
+      video.pause();
 
       // Create canvas
       const canvas = document.createElement('canvas');
       canvas.width = this.videoWidth;
       canvas.height = this.videoHeight;
       const ctx = canvas.getContext('2d');
+
       // Draw video on canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       // Save screenshot to base64
-      callback(canvas.toDataURL(imageFormat));
+      canvas.toBlob((data)=>{
+        callback(data);
+      });
 
       // Remove hidden video tag
+      video.srcObject = null;
       video.remove();
       try {
         // Destroy connect to stream
