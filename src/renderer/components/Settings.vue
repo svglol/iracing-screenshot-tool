@@ -2,10 +2,10 @@
   <div class="settings">
     <ul class="toolbar" style="padding:.5rem">
       <li>
-        <a @click="showSettings = true" ><i class="mdi mdi-settings"/></a>
+        <a @click="showSettings = true" ><font-awesome-icon :icon="['fas', 'cog']"  /></a>
       </li>
       <li>
-        <a @click="showHelp = true" v-shortkey.push="['f1']" @shortkey="showHelp = true"><i class="mdi mdi-help"/></a>
+        <a @click="showHelp = true" v-shortkey.push="['f1']" @shortkey="showHelp = true"><font-awesome-icon :icon="['fas', 'info-circle']"  /></a>
       </li>
     </ul>
 
@@ -15,7 +15,7 @@
   </b-modal>
 
   <b-modal :active.sync="showHelp"
-has-modal-card full-screen :can-cancel="true">
+  has-modal-card full-screen :can-cancel="true">
   <HelpModal/>
 </b-modal>
 
@@ -35,6 +35,7 @@ export default {
     return {
       showSettings: false,
       showHelp: false,
+      showConfig: false,
     }
   },
   methods: {

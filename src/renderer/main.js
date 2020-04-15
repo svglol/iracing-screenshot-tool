@@ -1,5 +1,4 @@
 import 'bulma-pro/bulma.sass';
-import 'material-design-icons/iconfont/material-icons.css';
 import Vue from 'vue';
 import App from './App.vue';
 import router from './router';
@@ -15,9 +14,15 @@ Vue.use(VueLazyload)
 Vue.use(Buefy);
 Vue.use(require('vue-shortkey'));
 
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy } from '@fortawesome/free-solid-svg-icons'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+
+library.add(faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy)
+
+Vue.component('font-awesome-icon', FontAwesomeIcon)
+
 import * as Sentry from '@sentry/electron';
-
-
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 

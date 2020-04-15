@@ -34,11 +34,10 @@
             @click="deleteFile"
             v-shortkey="['del']"
             @shortkey="deleteFile"
-            ><i class="mdi mdi-delete"
-            /></a>
+            ><font-awesome-icon :icon="['fas', 'trash']"  /></a>
           </li>
           <li>
-            <a @click="openFolder"><i class="mdi mdi-folder" /></a>
+            <a @click="openFolder"><font-awesome-icon :icon="['fas', 'folder']"  /></a>
           </li>
           <li>
             <a
@@ -46,13 +45,11 @@
             @shortkey="copy"
             @click="copy"
             v-show="false"
-            ><i class="mdi mdi-content-copy"
-            /></a>
+            ><font-awesome-icon :icon="['fas', 'copy']"  /></a>
           </li>
           <li>
             <a @click="openExternally"
-            ><i class="mdi mdi-launch"
-            /></a>
+            ><font-awesome-icon :icon="['fas', 'external-link-alt']"  /></a>
           </li>
         </ul>
       </div>
@@ -329,13 +326,15 @@ export default Vue.extend({
       margin: 0;
       padding: 0;
       overflow: hidden;
+      margin-top: .1rem;
     }
 
     .toolbar li {
       float: right;
       margin-left: 0.3rem;
       margin-right: 0.3rem;
-      font-size: 1.4rem;
+      margin-top: auto;
+      font-size: 1.2rem;
     }
 
     .toolbar li a {
