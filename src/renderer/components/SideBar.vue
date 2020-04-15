@@ -148,8 +148,9 @@ export default {
     ipcRenderer.on('screenshot-response', (event, arg) => {
       if (fs.existsSync(arg)) {
         this.takingScreenshot = false;
+        let file = arg.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
         this.$buefy.notification.open({
-          message: arg + ' saved succesfully',
+          message: file + ' saved succesfully',
           type: 'is-success',
         });
       }
