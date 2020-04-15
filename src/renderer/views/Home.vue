@@ -216,7 +216,7 @@ export default Vue.extend({
         },
         currentURL: function () {
           if (this.currentURL !== '') {
-            this.fileName = this.currentURL.split(/[\\/]/).pop();
+            this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.')
             var dimensions = sizeOf(this.currentURL);
             this.resolution = dimensions.width + ' x ' + dimensions.height;
             dimensions = null;
