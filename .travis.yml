@@ -1,6 +1,10 @@
 os: windows
 language: node_js
 node_js: '12'
+cache: yarn
+cache:
+  yarn: true
+  directories:
+    - node_modules
 script:
-  - npm install
-  - npm run build
+  - yarn run build
