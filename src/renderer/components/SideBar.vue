@@ -122,6 +122,8 @@ export default {
       }
       this.takingScreenshot = true;
       this.$emit('click', { width: w, height: h, crop: this.crop });
+      document.body.requestPointerLock();
+      document.body.style.cursor = 'none';
     },
   },
   created() {
@@ -146,6 +148,8 @@ export default {
     });
 
     ipcRenderer.on('screenshot-response', (event, arg) => {
+      document.exitPointerLock();
+      document.body.style.cursor = 'auto';
       if (fs.existsSync(arg)) {
         this.takingScreenshot = false;
         let file = arg.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
@@ -201,4 +205,5 @@ export default {
 .message.is-info .message-body{
   color:rgb(50, 152, 220)!important;
 }
+
 </style>
