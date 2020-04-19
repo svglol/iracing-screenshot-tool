@@ -187,6 +187,14 @@ function createWindow() {
     ipcMain.on('resize-screenshot', async (event, data) => {
       takingScreenshot = true;
       iracing.camControls.setState(8);
+      var subscription = iracing.on('update', function () {
+        if(takingScreenshot){
+          iracing.camControls.setState(8);
+        }
+        else{
+          subscription = null;
+        }
+      });
       var id = resize(data.width, data.height);
       workerWindow.webContents.send('screenshot-request', {width:data.width,height:data.height,crop:data.crop,windowID:id});
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
