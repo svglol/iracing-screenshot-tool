@@ -161,6 +161,8 @@ export default {
     });
 
     ipcRenderer.on('screenshot-error', (event, arg) => {
+      document.exitPointerLock();
+      document.body.style.cursor = 'auto';
       this.takingScreenshot = false;
       this.$buefy.notification.open({
         message: 'An error has occured when taking a screenshot :(',
