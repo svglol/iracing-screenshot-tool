@@ -134,13 +134,13 @@ export default {
   },
   beforeDestroy(){
     if(config.get('defaultScreenHeight') !== parseInt(this.screenHeight)){
-      if(this.screenHeight > 720 && this.screenHeight < 2160){
+      if(this.screenHeight >= 720 && this.screenHeight <= 2160){
         config.set('defaultScreenHeight',parseInt(this.screenHeight));
         ipcRenderer.send('defaultScreenHeight',parseInt(this.screenHeight));
       }
     }
     if(config.get('defaultScreenWidth') !== parseInt(this.screenWidth)){
-      if(this.screenWidth > 1280 && this.screenWidth < 3840){
+      if(this.screenWidth >= 1280 && this.screenWidth <= 3840){
         ipcRenderer.send('defaultScreenWidth',parseInt(this.screenWidth));
         config.set('defaultScreenWidth',parseInt(this.screenWidth));
       }
