@@ -154,7 +154,7 @@ export default {
         this.takingScreenshot = false;
         let file = arg.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
         this.$buefy.notification.open({
-          message: file + ' saved succesfully',
+          message: file + ' saved successfully',
           type: 'is-success',
         });
       }
