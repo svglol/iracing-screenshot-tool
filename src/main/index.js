@@ -3,7 +3,6 @@ const { ipcMain } = require('electron');
 const ffi = require('ffi-napi');
 const config = require('../utilities/config');
 import { productName } from '../../package.json';
-import * as Sentry from '@sentry/electron';
 let width, height;
 let takingScreenshot = false;
 
@@ -27,7 +26,6 @@ let mainWindow, workerWindow;
 
 // only allow single instance of application
 if (!isDev) {
-  Sentry.init({dsn: 'https://b80e45fd34c54ebe94691e27445740b1@o376188.ingest.sentry.io/5196735'});
   if (gotTheLock) {
     app.on('second-instance', () => {
       // Someone tried to run a second instance, we should focus our window.

@@ -22,13 +22,7 @@ library.add(faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCa
 
 Vue.component('font-awesome-icon', FontAwesomeIcon)
 
-import * as Sentry from '@sentry/electron';
-
 const isDevelopment = process.env.NODE_ENV === 'development';
-
-if(!isDevelopment){
-  Sentry.init({dsn: 'https://b80e45fd34c54ebe94691e27445740b1@o376188.ingest.sentry.io/5196735'});
-}
 
 Vue.config.devtools = isDevelopment;
 Vue.config.performance = isDevelopment;
