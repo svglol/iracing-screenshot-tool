@@ -26,10 +26,6 @@
         "nsis",
         "portable"
       ]
-    },
-    "nsis": {
-      "allowToChangeInstallationDirectory": true,
-      "oneClick": false
     }
   },
   "main": "./dist/main.js",
