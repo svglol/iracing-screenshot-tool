@@ -1,9 +1,0 @@
-os: windows
-language: node_js
-node_js: '12'
-cache:
-  yarn: true
-  directories:
-    - node_modules
-script:
-  - yarn run build
