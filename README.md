@@ -1,0 +1,2 @@
+# iracing-screenshot-tool
+
