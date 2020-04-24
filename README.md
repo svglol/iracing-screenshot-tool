@@ -1,5 +1,5 @@
 # iRacing Screenshot Tool 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/svglol/iracing-screenshot-tool/build) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/svglol/iracing-screenshot-tool) [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
+![Build/release](https://github.com/svglol/iracing-screenshot-tool/workflows/Build/release/badge.svg) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/svglol/iracing-screenshot-tool) [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
 
 ![](https://github.com/svglol/iracing-screenshot-tool/blob/master/static/screenshot.png?v=4&s=200)
 
