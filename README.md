@@ -6,6 +6,12 @@
 A tool created to take high resolution screenshots of iRacing without having to use Nvidia DSR.
 Created using Electron and Vue.
 
+# Features
+* A wide range of resoultions to choose from, including custom resoultions
+* Auto Crop the iRacing watermark - user must resize iRacing UI to smallest size
+* Global Screenshot Hotkey (Control+PrintScreen)
+* Track and Driver Names included in filename, so you can keep track of screenshots easier
+
 # Limitations
 * iRacing must be run in Borderless Windowed mode
 * iRacing may run out of VRAM at higher resolutions causing the game to crash (8GB VRAM should be enough for 8K resolution in most situations)
