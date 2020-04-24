@@ -244,62 +244,53 @@ function createWindow() {
     }
   });
 
-  /**
-  * Auto Updater
-  *
-  * Uncomment the following code below and install `electron-updater` to
-  * support auto updating. Code Signing with a valid certificate is required.
-  * https://simulatedgreg.gitbooks.io/electron-vue/content/en/using-electron-builder.html#auto-updating
-  */
-
-  /*
   import { autoUpdater } from 'electron-updater'
 
   autoUpdater.on('update-downloaded', () => {
-  autoUpdater.quitAndInstall()
-})
+    autoUpdater.quitAndInstall()
+  })
 
-app.on('ready', () => {
-if (process.env.NODE_ENV === 'production') autoUpdater.checkForUpdates()
-})
-*/
+  app.on('ready', () => {
+    if (process.env.NODE_ENV === 'production') autoUpdater.checkForUpdates()
+  })
 
-function resize(width, height) {
-  const user32 = new ffi.Library('user32', {
-    GetTopWindow: ['long', ['long']],
-    FindWindowA: ['long', ['string', 'string']],
-    SetActiveWindow: ['long', ['long']],
-    SetForegroundWindow: ['bool', ['long']],
-    BringWindowToTop: ['bool', ['long']],
-    ShowWindow: ['bool', ['long', 'int']],
-    SwitchToThisWindow: ['void', ['long', 'bool']],
-    GetForegroundWindow: ['long', []],
-    AttachThreadInput: ['bool', ['int', 'long', 'bool']],
-    GetWindowThreadProcessId: ['int', ['long', 'int']],
-    SetWindowPos: [
-      'bool',
-      ['long', 'long', 'int', 'int', 'int', 'int', 'uint'],
-    ],
-    SetFocus: ['long', ['long']],
-  });
 
-  const kernel32 = new ffi.Library('Kernel32.dll', {
-    GetCurrentThreadId: ['int', []],
-  });
+  function resize(width, height) {
+    const user32 = new ffi.Library('user32', {
+      GetTopWindow: ['long', ['long']],
+      FindWindowA: ['long', ['string', 'string']],
+      SetActiveWindow: ['long', ['long']],
+      SetForegroundWindow: ['bool', ['long']],
+      BringWindowToTop: ['bool', ['long']],
+      ShowWindow: ['bool', ['long', 'int']],
+      SwitchToThisWindow: ['void', ['long', 'bool']],
+      GetForegroundWindow: ['long', []],
+      AttachThreadInput: ['bool', ['int', 'long', 'bool']],
+      GetWindowThreadProcessId: ['int', ['long', 'int']],
+      SetWindowPos: [
+        'bool',
+        ['long', 'long', 'int', 'int', 'int', 'int', 'uint'],
+      ],
+      SetFocus: ['long', ['long']],
+    });
 
-  const winToSetOnTop = user32.FindWindowA(null, 'iRacing.com Simulator');
-  const foregroundHWnd = user32.GetForegroundWindow();
-  const currentThreadId = kernel32.GetCurrentThreadId();
-  const windowThreadProcessId = user32.GetWindowThreadProcessId(
-    foregroundHWnd,
-    null
-  );
+    const kernel32 = new ffi.Library('Kernel32.dll', {
+      GetCurrentThreadId: ['int', []],
+    });
 
-  user32.SetWindowPos(winToSetOnTop, -2, 0, 0, width, height, 0);
-  user32.ShowWindow(winToSetOnTop, 9);
-  user32.SetForegroundWindow(winToSetOnTop);
-  user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
-  user32.SetFocus(winToSetOnTop);
-  user32.SetActiveWindow(winToSetOnTop);
-  return winToSetOnTop;
-}
+    const winToSetOnTop = user32.FindWindowA(null, 'iRacing.com Simulator');
+    const foregroundHWnd = user32.GetForegroundWindow();
+    const currentThreadId = kernel32.GetCurrentThreadId();
+    const windowThreadProcessId = user32.GetWindowThreadProcessId(
+      foregroundHWnd,
+      null
+    );
+
+    user32.SetWindowPos(winToSetOnTop, -2, 0, 0, width, height, 0);
+    user32.ShowWindow(winToSetOnTop, 9);
+    user32.SetForegroundWindow(winToSetOnTop);
+    user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
+    user32.SetFocus(winToSetOnTop);
+    user32.SetActiveWindow(winToSetOnTop);
+    return winToSetOnTop;
+  }
