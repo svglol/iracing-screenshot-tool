@@ -16,7 +16,7 @@
           title
         }}</span>
       </div>
-      <div class="button" @click="onUpdate"><font-awesome-icon :style="{ color: 'green' }" v-if="updateReady" :icon="['fas', 'arrow-down']" /></div>
+      <div class="button" @click="onUpdate" v-if="updateReady"><font-awesome-icon :style="{ color: 'green' }" :icon="['fas', 'arrow-down']" /></div>
       <div class="button" @click="onMinimize">
         <span class="dash">&#x2012;</span>
       </div>
