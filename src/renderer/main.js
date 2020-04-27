@@ -15,10 +15,10 @@ Vue.use(Buefy);
 Vue.use(require('vue-shortkey'));
 
 import { library } from '@fortawesome/fontawesome-svg-core'
-import { faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy,faQuestionCircle } from '@fortawesome/free-solid-svg-icons'
+import { faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy,faQuestionCircle,faArrowDown } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-library.add(faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy,faQuestionCircle)
+library.add(faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy,faQuestionCircle,faArrowDown)
 
 Vue.component('font-awesome-icon', FontAwesomeIcon)
 

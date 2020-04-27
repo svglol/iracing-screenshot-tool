@@ -230,6 +230,10 @@ function createWindow() {
         resize(width,height);
       }
     });
+
+    ipcMain.on('install-update', () => {
+      autoUpdater.quitAndInstall();
+    });
   });
 
   app.on('window-all-closed', () => {
@@ -247,8 +251,9 @@ function createWindow() {
   import { autoUpdater } from 'electron-updater'
 
   autoUpdater.on('update-downloaded', () => {
-    autoUpdater.quitAndInstall()
+    mainWindow.webContents.send('update-available', '');
   })
+
 
   app.on('ready', () => {
     if (process.env.NODE_ENV === 'production') autoUpdater.checkForUpdates()
