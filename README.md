@@ -22,4 +22,4 @@ Created using Electron and Vue.
 Please go to our Discord server and report any issues you are having. [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
 
 # Feature Suggestions
-We currently arent planning on adding any more features, but if you have any feel free to suggest them on our discord.
+If you have any suggestions feel free to suggest them on our discord.
