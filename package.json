@@ -1,7 +1,7 @@
 {
   "name": "iracing-screenshot-tool",
   "productName": "iRacing Screenshot Tool",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A tool for taking high resolution screenshots in iRacing",
   "repository": "svglol/iracing-screenshot-tool",
   "author": {

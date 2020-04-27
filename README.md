@@ -8,7 +8,7 @@ A tool created to take high resolution screenshots of iRacing without having to 
 Created using Electron and Vue.
 
 # Features
-* A wide range of resoultions to choose from, including custom resoultions
+* A wide range of resolutions to choose from, including custom resolutions
 * Auto Crop the iRacing watermark - user must resize iRacing UI to smallest size
 * Global Screenshot Hotkey (Control+PrintScreen)
 * Track and Driver Names included in filename, so you can keep track of screenshots easier

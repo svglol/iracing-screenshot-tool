@@ -28,7 +28,7 @@
 
 
     <b-message  v-if="(resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k' || resolution == 'Custom')&& !disableTooltips "type="is-warning" aria-close-label="Close message" size="is-small" style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow">
-      <strong> High resoultions may crash iRacing if you run out of VRAM. Certain track/car combinations will require more VRAM</strong>
+      <strong> High resolutions may crash iRacing if you run out of VRAM. Certain track/car combinations will require more VRAM</strong>
     </b-message>
 
     <b-switch
