@@ -39,12 +39,12 @@
         <div class="columns">
           <div class="column">
             <b-field label="Width">
-              <b-input type="number" min="1280" max="3840" v-model="screenWidth"></b-input>
+              <b-input type="number" min="1280" max="10000" v-model="screenWidth"></b-input>
             </b-field>
           </div>
           <div class="column">
             <b-field label="Height">
-              <b-input type="number" v-model="screenHeight" min="720" max="2160" ></b-input>
+              <b-input type="number" v-model="screenHeight" min="720" max="10000" ></b-input>
             </b-field>
           </div>
         </div>
@@ -134,13 +134,13 @@ export default {
   },
   beforeDestroy(){
     if(config.get('defaultScreenHeight') !== parseInt(this.screenHeight)){
-      if(this.screenHeight >= 720 && this.screenHeight <= 2160){
+      if(this.screenHeight >= 720 && this.screenHeight <= 10000){
         config.set('defaultScreenHeight',parseInt(this.screenHeight));
         ipcRenderer.send('defaultScreenHeight',parseInt(this.screenHeight));
       }
     }
     if(config.get('defaultScreenWidth') !== parseInt(this.screenWidth)){
-      if(this.screenWidth >= 1280 && this.screenWidth <= 3840){
+      if(this.screenWidth >= 1280 && this.screenWidth <= 10000){
         ipcRenderer.send('defaultScreenWidth',parseInt(this.screenWidth));
         config.set('defaultScreenWidth',parseInt(this.screenWidth));
       }
