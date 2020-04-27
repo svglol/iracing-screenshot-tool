@@ -1,7 +1,7 @@
 # iRacing Screenshot Tool
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/svglol/iracing-screenshot-tool)](https://github.com/svglol/iracing-screenshot-tool/releases) [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
 
-![](https://github.com/svglol/iracing-screenshot-tool/blob/master/static/screenshot.png?v=4&s=200)
+![](https://raw.githubusercontent.com/svglol/iracing-screenshot-tool/master/static/screenshot.png?v=4&s=200?)
 
 # About
 A tool created to take high resolution screenshots of iRacing without having to use Nvidia DSR.
