@@ -55,6 +55,10 @@ const schema = {
   defaultScreenHeight:{
     type:'number',
     default: 0
+  },
+  firstTime:{
+    type:'boolean',
+    default: true
   }
 };
 

@@ -5,7 +5,10 @@
         <a @click="showSettings = true" ><font-awesome-icon :icon="['fas', 'cog']"  /></a>
       </li>
       <li>
-        <a @click="showHelp = true" v-shortkey.push="['f1']" @shortkey="showHelp = true"><font-awesome-icon :icon="['fas', 'info-circle']"  /></a>
+        <a @click="showHelp = true" v-shortkey.push="['f1']" @shortkey="showHelp = true"><font-awesome-icon :icon="['fas', 'question-circle']"  /></a>
+      </li>
+      <li>
+        <a @click="showInstructions = true" ><font-awesome-icon :icon="['fas', 'info-circle']" /></a>
       </li>
     </ul>
 
@@ -19,6 +22,11 @@
   <HelpModal/>
 </b-modal>
 
+<b-modal :active.sync="showInstructions"
+has-modal-card full-screen :can-cancel="true">
+<InstructionsModal/>
+</b-modal>
+
 
 </div>
 </template>
@@ -26,20 +34,30 @@
 <script>
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
+import InstructionsModal from '../components/InstructionsModal.vue';
+
+const config = require('../../utilities/config');
 
 export default {
   components: {
-    HelpModal, SettingsModal
+    HelpModal, SettingsModal, InstructionsModal
   },
   data() {
     return {
       showSettings: false,
       showHelp: false,
       showConfig: false,
+      showInstructions: false,
     }
   },
   methods: {
 
+  },
+  mounted(){
+    if(config.get('firstTime')){
+      this.showInstructions = true;
+      config.set('firstTime',false);
+    }
   }
 }
 </script>
