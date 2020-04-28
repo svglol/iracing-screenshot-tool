@@ -188,8 +188,12 @@ export default {
   },
   updated() {
     config.set('crop', this.crop);
-    config.set('customWidth', parseInt(this.customWidth));
-    config.set('customHeight', parseInt(this.customHeight));
+    if(!isNaN(parseInt(this.customWidth))){
+      config.set('customWidth', parseInt(this.customWidth));
+    }
+    if(!isNaN(parseInt(this.customHeight))){
+      config.set('customHeight', parseInt(this.customHeight));
+    }
     config.set('resolution', this.resolution);
   },
 };
