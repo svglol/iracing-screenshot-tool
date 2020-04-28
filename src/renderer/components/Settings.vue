@@ -10,6 +10,9 @@
       <li>
         <a @click="showInstructions = true" ><font-awesome-icon :icon="['fas', 'info-circle']" /></a>
       </li>
+      <li>
+        <a @click="openDiscord" ><font-awesome-icon :icon="['fab', 'discord']" /></a>
+      </li>
     </ul>
 
     <b-modal :active.sync="showSettings"
@@ -35,6 +38,7 @@ has-modal-card full-screen :can-cancel="true">
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import InstructionsModal from '../components/InstructionsModal.vue';
+const { shell } = require('electron');
 
 const config = require('../../utilities/config');
 
@@ -51,7 +55,9 @@ export default {
     }
   },
   methods: {
-
+    openDiscord(){
+      shell.openItem('https://discord.gg/GX2kSgN');
+    }
   },
   mounted(){
     if(config.get('firstTime')){
