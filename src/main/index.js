@@ -1,7 +1,7 @@
 const { app, BrowserWindow, screen, globalShortcut, Menu } = require('electron');
 const { ipcMain } = require('electron');
 const ffi = require('ffi-napi');
-const config = require('../utilities/config');
+const fs = require("fs");
 import { productName } from '../../package.json';
 let width, height;
 let takingScreenshot = false;
@@ -11,6 +11,8 @@ app.name = productName;
 // to hide deprecation message
 app.allowRendererProcessReuse = true;
 app.commandLine.appendSwitch('js-flags', '--expose_gc');
+
+let config;
 
 // disable electron warning
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
@@ -133,7 +135,8 @@ function createWindow() {
     });
   }
 
-  app.on('ready', () => {
+  app.on('ready', async () => {
+    loadConfig();
     createWindow();
 
     width = config.get('defaultScreenWidth');
@@ -298,4 +301,14 @@ function createWindow() {
     user32.SetFocus(winToSetOnTop);
     user32.SetActiveWindow(winToSetOnTop);
     return winToSetOnTop;
+  }
+
+  function loadConfig(){
+    try{
+      config = require('../utilities/config');
+    }
+    catch{
+      fs.unlinkSync(app.getPath('userData')+'\\config.json');
+      config = require('../utilities/config');
+    }
   }
