@@ -5,6 +5,8 @@
     </header>
     <section class="modal-card-body" style="background-color: transparent;">
       <div style=" max-width:600px; margin:auto;padding-bottom:1rem">
+
+         <span class="heading">Version - {{toolVersion}}</span>
         <span class="heading">iRacing Settings</span>
         <ul>
           <li>iRacing must be running in Windowed Borderless</li>
@@ -19,7 +21,18 @@
       <p>By default  "Control + PrintScreen" will take a screenshot with the current settings, this can be changed in the settings.</p>
       <span class="heading">Issues</span>
       <p>If you have any issues please report them on the <a @click="openDiscord">Discord</a> </p>
-      <span class="heading">Version - {{toolVersion}}</span>
+       <span class="heading">Instructions</span>
+       <p>
+       <ol>
+         <li>iRacing <b>must</b> be running in Windowed Borderless Mode</li>
+         <li>Run iRacing and setup the camera in the position you want to take the screenshot</li>
+         <li>Select your desired resolution (Try lower resolutions before going to 8K)</li>
+         <li>Select if you want to crop the iRacing watermark or not, if you want to crop it you will need to resize the iRacing UI with 'Control + PageDown' to the smallest size first</li>
+         <li>Press the screenshot button or use the Hotkey 'Control + PrintScreen' to take the screenshots</li>
+         <li>Depending on the resolution selected this may take a few seconds, once your iRacing screen resizes to its normal size it is finished</li>
+         <li>Your screenshot will be saved to 'C:\Users\{User}\Pictures\Screenshots'</li>
+       </ol>
+     </p>
     </div>
   </section>
 </div>
@@ -76,4 +89,21 @@ button {
   height: 20px;
   margin-bottom: 1.5rem;
 }
+
+ol {
+  list-style: none;
+   counter-reset: li;
+ }
+
+ ol li{
+   margin-left: 2rem;
+ }
+
+ol li::before {
+  content: counter(li);
+  color: white;
+  display: inline-block; width: 1em;
+  margin-left: -1em}
+
+  li {counter-increment: li}
 </style>

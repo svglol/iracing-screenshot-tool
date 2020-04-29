@@ -1,3 +1,9 @@
+// Set your colors
+$primary: #ec202a;
+$primary-invert: findColorInvert($primary);
+$twitter: #4099ff;
+$twitter-invert: findColorInvert($twitter);
+
 html {
 	overflow: hidden;
 	overflow-y: hidden !important;
@@ -50,7 +56,7 @@ span + .material-icons {
 }
 
 ::-webkit-scrollbar-thumb {
-	background: #666666;
+	background: $primary;
 }
 
 input::-webkit-outer-spin-button,
@@ -60,12 +66,6 @@ input::-webkit-inner-spin-button {
 }
 
 @import '~bulma/sass/utilities/_all';
-
-// Set your colors
-$primary: #ec202a;
-$primary-invert: findColorInvert($primary);
-$twitter: #4099ff;
-$twitter-invert: findColorInvert($twitter);
 
 // Setup $colors to use as bulma classes (e.g. 'is-twitter')
 $colors: (
@@ -136,6 +136,11 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
+	background-color: $primary;
+	border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
 	background-color: $primary;
 	border-radius: 10px;
 }

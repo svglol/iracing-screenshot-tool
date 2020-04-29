@@ -15,7 +15,6 @@
           <li>Your screenshot will be saved to 'C:\Users\{User}\Pictures\Screenshots'</li>
         </ol>
       </br>
-
     </div>
   </section>
 </div>
@@ -58,7 +57,10 @@ p{
   color:#aaaaaa;
 }
 
-ol {list-style: none; counter-reset: li}
+ol {
+  list-style: none;
+   counter-reset: li;
+ }
 
 li::before {
   content: counter(li);

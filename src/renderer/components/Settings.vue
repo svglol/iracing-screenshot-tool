@@ -7,9 +7,7 @@
       <li>
         <a @click="showHelp = true" v-shortkey.push="['f1']" @shortkey="showHelp = true"><font-awesome-icon :icon="['fas', 'question-circle']"  /></a>
       </li>
-      <li>
-        <a @click="showInstructions = true" ><font-awesome-icon :icon="['fas', 'info-circle']" /></a>
-      </li>
+
       <li>
         <a @click="openDiscord" ><font-awesome-icon :icon="['fab', 'discord']" /></a>
       </li>
