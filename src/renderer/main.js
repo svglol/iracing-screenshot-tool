@@ -9,6 +9,7 @@ import './assets/style/main.scss';
 import Buefy from 'buefy';
 import VueLazyload from 'vue-lazyload'
 
+
 Vue.use(VueLazyload)
 
 Vue.use(Buefy);
@@ -22,6 +23,12 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 library.add(faUserCog,faInfoCircle,faCog,faExternalLinkAlt,faFolder,faTrash,faCamera,faCopy,faQuestionCircle,faArrowDown,faDiscord)
 
 Vue.component('font-awesome-icon', FontAwesomeIcon)
+
+import VueSimpleContextMenu from 'vue-simple-context-menu'
+import vClickOutside from 'v-click-outside'
+
+Vue.use(vClickOutside)
+Vue.component('vue-simple-context-menu', VueSimpleContextMenu)
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 

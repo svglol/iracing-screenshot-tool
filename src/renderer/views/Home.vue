@@ -34,10 +34,11 @@
             @click="deleteFile"
             v-shortkey="['del']"
             @shortkey="deleteFile"
+            v-show="false"
             ><font-awesome-icon :icon="['fas', 'trash']"  /></a>
           </li>
           <li>
-            <a @click="openFolder"><font-awesome-icon :icon="['fas', 'folder']"  /></a>
+            <a @click="openFolder" v-show="false"><font-awesome-icon :icon="['fas', 'folder']"  /></a>
           </li>
           <li>
             <a
@@ -48,7 +49,7 @@
             ><font-awesome-icon :icon="['fas', 'copy']"  /></a>
           </li>
           <li>
-            <a @click="openExternally"
+            <a @click="openExternally" v-show="false"
             ><font-awesome-icon :icon="['fas', 'external-link-alt']"  /></a>
           </li>
         </ul>
@@ -70,6 +71,7 @@
         :draggable="false"
         v-lazy="items[i].thumb"
         style="max-height: calc(100vh - 41px - 24px - 95px); object-fit: contain;padding:1rem"
+        @contextmenu.prevent.stop="handleClick($event, items[i])"
         />
       </figure>
     </b-carousel-item>
@@ -80,10 +82,19 @@
         v-lazy="getImageUrl(items[props.i])"
         @click="selectImage(items[props.i].file)"
         style="max-height: 70px; object-fit: contain;height:70px"
+        @contextmenu.prevent.stop="handleClick($event, items[props.i])"
         />
       </figure>
     </template>
   </b-carousel>
+
+  <vue-simple-context-menu
+  :elementId="'myUniqueId'"
+  :options="options"
+  :ref="'vueSimpleContextMenu'"
+  @option-clicked="optionClicked"
+  />
+
 </div>
 </div>
 </div>
@@ -120,7 +131,25 @@ export default Vue.extend({
       currentURL: '',
       fileName: '',
       resolution: '',
-      selected: 0
+      selected: 0,
+      options: [
+        {
+          name: 'Open Externally',
+          slug: 'external'
+        },
+        {
+          name: 'Open Folder',
+          slug: 'folder'
+        },
+        {
+          name: 'Copy',
+          slug: 'copy'
+        },
+        {
+          name: 'Delete',
+          slug: 'delete'
+        }
+      ],
     };
   },
   methods: {
@@ -159,221 +188,251 @@ export default Vue.extend({
             }
           }
         },
-      },
-      mounted() {
-        ipcRenderer.on('screenshot-response', (event, arg) => {
-          if (fs.existsSync(arg)) {
-            var file =  path.parse(arg).name;
-            var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
-            this.items.unshift({file:arg, thumb:thumb});
-            clipboard.write({ image: arg });
-            this.selected = 0;
-          }
-        });
-        loadGallery(this.items);
-
-        config.onDidChange('screenshotFolder', (newValue,oldValue) => {
-          dir = newValue;
-          loadGallery(this.items);
-        });
-      },
-      watch: {
-        items() {
-          if (this.items.length !== 0) {
-            this.currentURL = this.items[0].file;
-          } else {
-            this.currentURL = "";
-          }
-
-          if (this.items.length != 0) {
-
-            const SEARCH_DELAY = 100; // in ms
-
-            function waitForElementToBeAdded(cssSelector) {
-              return new Promise((resolve) => {
-                const interval = setInterval(() => {
-                  var element = document.querySelector(cssSelector)
-                  if (element != null) {
-                    clearInterval(interval);
-                    resolve(element);
+        handleClick (event, item) {
+          this.$refs.vueSimpleContextMenu.showMenu(event, item)
+        },
+        optionClicked (event) {
+          switch(event.option.slug){
+            case 'copy':
+            clipboard.write({ image: event.item.file });
+            break;
+            case 'external':
+            shell.openItem(event.item.file);
+            break;
+            case 'folder':
+            var file = event.item.file.replace(/\//g, '\\');
+              shell.showItemInFolder(file);
+              break;
+              case 'delete':
+              var file = event.item.file.replace(/\//g, '\\');
+                shell.moveItemToTrash(file);
+                var index = 0;
+                for(var i = this.items.length - 1; i >= 0; i--) {
+                  if(this.items[i].file === event.item.file){
+                    this.$delete(this.items, i)
+                    if(this.selected == this.items.length) this.selected--;
                   }
-                }, SEARCH_DELAY);
-              });
-            }
-            waitForElementToBeAdded('.carousel-indicator').then(value => {
-              (function () {
-                function scrollH(e) {
-                  e = window.event || e;
-                  var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-                  value.scrollLeft -= (delta * 200);
                 }
-                if (window.addEventListener) {
-                  window.addEventListener("wheel", scrollH, false);
-                }
-              })();
-            });
+                break;
 
-          }
-        },
-        currentURL: function () {
-          if (this.currentURL !== '') {
-            this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.')
-            var dimensions = sizeOf(this.currentURL);
-            this.resolution = dimensions.width + ' x ' + dimensions.height;
-            dimensions = null;
-          }
-        },
-      },
-    });
-
-    async function loadGallery(items) {
-      items.splice(0,items.length)
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
-      }
-
-      // Load images from screenshots Folder
-      await fs.readdir(dir, (err, files) => {
-        if (err) {
-          console.log(err);
-        }
-
-        files = files
-        .map((fileName) => {
-          return {
-            name: fileName,
-            time: fs.statSync(dir + '/' + fileName).mtime.getTime(),
-          };
-        })
-        .sort((a, b) => {
-          return a.time - b.time;
-        })
-        .map((v) => {
-          return v.name;
-        });
-
-        files.forEach(async (file) => {
-          if (file.split('.').pop() === 'png') {
-            let url = dir + file;
-            url = url.replace(/\\/g, '/');
-
-            var file =  path.parse(file).name;
-            var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
-
-            if (!fs.existsSync(thumb)) {
-              await sharp(url)
-              .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
-              .toFile(thumb, (err, info) => {
-                items.unshift({file:url,thumb:thumb});
-              });
-            }else{
-              items.unshift({file:url,thumb:thumb});
+              }
             }
-          }
-        });
-      });
-
-      //Clear unused thumbnail cache
-      var thumbDir = app.getPath('userData')+'\\Cache\\';
-      await fs.readdir(thumbDir, (err, files) => {
-        files.forEach(async (file) => {
-          var fullFile = thumbDir + file;
-          if (file.split('.').pop() === 'webp') {
-            var deleteItem = true;
-            items.forEach((item, i) => {
-              if(item.thumb === fullFile){
-                deleteItem = false;
+          },
+          mounted() {
+            ipcRenderer.on('screenshot-response', (event, arg) => {
+              if (fs.existsSync(arg)) {
+                var file =  path.parse(arg).name;
+                var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
+                this.items.unshift({file:arg, thumb:thumb});
+                clipboard.write({ image: arg });
+                this.selected = 0;
               }
             });
-            if(deleteItem){
-              fs.unlinkSync(fullFile);
-            }
-          }
+            loadGallery(this.items);
+
+            config.onDidChange('screenshotFolder', (newValue,oldValue) => {
+              dir = newValue;
+              loadGallery(this.items);
+            });
+          },
+          watch: {
+            items() {
+              if (this.items.length !== 0) {
+                this.currentURL = this.items[0].file;
+              } else {
+                this.currentURL = "";
+              }
+
+              if (this.items.length != 0) {
+
+                const SEARCH_DELAY = 100; // in ms
+
+                function waitForElementToBeAdded(cssSelector) {
+                  return new Promise((resolve) => {
+                    const interval = setInterval(() => {
+                      var element = document.querySelector(cssSelector)
+                      if (element != null) {
+                        clearInterval(interval);
+                        resolve(element);
+                      }
+                    }, SEARCH_DELAY);
+                  });
+                }
+                waitForElementToBeAdded('.carousel-indicator').then(value => {
+                  (function () {
+                    function scrollH(e) {
+                      e = window.event || e;
+                      var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
+                      value.scrollLeft -= (delta * 200);
+                    }
+                    if (window.addEventListener) {
+                      window.addEventListener("wheel", scrollH, false);
+                    }
+                  })();
+                });
+
+              }
+            },
+            currentURL: function () {
+              if (this.currentURL !== '') {
+                this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.')
+                var dimensions = sizeOf(this.currentURL);
+                this.resolution = dimensions.width + ' x ' + dimensions.height;
+                dimensions = null;
+              }
+            },
+          },
         });
-      });
-    }
-    </script>
 
-    <style>
-    .container {
-      max-width: 100vw !important;
-      padding: 0px !important;
-    }
+        async function loadGallery(items) {
+          items.splice(0,items.length)
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir);
+          }
 
-    html{
-      background-color: transparent!important;
-    }
-    body {
-      background-position: center;
-      background-repeat: no-repeat;
-      background-size: cover;
-      background: rgb(37,37,37)!important;
-      background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
-      height: 100vh;
-      color: white !important;
-    }
-    .label {
-      color: white !important;
-    }
-    .indicator-item {
-      flex: 0 0 calc(100vh/6) !important;
-      margin-left: .25rem;
-      margin-right: .25rem;
-    }
+          // Load images from screenshots Folder
+          await fs.readdir(dir, (err, files) => {
+            if (err) {
+              console.log(err);
+            }
 
-    .toolbar {
-      list-style-type: none;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      margin-top: .1rem;
-    }
+            files = files
+            .map((fileName) => {
+              return {
+                name: fileName,
+                time: fs.statSync(dir + '/' + fileName).mtime.getTime(),
+              };
+            })
+            .sort((a, b) => {
+              return a.time - b.time;
+            })
+            .map((v) => {
+              return v.name;
+            });
 
-    .toolbar li {
-      float: right;
-      margin-left: 0.3rem;
-      margin-right: 0.3rem;
-      margin-top: auto;
-      font-size: 1.2rem;
-    }
+            files.forEach(async (file) => {
+              if (file.split('.').pop() === 'png') {
+                let url = dir + file;
+                url = url.replace(/\\/g, '/');
 
-    .toolbar li a {
-      display: block;
-      color: white;
-      text-align: center;
-      text-decoration: none;
-    }
+                var file =  path.parse(file).name;
+                var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
 
-    .toolbar li a:hover {
-      opacity: 0.5;
-    }
+                if (!fs.existsSync(thumb)) {
+                  await sharp(url)
+                  .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
+                  .toFile(thumb, (err, info) => {
+                    items.unshift({file:url,thumb:thumb});
+                  });
+                }else{
+                  items.unshift({file:url,thumb:thumb});
+                }
+              }
+            });
+          });
 
-    .carousel .carousel-indicator.has-custom {
-      overflow-x: scroll !important;
-      margin-top: auto;
-      background-color: rgba(0,0,0,.2);
-      scroll-behavior: smooth;
-    }
+          //Clear unused thumbnail cache
+          var thumbDir = app.getPath('userData')+'\\Cache\\';
+          await fs.readdir(thumbDir, (err, files) => {
+            files.forEach(async (file) => {
+              var fullFile = thumbDir + file;
+              if (file.split('.').pop() === 'webp') {
+                var deleteItem = true;
+                items.forEach((item, i) => {
+                  if(item.thumb === fullFile){
+                    deleteItem = false;
+                  }
+                });
+                if(deleteItem){
+                  fs.unlinkSync(fullFile);
+                }
+              }
+            });
+          });
+        }
+        </script>
 
-    .indicator-item{
-      padding-right: .5rem;
-    }
+        <style>
+        .container {
+          max-width: 100vw !important;
+          padding: 0px !important;
+        }
 
-    .is-active img{
-      filter:
-      drop-shadow(0 -2px 0 #ec202a)
-      drop-shadow(0 2px 0 #ec202a)
-      drop-shadow(-2px 0 0 #ec202a)
-      drop-shadow(2px 0 0 #ec202a);
-    }
+        html{
+          background-color: transparent!important;
+        }
+        body {
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+          background: rgb(37,37,37)!important;
+          background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
+          height: 100vh;
+          color: white !important;
+        }
+        .label {
+          color: white !important;
+        }
+        .indicator-item {
+          flex: 0 0 calc(100vh/6) !important;
+          margin-left: .25rem;
+          margin-right: .25rem;
+        }
 
-    .indicator-item img:hover{
-      opacity: .8;
-    }
+        .toolbar {
+          list-style-type: none;
+          margin: 0;
+          padding: 0;
+          overflow: hidden;
+          margin-top: .1rem;
+        }
 
-    .carousel {
-      height: calc(100vh - 41px - 27px);
-      display: flex;
-      flex-direction: column;
-    }
-    </style>
+        .toolbar li {
+          float: right;
+          margin-left: 0.3rem;
+          margin-right: 0.3rem;
+          margin-top: auto;
+          font-size: 1.2rem;
+        }
+
+        .toolbar li a {
+          display: block;
+          color: white;
+          text-align: center;
+          text-decoration: none;
+        }
+
+        .toolbar li a:hover {
+          opacity: 0.5;
+        }
+
+        .carousel .carousel-indicator.has-custom {
+          overflow-x: scroll !important;
+          margin-top: auto;
+          background-color: rgba(0,0,0,.2);
+          scroll-behavior: smooth;
+        }
+
+        .indicator-item{
+          padding-right: .5rem;
+        }
+
+        .is-active img{
+          filter:
+          drop-shadow(0 -2px 0 #ec202a)
+          drop-shadow(0 2px 0 #ec202a)
+          drop-shadow(-2px 0 0 #ec202a)
+          drop-shadow(2px 0 0 #ec202a);
+        }
+
+        .indicator-item img:hover{
+          opacity: .8;
+        }
+
+        .carousel {
+          height: calc(100vh - 41px - 27px);
+          display: flex;
+          flex-direction: column;
+        }
+
+        </style>
