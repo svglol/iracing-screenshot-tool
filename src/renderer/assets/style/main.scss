@@ -5,110 +5,110 @@ $twitter: #4099ff;
 $twitter-invert: findColorInvert($twitter);
 
 html {
-	overflow: hidden;
-	overflow-y: hidden !important;
+  overflow: hidden;
+  overflow-y: hidden !important;
 }
 
 body {
-	-webkit-user-select: none;
-	-moz-user-select: -moz-none;
-	-ms-user-select: none;
-	user-select: none;
-	color: white;
+  -webkit-user-select: none;
+  -moz-user-select: -moz-none;
+  -ms-user-select: none;
+  user-select: none;
+  color: white;
 }
 
 img {
-	box-shadow: none;
+  box-shadow: none;
 }
 
 .section {
-	padding: 1.5em;
+  padding: 1.5em;
 }
 
 span + .material-icons {
-	margin-left: 0.25em;
+  margin-left: 0.25em;
 }
 
 .material-icons + span {
-	margin-left: 0.25em;
+  margin-left: 0.25em;
 }
 
 .has-pointer {
-	cursor: pointer;
+  cursor: pointer;
 }
 
 .no-padding {
-	padding: 0 !important;
+  padding: 0 !important;
 }
 
 .file-name {
-	padding-top: 0.25em;
+  padding-top: 0.25em;
 }
 
 /* custom Scroll bars */
 ::-webkit-scrollbar {
-	width: 10px !important;
-	height: 10px !important;
+  width: 10px !important;
+  height: 10px !important;
 }
 
 ::-webkit-scrollbar-track {
-	background: #f0f0f0;
+  background: #f0f0f0;
 }
 
 ::-webkit-scrollbar-thumb {
-	background: $primary;
+  background: $primary;
 }
 
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
-	-webkit-appearance: none;
-	margin: 0;
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 @import '~bulma/sass/utilities/_all';
 
 // Setup $colors to use as bulma classes (e.g. 'is-twitter')
 $colors: (
-	'white': (
-		$white,
-		$black,
-	),
-	'black': (
-		$black,
-		$white,
-	),
-	'light': (
-		$light,
-		$light-invert,
-	),
-	'dark': (
-		$dark,
-		$dark-invert,
-	),
-	'primary': (
-		$primary,
-		$primary-invert,
-	),
-	'info': (
-		$info,
-		$info-invert,
-	),
-	'success': (
-		$success,
-		$success-invert,
-	),
-	'warning': (
-		$warning,
-		$warning-invert,
-	),
-	'danger': (
-		$danger,
-		$danger-invert,
-	),
-	'twitter': (
-		$twitter,
-		$twitter-invert,
-	),
+'white': (
+$white,
+$black,
+),
+'black': (
+$black,
+$white,
+),
+'light': (
+$light,
+$light-invert,
+),
+'dark': (
+$dark,
+$dark-invert,
+),
+'primary': (
+$primary,
+$primary-invert,
+),
+'info': (
+$info,
+$info-invert,
+),
+'success': (
+$success,
+$success-invert,
+),
+'warning': (
+$warning,
+$warning-invert,
+),
+'danger': (
+$danger,
+$danger-invert,
+),
+'twitter': (
+$twitter,
+$twitter-invert,
+),
 );
 
 // Links
@@ -123,30 +123,30 @@ $link-focus-border: $primary;
 input,
 select,
 textarea {
-	color: black !important;
+  color: black !important;
 }
 
 ::-webkit-scrollbar {
-	width: 8px!important;
-	height: 8px!important;
+  width: 8px!important;
+  height: 8px!important;
 }
 
 ::-webkit-scrollbar-track {
-	background-color: rgba(0, 0, 0, 0.5)!important;
+  background-color: rgba(0, 0, 0, 0.5)!important;
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
-	background-color: $primary;
-	border-radius: 10px;
+  background-color: $primary;
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-	background-color: $primary;
-	border-radius: 10px;
+  background-color: $primary;
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:horizontal:hover {
-	background-color: darken($primary, 10%);
+  background-color: darken($primary, 10%);
 }
 
 @import 'https://fonts.googleapis.com/css?family=Material+Icons';
@@ -154,11 +154,11 @@ textarea {
 @import 'https://cdn.materialdesignicons.com/2.5.94/css/materialdesignicons.min.css';
 
 .shadow {
-    box-shadow: 0 1rem 1rem rgba(0,0,0,.175)!important;
+  box-shadow: 0 1rem 1rem rgba(0,0,0,.175)!important;
 }
 
 .modal-close{
-   top: 40px!important;
+  top: 40px!important;
 }
 
 .modal.is-full-screen > .animation-content, .modal.is-full-screen > .animation-content > .modal-card{
@@ -167,7 +167,7 @@ textarea {
 }
 
 :focus {
-    outline: -webkit-focus-ring-color auto 0px;
+  outline: -webkit-focus-ring-color auto 0px;
 }
 
 $white: #fff;
@@ -204,10 +204,12 @@ $black: #333;
   }
   li {
     &:first-of-type {
-      margin-top: 5px;
+      border-top-left-radius: 5px;
+      border-top-right-radius: 5px;
     }
     &:last-of-type {
-      margin-bottom: 5px;
+      border-bottom-left-radius: 5px;
+      border-bottom-right-radius: 5px;
     }
   }
 }
