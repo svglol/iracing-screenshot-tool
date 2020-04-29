@@ -213,3 +213,7 @@ $black: #333;
     }
   }
 }
+
+a:hover{
+  color:darken($red,20%);
+}

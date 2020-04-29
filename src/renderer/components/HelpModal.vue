@@ -5,8 +5,6 @@
     </header>
     <section class="modal-card-body" style="background-color: transparent;">
       <div style=" max-width:600px; margin:auto;padding-bottom:1rem">
-
-         <span class="heading">Version - {{toolVersion}}</span>
         <span class="heading">iRacing Settings</span>
         <ul>
           <li>iRacing must be running in Windowed Borderless</li>
@@ -40,12 +38,10 @@
 
 <script>
 const { shell } = require('electron');
-import { version } from '../../../package.json';
 
 export default {
   data() {
     return {
-      toolVersion: version
     }
   },
   methods:{
