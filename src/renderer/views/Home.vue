@@ -226,6 +226,8 @@ export default Vue.extend({
                 this.items.unshift({file:arg, thumb:thumb});
                 clipboard.write({ image: arg });
                 this.selected = 0;
+
+                document.querySelector('.carousel-indicator').scrollLeft = (0);
               }
             });
             loadGallery(this.items);
