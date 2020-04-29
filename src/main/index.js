@@ -3,7 +3,7 @@ const { ipcMain } = require('electron');
 const ffi = require('ffi-napi');
 const fs = require("fs");
 import { productName } from '../../package.json';
-let width, height;
+let width, height, left, top;
 let takingScreenshot = false;
 
 // set app name
@@ -141,6 +141,8 @@ function createWindow() {
 
     width = config.get('defaultScreenWidth');
     height = config.get('defaultScreenHeight');
+    left = config.get('defaultScreenLeft');
+    top = config.get('defaultScreenTop');
 
     if(config.get('defaultScreenWidth') === 0){
       config.set('defaultScreenWidth',screen.getPrimaryDisplay().bounds.width);
@@ -164,7 +166,7 @@ function createWindow() {
     }
 
     ipcMain.on('screenshot-response', (event, output) => {
-      resize(width, height);
+      resize(width, height, left, top);
       iracing.camControls.setState(4); //reopen camera edit
       mainWindow.webContents.send('screenshot-response', output);
       takingScreenshot = false;
@@ -188,7 +190,7 @@ function createWindow() {
     ipcMain.on('resize-screenshot', async (event, data) => {
       takingScreenshot = true;
       iracing.camControls.setState(8);
-      var id = resize(data.width, data.height);
+      var id = resize(data.width, data.height,left,top);
       workerWindow.webContents.send('screenshot-request', {width:data.width,height:data.height,crop:data.crop,windowID:id});
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
       workerWindow.webContents.send('telemetry', iracing.telemetry);
@@ -198,10 +200,6 @@ function createWindow() {
       if(takingScreenshot){
         iracing.camControls.setState(8);
       }
-    });
-
-    ipcMain.on('resize', (event, data) => {
-      resize(data.width, data.height);
     });
 
     ipcMain.on('screenshot-error', (event, data) => {
@@ -223,14 +221,28 @@ function createWindow() {
     ipcMain.on('defaultScreenHeight', (event,data) => {
       height = data;
       if(!takingScreenshot){
-        resize(width,height);
+        resize(width,height,left,top);
       }
     });
 
     ipcMain.on('defaultScreenWidth', (event,data) => {
       width = data;
       if(!takingScreenshot){
-        resize(width,height);
+        resize(width,height,left,top);
+      }
+    });
+
+    ipcMain.on('defaultScreenLeft', (event,data) => {
+      left = data;
+      if(!takingScreenshot){
+        resize(width,height,left,top);
+      }
+    });
+
+    ipcMain.on('defaultScreenTop', (event,data) => {
+      top = data;
+      if(!takingScreenshot){
+        resize(width,height,left,top);
       }
     });
 
@@ -263,7 +275,7 @@ function createWindow() {
   })
 
 
-  function resize(width, height) {
+  function resize(width, height,left,top) {
     const user32 = new ffi.Library('user32', {
       GetTopWindow: ['long', ['long']],
       FindWindowA: ['long', ['string', 'string']],
@@ -294,7 +306,7 @@ function createWindow() {
       null
     );
 
-    user32.SetWindowPos(winToSetOnTop, -2, 0, 0, width, height, 0);
+    user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height, 0);
     user32.ShowWindow(winToSetOnTop, 9);
     user32.SetForegroundWindow(winToSetOnTop);
     user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);

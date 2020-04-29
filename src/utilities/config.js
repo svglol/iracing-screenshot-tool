@@ -56,6 +56,14 @@ const schema = {
     type:'number',
     default: 0
   },
+  defaultScreenLeft:{
+    type:'number',
+    default: 0
+  },
+  defaultScreenTop:{
+    type:'number',
+    default: 0
+  },
   firstTime:{
     type:'boolean',
     default: true

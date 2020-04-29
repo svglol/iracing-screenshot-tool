@@ -38,6 +38,18 @@
         </b-field>
         <div class="columns">
           <div class="column">
+            <b-field label="Left">
+              <b-input type="number" v-model="screenLeft"></b-input>
+            </b-field>
+          </div>
+          <div class="column">
+            <b-field label="Top">
+              <b-input type="number" v-model="screenTop"></b-input>
+            </b-field>
+          </div>
+        </div>
+        <div class="columns">
+          <div class="column">
             <b-field label="Width">
               <b-input type="number" min="1280" max="10000" v-model="screenWidth"></b-input>
             </b-field>
@@ -68,7 +80,9 @@ export default {
       bindingKey: false,
       disableTooltips:config.get('disableTooltips'),
       screenWidth: config.get('defaultScreenWidth'),
-      screenHeight: config.get('defaultScreenHeight')
+      screenHeight: config.get('defaultScreenHeight'),
+      screenTop: config.get('defaultScreenTop'),
+      screenLeft: config.get('defaultScreenLeft')
     }
   },
   methods: {
@@ -143,6 +157,20 @@ export default {
       if(this.screenWidth >= 1280 && this.screenWidth <= 10000){
         ipcRenderer.send('defaultScreenWidth',parseInt(this.screenWidth));
         config.set('defaultScreenWidth',parseInt(this.screenWidth));
+      }
+    }
+
+    if(config.get('defaultScreenLeft') !== parseInt(this.screenLeft)){
+      if(this.screenLeft !== ''){
+        ipcRenderer.send('defaultScreenLeft',parseInt(this.screenLeft));
+        config.set('defaultScreenLeft',parseInt(this.screenLeft));
+      }
+    }
+
+    if(config.get('defaultScreenTop') !== parseInt(this.screenTop)){
+      if(this.screenTop !== ''){
+        ipcRenderer.send('defaultScreenTop',parseInt(this.screenTop));
+        config.set('defaultScreenTop',parseInt(this.screenTop));
       }
     }
   }
