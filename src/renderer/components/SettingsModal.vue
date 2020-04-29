@@ -32,7 +32,7 @@
         <hr />
         <b-field>
           <div>
-            <span class="label" style="margin-bottom:0px;">Monitor Size</span>
+            <span class="label" style="margin-bottom:0px;">Monitor Size & Position</span>
             <span class="description">Width and height to resize iRacing window to after taking screenshot. Useful for people using an Ultrawide or Nvidia Surround</span>
           </div>
         </b-field>
