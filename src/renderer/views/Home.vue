@@ -435,6 +435,7 @@ export default Vue.extend({
           height: calc(100vh - 41px - 27px);
           display: flex;
           flex-direction: column;
+          max-width: calc(100vw - 240px)
         }
 
         </style>
