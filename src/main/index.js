@@ -274,7 +274,6 @@ function createWindow() {
     if (process.env.NODE_ENV === 'production') autoUpdater.checkForUpdates()
   })
 
-
   function resize(width, height,left,top) {
     const user32 = new ffi.Library('user32', {
       GetTopWindow: ['long', ['long']],
@@ -292,6 +291,8 @@ function createWindow() {
         ['long', 'long', 'int', 'int', 'int', 'int', 'uint'],
       ],
       SetFocus: ['long', ['long']],
+      SetWindowLongA:['long',['uint32','int','long']],
+      GetWindowLongA:['long',['long','long']],
     });
 
     const kernel32 = new ffi.Library('Kernel32.dll', {
@@ -306,7 +307,10 @@ function createWindow() {
       null
     );
 
+    // var winStyle = user32.GetWindowLongA(winToSetOnTop,-16);
     user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height, 0);
+    user32.SetWindowLongA(winToSetOnTop,-16,0);
+    user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height,0);
     user32.ShowWindow(winToSetOnTop, 9);
     user32.SetForegroundWindow(winToSetOnTop);
     user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
