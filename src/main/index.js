@@ -293,6 +293,7 @@ function createWindow() {
       SetFocus: ['long', ['long']],
       SetWindowLongA:['long',['uint32','int','long']],
       GetWindowLongA:['long',['long','long']],
+      GetWindowRect: ["bool", ["int32", "pointer"]],
     });
 
     const kernel32 = new ffi.Library('Kernel32.dll', {
@@ -307,10 +308,21 @@ function createWindow() {
       null
     );
 
-    // var winStyle = user32.GetWindowLongA(winToSetOnTop,-16);
     user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height, 0);
-    user32.SetWindowLongA(winToSetOnTop,-16,0);
-    user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height,0);
+    var rectPointer = Buffer.alloc(4 * 4);
+    user32.GetWindowRect(winToSetOnTop,rectPointer)
+    var rect = RectPointerToRect(rectPointer);
+    if(rect.right !== width || rect.bottom !== height ){
+      user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height,0);
+    }
+
+    //349110272 - bordered
+    //335544320 - borderless
+    var winStyle = user32.GetWindowLongA(winToSetOnTop,-16);
+    if(winStyle !== 335544320){
+      user32.SetWindowLongA(winToSetOnTop,-16,335544320);
+    }
+
     user32.ShowWindow(winToSetOnTop, 9);
     user32.SetForegroundWindow(winToSetOnTop);
     user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
@@ -318,6 +330,15 @@ function createWindow() {
     user32.SetActiveWindow(winToSetOnTop);
     return winToSetOnTop;
   }
+
+  function RectPointerToRect(rectPointer) {
+    let rect = {};
+    rect.left = rectPointer.readUInt32LE(0);
+    rect.top = rectPointer.readUInt32LE(4);
+    rect.right = rectPointer.readUInt32LE(8);
+    rect.bottom = rectPointer.readUInt32LE(12);
+    return rect;
+}
 
   function loadConfig(){
     try{
