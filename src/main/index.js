@@ -312,7 +312,7 @@ function createWindow() {
     var rectPointer = Buffer.alloc(4 * 4);
     user32.GetWindowRect(winToSetOnTop,rectPointer)
     var rect = RectPointerToRect(rectPointer);
-    if(rect.right !== width || rect.bottom !== height ){
+    if((rect.right - rect.left) !== width || (rect.bottom - rect.top) !== height ){
       user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height,0);
     }
 
@@ -338,7 +338,7 @@ function createWindow() {
     rect.right = rectPointer.readUInt32LE(8);
     rect.bottom = rectPointer.readUInt32LE(12);
     return rect;
-}
+  }
 
   function loadConfig(){
     try{
