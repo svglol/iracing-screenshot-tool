@@ -9,18 +9,21 @@ const sharp = require('sharp');
 const app = remote.app;
 
 const config = require('../../utilities/config');
-let sessionInfo, telemetry,windowID;
+let sessionInfo, telemetry,windowID,crop;
 
 export default {
   methods: {},
   mounted() {
     ipcRenderer.on('screenshot-request', (event, input) => {
+      console.log("Screenshot - "+input.width+'x'+input.height+' Crop - '+input.crop);
+      console.time("Screenshot");
       windowID = input.windowID;
+      crop = input.crop;
       if(windowID === undefined){
         ipcRenderer.send('screenshot-error', 'iRacing window not found');
       }else{
         fullscreenScreenshot((base64data) => {
-          saveImage(base64data, input.crop);
+          saveImage(base64data);
         });
       }
     });
@@ -33,37 +36,25 @@ export default {
   },
 };
 
-function saveImage(blob, crop) {
+function saveImage(blob) {
+  console.time("Save Image");
   var base64data = '';
   let reader = new FileReader();
   reader.readAsDataURL(blob);
   reader.onload = async function() {
+    console.time("Save Image to file");
     base64data = reader.result;
     base64data = base64data.replace(/^data:image\/png;base64,/, '');
-
     const file = getFileNameString();
     var fileName = config.get('screenshotFolder')+ file + '.png';
     var buff = await Buffer.from(base64data, 'base64');
     await fs.writeFileSync(fileName, '');
-    const image = sharp(buff);
-    image
-    .metadata()
-    .then(function(metadata) {
-      if(metadata.width < 54){
-        return Error('image is too small');
-      }else{
-        if(crop){
-          return image
-          .extract({ left: 0, top: 0, width: metadata.width-54, height: metadata.height-30 })
-          .toFile(fileName)
-        }
-        else{
-          return image
-          .toFile(fileName)
-        }
-      }
-    })
-    .then(data => {
+
+    var writeStream = fs.createWriteStream(fileName);
+    writeStream.write(buff);
+    writeStream.on('finish', () => {
+      console.timeEnd("Save Image to file");
+      console.time("Save Thumbnail");
       const thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
       sharp(fileName)
       .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
@@ -72,13 +63,16 @@ function saveImage(blob, crop) {
         buff = null;
         base64data = null;
         global.gc();
+        console.timeEnd("Save Thumbnail");
+        console.timeEnd("Save Image");
+        console.timeEnd("Screenshot");
       });
-
-    })
-    .catch(err => {
+    });
+    writeStream.on('error',(err)=>{
       console.log(err)
       ipcRenderer.send('screenshot-error', err);
-    });
+    })
+    writeStream.end();
   };
 }
 
@@ -118,13 +112,12 @@ function getFileNameString() {
 }
 
 async function fullscreenScreenshot(callback) {
-  let imageFormat = 'image/png';
 
   var handleStream = (stream) => {
+    console.timeEnd("Get Media");
     // Create hidden video tag
     var video = document.createElement('video');
     video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
-
     // Event connected to stream
     video.addEventListener('loadedmetadata', function () {
       // Set video ORIGINAL height (screenshot)
@@ -134,19 +127,16 @@ async function fullscreenScreenshot(callback) {
       video.play();
       video.pause();
 
-      // Create canvas
-      const canvas = document.createElement('canvas');
-      canvas.width = this.videoWidth;
-      canvas.height = this.videoHeight;
-      const ctx = canvas.getContext('2d');
+      console.time('Create OffscreenCanvas');
+      var offscreen;
+      if(crop){
+        offscreen = new OffscreenCanvas(this.videoWidth-54,  this.videoHeight-30);
+      }else{
+        offscreen = new OffscreenCanvas(this.videoWidth,  this.videoHeight);
+      }
 
-      // Draw video on canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // Save screenshot to base64
-      canvas.toBlob((data)=>{
-        callback(data);
-      });
+      const offctx = offscreen.getContext('2d',{ alpha: false });
+      offctx.drawImage(video, 0, 0, this.videoWidth, this.videoHeight);
 
       // Remove hidden video tag
       video.srcObject = null;
@@ -159,19 +149,25 @@ async function fullscreenScreenshot(callback) {
       } catch (error) {
         console.log(error);
       }
-    });
 
+      console.timeEnd('Create OffscreenCanvas');
+      console.time('To Blob');
+      offscreen.convertToBlob().then(function(blob) {
+        console.timeEnd('To Blob');
+        console.timeEnd("Draw Image");
+        callback(blob);
+      });
+    });
     video.srcObject = stream;
-    document.body.append(video);
   };
 
   var handleError = function (e) {
     throw e;
     ipcRenderer.send('screenshot-error', e);
   };
-
   await delay(1000);
-
+  console.time("Draw Image");
+  console.time("Get Media");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
