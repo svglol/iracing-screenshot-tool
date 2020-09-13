@@ -318,10 +318,10 @@ function createWindow() {
 
     //349110272 - bordered
     //335544320 - borderless
-    var winStyle = user32.GetWindowLongA(winToSetOnTop,-16);
-    if(winStyle !== 335544320){
-      user32.SetWindowLongA(winToSetOnTop,-16,335544320);
-    }
+    // var winStyle = user32.GetWindowLongA(winToSetOnTop,-16);
+    // if(winStyle !== 335544320){
+    //   user32.SetWindowLongA(winToSetOnTop,-16,335544320);
+    // }
 
     user32.ShowWindow(winToSetOnTop, 9);
     user32.SetForegroundWindow(winToSetOnTop);
