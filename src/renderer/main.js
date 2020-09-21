@@ -30,6 +30,10 @@ import vClickOutside from 'v-click-outside'
 Vue.use(vClickOutside)
 Vue.component('vue-simple-context-menu', VueSimpleContextMenu)
 
+import VueMarkdownPlus from 'vue-markdown-plus'
+Vue.use(VueMarkdownPlus)
+Vue.component('vue-markdown-plus', VueMarkdownPlus);
+
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 Vue.config.devtools = isDevelopment;

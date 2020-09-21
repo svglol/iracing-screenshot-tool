@@ -8,7 +8,7 @@
       <div class="columns is-centered" style=" margin:auto;padding-bottom:1rem">
         <div class="column is-2" style="max-width:200px;">
           <span class="heading">Version - {{toolVersion}}</span>
-          <span class="heading" v-show="false"><a @click="openChangelog">Changelog</a></span>
+          <span class="heading"><a @click="$emit('changelog')">Changelog</a></span>
         </div>
 
         <div class="column is-9" style="max-width:600px;">

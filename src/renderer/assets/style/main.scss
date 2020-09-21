@@ -217,3 +217,19 @@ $black: #333;
 a:hover{
   color:darken($red,20%);
 }
+
+h2{
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+p,li{
+  font-size: .8rem;
+  color: #aaaaaa;
+}
+
+ul{
+  list-style-type: square;
+  margin-left: 1.5rem;
+}

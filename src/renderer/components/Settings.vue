@@ -15,7 +15,7 @@
 
     <b-modal :active.sync="showSettings"
     has-modal-card full-screen :can-cancel="true">
-    <SettingsModal />
+    <SettingsModal  @changelog="showChangelog = true"/>
   </b-modal>
 
   <b-modal :active.sync="showHelp"
@@ -28,6 +28,15 @@ has-modal-card full-screen :can-cancel="true">
 <InstructionsModal/>
 </b-modal>
 
+<b-modal :active.sync="showChangelog"
+has-modal-card
+trap-focus
+:destroy-on-hide="false"
+:can-cancel="false"
+aria-role="dialog"
+aria-modal>
+<ChangelogModal @close="showChangelog = false"/>
+</b-modal>
 
 </div>
 </template>
@@ -36,13 +45,16 @@ has-modal-card full-screen :can-cancel="true">
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import InstructionsModal from '../components/InstructionsModal.vue';
+import ChangelogModal from '../components/ChangelogModal.vue';
 const { shell } = require('electron');
+import { version } from '../../../package.json';
 
 const config = require('../../utilities/config');
 
 export default {
+  props: ['email', 'password', 'canCancel'],
   components: {
-    HelpModal, SettingsModal, InstructionsModal
+    HelpModal, SettingsModal, InstructionsModal, ChangelogModal
   },
   data() {
     return {
@@ -50,6 +62,7 @@ export default {
       showHelp: false,
       showConfig: false,
       showInstructions: false,
+      showChangelog: false,
     }
   },
   methods: {
@@ -58,9 +71,23 @@ export default {
     }
   },
   mounted(){
-    if(config.get('firstTime')){
+    var firstTime = config.get('firstTime');
+    if(firstTime){
       this.showInstructions = true;
       config.set('firstTime',false);
+    }
+
+    var configVersion = config.get('version');
+    if(configVersion == '' && !firstTime){
+      config.set('version',version);
+      this.showChangelog = true;
+    }
+    else if(configVersion !== version && !firstTime){
+      config.set('version',version);
+      this.showChangelog = true;
+    }
+    else{
+      config.set('version',version);
     }
   }
 }
@@ -103,4 +130,5 @@ export default {
 .toolbar li a:hover {
   opacity: 0.5;
 }
+
 </style>

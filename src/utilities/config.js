@@ -67,6 +67,10 @@ const schema = {
   firstTime:{
     type:'boolean',
     default: true
+  },
+  version:{
+    type:'string',
+    default: ''
   }
 };
 
