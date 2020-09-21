@@ -126,6 +126,7 @@ async function fullscreenScreenshot(callback) {
 
       video.play();
       video.pause();
+      ipcRenderer.send('screenshot-finished', '');
 
       console.time('Create OffscreenCanvas');
       var offscreen;

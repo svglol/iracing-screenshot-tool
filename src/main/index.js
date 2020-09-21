@@ -167,9 +167,12 @@ function createWindow() {
     }
 
     ipcMain.on('screenshot-response', (event, output) => {
+      mainWindow.webContents.send('screenshot-response', output);
+    });
+
+    ipcMain.on('screenshot-finished', () => {
       resize(width, height, left, top);
       iracing.camControls.setState(cameraState); //reset camera state
-      mainWindow.webContents.send('screenshot-response', output);
       takingScreenshot = false;
     });
 
