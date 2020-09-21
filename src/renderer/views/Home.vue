@@ -64,6 +64,7 @@
     indicator-custom
     :indicator-inside="false"
     v-model="selected"
+    id="carousel"
     >
     <b-carousel-item v-for="(item, i) in items" :key="i">
       <figure class="al image" :draggable="false">
@@ -263,12 +264,14 @@ export default Vue.extend({
                 waitForElementToBeAdded('.carousel-indicator').then(value => {
                   (function () {
                     function scrollH(e) {
+                      console.log(e)
                       e = window.event || e;
                       var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-                      value.scrollLeft -= (delta * 200);
+                      value.scrollLeft -= (delta * 400);
                     }
+                    var carousel = document.getElementById('carousel');
                     if (window.addEventListener) {
-                      window.addEventListener("wheel", scrollH, false);
+                      carousel.addEventListener("wheel", scrollH, false);
                     }
                   })();
                 });
