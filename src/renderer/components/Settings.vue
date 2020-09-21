@@ -19,13 +19,13 @@
   </b-modal>
 
   <b-modal :active.sync="showHelp"
-  has-modal-card full-screen :can-cancel="true">
-  <HelpModal/>
-</b-modal>
-
-<b-modal :active.sync="showInstructions"
-has-modal-card full-screen :can-cancel="true">
-<InstructionsModal/>
+  has-modal-card
+  trap-focus
+  :destroy-on-hide="false"
+  :can-cancel="false"
+  aria-role="dialog"
+  aria-modal >
+  <HelpModal  @close="showHelp = false"/>
 </b-modal>
 
 <b-modal :active.sync="showChangelog"
@@ -44,7 +44,6 @@ aria-modal>
 <script>
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
-import InstructionsModal from '../components/InstructionsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
 const { shell } = require('electron');
 import { version } from '../../../package.json';
@@ -52,16 +51,14 @@ import { version } from '../../../package.json';
 const config = require('../../utilities/config');
 
 export default {
-  props: ['email', 'password', 'canCancel'],
   components: {
-    HelpModal, SettingsModal, InstructionsModal, ChangelogModal
+    HelpModal, SettingsModal, ChangelogModal
   },
   data() {
     return {
       showSettings: false,
       showHelp: false,
       showConfig: false,
-      showInstructions: false,
       showChangelog: false,
     }
   },
@@ -73,7 +70,7 @@ export default {
   mounted(){
     var firstTime = config.get('firstTime');
     if(firstTime){
-      this.showInstructions = true;
+      this.showHelp = true;
       config.set('firstTime',false);
     }
 
