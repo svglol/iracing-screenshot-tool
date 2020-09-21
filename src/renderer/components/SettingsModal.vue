@@ -206,4 +206,8 @@ hr{
   color:#aaaaaa;
 }
 
+.modal-card-body{
+  padding: 0!important;
+}
+
 </style>
