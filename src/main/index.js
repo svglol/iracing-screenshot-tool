@@ -5,6 +5,7 @@ const fs = require("fs");
 import { productName } from '../../package.json';
 let width, height, left, top;
 let takingScreenshot = false;
+let cameraState = 0;
 
 // set app name
 app.name = productName;
@@ -167,7 +168,7 @@ function createWindow() {
 
     ipcMain.on('screenshot-response', (event, output) => {
       resize(width, height, left, top);
-      iracing.camControls.setState(4); //reopen camera edit
+      iracing.camControls.setState(cameraState); //reset camera state
       mainWindow.webContents.send('screenshot-response', output);
       takingScreenshot = false;
     });
@@ -189,7 +190,9 @@ function createWindow() {
 
     ipcMain.on('resize-screenshot', async (event, data) => {
       takingScreenshot = true;
-      iracing.camControls.setState(8);
+      var iracingCameraState = iracing.telemetry.values.CamCameraState;
+      parseCameraState(iracingCameraState)
+      iracing.camControls.setState(cameraState + 8);
       var id = resize(data.width, data.height,left,top);
       workerWindow.webContents.send('screenshot-request', {width:data.width,height:data.height,crop:data.crop,windowID:id});
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
@@ -198,7 +201,7 @@ function createWindow() {
 
     iracing.on('update', function () {
       if(takingScreenshot){
-        iracing.camControls.setState(8);
+        iracing.camControls.setState(cameraState + 8);
       }
     });
 
@@ -348,4 +351,37 @@ function createWindow() {
       fs.unlinkSync(app.getPath('userData')+'\\config.json');
       config = require('../utilities/config');
     }
+  }
+
+  function parseCameraState(iracingCameraState){
+    cameraState = 4; //always have camtoolactive
+    iracingCameraState.forEach((state) => {
+      switch(state){
+        case 'IsSessionScreen':
+        cameraState += 1;
+        break;
+        case 'IsScenicActive':
+         cameraState += 2;
+        break;
+        case 'UIHidden':
+         cameraState += 8;
+        break;
+        case 'UseAutoShotSelection':
+         cameraState += 16;
+        break;
+        case 'UseTemporaryEdits':
+         cameraState += 32;
+        break;
+        case 'UseKeyAcceleration':
+         cameraState += 64;
+        break;
+        case 'UseKey10xAcceleration':
+        cameraState += 128;
+        break;
+        case 'UseMouseAimMode':
+        cameraState += 256;
+        break;
+      }
+    });
+
   }
