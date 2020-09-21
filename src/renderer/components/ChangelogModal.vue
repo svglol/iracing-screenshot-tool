@@ -107,9 +107,4 @@ button {
   width: 30px;
 }
 
-h2{
-  color:red!important;
-}
-
-
 </style>
