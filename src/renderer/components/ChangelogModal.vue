@@ -29,35 +29,24 @@ export default {
   },
   mounted(){
     var ctx = this;
-    if(this.changelog == ''){
-      fetch.fetchUrl("https://api.github.com/repos/svglol/iracing-screenshot-tool/releases", function(error, meta, body){
-        var releases = JSON.parse(body.toString());
-        if(Array.isArray(releases)){
-          fs.writeFileSync(changelogFile, body);
-          ctx.parseChangelog(releases);
-        }else{
-          //error/api rate limit
-          fs.readFile(changelogFile, (err, data) => {
-            var releases = JSON.parse(data.toString());
-            ctx.parseChangelog(releases);
-          });
+    fs.readFile(changelogFile, (err, data) => {
+      var releases = JSON.parse(data.toString());
+      ctx.parseChangelog(releases);
+    });
+},
+methods:{
+  parseChangelog(releases){
+    if(Array.isArray(releases)){
+      releases.forEach((release, i) => {
+        let compare = compareVer(version,release.name);
+        if(compare == 0 || compare == 1){
+          this.changelog += "## " + release.name + " \n ";
+          this.changelog += release.body + "\n \n ___ \n";
         }
       });
     }
-  },
-  methods:{
-    parseChangelog(releases){
-      if(Array.isArray(releases)){
-        releases.forEach((release, i) => {
-          let compare = compareVer(version,release.name);
-          if(compare == 0 || compare == 1){
-            this.changelog += "## " + release.name + " \n ";
-            this.changelog += release.body + "\n \n ___ \n";
-          }
-        });
-      }
-    }
   }
+}
 }
 
 function compareVer(a, b)

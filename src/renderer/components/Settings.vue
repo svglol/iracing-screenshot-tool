@@ -45,8 +45,12 @@ aria-modal>
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
-const { shell } = require('electron');
+const { shell, remote } = require('electron');
 import { version } from '../../../package.json';
+const app = remote.app;
+const fs = require('fs');
+const fetch = require('fetch');
+const changelogFile = app.getPath('userData')+'\\releases'+'.json';
 
 const config = require('../../utilities/config');
 
@@ -75,13 +79,18 @@ export default {
     }
 
     var configVersion = config.get('version');
-    if(configVersion == '' && !firstTime){
+    if(configVersion == '' || configVersion !== version){
+      var ctx = this;
       config.set('version',version);
-      this.showChangelog = true;
-    }
-    else if(configVersion !== version && !firstTime){
-      config.set('version',version);
-      this.showChangelog = true;
+      fetch.fetchUrl("https://api.github.com/repos/svglol/iracing-screenshot-tool/releases", function(error, meta, body){
+        var releases = JSON.parse(body.toString());
+        if(Array.isArray(releases)){
+          fs.writeFileSync(changelogFile, body);
+          if(!firstTime){
+            ctx.showChangelog = true;
+          }
+        }
+      });
     }
     else{
       config.set('version',version);
