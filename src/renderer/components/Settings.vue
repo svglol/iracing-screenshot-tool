@@ -1,56 +1,70 @@
 <template>
   <div class="settings">
-    <ul class="toolbar" style="padding:.5rem">
+    <ul
+      class="toolbar"
+      style="padding:.5rem"
+    >
       <li>
-        <a @click="showSettings = true" ><font-awesome-icon :icon="['fas', 'cog']"  /></a>
+        <a @click="showSettings = true"><font-awesome-icon :icon="['fas', 'cog']" /></a>
       </li>
       <li>
-        <a @click="showHelp = true" v-shortkey.push="['f1']" @shortkey="showHelp = true"><font-awesome-icon :icon="['fas', 'question-circle']"  /></a>
+        <a
+          v-shortkey.push="['f1']"
+          @click="showHelp = true"
+          @shortkey="showHelp = true"
+        ><font-awesome-icon :icon="['fas', 'question-circle']" /></a>
       </li>
 
       <li>
-        <a @click="openDiscord" ><font-awesome-icon :icon="['fab', 'discord']" /></a>
+        <a @click="openDiscord"><font-awesome-icon :icon="['fab', 'discord']" /></a>
       </li>
     </ul>
 
-    <b-modal :active.sync="showSettings"
-    has-modal-card full-screen :can-cancel="true">
-    <SettingsModal  @changelog="showChangelog = true"/>
-  </b-modal>
+    <b-modal
+      :active.sync="showSettings"
+      has-modal-card
+      full-screen
+      :can-cancel="true"
+    >
+      <SettingsModal @changelog="showChangelog = true" />
+    </b-modal>
 
-  <b-modal :active.sync="showHelp"
-  has-modal-card
-  trap-focus
-  :destroy-on-hide="false"
-  :can-cancel="false"
-  aria-role="dialog"
-  aria-modal >
-  <HelpModal  @close="showHelp = false"/>
-</b-modal>
+    <b-modal
+      :active.sync="showHelp"
+      has-modal-card
+      trap-focus
+      :destroy-on-hide="false"
+      :can-cancel="false"
+      aria-role="dialog"
+      aria-modal
+    >
+      <HelpModal @close="showHelp = false" />
+    </b-modal>
 
-<b-modal :active.sync="showChangelog"
-has-modal-card
-trap-focus
-:destroy-on-hide="false"
-:can-cancel="false"
-aria-role="dialog"
-aria-modal>
-<ChangelogModal @close="showChangelog = false"/>
-</b-modal>
-
-</div>
+    <b-modal
+      :active.sync="showChangelog"
+      has-modal-card
+      trap-focus
+      :destroy-on-hide="false"
+      :can-cancel="false"
+      aria-role="dialog"
+      aria-modal
+    >
+      <ChangelogModal @close="showChangelog = false" />
+    </b-modal>
+  </div>
 </template>
 
 <script>
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
-const { shell, remote } = require('electron');
 import { version } from '../../../package.json';
+const { shell, remote } = require('electron');
 const app = remote.app;
 const fs = require('fs');
 const fetch = require('fetch');
-const changelogFile = app.getPath('userData')+'\\releases'+'.json';
+const changelogFile = app.getPath('userData') + '\\releases' + '.json';
 
 const config = require('../../utilities/config');
 
@@ -58,45 +72,44 @@ export default {
   components: {
     HelpModal, SettingsModal, ChangelogModal
   },
-  data() {
+  data () {
     return {
       showSettings: false,
       showHelp: false,
       showConfig: false,
-      showChangelog: false,
-    }
+      showChangelog: false
+    };
   },
-  methods: {
-    openDiscord(){
-      shell.openItem('https://discord.gg/GX2kSgN');
-    }
-  },
-  mounted(){
+  mounted () {
     var firstTime = config.get('firstTime');
-    if(firstTime){
+    if (firstTime) {
       this.showHelp = true;
-      config.set('firstTime',false);
+      config.set('firstTime', false);
     }
 
     var configVersion = config.get('version');
-    if(configVersion == '' || configVersion !== version){
+    if (configVersion == '' || configVersion !== version) {
       var ctx = this;
-      config.set('version',version);
-      fetch.fetchUrl("https://api.github.com/repos/svglol/iracing-screenshot-tool/releases", function(error, meta, body){
+      config.set('version', version);
+      fetch.fetchUrl('https://api.github.com/repos/svglol/iracing-screenshot-tool/releases', function (error, meta, body) {
         var releases = JSON.parse(body.toString());
-        if(Array.isArray(releases)){
+        if (Array.isArray(releases)) {
           fs.writeFileSync(changelogFile, body);
-          if(!firstTime){
+          if (!firstTime) {
             ctx.showChangelog = true;
           }
         }
       });
+    } else {
+      config.set('version', version);
     }
-    else{
-      config.set('version',version);
+  },
+  methods: {
+    openDiscord () {
+      shell.openItem('https://discord.gg/GX2kSgN');
     }
   }
-}
+};
 </script>
 
 <style scoped>

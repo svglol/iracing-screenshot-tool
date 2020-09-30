@@ -18,61 +18,68 @@ const schema = {
   },
   crop: {
     type: 'boolean',
-    default: true,
+    default: true
   },
   winPosX: {
     type: 'number',
-    default: 0,
+    default: 0
   },
   winPosY: {
     type: 'number',
-    default: 0,
+    default: 0
   },
   winWidth: {
     type: 'number',
-    default: 1100,
+    default: 1100
   },
   winHeight: {
     type: 'number',
-    default: 655,
+    default: 655
   },
   screenshotFolder: {
     type: 'string',
-    default: dir,
+    default: dir
   },
   screenshotKeybind: {
     type: 'string',
-    default: 'Control+PrintScreen',
+    default: 'Control+PrintScreen'
   },
-  disableTooltips:{
+  disableTooltips: {
     type: 'boolean',
-    default: false,
+    default: false
   },
-  defaultScreenWidth:{
-    type:'number',
+  defaultScreenWidth: {
+    type: 'number',
     default: 0
   },
-  defaultScreenHeight:{
-    type:'number',
+  defaultScreenHeight: {
+    type: 'number',
     default: 0
   },
-  defaultScreenLeft:{
-    type:'number',
+  defaultScreenLeft: {
+    type: 'number',
     default: 0
   },
-  defaultScreenTop:{
-    type:'number',
+  defaultScreenTop: {
+    type: 'number',
     default: 0
   },
-  firstTime:{
-    type:'boolean',
+  firstTime: {
+    type: 'boolean',
     default: true
   },
-  version:{
-    type:'string',
+  version: {
+    type: 'string',
     default: ''
+  },
+  reshade: {
+    type: 'boolean',
+    default: false
+  },
+  reshadeFile: {
+    type: 'string',
+    default: 'C:\\Program Files (x86)\\iRacing\\ReShade.ini'
   }
 };
 
-
-module.exports = new Store({schema});
+module.exports = new Store({ schema });
