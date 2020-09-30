@@ -80,7 +80,7 @@
     </b-button>
 
     <b-message
-      v-if=" !disableTooltips"
+      v-if="reshade && !disableTooltips"
       type="is-danger"
       aria-close-label="Close message"
       size="is-small"
