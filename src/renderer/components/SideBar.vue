@@ -164,6 +164,10 @@ export default {
     config.onDidChange('disableTooltips', (newValue, oldValue) => {
       this.disableTooltips = newValue;
     });
+
+    config.onDidChange('reshade', (newValue, oldValue) => {
+      this.reshade = newValue;
+    });
   },
   mounted () {
     this.crop = config.get('crop');
