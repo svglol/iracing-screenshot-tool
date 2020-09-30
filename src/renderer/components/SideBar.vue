@@ -41,7 +41,7 @@
     </b-field>
 
     <b-message
-      v-if="(resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k' || resolution == 'Custom')&& !disableTooltips "
+      v-if="(resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k')&& !disableTooltips "
       type="is-warning"
       aria-close-label="Close message"
       size="is-small"
@@ -67,7 +67,6 @@
     >
       <strong>Shrink iRacing UI to as small as possible with Ctrl+PgDwn before taking screenshot</strong>
     </b-message>
-
     <b-button
       type="is-primary"
       icon-left="camera"
@@ -79,6 +78,16 @@
     >
       Screenshot
     </b-button>
+
+    <b-message
+      v-if=" !disableTooltips"
+      type="is-danger"
+      aria-close-label="Close message"
+      size="is-small"
+      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
+    >
+      <strong>After pressing the screenshot button in the iRacing Screenshot Tool, you will need to press the keybind for taking a screenshot for ReShade</strong>
+    </b-message>
   </div>
 </template>
 
@@ -98,7 +107,8 @@ export default {
       customHeight: '0',
       iracingOpen: false,
       takingScreenshot: false,
-      disableTooltips: config.get('disableTooltips')
+      disableTooltips: config.get('disableTooltips'),
+      reshade: config.get('reshade')
     };
   },
   computed: {
@@ -128,7 +138,6 @@ export default {
     });
 
     ipcRenderer.on('screenshot-response', (event, arg) => {
-      console.log(arg);
       document.exitPointerLock();
       document.body.style.cursor = 'auto';
       if (fs.existsSync(arg)) {
@@ -161,9 +170,11 @@ export default {
     this.customWidth = config.get('customWidth');
     this.customHeight = config.get('customHeight');
     this.resolution = config.get('resolution');
+    this.reshade = config.get('reshade');
   },
   updated () {
     config.set('crop', this.crop);
+    config.set('reshade', this.reshade);
     if (!isNaN(parseInt(this.customWidth))) {
       config.set('customWidth', parseInt(this.customWidth));
     }
