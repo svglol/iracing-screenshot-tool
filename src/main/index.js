@@ -69,10 +69,6 @@ async function installDevTools () {
 }
 
 function createWindow () {
-  /**
-	 * Initial window options
-	 */
-
   workerWindow = new BrowserWindow({
     show: process.env.NODE_ENV === 'development',
     webPreferences: {
@@ -444,4 +440,4 @@ function parseCameraState (iracingCameraState) {
   }
 }
 
-const delay = ms => new Promise(res => setTimeout(res, ms));
+const delay = ms => new Promise(function (resolve) { setTimeout(resolve, ms); });

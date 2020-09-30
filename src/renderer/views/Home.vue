@@ -1,8 +1,11 @@
 <template>
-  <div class="columns is-gapless" style="margin-top: 0px; height: 100vh;">
+  <div
+    class="columns is-gapless"
+    style="margin-top: 0px; height: 100vh;"
+  >
     <div
-    class="column is-2 shadow"
-    style="
+      class="column is-2 shadow"
+      style="
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
@@ -10,123 +13,143 @@
     max-width:240px
     "
     >
-    <SideBar v-on:click="screenshot" />
-    <Settings />
-  </div>
-
-  <div class="column">
-    <div v-if="currentURL !== ''">
-      <div
-      class="columns is-gapless"
-      style="margin-bottom: 0.15rem;
-      background-color:rgba(0, 0, 0, 0.2)"
-      >
-      <div class="column is-9">
-        <div class="control" style="padding-top:.5rem;padding-bottom:.5rem; padding-left:.5rem">
-          <span style="font-weight: bold;">{{ fileName }}</span>
-          <b-tag type="is-info">{{ resolution }}</b-tag>
-        </div>
-      </div>
-      <div class="column" style="margin-left: 5rem;">
-        <ul class="toolbar" style="padding-right:.5rem;padding-top:.25rem;padding-bottom:.25rem;">
-          <li>
-            <a
-            @click="deleteFile"
-            v-shortkey="['del']"
-            @shortkey="deleteFile"
-            v-show="false"
-            ><font-awesome-icon :icon="['fas', 'trash']"  /></a>
-          </li>
-          <li>
-            <a @click="openFolder" v-show="false"><font-awesome-icon :icon="['fas', 'folder']"  /></a>
-          </li>
-          <li>
-            <a
-            v-shortkey="['ctrl', 'c']"
-            @shortkey="copy"
-            @click="copy"
-            v-show="false"
-            ><font-awesome-icon :icon="['fas', 'copy']"  /></a>
-          </li>
-          <li>
-            <a @click="openExternally" v-show="false"
-            ><font-awesome-icon :icon="['fas', 'external-link-alt']"  /></a>
-          </li>
-        </ul>
-      </div>
+      <SideBar @click="screenshot" />
+      <Settings />
     </div>
 
-    <b-carousel
-    :animated="'fade'"
-    :arrow="false"
-    :autoplay="false"
-    :has-drag="false"
-    indicator-custom
-    :indicator-inside="false"
-    v-model="selected"
-    id="carousel"
-    >
-    <b-carousel-item v-for="(item, i) in items" :key="i">
-      <figure class="al image" :draggable="false">
-        <img
-        :draggable="false"
-        v-lazy="items[i].thumb"
-        style="max-height: calc(100vh - 41px - 24px - 95px); object-fit: contain;padding:1rem"
-        @contextmenu.prevent.stop="handleClick($event, items[i])"
-        />
-      </figure>
-    </b-carousel-item>
-    <template slot="indicators" slot-scope="props" >
-      <figure class="al image" :draggable="false">
-        <img
-        :draggable="false"
-        v-lazy="getImageUrl(items[props.i])"
-        @click="selectImage(items[props.i].file)"
-        style="max-height: 70px; object-fit: contain;height:70px"
-        @contextmenu.prevent.stop="handleClick($event, items[props.i])"
-        />
-      </figure>
-    </template>
-  </b-carousel>
+    <div class="column">
+      <div v-if="currentURL !== ''">
+        <div
+          class="columns is-gapless"
+          style="margin-bottom: 0.15rem;
+      background-color:rgba(0, 0, 0, 0.2)"
+        >
+          <div class="column is-9">
+            <div
+              class="control"
+              style="padding-top:.5rem;padding-bottom:.5rem; padding-left:.5rem"
+            >
+              <span style="font-weight: bold;">{{ fileName }}</span>
+              <b-tag type="is-info">
+                {{ resolution }}
+              </b-tag>
+            </div>
+          </div>
+          <div
+            class="column"
+            style="margin-left: 5rem;"
+          >
+            <ul
+              class="toolbar"
+              style="padding-right:.5rem;padding-top:.25rem;padding-bottom:.25rem;"
+            >
+              <li>
+                <a
+                  v-show="false"
+                  v-shortkey="['del']"
+                  @click="deleteFile"
+                  @shortkey="deleteFile"
+                ><font-awesome-icon :icon="['fas', 'trash']" /></a>
+              </li>
+              <li>
+                <a
+                  v-show="false"
+                  @click="openFolder"
+                ><font-awesome-icon :icon="['fas', 'folder']" /></a>
+              </li>
+              <li>
+                <a
+                  v-show="false"
+                  v-shortkey="['ctrl', 'c']"
+                  @shortkey="copy"
+                  @click="copy"
+                ><font-awesome-icon :icon="['fas', 'copy']" /></a>
+              </li>
+              <li>
+                <a
+                  v-show="false"
+                  @click="openExternally"
+                ><font-awesome-icon :icon="['fas', 'external-link-alt']" /></a>
+              </li>
+            </ul>
+          </div>
+        </div>
 
-  <vue-simple-context-menu
-  :elementId="'myUniqueId'"
-  :options="options"
-  :ref="'vueSimpleContextMenu'"
-  @option-clicked="optionClicked"
-  />
+        <b-carousel
+          id="carousel"
+          v-model="selected"
+          :animated="'fade'"
+          :arrow="false"
+          :autoplay="false"
+          :has-drag="false"
+          indicator-custom
+          :indicator-inside="false"
+        >
+          <b-carousel-item
+            v-for="(item, i) in items"
+            :key="i"
+          >
+            <figure
+              class="al image"
+              :draggable="false"
+            >
+              <img
+                v-lazy="items[i].thumb"
+                :draggable="false"
+                style="max-height: calc(100vh - 41px - 24px - 95px); object-fit: contain;padding:1rem"
+                @contextmenu.prevent.stop="handleClick($event, items[i])"
+              >
+            </figure>
+          </b-carousel-item>
+          <template
+            slot="indicators"
+            slot-scope="props"
+          >
+            <figure
+              class="al image"
+              :draggable="false"
+            >
+              <img
+                v-lazy="getImageUrl(items[props.i])"
+                :draggable="false"
+                style="max-height: 70px; object-fit: contain;height:70px"
+                @click="selectImage(items[props.i].file)"
+                @contextmenu.prevent.stop="handleClick($event, items[props.i])"
+              >
+            </figure>
+          </template>
+        </b-carousel>
 
-</div>
-</div>
-</div>
+        <vue-simple-context-menu
+          :ref="'vueSimpleContextMenu'"
+          :element-id="'myUniqueId'"
+          :options="options"
+          @option-clicked="optionClicked"
+        />
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
-const electron = window.require ? window.require('electron') : null;
-
 import SideBar from '../components/SideBar.vue';
 import Settings from '../components/Settings.vue';
-const { ipcRenderer, remote, desktopCapturer, clipboard } = require('electron');
-const { exec } = require('electron').remote.require('child_process');
+import Vue from 'vue';
+
+const { ipcRenderer, remote, clipboard } = require('electron');
 const { shell } = require('electron');
 const sizeOf = require('image-size');
-const { screen } = remote;
-const mainWindow = remote.getCurrentWindow();
-const { width, height } = screen.getPrimaryDisplay().bounds;
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const app = remote.app;
-import Vue from 'vue';
 const config = require('../../utilities/config');
 let dir = config.get('screenshotFolder');
-
-let iRacingWindowSource = null;
 
 export default Vue.extend({
   name: 'Home',
   components: { SideBar, Settings },
-  data() {
+  data () {
     return {
       items: [],
       currentURL: '',
@@ -150,212 +173,208 @@ export default Vue.extend({
           name: 'Delete',
           slug: 'delete'
         }
-      ],
+      ]
     };
   },
-  methods: {
-    getImageUrl(item){
-      if(item != undefined)
-      return item.thumb;
+  watch: {
+    items () {
+      if (this.items.length !== 0) {
+        this.currentURL = this.items[0].file;
+      } else {
+        this.currentURL = '';
+      }
+
+      if (this.items.length !== 0) {
+        waitForElementToBeAdded('.carousel-indicator').then(value => {
+          (function () {
+            function scrollH (e) {
+              console.log(e);
+              e = window.event || e;
+              var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
+              value.scrollLeft -= (delta * 400);
+            }
+            var carousel = document.getElementById('carousel');
+            if (window.addEventListener) {
+              carousel.addEventListener('wheel', scrollH, false);
+            }
+          })();
+        });
+      }
     },
-    screenshot(data) {
+    currentURL: function () {
+      if (this.currentURL !== '') {
+        this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
+        var dimensions = sizeOf(this.currentURL);
+        this.resolution = dimensions.width + ' x ' + dimensions.height;
+        dimensions = null;
+      }
+    }
+  },
+  mounted () {
+    ipcRenderer.on('screenshot-response', (event, arg) => {
+      if (fs.existsSync(arg)) {
+        var file = path.parse(arg).name;
+        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+        this.items.unshift({ file: arg, thumb: thumb });
+        clipboard.write({ image: arg });
+        this.selected = 0;
+
+        document.querySelector('.carousel-indicator').scrollLeft = (0);
+      }
+    });
+    loadGallery(this.items);
+
+    config.onDidChange('screenshotFolder', (newValue, oldValue) => {
+      dir = newValue;
+      loadGallery(this.items);
+    });
+  },
+  methods: {
+    getImageUrl (item) {
+      if (item !== undefined) { return item.thumb; }
+    },
+    screenshot (data) {
       ipcRenderer.send('resize-screenshot', data);
     },
-    selectImage(item) {
+    selectImage (item) {
       this.currentURL = item;
     },
-    openExternally() {
+    openExternally () {
       shell.openItem(this.currentURL);
     },
-    copy() {
+    copy () {
       clipboard.write({ image: this.currentURL });
       this.$buefy.notification.open({
         message: this.fileName + ' copied to clipboard',
-        type:"is-dark",
-      })
+        type: 'is-dark'
+      });
     },
-    openFolder() {
+    openFolder () {
       const file = this.currentURL.replace(/\//g, '\\');
-        shell.showItemInFolder(file);
-      },
-      deleteFile() {
-        const file = this.currentURL.replace(/\//g, '\\');
-          shell.moveItemToTrash(file);
-          var index = 0;
-          for(var i = this.items.length - 1; i >= 0; i--) {
-            if(this.items[i].file === this.currentURL){
-              this.$delete(this.items, i)
-              if(this.selected == this.items.length) this.selected--;
-            }
-          }
-        },
-        handleClick (event, item) {
-          this.$refs.vueSimpleContextMenu.showMenu(event, item)
-        },
-        optionClicked (event) {
-          switch(event.option.slug){
-            case 'copy':
-            clipboard.write({ image: event.item.file });
-            break;
-            case 'external':
-            shell.openItem(event.item.file);
-            break;
-            case 'folder':
-            var file = event.item.file.replace(/\//g, '\\');
-              shell.showItemInFolder(file);
-              break;
-              case 'delete':
-              var file = event.item.file.replace(/\//g, '\\');
-                shell.moveItemToTrash(file);
-                var index = 0;
-                for(var i = this.items.length - 1; i >= 0; i--) {
-                  if(this.items[i].file === event.item.file){
-                    this.$delete(this.items, i)
-                    if(this.selected == this.items.length) this.selected--;
-                  }
-                }
-                break;
-
-              }
-            }
-          },
-          mounted() {
-            ipcRenderer.on('screenshot-response', (event, arg) => {
-              if (fs.existsSync(arg)) {
-                var file =  path.parse(arg).name;
-                var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
-                this.items.unshift({file:arg, thumb:thumb});
-                clipboard.write({ image: arg });
-                this.selected = 0;
-
-                document.querySelector('.carousel-indicator').scrollLeft = (0);
-              }
-            });
-            loadGallery(this.items);
-
-            config.onDidChange('screenshotFolder', (newValue,oldValue) => {
-              dir = newValue;
-              loadGallery(this.items);
-            });
-          },
-          watch: {
-            items() {
-              if (this.items.length !== 0) {
-                this.currentURL = this.items[0].file;
-              } else {
-                this.currentURL = "";
-              }
-
-              if (this.items.length != 0) {
-
-                const SEARCH_DELAY = 100; // in ms
-
-                function waitForElementToBeAdded(cssSelector) {
-                  return new Promise((resolve) => {
-                    const interval = setInterval(() => {
-                      var element = document.querySelector(cssSelector)
-                      if (element != null) {
-                        clearInterval(interval);
-                        resolve(element);
-                      }
-                    }, SEARCH_DELAY);
-                  });
-                }
-                waitForElementToBeAdded('.carousel-indicator').then(value => {
-                  (function () {
-                    function scrollH(e) {
-                      console.log(e)
-                      e = window.event || e;
-                      var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-                      value.scrollLeft -= (delta * 400);
-                    }
-                    var carousel = document.getElementById('carousel');
-                    if (window.addEventListener) {
-                      carousel.addEventListener("wheel", scrollH, false);
-                    }
-                  })();
-                });
-
-              }
-            },
-            currentURL: function () {
-              if (this.currentURL !== '') {
-                this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.')
-                var dimensions = sizeOf(this.currentURL);
-                this.resolution = dimensions.width + ' x ' + dimensions.height;
-                dimensions = null;
-              }
-            },
-          },
-        });
-
-        async function loadGallery(items) {
-          items.splice(0,items.length)
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir);
-          }
-
-          // Load images from screenshots Folder
-          await fs.readdir(dir, (err, files) => {
-            if (err) {
-              console.log(err);
-            }
-
-            files = files
-            .map((fileName) => {
-              return {
-                name: fileName,
-                time: fs.statSync(dir + '/' + fileName).mtime.getTime(),
-              };
-            })
-            .sort((a, b) => {
-              return a.time - b.time;
-            })
-            .map((v) => {
-              return v.name;
-            });
-
-            files.forEach(async (file) => {
-              if (file.split('.').pop() === 'png') {
-                let url = dir + file;
-                url = url.replace(/\\/g, '/');
-
-                var file =  path.parse(file).name;
-                var thumb = app.getPath('userData')+'\\Cache\\'+file+'.webp';
-
-                if (!fs.existsSync(thumb)) {
-                  await sharp(url)
-                  .resize(1280, 720,{fit: 'contain',background:{r:0,g:0,b:0,alpha:0}})
-                  .toFile(thumb, (err, info) => {
-                    items.unshift({file:url,thumb:thumb});
-                  });
-                }else{
-                  items.unshift({file:url,thumb:thumb});
-                }
-              }
-            });
-          });
-
-          //Clear unused thumbnail cache
-          var thumbDir = app.getPath('userData')+'\\Cache\\';
-          await fs.readdir(thumbDir, (err, files) => {
-            files.forEach(async (file) => {
-              var fullFile = thumbDir + file;
-              if (file.split('.').pop() === 'webp') {
-                var deleteItem = true;
-                items.forEach((item, i) => {
-                  if(item.thumb === fullFile){
-                    deleteItem = false;
-                  }
-                });
-                if(deleteItem){
-                  fs.unlinkSync(fullFile);
-                }
-              }
-            });
-          });
+      shell.showItemInFolder(file);
+    },
+    deleteFile () {
+      const file = this.currentURL.replace(/\//g, '\\');
+      shell.moveItemToTrash(file);
+      for (var i = this.items.length - 1; i >= 0; i--) {
+        if (this.items[i].file === this.currentURL) {
+          this.$delete(this.items, i);
+          if (this.selected === this.items.length) this.selected--;
         }
-        </script>
+      }
+    },
+    handleClick (event, item) {
+      this.$refs.vueSimpleContextMenu.showMenu(event, item);
+    },
+    optionClicked (event) {
+      switch (event.option.slug) {
+        case 'copy':
+          clipboard.write({ image: event.item.file });
+          break;
+        case 'external':
+          shell.openItem(event.item.file);
+          break;
+        case 'folder':
+          var file = event.item.file.replace(/\//g, '\\');
+          shell.showItemInFolder(file);
+          break;
+        case 'delete':
+          file = event.item.file.replace(/\//g, '\\');
+          shell.moveItemToTrash(file);
+          for (var i = this.items.length - 1; i >= 0; i--) {
+            if (this.items[i].file === event.item.file) {
+              this.$delete(this.items, i);
+              if (this.selected === this.items.length) this.selected--;
+            }
+          }
+          break;
+      }
+    }
+  }
+});
+
+async function loadGallery (items) {
+  items.splice(0, items.length);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir);
+  }
+
+  // Load images from screenshots Folder
+  await fs.readdir(dir, (err, files) => {
+    if (err) {
+      console.log(err);
+    }
+
+    files = files
+      .map((fileName) => {
+        return {
+          name: fileName,
+          time: fs.statSync(dir + '/' + fileName).mtime.getTime()
+        };
+      })
+      .sort((a, b) => {
+        return a.time - b.time;
+      })
+      .map((v) => {
+        return v.name;
+      });
+
+    files.forEach(async (file) => {
+      if (file.split('.').pop() === 'png') {
+        let url = dir + file;
+        url = url.replace(/\\/g, '/');
+
+        file = path.parse(file).name;
+        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+
+        if (!fs.existsSync(thumb)) {
+          await sharp(url)
+            .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+            .toFile(thumb, (err, info) => {
+              if (err) console.log(err);
+              items.unshift({ file: url, thumb: thumb });
+            });
+        } else {
+          items.unshift({ file: url, thumb: thumb });
+        }
+      }
+    });
+  });
+
+  // Clear unused thumbnail cache
+  var thumbDir = app.getPath('userData') + '\\Cache\\';
+  await fs.readdir(thumbDir, (err, files) => {
+    if (err) console.log(err);
+    files.forEach(async (file) => {
+      var fullFile = thumbDir + file;
+      if (file.split('.').pop() === 'webp') {
+        var deleteItem = true;
+        items.forEach((item, i) => {
+          if (item.thumb === fullFile) {
+            deleteItem = false;
+          }
+        });
+        if (deleteItem) {
+          fs.unlinkSync(fullFile);
+        }
+      }
+    });
+  });
+}
+
+const SEARCH_DELAY = 100; // in ms
+function waitForElementToBeAdded (cssSelector) {
+  return new Promise((resolve) => {
+    const interval = setInterval(() => {
+      var element = document.querySelector(cssSelector);
+      if (element != null) {
+        clearInterval(interval);
+        resolve(element);
+      }
+    }, SEARCH_DELAY);
+  });
+}
+</script>
 
         <style>
         .container {

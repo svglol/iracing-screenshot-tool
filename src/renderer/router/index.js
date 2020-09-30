@@ -6,43 +6,40 @@ import Worker from '../views/Worker.vue';
 Vue.use(Router);
 
 const router = new Router({
-	routes: [
-		{
-			path: '/',
-			redirect: '/home',
-		},
-		{
-			path: '/home',
-			meta: {
-				title: 'Home',
-				icon: 'fa-home',
-			},
-			component: Home,
-		},
-		{
-			path: '/worker',
-			name: 'worker',
-			component: Worker,
-		},
-		{
-			path: '*',
-			redirect: '/home',
-		},
-	],
+  routes: [
+    {
+      path: '/',
+      redirect: '/home'
+    },
+    {
+      path: '/home',
+      meta: {
+        title: 'Home',
+        icon: 'fa-home'
+      },
+      component: Home
+    },
+    {
+      path: '/worker',
+      name: 'worker',
+      component: Worker
+    },
+    {
+      path: '*',
+      redirect: '/home'
+    }
+  ]
 });
 
 // dynamically set application title to current view
 router.afterEach((to) => {
-	let title =
-		to.path === '/home'
-			? process.env.PRODUCT_NAME
-			: `${to.meta.title} - ${process.env.PRODUCT_NAME}`;
+  let title = to.path === '/home' ? process.env.PRODUCT_NAME : `${to.meta.title} - ${process.env.PRODUCT_NAME}`;
 
-	if (!title) {
-		title = 'Home';
-	}
+  if (!title) {
+    title = 'Home';
+  }
 
-	document.title = title;
+  document.title = title;
 });
 
 export default router;
