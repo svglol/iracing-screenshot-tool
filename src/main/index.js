@@ -376,16 +376,16 @@ function resize (width, height, left, top) {
 }
 
 function sendKey (keyID) {
-  const user32 = new ffi.Library('user32', {
-    FindWindowA: ['long', ['string', 'string']],
-    SendMessageA: [
-      'long', ['long', 'int32', 'long', 'int32']
-    ]
-  });
-
-  const window = user32.FindWindowA(null, 'iRacing.com Simulator');
-  user32.SendMessageA(window, 0x0100 /* WM_KEYDOWN */, 0x2C, 0);
-  user32.SendMessageA(window, 0x0101 /* WM_KEYUP */, 0x2C, 0);
+  // const user32 = new ffi.Library('user32', {
+  //   FindWindowA: ['long', ['string', 'string']],
+  //   SendMessageA: [
+  //     'long', ['long', 'int32', 'long', 'int32']
+  //   ]
+  // });
+  //
+  // const window = user32.FindWindowA(null, 'iRacing.com Simulator');
+  // user32.SendMessageA(window, 0x0100 /* WM_KEYDOWN */, 0x2C, 0);
+  // user32.SendMessageA(window, 0x0101 /* WM_KEYUP */, 0x2C, 0);
 }
 
 function RectPointerToRect (rectPointer) {
