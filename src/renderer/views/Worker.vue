@@ -215,9 +215,9 @@ async function fullscreenScreenshot (callback) {
           chromeMediaSource: 'desktop',
           chromeMediaSourceId: 'window:' + windowID + ':0',
           minWidth: 1280,
-          maxWidth: 10000,
+          maxWidth: 20000,
           minHeight: 720,
-          maxHeight: 10000
+          maxHeight: 20000
         }
       }
     });
