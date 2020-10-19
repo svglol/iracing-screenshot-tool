@@ -1,7 +1,6 @@
 import Vue from 'vue';
 import Router from 'vue-router';
 import Home from '../views/Home.vue';
-import Worker from '../views/Worker.vue';
 
 Vue.use(Router);
 
@@ -18,11 +17,6 @@ const router = new Router({
         icon: 'fa-home'
       },
       component: Home
-    },
-    {
-      path: '/worker',
-      name: 'worker',
-      component: Worker
     },
     {
       path: '*',

@@ -1,13 +1,7 @@
 import { productName } from '../../package.json';
 
 import { autoUpdater } from 'electron-updater';
-const {
-  app,
-  BrowserWindow,
-  screen,
-  globalShortcut,
-  Menu
-} = require('electron');
+const { app, BrowserWindow, screen, globalShortcut, Menu } = require('electron');
 const { ipcMain } = require('electron');
 const ffi = require('ffi-napi');
 const fs = require('fs');
@@ -34,7 +28,7 @@ const isDebug = process.argv.includes('--debug');
 var irsdk = require('node-irsdk');
 var iracing = irsdk.getInstance();
 
-let mainWindow, workerWindow;
+let mainWindow;
 
 // only allow single instance of application
 if (!isDev) {
@@ -69,25 +63,6 @@ async function installDevTools () {
 }
 
 function createWindow () {
-  workerWindow = new BrowserWindow({
-    show: process.env.NODE_ENV === 'development',
-    webPreferences: {
-      nodeIntegration: true,
-      nodeIntegrationInWorker: true,
-      webSecurity: false
-    }
-  });
-
-  if (isDev) {
-    workerWindow.loadURL('http://localhost:9080/#/worker');
-  } else {
-    workerWindow.loadURL(`file://${__dirname}/index.html#worker`);
-
-    global.__static = require('path')
-      .join(__dirname, '/static')
-      .replace(/\\/g, '\\\\');
-  }
-
   mainWindow = new BrowserWindow({
     title: app.name,
     show: false,
@@ -128,7 +103,6 @@ function createWindow () {
   });
 
   mainWindow.on('close', () => {
-    workerWindow.close();
     const { x, y, width, height } = mainWindow.getBounds();
     config.set('winPosX', x);
     config.set('winPosY', y);
@@ -166,12 +140,10 @@ app.on('ready', async () => {
   if (isDev) {
     installDevTools();
     mainWindow.webContents.openDevTools();
-    workerWindow.webContents.openDevTools();
   }
 
   if (isDebug) {
     mainWindow.webContents.openDevTools();
-    workerWindow.webContents.openDevTools();
   }
 
   ipcMain.on('screenshot-response', (event, output) => {
@@ -207,14 +179,14 @@ app.on('ready', async () => {
     iracing.camControls.setState(States.UIHidden);
     var id = resize(data.width, data.height, left, top);
     if (!config.get('reshade')) {
-      workerWindow.webContents.send('screenshot-request', {
+      mainWindow.webContents.send('screenshot-request', {
         width: data.width,
         height: data.height,
         crop: data.crop,
         windowID: id
       });
-      workerWindow.webContents.send('session-info', iracing.sessionInfo);
-      workerWindow.webContents.send('telemetry', iracing.telemetry);
+      mainWindow.webContents.send('session-info', iracing.sessionInfo);
+      mainWindow.webContents.send('telemetry', iracing.telemetry);
     } else {
       const reshadeIni = loadIniFile.sync(config.get('reshadeFile'));
       const folder = reshadeIni.GENERAL.ScreenshotPath + '\\';
@@ -226,9 +198,9 @@ app.on('ready', async () => {
           resize(width, height, left, top);
           iracing.camControls.setState(cameraState); // reset camera state
           takingScreenshot = false;
-          workerWindow.webContents.send('session-info', iracing.sessionInfo);
-          workerWindow.webContents.send('telemetry', iracing.telemetry);
-          workerWindow.webContents.send('screenshot-reshade', folder + filename);
+          mainWindow.webContents.send('session-info', iracing.sessionInfo);
+          mainWindow.webContents.send('telemetry', iracing.telemetry);
+          mainWindow.webContents.send('screenshot-reshade', folder + filename);
           watcher.close();
         }
       });
