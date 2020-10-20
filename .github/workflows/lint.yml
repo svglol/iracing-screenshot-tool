@@ -14,7 +14,7 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v2
         with:
-          ref: ${BRANCH_NAME}
+          ref: ${{ github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v1
