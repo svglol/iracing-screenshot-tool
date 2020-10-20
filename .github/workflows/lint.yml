@@ -8,14 +8,13 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v2
-
       - name: Current Branch
         uses: nelonoel/branch-name@v1
 
-      - name: Switch Branch
-        run: git checkout ${BRANCH_NAME}
+      - name: Check out Git repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${BRANCH_NAME}
 
       - name: Set up Node.js
         uses: actions/setup-node@v1
