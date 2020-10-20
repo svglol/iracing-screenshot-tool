@@ -10,6 +10,11 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v2
+        with:
+        fetch-depth: 0
+
+      - name: Switch to Current Branch
+        run: git checkout ${{ env.BRANCH }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v1
