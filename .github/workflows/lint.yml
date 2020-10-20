@@ -8,13 +8,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Current Branch
-        uses: nelonoel/branch-name@v1
-
       - name: Check out Git repository
         uses: actions/checkout@v2
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v1
