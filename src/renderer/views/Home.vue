@@ -3,16 +3,7 @@
     class="columns is-gapless"
     style="margin-top: 0px; height: 100vh;"
   >
-    <div
-      class="column is-2 shadow"
-      style="
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    min-width:240px;
-    max-width:240px
-    "
-    >
+    <div class="sidebar column is-2 shadow">
       <SideBar @click="screenshot" />
       <Settings />
     </div>
@@ -20,9 +11,7 @@
     <div class="column">
       <div v-if="currentURL !== ''">
         <div
-          class="columns is-gapless"
-          style="margin-bottom: 0.15rem;
-      background-color:rgba(0, 0, 0, 0.2)"
+          class="columns is-gapless topbar"
         >
           <div class="column is-9">
             <div
@@ -36,42 +25,21 @@
             </div>
           </div>
           <div
-            class="column"
-            style="margin-left: 5rem;"
+            v-show="false"
           >
-            <ul
-              class="toolbar"
-              style="padding-right:.5rem;padding-top:.25rem;padding-bottom:.25rem;"
-            >
-              <li>
-                <a
-                  v-show="false"
-                  v-shortkey="['del']"
-                  @click="deleteFile"
-                  @shortkey="deleteFile"
-                ><font-awesome-icon :icon="['fas', 'trash']" /></a>
-              </li>
-              <li>
-                <a
-                  v-show="false"
-                  @click="openFolder"
-                ><font-awesome-icon :icon="['fas', 'folder']" /></a>
-              </li>
-              <li>
-                <a
-                  v-show="false"
-                  v-shortkey="['ctrl', 'c']"
-                  @shortkey="copy"
-                  @click="copy"
-                ><font-awesome-icon :icon="['fas', 'copy']" /></a>
-              </li>
-              <li>
-                <a
-                  v-show="false"
-                  @click="openExternally"
-                ><font-awesome-icon :icon="['fas', 'external-link-alt']" /></a>
-              </li>
-            </ul>
+            <a
+              v-show="false"
+              v-shortkey="['del']"
+              @click="deleteFile"
+              @shortkey="deleteFile"
+            />
+
+            <a
+              v-show="false"
+              v-shortkey="['ctrl', 'c']"
+              @shortkey="copy"
+              @click="copy"
+            />
           </div>
         </div>
 
@@ -132,8 +100,6 @@
 </template>
 
 <script>
-import SideBar from '../components/SideBar.vue';
-import Settings from '../components/Settings.vue';
 import Vue from 'vue';
 
 const { ipcRenderer, remote, clipboard } = require('electron');
@@ -150,7 +116,6 @@ let sessionInfo, telemetry, windowID, crop;
 
 export default Vue.extend({
   name: 'Home',
-  components: { SideBar, Settings },
   data () {
     return {
       items: [],
@@ -190,7 +155,6 @@ export default Vue.extend({
         waitForElementToBeAdded('.carousel-indicator').then(value => {
           (function () {
             function scrollH (e) {
-              console.log(e);
               e = window.event || e;
               var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
               value.scrollLeft -= (delta * 400);
@@ -597,87 +561,71 @@ const delay = ms => new Promise(function (resolve) { setTimeout(resolve, ms); })
 </script>
 
 <style>
-        .container {
-          max-width: 100vw !important;
-          padding: 0px !important;
-        }
+.container {
+  max-width: 100vw !important;
+  padding: 0px !important;
+}
 
-        html{
-          background-color: transparent!important;
-        }
-        body {
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
-          background: rgb(37,37,37)!important;
-          background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
-          height: 100vh;
-          color: white !important;
-        }
-        .label {
-          color: white !important;
-        }
-        .indicator-item {
-          flex: 0 0 calc(100vh/6) !important;
-          margin-left: .25rem;
-          margin-right: .25rem;
-        }
+html {
+  background-color: transparent!important;
+}
 
-        .toolbar {
-          list-style-type: none;
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-          margin-top: .1rem;
-        }
+body {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background: rgb(37, 37, 37)!important;
+  background: linear-gradient(0deg, rgba(37, 37, 37, 1) 0%, rgba(61, 61, 61, 1) 100%);
+  height: 100vh;
+  color: white !important;
+}
 
-        .toolbar li {
-          float: right;
-          margin-left: 0.3rem;
-          margin-right: 0.3rem;
-          margin-top: auto;
-          font-size: 1.2rem;
-        }
+.label {
+  color: white !important;
+}
 
-        .toolbar li a {
-          display: block;
-          color: white;
-          text-align: center;
-          text-decoration: none;
-        }
+.indicator-item {
+  flex: 0 0 calc(100vh/6) !important;
+  margin-left: .25rem;
+  margin-right: .25rem;
+}
 
-        .toolbar li a:hover {
-          opacity: 0.5;
-        }
+.carousel .carousel-indicator.has-custom {
+  overflow-x: scroll !important;
+  margin-top: auto;
+  background-color: rgba(0, 0, 0, .2);
+  scroll-behavior: smooth;
+}
 
-        .carousel .carousel-indicator.has-custom {
-          overflow-x: scroll !important;
-          margin-top: auto;
-          background-color: rgba(0,0,0,.2);
-          scroll-behavior: smooth;
-        }
+.indicator-item {
+  padding-right: .5rem;
+}
 
-        .indicator-item{
-          padding-right: .5rem;
-        }
+.is-active img {
+  filter: drop-shadow(0 -2px 0 #ec202a) drop-shadow(0 2px 0 #ec202a) drop-shadow(-2px 0 0 #ec202a) drop-shadow(2px 0 0 #ec202a);
+}
 
-        .is-active img{
-          filter:
-          drop-shadow(0 -2px 0 #ec202a)
-          drop-shadow(0 2px 0 #ec202a)
-          drop-shadow(-2px 0 0 #ec202a)
-          drop-shadow(2px 0 0 #ec202a);
-        }
+.indicator-item img:hover {
+  opacity: .8;
+}
 
-        .indicator-item img:hover{
-          opacity: .8;
-        }
+.carousel {
+  height: calc(100vh - 41px - 27px);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 240px)
+}
 
-        .carousel {
-          height: calc(100vh - 41px - 27px);
-          display: flex;
-          flex-direction: column;
-          max-width: calc(100vw - 240px)
-        }
+.sidebar {
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex!important;
+  flex-direction: column;
+  min-width: 240px;
+  max-width: 240px
+}
 
+.topbar {
+  margin-bottom: 0.15rem!important;
+  background-color:rgba(0, 0, 0, 0.2)
+}
 </style>

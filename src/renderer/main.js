@@ -19,6 +19,20 @@ import vClickOutside from 'v-click-outside';
 
 import VueMarkdownPlus from 'vue-markdown-plus';
 
+import ChangelogModal from './components/ChangelogModal.vue';
+import HelpModal from './components/HelpModal.vue';
+import Settings from './components/Settings.vue';
+import SettingsModal from './components/SettingsModal.vue';
+import SideBar from './components/SideBar.vue';
+import TitleBar from './components/TitleBar.vue';
+
+Vue.component('ChangelogModal', ChangelogModal);
+Vue.component('HelpModal', HelpModal);
+Vue.component('Settings', Settings);
+Vue.component('SettingsModal', SettingsModal);
+Vue.component('SideBar', SideBar);
+Vue.component('TitleBar', TitleBar);
+
 Vue.use(VueLazyload);
 
 Vue.use(Buefy);

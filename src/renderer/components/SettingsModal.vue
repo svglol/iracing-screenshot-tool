@@ -3,21 +3,12 @@
     class="modal-card"
     style="width: auto; height:100vh"
   >
-    <header
-      class="modal-card-head"
-      style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0px;"
-    >
-      <p
-        class="modal-card-title"
-        style="color:white; font-weight:700"
-      >
+    <header class="modal-card-head">
+      <p class="modal-card-title">
         Settings
       </p>
     </header>
-    <section
-      class="modal-card-body"
-      style="background-color: transparent; "
-    >
+    <section class="modal-card-body">
       <div
         class="columns is-centered"
         style=" margin:auto;padding-bottom:2rem"
@@ -317,7 +308,6 @@ export default {
 </script>
 
 <style scoped>
-
 hr{
   margin: 0;
   margin-top: .25rem;
@@ -334,5 +324,4 @@ hr{
 .modal-card-body{
   padding: 0!important;
 }
-
 </style>

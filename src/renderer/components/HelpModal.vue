@@ -1,16 +1,7 @@
 <template>
-  <div
-    class="modal-card"
-    style="width: 60vw; height:80vh; background: rgb(37,37,37)!important;"
-  >
-    <header
-      class="modal-card-head"
-      style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0;"
-    >
-      <p
-        class="modal-card-title"
-        style="color:white;font-weight:700;  margin-bottom: 0rem;"
-      >
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title">
         Help
       </p>
       <button
@@ -19,10 +10,7 @@
         @click="$emit('close')"
       />
     </header>
-    <section
-      class="modal-card-body"
-      style="background-color: transparent;"
-    >
+    <section class="modal-card-body">
       <div style=" max-width:600px; margin:auto;">
         <span class="heading">iRacing Settings</span>
         <ul>
@@ -71,30 +59,29 @@ export default {
 </script>
 
 <style scoped>
-
-.heading{
+.heading {
   font-size: .75rem;
   font-weight: 700;
 }
 
-ul{
+ul {
   list-style-type: disc;
   margin-left: 2rem;
 }
 
-li{
-  color:#aaaaaa;
+li {
+  color: #aaaaaa;
 }
 
-p{
+p {
   margin-bottom: 1rem;
-  color:#aaaaaa;
+  color: #aaaaaa;
 }
 
 button {
   background-color: transparent;
   border: 0px;
-  color:white;
+  color: white;
   font-size: 1.5rem;
   padding: 0px;
   margin: 0px;
@@ -109,29 +96,33 @@ ol {
   counter-reset: li;
 }
 
-ol li{
+ol li {
   margin-left: 2rem;
 }
 
 ol li::before {
   content: counter(li);
   color: white;
-  display: inline-block; width: 1em;
-  margin-left: -1em}
+  display: inline-block;
+  width: 1em;
+  margin-left: -1em
+}
 
-  li {counter-increment: li}
+li {
+  counter-increment: li
+}
 
-  button {
-    background-color: transparent;
-    border: 0px;
-    color:white;
-    font-size: 2rem;
-    padding: 0px;
-    margin: 0px;
-    text-align: left;
-    height: 30px;
-    max-height: 30px;
-    max-width: 30px;
-    width: 30px;
-  }
-  </style>
+button {
+  background-color: transparent;
+  border: 0px;
+  color: white;
+  font-size: 2rem;
+  padding: 0px;
+  margin: 0px;
+  text-align: left;
+  height: 30px;
+  max-height: 30px;
+  max-width: 30px;
+  width: 30px;
+}
+</style>

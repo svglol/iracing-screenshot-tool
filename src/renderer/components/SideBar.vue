@@ -249,5 +249,4 @@ export default {
 .message.is-info .message-body{
   color:rgb(50, 152, 220)!important;
 }
-
 </style>

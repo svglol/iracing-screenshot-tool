@@ -56,9 +56,6 @@
 </template>
 
 <script>
-import HelpModal from '../components/HelpModal.vue';
-import SettingsModal from '../components/SettingsModal.vue';
-import ChangelogModal from '../components/ChangelogModal.vue';
 import { version } from '../../../package.json';
 const { shell, remote } = require('electron');
 const app = remote.app;
@@ -69,9 +66,6 @@ const changelogFile = app.getPath('userData') + '\\releases' + '.json';
 const config = require('../../utilities/config');
 
 export default {
-  components: {
-    HelpModal, SettingsModal, ChangelogModal
-  },
   data () {
     return {
       showSettings: false,
@@ -152,5 +146,4 @@ export default {
 .toolbar li a:hover {
   opacity: 0.5;
 }
-
 </style>

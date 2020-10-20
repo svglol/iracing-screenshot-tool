@@ -1,16 +1,7 @@
 <template>
-  <div
-    class="modal-card"
-    style="width: 60vw; height:80vh; background: rgb(37,37,37)!important;"
-  >
-    <header
-      class="modal-card-head"
-      style="background-color: rgba(0, 0, 0, 0.2);border-bottom: 0;"
-    >
-      <p
-        class="modal-card-title"
-        style="color:white;font-weight:700;  margin-bottom: 0rem;"
-      >
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title">
         Changelog
       </p>
       <button
@@ -19,10 +10,7 @@
         @click="$emit('close')"
       />
     </header>
-    <section
-      class="modal-card-body"
-      style="background-color: transparent;"
-    >
+    <section class="modal-card-body">
       <vue-markdown-plus :source="changelog" />
     </section>
   </div>
@@ -86,7 +74,6 @@ function compareVer (a, b) {
 </script>
 
 <style scoped>
-
 .heading{
   font-size: .75rem;
   font-weight: 700;
@@ -105,5 +92,4 @@ button {
   max-width: 30px;
   width: 30px;
 }
-
 </style>
