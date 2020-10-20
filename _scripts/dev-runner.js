@@ -22,7 +22,7 @@ if (remoteDebugging) {
   process.env.RENDERER_REMOTE_DEBUGGING = true
 }
 
-async function killElectron(pid) {
+async function killElectron (pid) {
   return new Promise((resolve, reject) => {
     if (pid) {
       kill(pid, (err) => {
@@ -36,7 +36,7 @@ async function killElectron(pid) {
   })
 }
 
-async function restartElectron() {
+async function restartElectron () {
   console.log(chalk.gray('\nStarting electron...'))
 
   const { pid } = electronProcess || {}
@@ -46,7 +46,7 @@ async function restartElectron() {
     path.join(__dirname, '../dist/main.js'),
     // '--enable-logging', // Enable to show logs from all electron processes
     remoteDebugging ? '--inspect=9222' : '',
-    remoteDebugging ? '--remote-debugging-port=9223' : '',
+    remoteDebugging ? '--remote-debugging-port=9223' : ''
   ])
 
   electronProcess.stdout.on('data', (data) => {
@@ -62,7 +62,7 @@ async function restartElectron() {
   })
 }
 
-function startMain() {
+function startMain () {
   const webpackSetup = webpack([mainConfig])
 
   webpackSetup.compilers.forEach((compiler) => {
@@ -99,7 +99,7 @@ function startMain() {
 
   webpackSetup.watch(
     {
-      aggregateTimeout: 500,
+      aggregateTimeout: 500
     },
     (err) => {
       if (err) console.error(chalk.red(err))
@@ -107,7 +107,7 @@ function startMain() {
   )
 }
 
-function startRenderer(callback) {
+function startRenderer (callback) {
   const compiler = webpack(rendererConfig)
   const { name } = compiler
 
@@ -121,7 +121,7 @@ function startRenderer(callback) {
     hot: true,
     noInfo: true,
     overlay: true,
-    clientLogLevel: 'warning',
+    clientLogLevel: 'warning'
   })
 
   server.listen(9080, '', (err) => {

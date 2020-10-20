@@ -8,7 +8,7 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const {
   dependencies,
   devDependencies,
-  productName,
+  productName
 } = require('../package.json')
 
 const externals = Object.keys(dependencies).concat(Object.keys(devDependencies))
@@ -20,12 +20,12 @@ const config = {
   mode: process.env.NODE_ENV,
   devtool: isDevMode ? '#cheap-module-eval-source-map' : false,
   entry: {
-    renderer: path.join(__dirname, '../src/renderer/main.js'),
+    renderer: path.join(__dirname, '../src/renderer/main.js')
   },
   output: {
     libraryTarget: 'commonjs2',
     path: path.join(__dirname, '../dist'),
-    filename: '[name].js',
+    filename: '[name].js'
   },
   externals: externals.filter((d) => !whiteListedModules.includes(d)),
   module: {
@@ -41,31 +41,23 @@ const config = {
             options: {
               implementation: require('sass'),
               fiber: require('fibers'),
-              indentedSyntax: true, // optional
-            },
-            // Requires sass-loader@^8.0.0
-            options: {
-              implementation: require('sass'),
-              sassOptions: {
-                fiber: require('fibers'),
-                indentedSyntax: true, // optional
-              },
-            },
-          },
-        ],
+              indentedSyntax: true // optional
+            }
+          }
+        ]
       },
       {
         test: /\.(j|t)s$/,
         use: 'babel-loader',
-        exclude: /node_modules/,
+        exclude: /node_modules/
       },
       {
         test: /\.node$/,
-        use: 'node-loader',
+        use: 'node-loader'
       },
       {
         test: /\.vue$/,
-        loader: 'vue-loader',
+        loader: 'vue-loader'
       },
       {
         test: /\.s(c|a)ss$/,
@@ -73,20 +65,20 @@ const config = {
           {
             loader: MiniCssExtractPlugin.loader,
             options: {
-              hmr: isDevMode,
-            },
+              hmr: isDevMode
+            }
           },
           {
-            loader: 'css-loader',
+            loader: 'css-loader'
           },
           {
             loader: 'sass-loader',
             options: {
               // eslint-disable-next-line
               implementation: require('sass'),
-            },
-          },
-        ],
+            }
+          }
+        ]
       },
       {
         test: /\.css$/,
@@ -94,11 +86,11 @@ const config = {
           {
             loader: MiniCssExtractPlugin.loader,
             options: {
-              hmr: isDevMode,
-            },
+              hmr: isDevMode
+            }
           },
-          'css-loader',
-        ],
+          'css-loader'
+        ]
       },
       {
         test: /\.(png|jpe?g|gif|tif?f|bmp|webp|svg)(\?.*)?$/,
@@ -107,9 +99,9 @@ const config = {
           options: {
             esModule: false,
             limit: 10000,
-            name: 'imgs/[name]--[folder].[ext]',
-          },
-        },
+            name: 'imgs/[name]--[folder].[ext]'
+          }
+        }
       },
       {
         test: /\.(woff2?|eot|ttf|otf)(\?.*)?$/,
@@ -118,15 +110,15 @@ const config = {
           options: {
             esModule: false,
             limit: 10000,
-            name: 'fonts/[name]--[folder].[ext]',
-          },
-        },
-      },
-    ],
+            name: 'fonts/[name]--[folder].[ext]'
+          }
+        }
+      }
+    ]
   },
   node: {
     __dirname: isDevMode,
-    __filename: isDevMode,
+    __filename: isDevMode
   },
   plugins: [
     // new WriteFilePlugin(),
@@ -136,27 +128,27 @@ const config = {
       template: path.resolve(__dirname, '../src/index.ejs'),
       nodeModules: isDevMode
         ? path.resolve(__dirname, '../node_modules')
-        : false,
+        : false
     }),
     new VueLoaderPlugin(),
     new webpack.DefinePlugin({
-      'process.env.PRODUCT_NAME': JSON.stringify(productName),
+      'process.env.PRODUCT_NAME': JSON.stringify(productName)
     }),
     new MiniCssExtractPlugin({
       filename: '[name].css',
-      chunkFilename: '[id].css',
-    }),
+      chunkFilename: '[id].css'
+    })
   ],
   resolve: {
     alias: {
       vue$: 'vue/dist/vue.common.js',
       '@': path.join(__dirname, '../src/'),
       src: path.join(__dirname, '../src/'),
-      icons: path.join(__dirname, '../_icons/'),
+      icons: path.join(__dirname, '../_icons/')
     },
-    extensions: ['.ts', '.js', '.vue', '.json'],
+    extensions: ['.ts', '.js', '.vue', '.json']
   },
-  target: 'electron-renderer',
+  target: 'electron-renderer'
 }
 
 /**
@@ -167,7 +159,7 @@ if (isDevMode) {
   config.plugins.push(
     new webpack.HotModuleReplacementPlugin(),
     new webpack.DefinePlugin({
-      __static: `"${path.join(__dirname, '../static').replace(/\\/g, '\\\\')}"`,
+      __static: `"${path.join(__dirname, '../static').replace(/\\/g, '\\\\')}"`
     })
   )
 } else {
@@ -176,11 +168,11 @@ if (isDevMode) {
       {
         from: path.join(__dirname, '../static'),
         to: path.join(__dirname, '../dist/static'),
-        ignore: ['.*'],
-      },
+        ignore: ['.*']
+      }
     ]),
     new webpack.LoaderOptionsPlugin({
-      minimize: true,
+      minimize: true
     })
   )
 }

@@ -56,14 +56,14 @@
 </template>
 
 <script>
-import { version } from '../../../package.json';
-const { shell, remote } = require('electron');
-const app = remote.app;
-const fs = require('fs');
-const fetch = require('fetch');
-const changelogFile = app.getPath('userData') + '\\releases' + '.json';
+import { version } from '../../../package.json'
+const { shell, remote } = require('electron')
+const app = remote.app
+const fs = require('fs')
+const fetch = require('fetch')
+const changelogFile = app.getPath('userData') + '\\releases' + '.json'
 
-const config = require('../../utilities/config');
+const config = require('../../utilities/config')
 
 export default {
   data () {
@@ -72,41 +72,41 @@ export default {
       showHelp: false,
       showConfig: false,
       showChangelog: false
-    };
+    }
   },
   mounted () {
-    var firstTime = config.get('firstTime');
+    var firstTime = config.get('firstTime')
     if (firstTime) {
-      this.showHelp = true;
-      config.set('firstTime', false);
+      this.showHelp = true
+      config.set('firstTime', false)
     }
 
-    var configVersion = config.get('version');
+    var configVersion = config.get('version')
     if (configVersion === '' || configVersion !== version) {
-      var ctx = this;
-      config.set('version', version);
+      var ctx = this
+      config.set('version', version)
       fetch.fetchUrl('https://api.github.com/repos/svglol/iracing-screenshot-tool/releases', function (error, meta, body) {
         if (error) {
-          console.log(error);
+          console.log(error)
         }
-        var releases = JSON.parse(body.toString());
+        var releases = JSON.parse(body.toString())
         if (Array.isArray(releases)) {
-          fs.writeFileSync(changelogFile, body);
+          fs.writeFileSync(changelogFile, body)
           if (!firstTime) {
-            ctx.showChangelog = true;
+            ctx.showChangelog = true
           }
         }
-      });
+      })
     } else {
-      config.set('version', version);
+      config.set('version', version)
     }
   },
   methods: {
     openDiscord () {
-      shell.openItem('https://discord.gg/GX2kSgN');
+      shell.openItem('https://discord.gg/GX2kSgN')
     }
   }
-};
+}
 </script>
 
 <style scoped>

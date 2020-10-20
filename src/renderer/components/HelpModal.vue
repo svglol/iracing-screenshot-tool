@@ -43,19 +43,19 @@
 </template>
 
 <script>
-const { shell } = require('electron');
+const { shell } = require('electron')
 
 export default {
   data () {
     return {
-    };
+    }
   },
   methods: {
     openDiscord () {
-      shell.openItem('https://discord.gg/GX2kSgN');
+      shell.openItem('https://discord.gg/GX2kSgN')
     }
   }
-};
+}
 </script>
 
 <style scoped>

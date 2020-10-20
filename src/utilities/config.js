@@ -1,7 +1,7 @@
-'use strict';
-const Store = require('electron-store');
-const homedir = require('os').homedir();
-const dir = homedir + '\\Pictures\\Screenshots\\';
+'use strict'
+const Store = require('electron-store')
+const homedir = require('os').homedir()
+const dir = homedir + '\\Pictures\\Screenshots\\'
 
 const schema = {
   customHeight: {
@@ -80,6 +80,6 @@ const schema = {
     type: 'string',
     default: 'C:\\Program Files (x86)\\iRacing\\ReShade.ini'
   }
-};
+}
 
-module.exports = new Store({ schema });
+module.exports = new Store({ schema })

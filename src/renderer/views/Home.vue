@@ -100,19 +100,19 @@
 </template>
 
 <script>
-import Vue from 'vue';
+import Vue from 'vue'
 
-const { ipcRenderer, remote, clipboard } = require('electron');
-const { shell } = require('electron');
-const sizeOf = require('image-size');
-const fs = require('fs');
-const path = require('path');
-const sharp = require('sharp');
-const app = remote.app;
-const config = require('../../utilities/config');
-let dir = config.get('screenshotFolder');
+const { ipcRenderer, remote, clipboard } = require('electron')
+const { shell } = require('electron')
+const sizeOf = require('image-size')
+const fs = require('fs')
+const path = require('path')
+const sharp = require('sharp')
+const app = remote.app
+const config = require('../../utilities/config')
+let dir = config.get('screenshotFolder')
 
-let sessionInfo, telemetry, windowID, crop;
+let sessionInfo, telemetry, windowID, crop
 
 export default Vue.extend({
   name: 'Home',
@@ -141,195 +141,195 @@ export default Vue.extend({
           slug: 'delete'
         }
       ]
-    };
+    }
   },
   watch: {
     items () {
       if (this.items.length !== 0) {
-        this.currentURL = this.items[0].file;
+        this.currentURL = this.items[0].file
       } else {
-        this.currentURL = '';
+        this.currentURL = ''
       }
 
       if (this.items.length !== 0) {
         waitForElementToBeAdded('.carousel-indicator').then(value => {
           (function () {
             function scrollH (e) {
-              e = window.event || e;
-              var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-              value.scrollLeft -= (delta * 400);
+              e = window.event || e
+              var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)))
+              value.scrollLeft -= (delta * 400)
             }
-            var carousel = document.getElementById('carousel');
+            var carousel = document.getElementById('carousel')
             if (window.addEventListener) {
-              carousel.addEventListener('wheel', scrollH, false);
+              carousel.addEventListener('wheel', scrollH, false)
             }
-          })();
-        });
+          })()
+        })
       }
     },
     currentURL: function () {
       if (this.currentURL !== '') {
-        this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
-        var dimensions = sizeOf(this.currentURL);
-        this.resolution = dimensions.width + ' x ' + dimensions.height;
-        dimensions = null;
+        this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.')
+        var dimensions = sizeOf(this.currentURL)
+        this.resolution = dimensions.width + ' x ' + dimensions.height
+        dimensions = null
       }
     }
   },
   mounted () {
     ipcRenderer.on('screenshot-response', (event, arg) => {
       if (fs.existsSync(arg)) {
-        var file = path.parse(arg).name;
-        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
-        this.items.unshift({ file: arg, thumb: thumb });
-        clipboard.write({ image: arg });
-        this.selected = 0;
+        var file = path.parse(arg).name
+        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp'
+        this.items.unshift({ file: arg, thumb: thumb })
+        clipboard.write({ image: arg })
+        this.selected = 0
 
-        document.querySelector('.carousel-indicator').scrollLeft = (0);
+        document.querySelector('.carousel-indicator').scrollLeft = (0)
       }
-    });
+    })
 
     ipcRenderer.on('screenshot-request', (event, input) => {
-      console.log('Screenshot - ' + input.width + 'x' + input.height + ' Crop - ' + input.crop);
-      console.time('Screenshot');
-      windowID = input.windowID;
-      crop = input.crop;
+      console.log('Screenshot - ' + input.width + 'x' + input.height + ' Crop - ' + input.crop)
+      console.time('Screenshot')
+      windowID = input.windowID
+      crop = input.crop
       if (windowID === undefined) {
-        ipcRenderer.send('screenshot-error', 'iRacing window not found');
+        ipcRenderer.send('screenshot-error', 'iRacing window not found')
       } else {
         fullscreenScreenshot(input, (base64data) => {
-          saveImage(base64data);
-        });
+          saveImage(base64data)
+        })
       }
-    });
+    })
 
     ipcRenderer.on('screenshot-reshade', (event, arg) => {
-      const file = getFileNameString();
-      var fileName = config.get('screenshotFolder') + file + '.png';
+      const file = getFileNameString()
+      var fileName = config.get('screenshotFolder') + file + '.png'
       // crop and move file
-      sharp.cache(false);
-      crop = config.get('crop');
-      var buff = fs.readFileSync(arg);
-      const image = sharp(buff);
+      sharp.cache(false)
+      crop = config.get('crop')
+      var buff = fs.readFileSync(arg)
+      const image = sharp(buff)
       image
         .metadata()
         .then(function (metadata) {
           if (metadata.width < 54) {
-            return Error('image is too small');
+            return Error('image is too small')
           } else {
             if (crop) {
               return image
                 .extract({ left: 0, top: 0, width: metadata.width - 54, height: metadata.height - 30 })
-                .toFile(fileName);
+                .toFile(fileName)
             } else {
               return image
-                .toFile(fileName);
+                .toFile(fileName)
             }
           }
         })
         .then(async data => {
           // create Thumbnail
-          const thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+          const thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp'
           sharp(fileName)
             .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
             .toFile(thumb, (err, info) => {
               // return screenshot
-              ipcRenderer.send('screenshot-response', fileName);
-              global.gc();
+              ipcRenderer.send('screenshot-response', fileName)
+              global.gc()
               if (err) {
-                console.log(err);
+                console.log(err)
               }
-            });
-        });
-    });
+            })
+        })
+    })
 
     ipcRenderer.on('session-info', (event, arg) => {
-      sessionInfo = arg;
-    });
+      sessionInfo = arg
+    })
     ipcRenderer.on('telemetry', (event, arg) => {
-      telemetry = arg;
-    });
-    loadGallery(this.items);
+      telemetry = arg
+    })
+    loadGallery(this.items)
 
     config.onDidChange('screenshotFolder', (newValue, oldValue) => {
-      dir = newValue;
-      loadGallery(this.items);
-    });
+      dir = newValue
+      loadGallery(this.items)
+    })
   },
   methods: {
     getImageUrl (item) {
-      if (item !== undefined) { return item.thumb; }
+      if (item !== undefined) { return item.thumb }
     },
     screenshot (data) {
-      ipcRenderer.send('resize-screenshot', data);
+      ipcRenderer.send('resize-screenshot', data)
     },
     selectImage (item) {
-      this.currentURL = item;
+      this.currentURL = item
     },
     openExternally () {
-      shell.openItem(this.currentURL);
+      shell.openItem(this.currentURL)
     },
     copy () {
-      clipboard.write({ image: this.currentURL });
+      clipboard.write({ image: this.currentURL })
       this.$buefy.notification.open({
         message: this.fileName + ' copied to clipboard',
         type: 'is-dark'
-      });
+      })
     },
     openFolder () {
-      const file = this.currentURL.replace(/\//g, '\\');
-      shell.showItemInFolder(file);
+      const file = this.currentURL.replace(/\//g, '\\')
+      shell.showItemInFolder(file)
     },
     deleteFile () {
-      const file = this.currentURL.replace(/\//g, '\\');
-      shell.moveItemToTrash(file);
+      const file = this.currentURL.replace(/\//g, '\\')
+      shell.moveItemToTrash(file)
       for (var i = this.items.length - 1; i >= 0; i--) {
         if (this.items[i].file === this.currentURL) {
-          this.$delete(this.items, i);
-          if (this.selected === this.items.length) this.selected--;
+          this.$delete(this.items, i)
+          if (this.selected === this.items.length) this.selected--
         }
       }
     },
     handleClick (event, item) {
-      this.$refs.vueSimpleContextMenu.showMenu(event, item);
+      this.$refs.vueSimpleContextMenu.showMenu(event, item)
     },
     optionClicked (event) {
       switch (event.option.slug) {
         case 'copy':
-          clipboard.write({ image: event.item.file });
-          break;
+          clipboard.write({ image: event.item.file })
+          break
         case 'external':
-          shell.openItem(event.item.file);
-          break;
+          shell.openItem(event.item.file)
+          break
         case 'folder':
-          var file = event.item.file.replace(/\//g, '\\');
-          shell.showItemInFolder(file);
-          break;
+          var file = event.item.file.replace(/\//g, '\\')
+          shell.showItemInFolder(file)
+          break
         case 'delete':
-          file = event.item.file.replace(/\//g, '\\');
-          shell.moveItemToTrash(file);
+          file = event.item.file.replace(/\//g, '\\')
+          shell.moveItemToTrash(file)
           for (var i = this.items.length - 1; i >= 0; i--) {
             if (this.items[i].file === event.item.file) {
-              this.$delete(this.items, i);
-              if (this.selected === this.items.length) this.selected--;
+              this.$delete(this.items, i)
+              if (this.selected === this.items.length) this.selected--
             }
           }
-          break;
+          break
       }
     }
   }
-});
+})
 
 async function loadGallery (items) {
-  items.splice(0, items.length);
+  items.splice(0, items.length)
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir);
+    fs.mkdirSync(dir)
   }
 
   // Load images from screenshots Folder
   await fs.readdir(dir, (err, files) => {
     if (err) {
-      console.log(err);
+      console.log(err)
     }
 
     files = files
@@ -337,203 +337,203 @@ async function loadGallery (items) {
         return {
           name: fileName,
           time: fs.statSync(dir + '/' + fileName).mtime.getTime()
-        };
+        }
       })
       .sort((a, b) => {
-        return a.time - b.time;
+        return a.time - b.time
       })
       .map((v) => {
-        return v.name;
-      });
+        return v.name
+      })
 
     files.forEach(async (file) => {
       if (file.split('.').pop() === 'png') {
-        let url = dir + file;
-        url = url.replace(/\\/g, '/');
+        let url = dir + file
+        url = url.replace(/\\/g, '/')
 
-        file = path.parse(file).name;
-        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+        file = path.parse(file).name
+        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp'
 
         if (!fs.existsSync(thumb)) {
           await sharp(url)
             .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
             .toFile(thumb, (err, info) => {
-              if (err) console.log(err);
-              items.unshift({ file: url, thumb: thumb });
-            });
+              if (err) console.log(err)
+              items.unshift({ file: url, thumb: thumb })
+            })
         } else {
-          items.unshift({ file: url, thumb: thumb });
+          items.unshift({ file: url, thumb: thumb })
         }
       }
-    });
-  });
+    })
+  })
 
   // Clear unused thumbnail cache
-  var thumbDir = app.getPath('userData') + '\\Cache\\';
+  var thumbDir = app.getPath('userData') + '\\Cache\\'
   await fs.readdir(thumbDir, (err, files) => {
-    if (err) console.log(err);
+    if (err) console.log(err)
     files.forEach(async (file) => {
-      var fullFile = thumbDir + file;
+      var fullFile = thumbDir + file
       if (file.split('.').pop() === 'webp') {
-        var deleteItem = true;
+        var deleteItem = true
         items.forEach((item, i) => {
           if (item.thumb === fullFile) {
-            deleteItem = false;
+            deleteItem = false
           }
-        });
+        })
         if (deleteItem) {
-          fs.unlinkSync(fullFile);
+          fs.unlinkSync(fullFile)
         }
       }
-    });
-  });
+    })
+  })
 }
 
-const SEARCH_DELAY = 100; // in ms
+const SEARCH_DELAY = 100 // in ms
 function waitForElementToBeAdded (cssSelector) {
   return new Promise((resolve) => {
     const interval = setInterval(() => {
-      var element = document.querySelector(cssSelector);
+      var element = document.querySelector(cssSelector)
       if (element != null) {
-        clearInterval(interval);
-        resolve(element);
+        clearInterval(interval)
+        resolve(element)
       }
-    }, SEARCH_DELAY);
-  });
+    }, SEARCH_DELAY)
+  })
 }
 
 function saveImage (blob) {
-  console.time('Save Image');
-  var base64data = '';
-  const reader = new FileReader();
-  reader.readAsDataURL(blob);
+  console.time('Save Image')
+  var base64data = ''
+  const reader = new FileReader()
+  reader.readAsDataURL(blob)
   reader.onload = async function () {
-    console.time('Save Image to file');
-    base64data = reader.result;
-    base64data = base64data.replace(/^data:image\/png;base64,/, '');
-    const file = getFileNameString();
-    var fileName = config.get('screenshotFolder') + file + '.png';
-    var buff = await Buffer.from(base64data, 'base64');
-    await fs.writeFileSync(fileName, '');
+    console.time('Save Image to file')
+    base64data = reader.result
+    base64data = base64data.replace(/^data:image\/png;base64,/, '')
+    const file = getFileNameString()
+    var fileName = config.get('screenshotFolder') + file + '.png'
+    var buff = await Buffer.from(base64data, 'base64')
+    await fs.writeFileSync(fileName, '')
 
-    var writeStream = fs.createWriteStream(fileName);
-    writeStream.write(buff);
+    var writeStream = fs.createWriteStream(fileName)
+    writeStream.write(buff)
     writeStream.on('finish', () => {
-      console.timeEnd('Save Image to file');
-      console.time('Save Thumbnail');
-      const thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+      console.timeEnd('Save Image to file')
+      console.time('Save Thumbnail')
+      const thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp'
       sharp(fileName)
         .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .toFile(thumb, (err, info) => {
           if (err) {
-            console.log(err);
+            console.log(err)
           }
-          ipcRenderer.send('screenshot-response', fileName);
-          buff = null;
-          base64data = null;
-          global.gc();
-          console.timeEnd('Save Thumbnail');
-          console.timeEnd('Save Image');
-          console.timeEnd('Screenshot');
-        });
-    });
+          ipcRenderer.send('screenshot-response', fileName)
+          buff = null
+          base64data = null
+          global.gc()
+          console.timeEnd('Save Thumbnail')
+          console.timeEnd('Save Image')
+          console.timeEnd('Screenshot')
+        })
+    })
     writeStream.on('error', (err) => {
-      console.log(err);
-      ipcRenderer.send('screenshot-error', err);
-    });
-    writeStream.end();
-  };
+      console.log(err)
+      ipcRenderer.send('screenshot-error', err)
+    })
+    writeStream.end()
+  }
 }
 
 function getFileNameString () {
-  const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
-  let driverName = '';
+  const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName
+  let driverName = ''
 
   if (sessionInfo.data.WeekendInfo.TeamRacing === 1) {
     sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
       if (sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx) {
-        driverName = item.TeamName;
+        driverName = item.TeamName
       }
-    });
+    })
   } else {
     sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
       if (telemetry.values.CamCarIdx === item.CarIdx) {
-        driverName = item.UserName;
+        driverName = item.UserName
       }
-    });
+    })
   }
 
-  var unique = false;
-  var count = 0;
-  var file = trackName + '-' + driverName + '-' + count;
-  var screenshotFolder = config.get('screenshotFolder');
+  var unique = false
+  var count = 0
+  var file = trackName + '-' + driverName + '-' + count
+  var screenshotFolder = config.get('screenshotFolder')
   while (!unique) {
     if (fs.existsSync(screenshotFolder + file + '.png')) {
-      count++;
-      file = trackName + '-' + driverName + '-' + count;
+      count++
+      file = trackName + '-' + driverName + '-' + count
     } else {
-      unique = true;
+      unique = true
     }
   }
-  return file;
+  return file
 }
 
 async function fullscreenScreenshot (input, callback) {
   var handleStream = (stream) => {
-    console.timeEnd('Get Media');
+    console.timeEnd('Get Media')
     // Create hidden video tag
-    var video = document.createElement('video');
+    var video = document.createElement('video')
     // video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
     // Event connected to stream
     video.addEventListener('loadedmetadata', function () {
       // Set video ORIGINAL height (screenshot)
-      video.style.height = this.videoHeight + 'px'; // VideoHeight
-      video.style.width = this.videoWidth + 'px'; // VideoWidth
+      video.style.height = this.videoHeight + 'px' // VideoHeight
+      video.style.width = this.videoWidth + 'px' // VideoWidth
 
-      video.play();
-      video.pause();
-      ipcRenderer.send('screenshot-finished', '');
+      video.play()
+      video.pause()
+      ipcRenderer.send('screenshot-finished', '')
 
-      console.time('Create OffscreenCanvas');
-      var offscreen;
+      console.time('Create OffscreenCanvas')
+      var offscreen
       if (crop) {
-        offscreen = new OffscreenCanvas(this.videoWidth - 54, this.videoHeight - 30);
+        offscreen = new OffscreenCanvas(this.videoWidth - 54, this.videoHeight - 30)
       } else {
-        offscreen = new OffscreenCanvas(this.videoWidth, this.videoHeight);
+        offscreen = new OffscreenCanvas(this.videoWidth, this.videoHeight)
       }
 
-      const offctx = offscreen.getContext('2d', { alpha: false });
-      offctx.drawImage(video, 0, 0, this.videoWidth, this.videoHeight);
+      const offctx = offscreen.getContext('2d', { alpha: false })
+      offctx.drawImage(video, 0, 0, this.videoWidth, this.videoHeight)
 
       // Remove hidden video tag
-      video.srcObject = null;
-      video.remove();
+      video.srcObject = null
+      video.remove()
       try {
         // Destroy connect to stream
-        stream.getTracks()[0].stop();
-        video = null;
-        stream = null;
+        stream.getTracks()[0].stop()
+        video = null
+        stream = null
       } catch (error) {
-        console.log(error);
+        console.log(error)
       }
 
-      console.timeEnd('Create OffscreenCanvas');
-      console.time('To Blob');
+      console.timeEnd('Create OffscreenCanvas')
+      console.time('To Blob')
       offscreen.convertToBlob().then(function (blob) {
-        console.timeEnd('To Blob');
-        console.timeEnd('Draw Image');
-        callback(blob);
-      });
-    });
-    video.srcObject = stream;
-  };
+        console.timeEnd('To Blob')
+        console.timeEnd('Draw Image')
+        callback(blob)
+      })
+    })
+    video.srcObject = stream
+  }
 
   var handleError = function (e) {
-    ipcRenderer.send('screenshot-error', e);
-  };
-  await delay(1000);
-  console.time('Draw Image');
-  console.time('Get Media');
+    ipcRenderer.send('screenshot-error', e)
+  }
+  await delay(1000)
+  console.time('Draw Image')
+  console.time('Get Media')
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -547,16 +547,16 @@ async function fullscreenScreenshot (input, callback) {
           maxHeight: input.height
         }
       }
-    });
-    console.log('handle stream');
-    handleStream(stream);
+    })
+    console.log('handle stream')
+    handleStream(stream)
   } catch (e) {
-    handleError(e);
+    handleError(e)
   }
   // if(!found) ipcRenderer.send('screenshot-error', 'iRacing window not found');
 }
 
-const delay = ms => new Promise(function (resolve) { setTimeout(resolve, ms); });
+const delay = ms => new Promise(function (resolve) { setTimeout(resolve, ms) })
 
 </script>
 

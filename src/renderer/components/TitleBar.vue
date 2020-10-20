@@ -49,9 +49,9 @@
 </template>
 
 <script>
-const { ipcRenderer } = require('electron');
-const { remote } = require('electron');
-const win = remote.getCurrentWindow();
+const { ipcRenderer } = require('electron')
+const { remote } = require('electron')
+const win = remote.getCurrentWindow()
 
 export default {
   props: {
@@ -61,29 +61,29 @@ export default {
   data () {
     return {
       updateReady: false
-    };
+    }
   },
   mounted () {
     ipcRenderer.on('update-available', (event, arg) => {
-      this.updateReady = true;
-    });
+      this.updateReady = true
+    })
   },
   methods: {
     onClose () {
-      close();
+      close()
     },
     onMinimize () {
-      win.minimize();
+      win.minimize()
     },
     onMaximize () {
-      if (win.isMaximized()) win.unmaximize();
-      else win.maximize();
+      if (win.isMaximized()) win.unmaximize()
+      else win.maximize()
     },
     onUpdate () {
-      ipcRenderer.send('install-update', '');
+      ipcRenderer.send('install-update', '')
     }
   }
-};
+}
 </script>
 
 <style scoped>
