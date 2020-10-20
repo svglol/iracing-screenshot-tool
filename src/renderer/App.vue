@@ -10,12 +10,10 @@
 </template>
 
 <script>
-import Vue from 'vue';
-import TitleBar from './components/TitleBar.vue';
+import Vue from "vue";
 
 export default Vue.extend({
-  name: 'App',
-  components: { TitleBar }
+  name: "App",
 });
 </script>
 

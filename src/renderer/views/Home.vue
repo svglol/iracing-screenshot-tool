@@ -1,77 +1,42 @@
 <template>
-  <div
-    class="columns is-gapless"
-    style="margin-top: 0px; height: 100vh;"
-  >
-    <div
-      class="column is-2 shadow"
-      style="
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    min-width:240px;
-    max-width:240px
-    "
-    >
+  <div class="columns is-gapless" style="margin-top: 0px; height: 100vh">
+    <div class="sidebar column is-2 shadow">
       <SideBar @click="screenshot" />
       <Settings />
     </div>
 
     <div class="column">
       <div v-if="currentURL !== ''">
-        <div
-          class="columns is-gapless"
-          style="margin-bottom: 0.15rem;
-      background-color:rgba(0, 0, 0, 0.2)"
-        >
+        <div class="columns is-gapless topbar">
           <div class="column is-9">
             <div
               class="control"
-              style="padding-top:.5rem;padding-bottom:.5rem; padding-left:.5rem"
+              style="
+                padding-top: 0.5rem;
+                padding-bottom: 0.5rem;
+                padding-left: 0.5rem;
+              "
             >
-              <span style="font-weight: bold;">{{ fileName }}</span>
+              <span style="font-weight: bold">{{ fileName }}</span>
               <b-tag type="is-info">
                 {{ resolution }}
               </b-tag>
             </div>
           </div>
-          <div
-            class="column"
-            style="margin-left: 5rem;"
-          >
-            <ul
-              class="toolbar"
-              style="padding-right:.5rem;padding-top:.25rem;padding-bottom:.25rem;"
-            >
-              <li>
-                <a
-                  v-show="false"
-                  v-shortkey="['del']"
-                  @click="deleteFile"
-                  @shortkey="deleteFile"
-                ><font-awesome-icon :icon="['fas', 'trash']" /></a>
-              </li>
-              <li>
-                <a
-                  v-show="false"
-                  @click="openFolder"
-                ><font-awesome-icon :icon="['fas', 'folder']" /></a>
-              </li>
-              <li>
-                <a
-                  v-show="false"
-                  v-shortkey="['ctrl', 'c']"
-                  @shortkey="copy"
-                  @click="copy"
-                ><font-awesome-icon :icon="['fas', 'copy']" /></a>
-              </li>
-              <li>
-                <a
-                  v-show="false"
-                  @click="openExternally"
-                ><font-awesome-icon :icon="['fas', 'external-link-alt']" /></a>
-              </li>
-            </ul>
+          <div v-show="false">
+            <a
+              v-show="false"
+              v-shortkey="['del']"
+              @click="deleteFile"
+              @shortkey="deleteFile"
+            />
+
+            <a
+              v-show="false"
+              v-shortkey="['ctrl', 'c']"
+              @shortkey="copy"
+              @click="copy"
+            />
           </div>
         </div>
 
@@ -85,37 +50,29 @@
           indicator-custom
           :indicator-inside="false"
         >
-          <b-carousel-item
-            v-for="(item, i) in items"
-            :key="i"
-          >
-            <figure
-              class="al image"
-              :draggable="false"
-            >
+          <b-carousel-item v-for="(item, i) in items" :key="i">
+            <figure class="al image" :draggable="false">
               <img
                 v-lazy="items[i].thumb"
                 :draggable="false"
-                style="max-height: calc(100vh - 41px - 24px - 95px); object-fit: contain;padding:1rem"
+                style="
+                  max-height: calc(100vh - 41px - 24px - 95px);
+                  object-fit: contain;
+                  padding: 1rem;
+                "
                 @contextmenu.prevent.stop="handleClick($event, items[i])"
-              >
+              />
             </figure>
           </b-carousel-item>
-          <template
-            slot="indicators"
-            slot-scope="props"
-          >
-            <figure
-              class="al image"
-              :draggable="false"
-            >
+          <template slot="indicators" slot-scope="props">
+            <figure class="al image" :draggable="false">
               <img
                 v-lazy="getImageUrl(items[props.i])"
                 :draggable="false"
-                style="max-height: 70px; object-fit: contain;height:70px"
+                style="max-height: 70px; object-fit: contain; height: 70px"
                 @click="selectImage(items[props.i].file)"
                 @contextmenu.prevent.stop="handleClick($event, items[props.i])"
-              >
+              />
             </figure>
           </template>
         </b-carousel>
@@ -132,129 +89,209 @@
 </template>
 
 <script>
-import SideBar from '../components/SideBar.vue';
-import Settings from '../components/Settings.vue';
-import Vue from 'vue';
+import Vue from "vue";
 
-const { ipcRenderer, remote, clipboard } = require('electron');
-const { shell } = require('electron');
-const sizeOf = require('image-size');
-const fs = require('fs');
-const path = require('path');
-const sharp = require('sharp');
+const { ipcRenderer, remote, clipboard } = require("electron");
+const { shell } = require("electron");
+const sizeOf = require("image-size");
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
 const app = remote.app;
-const config = require('../../utilities/config');
-let dir = config.get('screenshotFolder');
+const config = require("../../utilities/config");
+let dir = config.get("screenshotFolder");
+
+let sessionInfo, telemetry, windowID, crop;
 
 export default Vue.extend({
-  name: 'Home',
-  components: { SideBar, Settings },
-  data () {
+  name: "Home",
+  data() {
     return {
       items: [],
-      currentURL: '',
-      fileName: '',
-      resolution: '',
+      currentURL: "",
+      fileName: "",
+      resolution: "",
       selected: 0,
       options: [
         {
-          name: 'Open Externally',
-          slug: 'external'
+          name: "Open Externally",
+          slug: "external",
         },
         {
-          name: 'Open Folder',
-          slug: 'folder'
+          name: "Open Folder",
+          slug: "folder",
         },
         {
-          name: 'Copy',
-          slug: 'copy'
+          name: "Copy",
+          slug: "copy",
         },
         {
-          name: 'Delete',
-          slug: 'delete'
-        }
-      ]
+          name: "Delete",
+          slug: "delete",
+        },
+      ],
     };
   },
   watch: {
-    items () {
+    items() {
       if (this.items.length !== 0) {
         this.currentURL = this.items[0].file;
       } else {
-        this.currentURL = '';
+        this.currentURL = "";
       }
 
       if (this.items.length !== 0) {
-        waitForElementToBeAdded('.carousel-indicator').then(value => {
+        waitForElementToBeAdded(".carousel-indicator").then((value) => {
           (function () {
-            function scrollH (e) {
-              console.log(e);
+            function scrollH(e) {
               e = window.event || e;
-              var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-              value.scrollLeft -= (delta * 400);
+              var delta = Math.max(-1, Math.min(1, e.wheelDelta || -e.detail));
+              value.scrollLeft -= delta * 400;
             }
-            var carousel = document.getElementById('carousel');
+            var carousel = document.getElementById("carousel");
             if (window.addEventListener) {
-              carousel.addEventListener('wheel', scrollH, false);
+              carousel.addEventListener("wheel", scrollH, false);
             }
           })();
         });
       }
     },
     currentURL: function () {
-      if (this.currentURL !== '') {
-        this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
+      if (this.currentURL !== "") {
+        this.fileName = this.currentURL
+          .split(/[\\/]/)
+          .pop()
+          .split(".")
+          .slice(0, -1)
+          .join(".");
         var dimensions = sizeOf(this.currentURL);
-        this.resolution = dimensions.width + ' x ' + dimensions.height;
+        this.resolution = dimensions.width + " x " + dimensions.height;
         dimensions = null;
       }
-    }
+    },
   },
-  mounted () {
-    ipcRenderer.on('screenshot-response', (event, arg) => {
+  mounted() {
+    ipcRenderer.on("screenshot-response", (event, arg) => {
       if (fs.existsSync(arg)) {
         var file = path.parse(arg).name;
-        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+        var thumb = app.getPath("userData") + "\\Cache\\" + file + ".webp";
         this.items.unshift({ file: arg, thumb: thumb });
         clipboard.write({ image: arg });
         this.selected = 0;
 
-        document.querySelector('.carousel-indicator').scrollLeft = (0);
+        document.querySelector(".carousel-indicator").scrollLeft = 0;
       }
+    });
+
+    ipcRenderer.on("screenshot-request", (event, input) => {
+      console.log(
+        "Screenshot - " +
+          input.width +
+          "x" +
+          input.height +
+          " Crop - " +
+          input.crop
+      );
+      console.time("Screenshot");
+      windowID = input.windowID;
+      crop = input.crop;
+      if (windowID === undefined) {
+        ipcRenderer.send("screenshot-error", "iRacing window not found");
+      } else {
+        fullscreenScreenshot(input, (base64data) => {
+          saveImage(base64data);
+        });
+      }
+    });
+
+    ipcRenderer.on("screenshot-reshade", (event, arg) => {
+      const file = getFileNameString();
+      var fileName = config.get("screenshotFolder") + file + ".png";
+      // crop and move file
+      sharp.cache(false);
+      crop = config.get("crop");
+      var buff = fs.readFileSync(arg);
+      const image = sharp(buff);
+      image
+        .metadata()
+        .then(function (metadata) {
+          if (metadata.width < 54) {
+            return Error("image is too small");
+          } else {
+            if (crop) {
+              return image
+                .extract({
+                  left: 0,
+                  top: 0,
+                  width: metadata.width - 54,
+                  height: metadata.height - 30,
+                })
+                .toFile(fileName);
+            } else {
+              return image.toFile(fileName);
+            }
+          }
+        })
+        .then(async () => {
+          // create Thumbnail
+          const thumb = app.getPath("userData") + "\\Cache\\" + file + ".webp";
+          sharp(fileName)
+            .resize(1280, 720, {
+              fit: "contain",
+              background: { r: 0, g: 0, b: 0, alpha: 0 },
+            })
+            .toFile(thumb, (err) => {
+              // return screenshot
+              ipcRenderer.send("screenshot-response", fileName);
+              global.gc();
+              if (err) {
+                console.log(err);
+              }
+            });
+        });
+    });
+
+    ipcRenderer.on("session-info", (event, arg) => {
+      sessionInfo = arg;
+    });
+    ipcRenderer.on("telemetry", (event, arg) => {
+      telemetry = arg;
     });
     loadGallery(this.items);
 
-    config.onDidChange('screenshotFolder', (newValue, oldValue) => {
+    config.onDidChange("screenshotFolder", (newValue) => {
       dir = newValue;
       loadGallery(this.items);
     });
   },
   methods: {
-    getImageUrl (item) {
-      if (item !== undefined) { return item.thumb; }
+    getImageUrl(item) {
+      if (item !== undefined) {
+        return item.thumb;
+      }
     },
-    screenshot (data) {
-      ipcRenderer.send('resize-screenshot', data);
+    screenshot(data) {
+      ipcRenderer.send("resize-screenshot", data);
     },
-    selectImage (item) {
+    selectImage(item) {
       this.currentURL = item;
     },
-    openExternally () {
+    openExternally() {
       shell.openItem(this.currentURL);
     },
-    copy () {
+    copy() {
       clipboard.write({ image: this.currentURL });
       this.$buefy.notification.open({
-        message: this.fileName + ' copied to clipboard',
-        type: 'is-dark'
+        message: this.fileName + " copied to clipboard",
+        type: "is-dark",
       });
     },
-    openFolder () {
-      const file = this.currentURL.replace(/\//g, '\\');
+    openFolder() {
+      const file = this.currentURL.replace(/\//g, "\\");
       shell.showItemInFolder(file);
     },
-    deleteFile () {
-      const file = this.currentURL.replace(/\//g, '\\');
+    deleteFile() {
+      const file = this.currentURL.replace(/\//g, "\\");
       shell.moveItemToTrash(file);
       for (var i = this.items.length - 1; i >= 0; i--) {
         if (this.items[i].file === this.currentURL) {
@@ -263,37 +300,41 @@ export default Vue.extend({
         }
       }
     },
-    handleClick (event, item) {
+    handleClick(event, item) {
       this.$refs.vueSimpleContextMenu.showMenu(event, item);
     },
-    optionClicked (event) {
+    optionClicked(event) {
       switch (event.option.slug) {
-        case 'copy':
+        case "copy":
           clipboard.write({ image: event.item.file });
           break;
-        case 'external':
+        case "external":
           shell.openItem(event.item.file);
           break;
-        case 'folder':
-          var file = event.item.file.replace(/\//g, '\\');
+        case "folder":
+          var file = event.item.file.replace(/\//g, "\\");
           shell.showItemInFolder(file);
           break;
-        case 'delete':
-          file = event.item.file.replace(/\//g, '\\');
+        case "delete":
+          file = event.item.file.replace(/\//g, "\\");
           shell.moveItemToTrash(file);
           for (var i = this.items.length - 1; i >= 0; i--) {
             if (this.items[i].file === event.item.file) {
               this.$delete(this.items, i);
-              if (this.selected === this.items.length) this.selected--;
+              if (this.selected === this.items.length) {
+                {
+                  this.selected--;
+                }
+              }
             }
+            break;
           }
-          break;
       }
-    }
-  }
+    },
+  },
 });
 
-async function loadGallery (items) {
+async function loadGallery(items) {
   items.splice(0, items.length);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir);
@@ -309,7 +350,7 @@ async function loadGallery (items) {
       .map((fileName) => {
         return {
           name: fileName,
-          time: fs.statSync(dir + '/' + fileName).mtime.getTime()
+          time: fs.statSync(dir + "/" + fileName).mtime.getTime(),
         };
       })
       .sort((a, b) => {
@@ -320,17 +361,20 @@ async function loadGallery (items) {
       });
 
     files.forEach(async (file) => {
-      if (file.split('.').pop() === 'png') {
+      if (file.split(".").pop() === "png") {
         let url = dir + file;
-        url = url.replace(/\\/g, '/');
+        url = url.replace(/\\/g, "/");
 
         file = path.parse(file).name;
-        var thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
+        var thumb = app.getPath("userData") + "\\Cache\\" + file + ".webp";
 
         if (!fs.existsSync(thumb)) {
           await sharp(url)
-            .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-            .toFile(thumb, (err, info) => {
+            .resize(1280, 720, {
+              fit: "contain",
+              background: { r: 0, g: 0, b: 0, alpha: 0 },
+            })
+            .toFile(thumb, (err) => {
               if (err) console.log(err);
               items.unshift({ file: url, thumb: thumb });
             });
@@ -342,14 +386,14 @@ async function loadGallery (items) {
   });
 
   // Clear unused thumbnail cache
-  var thumbDir = app.getPath('userData') + '\\Cache\\';
+  var thumbDir = app.getPath("userData") + "\\Cache\\";
   await fs.readdir(thumbDir, (err, files) => {
     if (err) console.log(err);
     files.forEach(async (file) => {
       var fullFile = thumbDir + file;
-      if (file.split('.').pop() === 'webp') {
+      if (file.split(".").pop() === "webp") {
         var deleteItem = true;
-        items.forEach((item, i) => {
+        items.forEach((item) => {
           if (item.thumb === fullFile) {
             deleteItem = false;
           }
@@ -363,7 +407,7 @@ async function loadGallery (items) {
 }
 
 const SEARCH_DELAY = 100; // in ms
-function waitForElementToBeAdded (cssSelector) {
+function waitForElementToBeAdded(cssSelector) {
   return new Promise((resolve) => {
     const interval = setInterval(() => {
       var element = document.querySelector(cssSelector);
@@ -374,90 +418,244 @@ function waitForElementToBeAdded (cssSelector) {
     }, SEARCH_DELAY);
   });
 }
+
+function saveImage(blob) {
+  console.time("Save Image");
+  var base64data = "";
+  const reader = new FileReader();
+  reader.readAsDataURL(blob);
+  reader.onload = async function () {
+    console.time("Save Image to file");
+    base64data = reader.result;
+    base64data = base64data.replace(/^data:image\/png;base64,/, "");
+    const file = getFileNameString();
+    var fileName = config.get("screenshotFolder") + file + ".png";
+    var buff = await Buffer.from(base64data, "base64");
+    await fs.writeFileSync(fileName, "");
+
+    var writeStream = fs.createWriteStream(fileName);
+    writeStream.write(buff);
+    writeStream.on("finish", () => {
+      console.timeEnd("Save Image to file");
+      console.time("Save Thumbnail");
+      const thumb = app.getPath("userData") + "\\Cache\\" + file + ".webp";
+      sharp(fileName)
+        .resize(1280, 720, {
+          fit: "contain",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .toFile(thumb, (err) => {
+          if (err) {
+            console.log(err);
+          }
+          ipcRenderer.send("screenshot-response", fileName);
+          buff = null;
+          base64data = null;
+          global.gc();
+          console.timeEnd("Save Thumbnail");
+          console.timeEnd("Save Image");
+          console.timeEnd("Screenshot");
+        });
+    });
+    writeStream.on("error", (err) => {
+      console.log(err);
+      ipcRenderer.send("screenshot-error", err);
+    });
+    writeStream.end();
+  };
+}
+
+function getFileNameString() {
+  const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
+  let driverName = "";
+
+  if (sessionInfo.data.WeekendInfo.TeamRacing === 1) {
+    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
+      if (sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx) {
+        driverName = item.TeamName;
+      }
+    });
+  } else {
+    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
+      if (telemetry.values.CamCarIdx === item.CarIdx) {
+        driverName = item.UserName;
+      }
+    });
+  }
+
+  var unique = false;
+  var count = 0;
+  var file = trackName + "-" + driverName + "-" + count;
+  var screenshotFolder = config.get("screenshotFolder");
+  while (!unique) {
+    if (fs.existsSync(screenshotFolder + file + ".png")) {
+      count++;
+      file = trackName + "-" + driverName + "-" + count;
+    } else {
+      unique = true;
+    }
+  }
+  return file;
+}
+
+async function fullscreenScreenshot(input, callback) {
+  var handleStream = (stream) => {
+    console.timeEnd("Get Media");
+    // Create hidden video tag
+    var video = document.createElement("video");
+    // video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
+    // Event connected to stream
+    video.addEventListener("loadedmetadata", function () {
+      // Set video ORIGINAL height (screenshot)
+      video.style.height = this.videoHeight + "px"; // VideoHeight
+      video.style.width = this.videoWidth + "px"; // VideoWidth
+
+      video.play();
+      video.pause();
+      ipcRenderer.send("screenshot-finished", "");
+
+      console.time("Create OffscreenCanvas");
+      var offscreen;
+      if (crop) {
+        offscreen = new OffscreenCanvas(
+          this.videoWidth - 54,
+          this.videoHeight - 30
+        );
+      } else {
+        offscreen = new OffscreenCanvas(this.videoWidth, this.videoHeight);
+      }
+
+      const offctx = offscreen.getContext("2d", { alpha: false });
+      offctx.drawImage(video, 0, 0, this.videoWidth, this.videoHeight);
+
+      // Remove hidden video tag
+      video.srcObject = null;
+      video.remove();
+      try {
+        // Destroy connect to stream
+        stream.getTracks()[0].stop();
+        video = null;
+        stream = null;
+      } catch (error) {
+        console.log(error);
+      }
+
+      console.timeEnd("Create OffscreenCanvas");
+      console.time("To Blob");
+      offscreen.convertToBlob().then(function (blob) {
+        console.timeEnd("To Blob");
+        console.timeEnd("Draw Image");
+        callback(blob);
+      });
+    });
+    video.srcObject = stream;
+  };
+
+  var handleError = function (e) {
+    ipcRenderer.send("screenshot-error", e);
+  };
+  await delay(1000);
+  console.time("Draw Image");
+  console.time("Get Media");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: "desktop",
+          chromeMediaSourceId: "window:" + input.windowID + ":0",
+          minWidth: 500,
+          maxWidth: input.width,
+          minHeight: 500,
+          maxHeight: input.height,
+        },
+      },
+    });
+    console.log("handle stream");
+    handleStream(stream);
+  } catch (e) {
+    handleError(e);
+  }
+  // if(!found) ipcRenderer.send('screenshot-error', 'iRacing window not found');
+}
+
+const delay = (ms) =>
+  new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
 </script>
 
-        <style>
-        .container {
-          max-width: 100vw !important;
-          padding: 0px !important;
-        }
+<style>
+.container {
+  max-width: 100vw !important;
+  padding: 0px !important;
+}
 
-        html{
-          background-color: transparent!important;
-        }
-        body {
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
-          background: rgb(37,37,37)!important;
-          background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
-          height: 100vh;
-          color: white !important;
-        }
-        .label {
-          color: white !important;
-        }
-        .indicator-item {
-          flex: 0 0 calc(100vh/6) !important;
-          margin-left: .25rem;
-          margin-right: .25rem;
-        }
+html {
+  background-color: transparent !important;
+}
 
-        .toolbar {
-          list-style-type: none;
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-          margin-top: .1rem;
-        }
+body {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background: rgb(37, 37, 37) !important;
+  background: linear-gradient(
+    0deg,
+    rgba(37, 37, 37, 1) 0%,
+    rgba(61, 61, 61, 1) 100%
+  );
+  height: 100vh;
+  color: white !important;
+}
 
-        .toolbar li {
-          float: right;
-          margin-left: 0.3rem;
-          margin-right: 0.3rem;
-          margin-top: auto;
-          font-size: 1.2rem;
-        }
+.label {
+  color: white !important;
+}
 
-        .toolbar li a {
-          display: block;
-          color: white;
-          text-align: center;
-          text-decoration: none;
-        }
+.indicator-item {
+  flex: 0 0 calc(100vh / 6) !important;
+  margin-left: 0.25rem;
+  margin-right: 0.25rem;
+}
 
-        .toolbar li a:hover {
-          opacity: 0.5;
-        }
+.carousel .carousel-indicator.has-custom {
+  overflow-x: scroll !important;
+  margin-top: auto;
+  background-color: rgba(0, 0, 0, 0.2);
+  scroll-behavior: smooth;
+}
 
-        .carousel .carousel-indicator.has-custom {
-          overflow-x: scroll !important;
-          margin-top: auto;
-          background-color: rgba(0,0,0,.2);
-          scroll-behavior: smooth;
-        }
+.indicator-item {
+  padding-right: 0.5rem;
+}
 
-        .indicator-item{
-          padding-right: .5rem;
-        }
+.is-active img {
+  filter: drop-shadow(0 -2px 0 #ec202a) drop-shadow(0 2px 0 #ec202a)
+    drop-shadow(-2px 0 0 #ec202a) drop-shadow(2px 0 0 #ec202a);
+}
 
-        .is-active img{
-          filter:
-          drop-shadow(0 -2px 0 #ec202a)
-          drop-shadow(0 2px 0 #ec202a)
-          drop-shadow(-2px 0 0 #ec202a)
-          drop-shadow(2px 0 0 #ec202a);
-        }
+.indicator-item img:hover {
+  opacity: 0.8;
+}
 
-        .indicator-item img:hover{
-          opacity: .8;
-        }
+.carousel {
+  height: calc(100vh - 41px - 27px);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 240px);
+}
 
-        .carousel {
-          height: calc(100vh - 41px - 27px);
-          display: flex;
-          flex-direction: column;
-          max-width: calc(100vw - 240px)
-        }
+.sidebar {
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex !important;
+  flex-direction: column;
+  min-width: 240px;
+  max-width: 240px;
+}
 
-        </style>
+.topbar {
+  margin-bottom: 0.15rem !important;
+  background-color: rgba(0, 0, 0, 0.2);
+}
+</style>
