@@ -13,8 +13,10 @@ jobs:
         with:
         fetch-depth: 0
 
-      - name: Switch to Current Branch
+      - name: Current Branch
         uses: nelonoel/branch-name@v1
+
+      - name: Switch Branch
         run: git checkout ${BRANCH_NAME}
 
       - name: Set up Node.js
