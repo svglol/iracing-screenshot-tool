@@ -112,24 +112,15 @@
   "scripts": {
     "build": "run-s rebuild:electron pack && electron-builder",
     "build-publish": "run-s rebuild:electron pack && electron-builder --publish always",
-    "debug": "run-s rebuild:electron debug-runner",
-    "debug-runner": "node _scripts/dev-runner.js --remote-debug",
-    "dev": "run-s rebuild:electron dev-runner",
-    "dev-runner": "node _scripts/dev-runner.js",
+    "dev": "node _scripts/dev-runner.js",
     "electron-builder-install": "electron-builder install-app-deps",
     "electron-rebuild": "electron-rebuild",
-    "jest": "jest",
-    "jest:coverage": "jest --collect-coverage",
-    "jest:watch": "jest --watch",
     "lint": "eslint --fix --ext .js,.ts,.vue ./",
     "pack": "run-p pack:main pack:renderer",
     "pack:main": "webpack --mode=production --env.NODE_ENV=production --hide-modules --config _scripts/webpack.main.config.js",
     "pack:renderer": "webpack --mode=production --env.NODE_ENV=production --hide-modules --config _scripts/webpack.renderer.config.js",
     "postinstall": "electron-builder install-app-deps",
-    "prettier": "prettier --write \"{src,_scripts}/**/*.{js,ts,vue}\"",
     "rebuild:electron": "run-s electron-builder-install electron-rebuild",
-    "rebuild:node": "npm rebuild",
-    "test": "jest --passWithNoTests",
-    "test:watch": "run-s rebuild:node jest:watch --passWithNoTests"
+    "rebuild:node": "npm rebuild"
   }
 }
