@@ -1,22 +1,24 @@
 <template>
   <div class="settings">
-    <ul
-      class="toolbar"
-      style="padding:.5rem"
-    >
+    <ul class="toolbar" style="padding: 0.5rem">
       <li>
-        <a @click="showSettings = true"><font-awesome-icon :icon="['fas', 'cog']" /></a>
+        <a @click="showSettings = true"
+          ><font-awesome-icon :icon="['fas', 'cog']"
+        /></a>
       </li>
       <li>
         <a
           v-shortkey.push="['f1']"
           @click="showHelp = true"
           @shortkey="showHelp = true"
-        ><font-awesome-icon :icon="['fas', 'question-circle']" /></a>
+          ><font-awesome-icon :icon="['fas', 'question-circle']"
+        /></a>
       </li>
 
       <li>
-        <a @click="openDiscord"><font-awesome-icon :icon="['fab', 'discord']" /></a>
+        <a @click="openDiscord"
+          ><font-awesome-icon :icon="['fab', 'discord']"
+        /></a>
       </li>
     </ul>
 
@@ -56,68 +58,71 @@
 </template>
 
 <script>
-import { version } from '../../../package.json'
-const { shell, remote } = require('electron')
-const app = remote.app
-const fs = require('fs')
-const fetch = require('fetch')
-const changelogFile = app.getPath('userData') + '\\releases' + '.json'
+import { version } from "../../../package.json";
+const { shell, remote } = require("electron");
+const app = remote.app;
+const fs = require("fs");
+const fetch = require("fetch");
+const changelogFile = app.getPath("userData") + "\\releases" + ".json";
 
-const config = require('../../utilities/config')
+const config = require("../../utilities/config");
 
 export default {
-  data () {
+  data() {
     return {
       showSettings: false,
       showHelp: false,
       showConfig: false,
-      showChangelog: false
-    }
+      showChangelog: false,
+    };
   },
-  mounted () {
-    var firstTime = config.get('firstTime')
+  mounted() {
+    var firstTime = config.get("firstTime");
     if (firstTime) {
-      this.showHelp = true
-      config.set('firstTime', false)
+      this.showHelp = true;
+      config.set("firstTime", false);
     }
 
-    var configVersion = config.get('version')
-    if (configVersion === '' || configVersion !== version) {
-      var ctx = this
-      config.set('version', version)
-      fetch.fetchUrl('https://api.github.com/repos/svglol/iracing-screenshot-tool/releases', function (error, meta, body) {
-        if (error) {
-          console.log(error)
-        }
-        var releases = JSON.parse(body.toString())
-        if (Array.isArray(releases)) {
-          fs.writeFileSync(changelogFile, body)
-          if (!firstTime) {
-            ctx.showChangelog = true
+    var configVersion = config.get("version");
+    if (configVersion === "" || configVersion !== version) {
+      var ctx = this;
+      config.set("version", version);
+      fetch.fetchUrl(
+        "https://api.github.com/repos/svglol/iracing-screenshot-tool/releases",
+        function (error, meta, body) {
+          if (error) {
+            console.log(error);
+          }
+          var releases = JSON.parse(body.toString());
+          if (Array.isArray(releases)) {
+            fs.writeFileSync(changelogFile, body);
+            if (!firstTime) {
+              ctx.showChangelog = true;
+            }
           }
         }
-      })
+      );
     } else {
-      config.set('version', version)
+      config.set("version", version);
     }
   },
   methods: {
-    openDiscord () {
-      shell.openItem('https://discord.gg/GX2kSgN')
-    }
-  }
-}
+    openDiscord() {
+      shell.openItem("https://discord.gg/GX2kSgN");
+    },
+  },
+};
 </script>
 
 <style scoped>
-.settings{
+.settings {
   margin-top: auto;
   /* padding: 1rem; */
   /* background-color: rgba(0, 0, 0, 0.3); */
   margin-bottom: 1.5rem;
 }
 
-.modal{
+.modal {
   margin-top: 24px;
   border: 0px;
 }
