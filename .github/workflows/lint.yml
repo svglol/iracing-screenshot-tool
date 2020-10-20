@@ -10,8 +10,6 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v2
-        with:
-        fetch-depth: 0
 
       - name: Current Branch
         uses: nelonoel/branch-name@v1
