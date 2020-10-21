@@ -97,6 +97,7 @@ const { ipcRenderer } = require('electron');
 const fs = require('fs');
 
 export default {
+  props: ['screenshot'],
   data () {
     return {
       items: ['1080p', '2k', '4k', '5k', '6k', '7k', '8k', 'Custom'],
@@ -109,6 +110,11 @@ export default {
       disableTooltips: config.get('disableTooltips'),
       reshade: config.get('reshade')
     };
+  },
+  computed: {
+    disabled () {
+      return iracingOpen;
+    }
   },
   created () {
     ipcRenderer.send('request-iracing-status', '');

@@ -228,5 +228,5 @@ async function fullscreenScreenshot (callback) {
   // if(!found) ipcRenderer.send('screenshot-error', 'iRacing window not found');
 }
 
-const delay = ms => new Promise(function (resolve) { setTimeout(resolve, ms); });
+const delay = ms => new Promise(res => setTimeout(res, ms));
 </script>

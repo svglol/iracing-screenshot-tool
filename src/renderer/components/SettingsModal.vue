@@ -255,7 +255,7 @@ export default {
   },
   methods: {
     openFolderDialog () {
-      dialog.showOpenDialog({
+      var path = dialog.showOpenDialog({
         defaultPath: config.get('screenshotFolder'),
         properties: ['openDirectory']
       }).then(result => {
@@ -283,7 +283,7 @@ export default {
       this.bindingKey = true;
       const keys = [];
       const keysReleased = [];
-      window.addEventListener('keydown', function keydown (e) {
+      var keydown = window.addEventListener('keydown', function keydown (e) {
         if (_this.bindingKey) {
           if (!keys.includes(e.key)) {
             keys.push(e.key);
@@ -300,7 +300,7 @@ export default {
             _this.screenshotKeybind = keys.join('+');
           }
           keysReleased.push(e.key);
-          if (keysReleased.length === keys.length) {
+          if (keysReleased.length == keys.length) {
             _this.bindingKey = false;
             ipcRenderer.send('screenshotKeybind-change', { newValue: _this.screenshotKeybind, oldValue: config.get('screenshotKeybind') });
             config.set('screenshotKeybind', _this.screenshotKeybind);

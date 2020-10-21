@@ -88,13 +88,10 @@ export default {
     }
 
     var configVersion = config.get('version');
-    if (configVersion === '' || configVersion !== version) {
+    if (configVersion == '' || configVersion !== version) {
       var ctx = this;
       config.set('version', version);
       fetch.fetchUrl('https://api.github.com/repos/svglol/iracing-screenshot-tool/releases', function (error, meta, body) {
-        if (error) {
-          console.log(error);
-        }
         var releases = JSON.parse(body.toString());
         if (Array.isArray(releases)) {
           fs.writeFileSync(changelogFile, body);

@@ -7,9 +7,9 @@ import modules from './modules';
 Vue.use(Vuex);
 
 export default new Vuex.Store({
-  modules,
-  strict: process.env.NODE_ENV !== 'production'
+	modules,
+	strict: process.env.NODE_ENV !== 'production',
 
-  // TODO: Enable when deploy
-  // plugins: [createPersistedState()]
+	// TODO: Enable when deploy
+	// plugins: [createPersistedState()]
 });
