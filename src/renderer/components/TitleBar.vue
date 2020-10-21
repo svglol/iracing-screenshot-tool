@@ -5,28 +5,43 @@
         <img
           :src="ico"
           style="
-            max-height: 18px;
-            margin-right: 5px;
-            margin-left: 5px;
-            margin-top: auto;
-            margin-bottom: auto;
-          "
-        />
-        <span style="margin-top: auto; margin-bottom: auto">{{ title }}</span>
+        max-height: 18px;
+        margin-right: 5px;
+        margin-left: 5px;
+        margin-top: auto;
+        margin-bottom: auto;
+        "
+        >
+        <span style="margin-top: auto; margin-bottom: auto;">{{
+          title
+        }}</span>
       </div>
-      <div v-if="updateReady" class="button" @click="onUpdate">
+      <div
+        v-if="updateReady"
+        class="button"
+        @click="onUpdate"
+      >
         <font-awesome-icon
           :style="{ color: 'green' }"
           :icon="['fas', 'arrow-down']"
         />
       </div>
-      <div class="button" @click="onMinimize">
+      <div
+        class="button"
+        @click="onMinimize"
+      >
         <span class="dash">&#x2012;</span>
       </div>
-      <div class="button" @click="onMaximize">
+      <div
+        class="button"
+        @click="onMaximize"
+      >
         <span>&#9744;</span>
       </div>
-      <div class="button close" @click="onClose">
+      <div
+        class="button close"
+        @click="onClose"
+      >
         <span>&#10005;</span>
       </div>
     </div>
@@ -34,40 +49,40 @@
 </template>
 
 <script>
-const { ipcRenderer } = require("electron");
-const { remote } = require("electron");
+const { ipcRenderer } = require('electron');
+const { remote } = require('electron');
 const win = remote.getCurrentWindow();
 
 export default {
   props: {
-    title: { type: String, default: "", required: true },
-    ico: { type: String, default: "", required: true },
+    title: { type: String, default: '', required: true },
+    ico: { type: String, default: '', required: true }
   },
-  data() {
+  data () {
     return {
-      updateReady: false,
+      updateReady: false
     };
   },
-  mounted() {
-    ipcRenderer.on("update-available", () => {
+  mounted () {
+    ipcRenderer.on('update-available', (event, arg) => {
       this.updateReady = true;
     });
   },
   methods: {
-    onClose() {
+    onClose () {
       close();
     },
-    onMinimize() {
+    onMinimize () {
       win.minimize();
     },
-    onMaximize() {
+    onMaximize () {
       if (win.isMaximized()) win.unmaximize();
       else win.maximize();
     },
-    onUpdate() {
-      ipcRenderer.send("install-update", "");
-    },
-  },
+    onUpdate () {
+      ipcRenderer.send('install-update', '');
+    }
+  }
 };
 </script>
 

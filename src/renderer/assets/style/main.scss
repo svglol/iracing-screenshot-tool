@@ -3,6 +3,7 @@ $primary: #ec202a;
 $primary-invert: findColorInvert($primary);
 $twitter: #4099ff;
 $twitter-invert: findColorInvert($twitter);
+
 html {
   overflow: hidden;
   overflow-y: hidden !important;
@@ -45,7 +46,6 @@ span + .material-icons {
 }
 
 /* custom Scroll bars */
-
 ::-webkit-scrollbar {
   width: 10px !important;
   height: 10px !important;
@@ -66,56 +66,60 @@ input::-webkit-inner-spin-button {
 }
 
 @import '~bulma/sass/utilities/_all';
+
 // Setup $colors to use as bulma classes (e.g. 'is-twitter')
 $colors: (
-  'white': (
-    $white,
-    $black
-  ),
-  'black': (
-    $black,
-    $white
-  ),
-  'light': (
-    $light,
-    $light-invert
-  ),
-  'dark': (
-    $dark,
-    $dark-invert
-  ),
-  'primary': (
-    $primary,
-    $primary-invert
-  ),
-  'info': (
-    $info,
-    $info-invert
-  ),
-  'success': (
-    $success,
-    $success-invert
-  ),
-  'warning': (
-    $warning,
-    $warning-invert
-  ),
-  'danger': (
-    $danger,
-    $danger-invert
-  ),
-  'twitter': (
-    $twitter,
-    $twitter-invert
-  )
+'white': (
+$white,
+$black,
+),
+'black': (
+$black,
+$white,
+),
+'light': (
+$light,
+$light-invert,
+),
+'dark': (
+$dark,
+$dark-invert,
+),
+'primary': (
+$primary,
+$primary-invert,
+),
+'info': (
+$info,
+$info-invert,
+),
+'success': (
+$success,
+$success-invert,
+),
+'warning': (
+$warning,
+$warning-invert,
+),
+'danger': (
+$danger,
+$danger-invert,
+),
+'twitter': (
+$twitter,
+$twitter-invert,
+),
 );
+
 // Links
 $link: $primary;
 $link-invert: $primary-invert;
 $link-focus-border: $primary;
+
 // Import Bulma and Buefy styles
 @import '~bulma';
 @import '~buefy/src/scss/buefy';
+
 input,
 select,
 textarea {
@@ -123,12 +127,12 @@ textarea {
 }
 
 ::-webkit-scrollbar {
-  width: 8px !important;
-  height: 8px !important;
+  width: 8px!important;
+  height: 8px!important;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: rgba(0, 0, 0, 0.5) !important;
+  background-color: rgba(0, 0, 0, 0.5)!important;
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
@@ -148,22 +152,18 @@ textarea {
 @import 'https://fonts.googleapis.com/css?family=Material+Icons';
 @import 'https://use.fontawesome.com/releases/v5.2.0/css/all.css';
 @import 'https://cdn.materialdesignicons.com/2.5.94/css/materialdesignicons.min.css';
+
 .shadow {
-  box-shadow: 0 1rem 1rem rgba(0, 0, 0, 0.175) !important;
+  box-shadow: 0 1rem 1rem rgba(0,0,0,.175)!important;
 }
 
-.modal-close {
-  top: 40px !important;
+.modal-close{
+  top: 40px!important;
 }
 
-.modal.is-full-screen > .animation-content,
-.modal.is-full-screen > .animation-content > .modal-card {
-  background: rgb(37, 37, 37);
-  background: linear-gradient(
-    0deg,
-    rgba(37, 37, 37, 1) 0%,
-    rgba(61, 61, 61, 1) 100%
-  );
+.modal.is-full-screen > .animation-content, .modal.is-full-screen > .animation-content > .modal-card{
+  background: rgb(37,37,37);
+  background: linear-gradient(0deg, rgba(37,37,37,1) 0%, rgba(61,61,61,1) 100%);
 }
 
 :focus {
@@ -173,6 +173,7 @@ textarea {
 $white: #fff;
 $grey: darken($white, 15%);
 $black: #333;
+
 .vue-simple-context-menu {
   top: 0;
   left: 0;
@@ -193,7 +194,7 @@ $black: #333;
     display: flex;
     color: $grey;
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: .75rem;
     padding: 5px 15px;
     align-items: center;
     &:hover {
@@ -213,48 +214,26 @@ $black: #333;
   }
 }
 
-a:hover {
-  color: darken($red, 20%);
+a:hover{
+  color:darken($red,20%);
 }
 
-h2 {
+h2{
   display: block;
   font-size: 1rem;
   font-weight: 700;
 }
 
-p,
-li {
-  font-size: 0.8rem;
+p,li{
+  font-size: .8rem;
   color: #aaaaaa;
 }
 
-ul {
+ul{
   list-style-type: square;
   margin-left: 1.5rem;
 }
 
-.text {
+.text{
   color: white;
-}
-
-.modal-card {
-  width: 60vw;
-  height: 80vh;
-  background: rgb(37, 37, 37) !important;
-}
-
-.modal-card-head {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-bottom: 0;
-}
-
-.modal-card-title {
-  color: white !important;
-  font-weight: 700;
-  margin-bottom: 0rem !important;
-}
-
-.modal-card-body {
-  background-color: transparent;
 }

@@ -1,37 +1,35 @@
-const path = require("path");
-const webpack = require("webpack");
-const CopyWebpackPlugin = require("copy-webpack-plugin");
+const path = require('path')
+const webpack = require('webpack')
+const CopyWebpackPlugin = require('copy-webpack-plugin')
 
 const {
   dependencies,
   devDependencies,
   productName,
-} = require("../package.json");
+} = require('../package.json')
 
-const externals = Object.keys(dependencies).concat(
-  Object.keys(devDependencies)
-);
-const isDevMode = process.env.NODE_ENV === "development";
-const whiteListedModules = [];
+const externals = Object.keys(dependencies).concat(Object.keys(devDependencies))
+const isDevMode = process.env.NODE_ENV === 'development'
+const whiteListedModules = []
 
 const config = {
-  name: "main",
+  name: 'main',
   mode: process.env.NODE_ENV,
-  devtool: isDevMode ? "#cheap-module-eval-source-map" : false,
+  devtool: isDevMode ? '#cheap-module-eval-source-map' : false,
   entry: {
-    main: path.join(__dirname, "../src/main/index.js"),
+    main: path.join(__dirname, '../src/main/index.js'),
   },
   externals: externals.filter((d) => !whiteListedModules.includes(d)),
   module: {
     rules: [
       {
         test: /\.(j|t)s$/,
-        loader: ["babel-loader"],
+        loader: ['babel-loader'],
         exclude: /node_modules/,
       },
       {
         test: /\.node$/,
-        use: "node-loader",
+        use: 'node-loader',
       },
     ],
   },
@@ -41,47 +39,47 @@ const config = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      "process.env.PRODUCT_NAME": JSON.stringify(productName),
+      'process.env.PRODUCT_NAME': JSON.stringify(productName),
     }),
   ],
   output: {
-    filename: "[name].js",
-    libraryTarget: "commonjs2",
-    path: path.join(__dirname, "../dist"),
+    filename: '[name].js',
+    libraryTarget: 'commonjs2',
+    path: path.join(__dirname, '../dist'),
   },
   resolve: {
-    extensions: [".ts", ".js", ".json"],
+    extensions: ['.ts', '.js', '.json'],
     alias: {
-      "@": path.join(__dirname, "../src/"),
-      src: path.join(__dirname, "../src/"),
+      '@': path.join(__dirname, '../src/'),
+      src: path.join(__dirname, '../src/'),
     },
   },
-  target: "electron-main",
-};
+  target: 'electron-main',
+}
 
 if (isDevMode) {
   config.plugins.push(
     new webpack.DefinePlugin({
-      __static: `"${path.join(__dirname, "../static").replace(/\\/g, "\\\\")}"`,
+      __static: `"${path.join(__dirname, '../static').replace(/\\/g, '\\\\')}"`,
     })
-  );
+  )
 } else {
   config.plugins.push(
     new CopyWebpackPlugin([
       {
-        from: path.join(__dirname, "../src/data"),
-        to: path.join(__dirname, "../dist/data"),
+        from: path.join(__dirname, '../src/data'),
+        to: path.join(__dirname, '../dist/data'),
       },
       {
-        from: path.join(__dirname, "../static"),
-        to: path.join(__dirname, "../dist/static"),
-        ignore: [".*"],
+        from: path.join(__dirname, '../static'),
+        to: path.join(__dirname, '../dist/static'),
+        ignore: ['.*'],
       },
     ]),
     new webpack.LoaderOptionsPlugin({
       minimize: true,
     })
-  );
+  )
 }
 
-module.exports = config;
+module.exports = config

@@ -1,34 +1,28 @@
 module.exports = {
   env: {
     browser: true,
-    es6: true,
-    node: true,
+    es6: true
   },
   extends: [
-    "plugin:vue/essential",
-    "plugin:prettier/recommended",
-    "eslint:recommended",
+    'plugin:vue/recommended',
+    'standard'
   ],
   globals: {
-    Atomics: "readonly",
-    SharedArrayBuffer: "readonly",
+    Atomics: 'readonly',
+    SharedArrayBuffer: 'readonly'
   },
   parserOptions: {
     ecmaVersion: 2018,
-    sourceType: "module",
+    sourceType: 'module'
   },
-  plugins: ["vue"],
+  plugins: [
+    'vue'
+  ],
   rules: {
     // allow async-await
-    "generator-star-spacing": "off",
+    'generator-star-spacing': 'off',
+    semi: ['error', 'always'],
     // allow debugger during development
-    "no-debugger": process.env.NODE_ENV === "production" ? "error" : "off",
-    "prettier/prettier": [
-      "error",
-      {
-        endOfLine: "auto",
-      },
-    ],
-  },
-  ignorePatterns: ["dist/*", "build/*"],
+    'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off'
+  }
 };
