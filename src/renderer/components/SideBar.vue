@@ -24,7 +24,7 @@
         v-model="customWidth"
         type="number"
         min="0"
-        max="20000"
+        max="10000"
       />
     </b-field>
 
@@ -36,7 +36,7 @@
         v-model="customHeight"
         type="number"
         min="0"
-        max="20000"
+        max="10000"
       />
     </b-field>
 
