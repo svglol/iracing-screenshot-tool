@@ -21,7 +21,7 @@ export default {
       if (windowID === undefined) {
         ipcRenderer.send('screenshot-error', 'iRacing window not found');
       } else {
-        fullscreenScreenshot(input, (base64data) => {
+        fullscreenScreenshot((base64data) => {
           saveImage(base64data);
         });
       }
@@ -151,7 +151,7 @@ function getFileNameString () {
   return file;
 }
 
-async function fullscreenScreenshot (input, callback) {
+async function fullscreenScreenshot (callback) {
   var handleStream = (stream) => {
     console.timeEnd('Get Media');
     // Create hidden video tag
@@ -214,10 +214,10 @@ async function fullscreenScreenshot (input, callback) {
         mandatory: {
           chromeMediaSource: 'desktop',
           chromeMediaSourceId: 'window:' + windowID + ':0',
-          minWidth: 500,
-          maxWidth: input.width,
-          minHeight: 500,
-          maxHeight: input.height
+          minWidth: 1280,
+          maxWidth: 20000,
+          minHeight: 720,
+          maxHeight: 20000
         }
       }
     });
