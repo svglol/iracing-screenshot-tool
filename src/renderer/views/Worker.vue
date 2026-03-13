@@ -3,217 +3,219 @@
 </template>
 
 <script>
-const { ipcRenderer, remote } = require('electron');
+const { ipcRenderer } = require('electron');
 const fs = require('fs');
+const path = require('path');
 const sharp = require('sharp');
-const app = remote.app;
 
+const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const config = require('../../utilities/config');
-let sessionInfo, telemetry, windowID, crop;
 
-export default {
-  mounted () {
-    ipcRenderer.on('screenshot-request', (event, input) => {
-      console.log('Screenshot - ' + input.width + 'x' + input.height + ' Crop - ' + input.crop);
-      console.time('Screenshot');
-      windowID = input.windowID;
-      crop = input.crop;
-      if (windowID === undefined) {
-        ipcRenderer.send('screenshot-error', 'iRacing window not found');
-      } else {
-        fullscreenScreenshot((base64data) => {
-          saveImage(base64data);
-        });
-      }
-    });
-    ipcRenderer.on('session-info', (event, arg) => {
-      sessionInfo = arg;
-    });
-    ipcRenderer.on('telemetry', (event, arg) => {
-      telemetry = arg;
-    });
-    ipcRenderer.on('screenshot-reshade', (event, arg) => {
-      const file = getFileNameString();
-      var fileName = config.get('screenshotFolder') + file + '.png';
-      // crop and move file
-      sharp.cache(false);
-      crop = config.get('crop');
-      var buff = fs.readFileSync(arg);
-      const image = sharp(buff);
-      image
-        .metadata()
-        .then(function (metadata) {
-          if (metadata.width < 54) {
-            return Error('image is too small');
-          } else {
-            if (crop) {
-              return image
-                .extract({ left: 0, top: 0, width: metadata.width - 54, height: metadata.height - 30 })
-                .toFile(fileName);
-            } else {
-              return image
-                .toFile(fileName);
-            }
-          }
-        })
-        .then(async data => {
-          // create Thumbnail
-          const thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
-          sharp(fileName)
-            .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-            .toFile(thumb, (err, info) => {
-              // return screenshot
-              ipcRenderer.send('screenshot-response', fileName);
-              global.gc();
-              if (err) {
-                console.log(err);
-              }
-            });
-        });
-    });
-  },
-  methods: {}
-};
+let sessionInfo = null;
+let telemetry = null;
+let windowID = null;
+let crop = false;
 
-function saveImage (blob) {
-  console.time('Save Image');
-  var base64data = '';
-  const reader = new FileReader();
-  reader.readAsDataURL(blob);
-  reader.onload = async function () {
-    console.time('Save Image to file');
-    base64data = reader.result;
-    base64data = base64data.replace(/^data:image\/png;base64,/, '');
-    const file = getFileNameString();
-    var fileName = config.get('screenshotFolder') + file + '.png';
-    var buff = await Buffer.from(base64data, 'base64');
-    await fs.writeFileSync(fileName, '');
-
-    var writeStream = fs.createWriteStream(fileName);
-    writeStream.write(buff);
-    writeStream.on('finish', () => {
-      console.timeEnd('Save Image to file');
-      console.time('Save Thumbnail');
-      const thumb = app.getPath('userData') + '\\Cache\\' + file + '.webp';
-      sharp(fileName)
-        .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .toFile(thumb, (err, info) => {
-          if (err) {
-            console.log(err);
-          }
-          ipcRenderer.send('screenshot-response', fileName);
-          buff = null;
-          base64data = null;
-          global.gc();
-          console.timeEnd('Save Thumbnail');
-          console.timeEnd('Save Image');
-          console.timeEnd('Screenshot');
-        });
-    });
-    writeStream.on('error', (err) => {
-      console.log(err);
-      ipcRenderer.send('screenshot-error', err);
-    });
-    writeStream.end();
-  };
+function ensureDirectory(targetDir) {
+  fs.mkdirSync(targetDir, { recursive: true });
 }
 
-function getFileNameString () {
-  const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
-  let driverName = '';
+function getScreenshotDir() {
+  return path.resolve(config.get('screenshotFolder'));
+}
 
-  if (sessionInfo.data.WeekendInfo.TeamRacing === 1) {
-    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-      if (sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx) {
-        driverName = item.TeamName;
-      }
-    });
+function getCacheDir() {
+  return path.join(userDataPath, 'Cache');
+}
+
+function getScreenshotPath(fileName) {
+  return path.join(getScreenshotDir(), `${fileName}.png`);
+}
+
+function getThumbnailPath(fileName) {
+  return path.join(getCacheDir(), `${fileName}.webp`);
+}
+
+function sanitizeFilePart(value, fallback) {
+  const sanitized = String(value || '')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .trim();
+
+  return sanitized || fallback;
+}
+
+async function createThumbnail(fileName, fileKey) {
+  const thumbPath = getThumbnailPath(fileKey);
+  await sharp(fileName)
+    .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .toFile(thumbPath);
+}
+
+function getFileNameString() {
+  const weekendInfo = sessionInfo?.data?.WeekendInfo || {};
+  const driverInfo = sessionInfo?.data?.DriverInfo || {};
+  const drivers = driverInfo.Drivers || [];
+  const driverCarIdx = driverInfo.DriverCarIdx;
+  const cameraCarIdx = telemetry?.values?.CamCarIdx;
+
+  const trackName = sanitizeFilePart(weekendInfo.TrackDisplayShortName, 'Track');
+  let driverName = 'Driver';
+
+  if (weekendInfo.TeamRacing === 1) {
+    const teamDriver = drivers.find((item) => item.CarIdx === driverCarIdx);
+    driverName = sanitizeFilePart(teamDriver?.TeamName, 'Team');
   } else {
-    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-      if (telemetry.values.CamCarIdx === item.CarIdx) {
-        driverName = item.UserName;
-      }
-    });
+    const selectedDriver = drivers.find((item) => item.CarIdx === cameraCarIdx);
+    driverName = sanitizeFilePart(selectedDriver?.UserName, 'Driver');
   }
 
-  var unique = false;
-  var count = 0;
-  var file = trackName + '-' + driverName + '-' + count;
-  var screenshotFolder = config.get('screenshotFolder');
-  while (!unique) {
-    if (fs.existsSync(screenshotFolder + file + '.png')) {
-      count++;
-      file = trackName + '-' + driverName + '-' + count;
-    } else {
-      unique = true;
-    }
+  ensureDirectory(getScreenshotDir());
+
+  let count = 0;
+  let fileName = `${trackName}-${driverName}-${count}`;
+
+  while (fs.existsSync(getScreenshotPath(fileName))) {
+    count += 1;
+    fileName = `${trackName}-${driverName}-${count}`;
   }
-  return file;
+
+  return fileName;
 }
 
-async function fullscreenScreenshot (callback) {
-  var handleStream = (stream) => {
+async function saveReshadeImage(sourceFile) {
+  try {
+    ensureDirectory(getScreenshotDir());
+    ensureDirectory(getCacheDir());
+
+    const fileKey = getFileNameString();
+    const fileName = getScreenshotPath(fileKey);
+
+    sharp.cache(false);
+    crop = config.get('crop');
+
+    const image = sharp(sourceFile);
+    const metadata = await image.metadata();
+
+    if (!metadata.width || !metadata.height || metadata.width < 54 || metadata.height < 30) {
+      throw new Error('image is too small');
+    }
+
+    if (crop) {
+      await image
+        .extract({ left: 0, top: 0, width: metadata.width - 54, height: metadata.height - 30 })
+        .toFile(fileName);
+    } else {
+      await image.toFile(fileName);
+    }
+
+    await createThumbnail(fileName, fileKey);
+    ipcRenderer.send('screenshot-response', fileName);
+    if (global.gc) {
+      global.gc();
+    }
+  } catch (error) {
+    console.log(error);
+    ipcRenderer.send('screenshot-error', error.message || String(error));
+  }
+}
+
+async function saveImage(blob) {
+  try {
+    console.time('Save Image');
+    ensureDirectory(getScreenshotDir());
+    ensureDirectory(getCacheDir());
+
+    const fileKey = getFileNameString();
+    const fileName = getScreenshotPath(fileKey);
+    const buffer = Buffer.from(await blob.arrayBuffer());
+
+    console.time('Save Image to file');
+    await fs.promises.writeFile(fileName, buffer);
+    console.timeEnd('Save Image to file');
+
+    console.time('Save Thumbnail');
+    await createThumbnail(fileName, fileKey);
+    console.timeEnd('Save Thumbnail');
+
+    ipcRenderer.send('screenshot-response', fileName);
+    if (global.gc) {
+      global.gc();
+    }
+
+    console.timeEnd('Save Image');
+    console.timeEnd('Screenshot');
+  } catch (error) {
+    console.log(error);
+    ipcRenderer.send('screenshot-error', error.message || String(error));
+  }
+}
+
+async function fullscreenScreenshot(callback) {
+  const handleStream = (stream) => {
     console.timeEnd('Get Media');
-    // Create hidden video tag
-    var video = document.createElement('video');
-    // video.style.cssText = 'position:absolute;top:-10000px;left:-10000px;';
-    // Event connected to stream
-    video.addEventListener('loadedmetadata', function () {
-      // Set video ORIGINAL height (screenshot)
-      video.style.height = this.videoHeight + 'px'; // VideoHeight
-      video.style.width = this.videoWidth + 'px'; // VideoWidth
+    let video = document.createElement('video');
+
+    video.addEventListener('loadedmetadata', async function () {
+      video.style.height = this.videoHeight + 'px';
+      video.style.width = this.videoWidth + 'px';
 
       video.play();
       video.pause();
       ipcRenderer.send('screenshot-finished', '');
 
       console.time('Create OffscreenCanvas');
-      var offscreen;
-      if (crop) {
-        offscreen = new OffscreenCanvas(this.videoWidth - 54, this.videoHeight - 30);
-      } else {
-        offscreen = new OffscreenCanvas(this.videoWidth, this.videoHeight);
-      }
+      const offscreen = crop
+        ? new OffscreenCanvas(this.videoWidth - 54, this.videoHeight - 30)
+        : new OffscreenCanvas(this.videoWidth, this.videoHeight);
 
       const offctx = offscreen.getContext('2d', { alpha: false });
       offctx.drawImage(video, 0, 0, this.videoWidth, this.videoHeight);
 
-      // Remove hidden video tag
       video.srcObject = null;
       video.remove();
+
       try {
-        // Destroy connect to stream
-        stream.getTracks()[0].stop();
+        stream.getTracks().forEach((track) => track.stop());
         video = null;
-        stream = null;
       } catch (error) {
         console.log(error);
       }
 
       console.timeEnd('Create OffscreenCanvas');
       console.time('To Blob');
-      offscreen.convertToBlob().then(function (blob) {
-        console.timeEnd('To Blob');
-        console.timeEnd('Draw Image');
-        callback(blob);
-      });
+      const blob = await offscreen.convertToBlob({ type: 'image/png' });
+      console.timeEnd('To Blob');
+      console.timeEnd('Draw Image');
+      callback(blob);
     });
+
     video.srcObject = stream;
   };
 
-  var handleError = function (e) {
-    ipcRenderer.send('screenshot-error', e);
+  const handleError = (error) => {
+    console.error('Screenshot capture failed', error);
+    ipcRenderer.send('screenshot-error', error.message || String(error));
   };
+
   await delay(1000);
   console.time('Draw Image');
   console.time('Get Media');
+
   try {
+    const sourceId = await ipcRenderer.invoke('desktop-capturer:get-source-id', windowID);
+
+    if (!sourceId) {
+      throw new Error('No desktop capture source found for window ' + windowID);
+    }
+
+    console.log('Using capture source ' + sourceId);
+
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         mandatory: {
           chromeMediaSource: 'desktop',
-          chromeMediaSourceId: 'window:' + windowID + ':0',
+          chromeMediaSourceId: sourceId,
           minWidth: 1280,
           maxWidth: 10000,
           minHeight: 720,
@@ -221,12 +223,49 @@ async function fullscreenScreenshot (callback) {
         }
       }
     });
+
     handleStream(stream);
-  } catch (e) {
-    handleError(e);
+  } catch (error) {
+    handleError(error);
   }
-  // if(!found) ipcRenderer.send('screenshot-error', 'iRacing window not found');
 }
 
-const delay = ms => new Promise(res => setTimeout(res, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export default {
+  mounted() {
+    ipcRenderer.on('screenshot-request', (event, input) => {
+      console.log(`Screenshot - ${input.width}x${input.height} Crop - ${input.crop}`);
+      console.time('Screenshot');
+      windowID = input.windowID;
+      crop = input.crop;
+
+      if (windowID === undefined) {
+        ipcRenderer.send('screenshot-error', 'iRacing window not found');
+        return;
+      }
+
+      fullscreenScreenshot((base64data) => {
+        saveImage(base64data);
+      });
+    });
+
+    ipcRenderer.on('session-info', (event, arg) => {
+      sessionInfo = arg;
+    });
+
+    ipcRenderer.on('telemetry', (event, arg) => {
+      telemetry = arg;
+    });
+
+    ipcRenderer.on('screenshot-reshade', (event, arg) => {
+      saveReshadeImage(arg);
+    });
+  },
+  methods: {}
+};
 </script>
+
+
+
+

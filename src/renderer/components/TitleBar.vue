@@ -3,20 +3,18 @@
     <div class="bar">
       <div class="dragregion">
         <img
-        v-bind:src="ico"
-        style="
-        max-height: 18px;
-        margin-right: 5px;
-        margin-left: 5px;
-        margin-top: auto;
-        margin-bottom: auto;
-        "
-        />
-        <span style="margin-top: auto; margin-bottom: auto;">{{
-          title
-        }}</span>
+          :src="ico"
+          style="
+            max-height: 18px;
+            margin-right: 5px;
+            margin-left: 5px;
+            margin-top: auto;
+            margin-bottom: auto;
+          "
+        >
+        <span style="margin-top: auto; margin-bottom: auto;">{{ title }}</span>
       </div>
-      <div class="button" @click="onUpdate" v-if="updateReady"><font-awesome-icon :style="{ color: 'green' }" :icon="['fas', 'arrow-down']" /></div>
+      <div class="button" v-if="updateReady" @click="onUpdate"><font-awesome-icon :style="{ color: 'green' }" :icon="['fas', 'arrow-down']" /></div>
       <div class="button" @click="onMinimize">
         <span class="dash">&#x2012;</span>
       </div>
@@ -27,35 +25,31 @@
 </template>
 
 <script>
-const electron = window.require ? window.require('electron') : null;
 const { ipcRenderer } = require('electron');
-const { remote } = require('electron');
-const win = remote.getCurrentWindow();
 
 export default {
   props: ['title', 'ico'],
-  data() {
+  data () {
     return {
-      updateReady: false,
-    }
+      updateReady: false
+    };
   },
   methods: {
-    onClose() {
-      close();
+    onClose () {
+      ipcRenderer.send('window-control', 'close');
     },
-    onMinimize() {
-      win.minimize();
+    onMinimize () {
+      ipcRenderer.send('window-control', 'minimize');
     },
-    onMaximize() {
-      if (win.isMaximized()) win.unmaximize();
-      else win.maximize();
+    onMaximize () {
+      ipcRenderer.send('window-control', 'toggle-maximize');
     },
-    onUpdate(){
+    onUpdate () {
       ipcRenderer.send('install-update', '');
     }
   },
-  mounted(){
-    ipcRenderer.on('update-available', (event, arg) => {
+  mounted () {
+    ipcRenderer.on('update-available', () => {
       this.updateReady = true;
     });
   }
@@ -121,3 +115,5 @@ img {
   margin-top: 0px;
 }
 </style>
+
+

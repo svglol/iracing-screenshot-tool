@@ -180,10 +180,9 @@
 </template>
 
 <script>
-import { version } from '../../../package.json';
+const { version } = require('../../../package.json');
 const config = require('../../utilities/config');
 const { ipcRenderer } = require('electron');
-const { dialog } = require('electron').remote;
 
 export default {
   data () {
@@ -226,98 +225,107 @@ export default {
     }
   },
   beforeDestroy () {
-    if (config.get('defaultScreenHeight') !== parseInt(this.screenHeight)) {
+    if (config.get('defaultScreenHeight') !== parseInt(this.screenHeight, 10)) {
       if (this.screenHeight >= 720 && this.screenHeight <= 10000) {
-        config.set('defaultScreenHeight', parseInt(this.screenHeight));
-        ipcRenderer.send('defaultScreenHeight', parseInt(this.screenHeight));
+        config.set('defaultScreenHeight', parseInt(this.screenHeight, 10));
+        ipcRenderer.send('defaultScreenHeight', parseInt(this.screenHeight, 10));
       }
     }
-    if (config.get('defaultScreenWidth') !== parseInt(this.screenWidth)) {
+    if (config.get('defaultScreenWidth') !== parseInt(this.screenWidth, 10)) {
       if (this.screenWidth >= 1280 && this.screenWidth <= 10000) {
-        ipcRenderer.send('defaultScreenWidth', parseInt(this.screenWidth));
-        config.set('defaultScreenWidth', parseInt(this.screenWidth));
+        ipcRenderer.send('defaultScreenWidth', parseInt(this.screenWidth, 10));
+        config.set('defaultScreenWidth', parseInt(this.screenWidth, 10));
       }
     }
 
-    if (config.get('defaultScreenLeft') !== parseInt(this.screenLeft)) {
+    if (config.get('defaultScreenLeft') !== parseInt(this.screenLeft, 10)) {
       if (this.screenLeft !== '') {
-        ipcRenderer.send('defaultScreenLeft', parseInt(this.screenLeft));
-        config.set('defaultScreenLeft', parseInt(this.screenLeft));
+        ipcRenderer.send('defaultScreenLeft', parseInt(this.screenLeft, 10));
+        config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
       }
     }
 
-    if (config.get('defaultScreenTop') !== parseInt(this.screenTop)) {
+    if (config.get('defaultScreenTop') !== parseInt(this.screenTop, 10)) {
       if (this.screenTop !== '') {
-        ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop));
-        config.set('defaultScreenTop', parseInt(this.screenTop));
+        ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop, 10));
+        config.set('defaultScreenTop', parseInt(this.screenTop, 10));
       }
     }
   },
   methods: {
     openFolderDialog () {
-      var path = dialog.showOpenDialog({
+      ipcRenderer.invoke('dialog:showOpen', {
         defaultPath: config.get('screenshotFolder'),
         properties: ['openDirectory']
-      }).then(result => {
+      }).then((result) => {
         if (!result.canceled) {
           this.screenshotFolder = result.filePaths[0];
         }
-      }).catch(err => {
+      }).catch((err) => {
         console.log(err);
       });
     },
     openReshadeDialog () {
-      dialog.showOpenDialog({
+      ipcRenderer.invoke('dialog:showOpen', {
         defaultPath: config.get('reshadeFile'),
         properties: ['openFile']
-      }).then(result => {
+      }).then((result) => {
         if (!result.canceled) {
           this.reshadeFile = result.filePaths[0];
         }
-      }).catch(err => {
+      }).catch((err) => {
         console.log(err);
       });
     },
     bindScreenshotKeybind () {
-      const _this = this;
-      this.bindingKey = true;
       const keys = [];
       const keysReleased = [];
-      var keydown = window.addEventListener('keydown', function keydown (e) {
-        if (_this.bindingKey) {
-          if (!keys.includes(e.key)) {
-            keys.push(e.key);
-            _this.screenshotKeybind = keys.join('+');
-          }
-        } else {
-          window.removeEventListener('keydown', keydown);
-        }
-      });
-      window.addEventListener('keyup', function keyup (e) {
-        if (_this.bindingKey) {
-          if (!keys.includes(e.key)) {
-            keys.push(e.key);
-            _this.screenshotKeybind = keys.join('+');
-          }
-          keysReleased.push(e.key);
-          if (keysReleased.length == keys.length) {
-            _this.bindingKey = false;
-            ipcRenderer.send('screenshotKeybind-change', { newValue: _this.screenshotKeybind, oldValue: config.get('screenshotKeybind') });
-            config.set('screenshotKeybind', _this.screenshotKeybind);
-            window.removeEventListener('keyup', keyup);
-          }
-        }
-      });
-    },
-    openChangelog () {
+      this.bindingKey = true;
 
+      const onKeyDown = (e) => {
+        if (!this.bindingKey) {
+          window.removeEventListener('keydown', onKeyDown);
+          return;
+        }
+
+        if (!keys.includes(e.key)) {
+          keys.push(e.key);
+          this.screenshotKeybind = keys.join('+');
+        }
+      };
+
+      const onKeyUp = (e) => {
+        if (!this.bindingKey) {
+          window.removeEventListener('keyup', onKeyUp);
+          return;
+        }
+
+        if (!keys.includes(e.key)) {
+          keys.push(e.key);
+          this.screenshotKeybind = keys.join('+');
+        }
+
+        keysReleased.push(e.key);
+        if (keysReleased.length === keys.length) {
+          this.bindingKey = false;
+          ipcRenderer.send('screenshotKeybind-change', {
+            newValue: this.screenshotKeybind,
+            oldValue: config.get('screenshotKeybind')
+          });
+          config.set('screenshotKeybind', this.screenshotKeybind);
+          window.removeEventListener('keyup', onKeyUp);
+          window.removeEventListener('keydown', onKeyDown);
+        }
+      };
+
+      window.addEventListener('keydown', onKeyDown);
+      window.addEventListener('keyup', onKeyUp);
     }
   }
 };
 </script>
 
 <style scoped>
-
 hr{
   margin: 0;
   margin-top: .25rem;
@@ -334,5 +342,7 @@ hr{
 .modal-card-body{
   padding: 0!important;
 }
-
 </style>
+
+
+

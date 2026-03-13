@@ -1,95 +1,100 @@
-import { productName } from '../../package.json';
-
-import { autoUpdater } from 'electron-updater';
-const {
-  app,
-  BrowserWindow,
-  screen,
-  globalShortcut,
-  Menu
-} = require('electron');
-const { ipcMain } = require('electron');
-const ffi = require('ffi-napi');
+const { productName } = require('../../package.json');
+const { autoUpdater } = require('electron-updater');
+const remoteMain = require('@electron/remote/main');
+const { app, BrowserWindow, screen, globalShortcut, Menu, ipcMain, dialog, desktopCapturer } = require('electron');
 const fs = require('fs');
 const loadIniFile = require('read-ini-file');
-let width, height, left, top;
+const path = require('path');
+
+const irsdk = require('./iracing-sdk');
+const { resizeIracingWindow } = require('./window-utils');
+
+let width;
+let height;
+let left;
+let top;
 let takingScreenshot = false;
 let cameraState = 0;
-
-// set app name
-app.name = productName;
-// to hide deprecation message
-app.allowRendererProcessReuse = true;
-app.commandLine.appendSwitch('js-flags', '--expose_gc');
-
 let config;
+let mainWindow;
+let workerWindow;
+let workerReady = false;
+let cancelReshadeWait = null;
 
-// disable electron warning
+app.name = productName;
+app.commandLine.appendSwitch('js-flags', '--expose_gc');
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
+
+remoteMain.initialize();
 
 const gotTheLock = app.requestSingleInstanceLock();
 const isDev = process.env.NODE_ENV === 'development';
 const isDebug = process.argv.includes('--debug');
+const iracing = irsdk.getInstance();
 
-var irsdk = require('node-irsdk');
-var iracing = irsdk.getInstance();
-
-let mainWindow, workerWindow;
-
-// only allow single instance of application
 if (!isDev) {
   if (gotTheLock) {
     app.on('second-instance', () => {
-      // Someone tried to run a second instance, we should focus our window.
       if (mainWindow && mainWindow.isMinimized()) {
         mainWindow.restore();
       }
-      mainWindow.focus();
+
+      if (mainWindow) {
+        mainWindow.focus();
+      }
     });
   } else {
     app.quit();
     process.exit(0);
   }
 } else {
-  // process.env.ELECTRON_ENABLE_LOGGING = true
-
   require('electron-debug')({
     showDevTools: false
   });
 }
 
-async function installDevTools () {
+async function installDevTools() {
   try {
-    /* eslint-disable */
-		require('vue-devtools').install();
-		/* eslint-enable */
+    require('vue-devtools').install();
   } catch (err) {
     console.log(err);
   }
 }
 
-function createWindow () {
-  /**
-	 * Initial window options
-	 */
+function broadcastToWindows(channel, ...args) {
+  [mainWindow, workerWindow].forEach((window) => {
+    if (window && !window.isDestroyed()) {
+      window.webContents.send(channel, ...args);
+    }
+  });
+}
 
+function createWindow() {
   workerWindow = new BrowserWindow({
-    show: process.env.NODE_ENV === 'development',
+    show: isDev,
     webPreferences: {
       nodeIntegration: true,
-      nodeIntegrationInWorker: true,
+      contextIsolation: false,
+      backgroundThrottling: false,
       webSecurity: false
     }
+  });
+
+  remoteMain.enable(workerWindow.webContents);
+
+  workerWindow.webContents.on('did-finish-load', () => {
+    workerReady = true;
+  });
+
+  workerWindow.on('closed', () => {
+    workerReady = false;
   });
 
   if (isDev) {
     workerWindow.loadURL('http://localhost:9080/#/worker');
   } else {
-    workerWindow.loadURL(`file://${__dirname}/index.html#worker`);
-
-    global.__static = require('path')
-      .join(__dirname, '/static')
-      .replace(/\\/g, '\\\\');
+    workerWindow.loadFile(path.join(__dirname, 'index.html'), { hash: '/worker' });
+    global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
   }
 
   mainWindow = new BrowserWindow({
@@ -102,48 +107,107 @@ function createWindow () {
     minWidth: 1100,
     minHeight: 655,
     backgroundColor: '#252525',
+    frame: false,
     webPreferences: {
       nodeIntegration: true,
-      nodeIntegrationInWorker: true,
+      contextIsolation: false,
       webSecurity: false
-    },
-    frame: false
+    }
   });
 
+  remoteMain.enable(mainWindow.webContents);
   Menu.setApplicationMenu(null);
-
-  // eslint-disable-next-line
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:9080');
   } else {
     mainWindow.loadFile(`${__dirname}/index.html`);
-
-    global.__static = require('path')
-      .join(__dirname, '/static')
-      .replace(/\\/g, '\\\\');
+    global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
   }
-  // load root file/url
 
-  // Show when loaded
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();
     mainWindow.focus();
   });
 
   mainWindow.on('close', () => {
-    workerWindow.close();
-    const { x, y, width, height } = mainWindow.getBounds();
-    config.set('winPosX', x);
-    config.set('winPosY', y);
-    config.set('winWidth', width);
-    config.set('winHeight', height);
+    clearPendingReshadeWait('Application closing');
+    restoreScreenshotState();
+
+    if (workerWindow && !workerWindow.isDestroyed()) {
+      workerWindow.close();
+    }
+
+    const bounds = mainWindow.getBounds();
+    config.set('winPosX', bounds.x);
+    config.set('winPosY', bounds.y);
+    config.set('winWidth', bounds.width);
+    config.set('winHeight', bounds.height);
   });
 
   mainWindow.on('closed', () => {
     console.log('\nApplication exiting...');
   });
 }
+
+ipcMain.on('config:get', (event, key) => {
+  event.returnValue = config.get(key);
+});
+
+ipcMain.on('config:set', (event, payload) => {
+  const oldValue = config.get(payload.key);
+  config.set(payload.key, payload.value);
+  event.returnValue = true;
+
+  if (oldValue !== payload.value) {
+    broadcastToWindows(`config:changed:${payload.key}`, payload.value, oldValue);
+  }
+});
+
+ipcMain.on('app:getPath-sync', (event, name) => {
+  event.returnValue = app.getPath(name);
+});
+
+ipcMain.handle('dialog:showOpen', (event, options) => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  return dialog.showOpenDialog(browserWindow || undefined, options);
+});
+ipcMain.handle('desktop-capturer:get-source-id', async (event, windowHandle) => {
+  const targetId = String(windowHandle || '');
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: 0, height: 0 },
+    fetchWindowIcons: false
+  });
+
+  const match = sources.find((source) => source.id.startsWith('window:' + targetId + ':'));
+  return match ? match.id : null;
+});
+
+ipcMain.on('window-control', (event, action) => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!browserWindow) {
+    return;
+  }
+
+  switch (action) {
+    case 'close':
+      browserWindow.close();
+      break;
+    case 'minimize':
+      browserWindow.minimize();
+      break;
+    case 'toggle-maximize':
+      if (browserWindow.isMaximized()) {
+        browserWindow.unmaximize();
+      } else {
+        browserWindow.maximize();
+      }
+      break;
+    default:
+      break;
+  }
+});
 
 app.on('ready', async () => {
   loadConfig();
@@ -160,10 +224,7 @@ app.on('ready', async () => {
   }
 
   if (config.get('defaultScreenHeight') === 0) {
-    config.set(
-      'defaultScreenHeight',
-      screen.getPrimaryDisplay().bounds.height
-    );
+    config.set('defaultScreenHeight', screen.getPrimaryDisplay().bounds.height);
     height = screen.getPrimaryDisplay().bounds.height;
   }
 
@@ -183,74 +244,90 @@ app.on('ready', async () => {
   });
 
   ipcMain.on('screenshot-finished', () => {
-    resize(width, height, left, top);
-    iracing.camControls.setState(cameraState); // reset camera state
-    takingScreenshot = false;
+    restoreScreenshotState();
   });
 
   ipcMain.on('request-iracing-status', (event) => {
-    var iracingOpen = false;
-    if (iracing.telemetry != null) iracingOpen = true;
-    else iracingOpen = false;
-    event.reply('iracing-status', iracingOpen);
+    event.reply('iracing-status', iracing.telemetry != null);
   });
 
-  iracing.on('Connected', function () {
-    mainWindow.webContents.send('iracing-connected', '');
+  iracing.on('Connected', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('iracing-connected', '');
+    }
   });
 
-  iracing.on('Disconnected', function () {
-    mainWindow.webContents.send('iracing-disconnected', '');
+  iracing.on('Disconnected', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('iracing-disconnected', '');
+    }
   });
 
   ipcMain.on('resize-screenshot', async (event, data) => {
+    if (takingScreenshot) {
+      return;
+    }
+
+    if (!iracing.telemetry || !iracing.sessionInfo) {
+      mainWindow.webContents.send('screenshot-error', 'iRacing telemetry is not available');
+      return;
+    }
+
+    if (!workerReady) {
+      mainWindow.webContents.send('screenshot-error', 'Screenshot worker is still loading');
+      return;
+    }
+
     takingScreenshot = true;
-    var iracingCameraState = iracing.telemetry.values.CamCameraState;
-    parseCameraState(iracingCameraState);
-    var States = iracing.Consts.CameraState;
-    iracing.camControls.setState(States.UIHidden);
-    var id = resize(data.width, data.height, left, top);
+    parseCameraState(iracing.telemetry.values.CamCameraState);
+    iracing.camControls.setState(iracing.Consts.CameraState.UIHidden);
+
+    const id = resize(data.width, data.height, left, top);
+
+    if (id === undefined) {
+      restoreScreenshotState();
+      mainWindow.webContents.send('screenshot-error', 'iRacing window not found');
+      return;
+    }
+
     if (!config.get('reshade')) {
+      workerWindow.webContents.send('session-info', iracing.sessionInfo);
+      workerWindow.webContents.send('telemetry', iracing.telemetry);
       workerWindow.webContents.send('screenshot-request', {
         width: data.width,
         height: data.height,
         crop: data.crop,
         windowID: id
       });
+      return;
+    }
+
+    try {
+      const reshadeIni = loadIniFile.sync(config.get('reshadeFile'));
+      const folder = getReshadeScreenshotFolder(reshadeIni);
+      const reshadeFile = await waitForReshadeScreenshot(folder);
+
+      restoreScreenshotState();
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
       workerWindow.webContents.send('telemetry', iracing.telemetry);
-    } else {
-      const reshadeIni = loadIniFile.sync(config.get('reshadeFile'));
-      const folder = reshadeIni.GENERAL.ScreenshotPath + '\\';
-      const key = reshadeIni.INPUT.KeyScreenshot.split(',')[0];
-      await delay(1000);
-      sendKey(key);
-      const watcher = fs.watch(folder, (eventType, filename) => {
-        if (filename.includes('iRacing')) {
-          resize(width, height, left, top);
-          iracing.camControls.setState(cameraState); // reset camera state
-          takingScreenshot = false;
-          workerWindow.webContents.send('session-info', iracing.sessionInfo);
-          workerWindow.webContents.send('telemetry', iracing.telemetry);
-          workerWindow.webContents.send('screenshot-reshade', folder + filename);
-          watcher.close();
-        }
-      });
+      workerWindow.webContents.send('screenshot-reshade', reshadeFile);
+    } catch (error) {
+      restoreScreenshotState();
+      mainWindow.webContents.send('screenshot-error', error.message || String(error));
     }
   });
 
-  iracing.on('update', function () {
-    if (takingScreenshot) {
-      var iracingCameraState = iracing.telemetry.values.CamCameraState;
-      var state = iracing.Consts.CameraState.UIHidden;
-      if (!iracingCameraState.includes('UseTemporaryEdits')) {
-        iracing.camControls.setState(state);
+  iracing.on('update', () => {
+    if (takingScreenshot && iracing.telemetry) {
+      const currentState = iracing.telemetry.values.CamCameraState || [];
+      if (!currentState.includes('UseTemporaryEdits')) {
+        iracing.camControls.setState(iracing.Consts.CameraState.UIHidden);
       }
     }
   });
 
   ipcMain.on('screenshot-error', (event, data) => {
-    takingScreenshot = false;
+    restoreScreenshotState();
     mainWindow.webContents.send('screenshot-error', data);
   });
 
@@ -311,103 +388,249 @@ app.on('activate', () => {
 });
 
 autoUpdater.on('update-downloaded', () => {
-  mainWindow.webContents.send('update-available', '');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-available', '');
+  }
 });
 
 app.on('ready', () => {
-  if (process.env.NODE_ENV === 'production') autoUpdater.checkForUpdates();
+  if (process.env.NODE_ENV === 'production') {
+    autoUpdater.checkForUpdates();
+  }
 });
 
-function resize (width, height, left, top) {
-  const user32 = new ffi.Library('user32', {
-    GetTopWindow: ['long', ['long']],
-    FindWindowA: ['long', ['string', 'string']],
-    SetActiveWindow: ['long', ['long']],
-    SetForegroundWindow: ['bool', ['long']],
-    BringWindowToTop: ['bool', ['long']],
-    ShowWindow: ['bool', ['long', 'int']],
-    SwitchToThisWindow: ['void', ['long', 'bool']],
-    GetForegroundWindow: ['long', []],
-    AttachThreadInput: ['bool', ['int', 'long', 'bool']],
-    GetWindowThreadProcessId: ['int', ['long', 'int']],
-    SetWindowPos: [
-      'bool',
-      ['long', 'long', 'int', 'int', 'int', 'int', 'uint']
-    ],
-    SetFocus: ['long', ['long']],
-    SetWindowLongA: ['long', ['uint32', 'int', 'long']],
-    GetWindowLongA: ['long', ['long', 'long']],
-    GetWindowRect: ['bool', ['int32', 'pointer']]
-  });
-
-  const kernel32 = new ffi.Library('Kernel32.dll', {
-    GetCurrentThreadId: ['int', []]
-  });
-
-  const winToSetOnTop = user32.FindWindowA(null, 'iRacing.com Simulator');
-  const foregroundHWnd = user32.GetForegroundWindow();
-  const currentThreadId = kernel32.GetCurrentThreadId();
-  const windowThreadProcessId = user32.GetWindowThreadProcessId(
-    foregroundHWnd,
-    null
-  );
-
-  user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height, 0);
-  var rectPointer = Buffer.alloc(4 * 4);
-  user32.GetWindowRect(winToSetOnTop, rectPointer);
-  var rect = RectPointerToRect(rectPointer);
-  if (rect.right - rect.left !== width || rect.bottom - rect.top !== height) {
-    user32.SetWindowPos(winToSetOnTop, -2, left, top, width, height, 0);
+function clearPendingReshadeWait(reason = 'Screenshot cancelled') {
+  if (typeof cancelReshadeWait !== 'function') {
+    return;
   }
 
-  // 349110272 - bordered
-  // 335544320 - borderless
-  // var winStyle = user32.GetWindowLongA(winToSetOnTop,-16);
-  // if(winStyle !== 335544320){
-  //   user32.SetWindowLongA(winToSetOnTop,-16,335544320);
-  // }
-
-  user32.ShowWindow(winToSetOnTop, 9);
-  user32.SetForegroundWindow(winToSetOnTop);
-  user32.AttachThreadInput(windowThreadProcessId, currentThreadId, 0);
-  user32.SetFocus(winToSetOnTop);
-  user32.SetActiveWindow(winToSetOnTop);
-  return winToSetOnTop;
+  const cancel = cancelReshadeWait;
+  cancelReshadeWait = null;
+  cancel(reason);
 }
 
-function sendKey (keyID) {
-  // const user32 = new ffi.Library('user32', {
-  //   FindWindowA: ['long', ['string', 'string']],
-  //   SendMessageA: [
-  //     'long', ['long', 'int32', 'long', 'int32']
-  //   ]
-  // });
-  //
-  // const window = user32.FindWindowA(null, 'iRacing.com Simulator');
-  // user32.SendMessageA(window, 0x0100 /* WM_KEYDOWN */, 0x2C, 0);
-  // user32.SendMessageA(window, 0x0101 /* WM_KEYUP */, 0x2C, 0);
+function restoreScreenshotState() {
+  if (!takingScreenshot) {
+    return;
+  }
+
+  resize(width, height, left, top);
+
+  if (iracing.camControls) {
+    iracing.camControls.setState(cameraState);
+  }
+
+  takingScreenshot = false;
 }
 
-function RectPointerToRect (rectPointer) {
-  const rect = {};
-  rect.left = rectPointer.readUInt32LE(0);
-  rect.top = rectPointer.readUInt32LE(4);
-  rect.right = rectPointer.readUInt32LE(8);
-  rect.bottom = rectPointer.readUInt32LE(12);
-  return rect;
+function getReshadeScreenshotFolder(reshadeIni = {}) {
+  const folder = reshadeIni.SCREENSHOT?.SavePath || reshadeIni.GENERAL?.ScreenshotPath;
+
+  if (!folder) {
+    throw new Error('Unable to determine the ReShade screenshot folder');
+  }
+
+  return path.resolve(folder);
 }
 
-function loadConfig () {
+function normalizeFileKey(filePath) {
+  return path.resolve(filePath).toLowerCase();
+}
+
+async function listReshadeScreenshotFiles(folder) {
+  const supportedExtensions = new Set(['.bmp', '.jpeg', '.jpg', '.png']);
+  let entries = [];
+
+  try {
+    entries = await fs.promises.readdir(folder, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const files = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const fullPath = path.join(folder, entry.name);
+    const extension = path.extname(entry.name).toLowerCase();
+
+    if (!supportedExtensions.has(extension)) {
+      continue;
+    }
+
+    try {
+      const stats = await fs.promises.stat(fullPath);
+      files.push({
+        fullPath,
+        key: normalizeFileKey(fullPath),
+        mtimeMs: stats.mtimeMs,
+        size: stats.size
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  return files;
+}
+
+async function findLatestReshadeScreenshot(folder, baselineFiles, startedAt) {
+  const files = await listReshadeScreenshotFiles(folder);
+  const candidates = files.filter((file) => {
+    const previous = baselineFiles.get(file.key);
+
+    if (!previous) {
+      return file.mtimeMs >= startedAt - 1000;
+    }
+
+    return file.mtimeMs > previous.mtimeMs || file.size !== previous.size;
+  });
+
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return candidates[0] || null;
+}
+
+async function waitForFileToSettle(filePath, attempts = 12, intervalMs = 250) {
+  let previousStats = null;
+
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      const stats = await fs.promises.stat(filePath);
+
+      if (
+        previousStats &&
+        stats.size > 0 &&
+        stats.size === previousStats.size &&
+        stats.mtimeMs === previousStats.mtimeMs
+      ) {
+        return;
+      }
+
+      previousStats = {
+        size: stats.size,
+        mtimeMs: stats.mtimeMs
+      };
+    } catch (error) {
+      if (index === attempts - 1) {
+        throw error;
+      }
+    }
+
+    await delay(intervalMs);
+  }
+}
+
+async function waitForReshadeScreenshot(folder, timeoutMs = 30000) {
+  fs.mkdirSync(folder, { recursive: true });
+
+  const baselineFiles = new Map(
+    (await listReshadeScreenshotFiles(folder)).map((file) => [file.key, file])
+  );
+  const startedAt = Date.now();
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let scanInFlight = false;
+    let watcher;
+    let poller;
+    let timeoutId;
+
+    const finish = (callback, value) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+
+      if (watcher) {
+        watcher.close();
+      }
+
+      if (poller) {
+        clearInterval(poller);
+      }
+
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      if (cancelReshadeWait === cancel) {
+        cancelReshadeWait = null;
+      }
+
+      callback(value);
+    };
+
+    const cancel = (reason) => {
+      finish(reject, new Error(reason));
+    };
+
+    const scan = async () => {
+      if (settled || scanInFlight) {
+        return;
+      }
+
+      scanInFlight = true;
+
+      try {
+        const candidate = await findLatestReshadeScreenshot(folder, baselineFiles, startedAt);
+
+        if (candidate) {
+          await waitForFileToSettle(candidate.fullPath);
+          finish(resolve, candidate.fullPath);
+        }
+      } catch (error) {
+        finish(reject, error);
+      } finally {
+        scanInFlight = false;
+      }
+    };
+
+    try {
+      watcher = fs.watch(folder, () => {
+        void scan();
+      });
+    } catch (error) {
+      finish(reject, error);
+      return;
+    }
+
+    poller = setInterval(() => {
+      void scan();
+    }, 500);
+
+    timeoutId = setTimeout(() => {
+      cancel('Timed out waiting for a ReShade screenshot');
+    }, timeoutMs);
+
+    cancelReshadeWait = cancel;
+    void scan();
+  });
+}
+
+function resize(targetWidth, targetHeight, targetLeft, targetTop) {
+  return resizeIracingWindow(targetWidth, targetHeight, targetLeft, targetTop);
+}
+
+function loadConfig() {
   try {
     config = require('../utilities/config');
-  } catch (e) {
-    fs.unlinkSync(app.getPath('userData') + '\\config.json');
+  } catch (error) {
+    fs.unlinkSync(path.join(app.getPath('userData'), 'config.json'));
     config = require('../utilities/config');
   }
 }
 
-function parseCameraState (iracingCameraState) {
+function parseCameraState(iracingCameraState = []) {
   cameraState = 0;
+
   iracingCameraState.forEach((state) => {
     switch (state) {
       case 'IsSessionScreen':
@@ -437,11 +660,22 @@ function parseCameraState (iracingCameraState) {
       case 'UseMouseAimMode':
         cameraState += 256;
         break;
+      default:
+        break;
     }
   });
+
   if (!iracingCameraState.includes('CamToolActive')) {
     cameraState += 4;
   }
 }
 
-const delay = ms => new Promise(res => setTimeout(res, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+
+
+
+
+
+
+
