@@ -59,14 +59,35 @@
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
-const { version } = require('../../../package.json');
+const { version, repository } = require('../../../package.json');
 
 const { shell, ipcRenderer } = require('electron');
 const fs = require('fs');
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const changelogFile = userDataPath + '\\releases.json';
+const changelogApiUrl = `https://api.github.com/repos/${getRepositorySlug(repository)}/releases`;
 
 const config = require('../../utilities/config');
+
+function getRepositorySlug(repo) {
+  const fallback = 'AlessandroRomanelli/iracing-screenshot-tool';
+  const raw = typeof repo === 'string' ? repo : repo?.url;
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const slug = raw
+    .replace(/^git\+/, '')
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/^git@github\.com:/i, '')
+    .replace(/^github:/i, '')
+    .replace(/\.git$/i, '')
+    .replace(/^\/+/, '')
+    .trim();
+
+  return slug || fallback;
+}
 
 export default {
   components: {
@@ -90,22 +111,19 @@ export default {
     }
 
     const configVersion = config.get('version');
-    if (configVersion === '' || configVersion !== version) {
-      config.set('version', version);
-      this.loadReleases(firstTime);
-    } else {
-      config.set('version', version);
-    }
+    const showChangelogOnLoad = configVersion !== '' && configVersion !== version && !firstTime;
+    config.set('version', version);
+    this.loadReleases(showChangelogOnLoad);
   },
   methods: {
-    async loadReleases (firstTime) {
+    async loadReleases (showChangelogOnLoad) {
       try {
-        const response = await fetch('https://api.github.com/repos/svglol/iracing-screenshot-tool/releases');
+        const response = await fetch(changelogApiUrl);
         const body = await response.text();
         const releases = JSON.parse(body);
         if (Array.isArray(releases)) {
           fs.writeFileSync(changelogFile, body);
-          if (!firstTime) {
+          if (showChangelogOnLoad) {
             this.showChangelog = true;
           }
         }

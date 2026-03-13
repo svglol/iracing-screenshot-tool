@@ -45,9 +45,11 @@ export default {
       }
 
       releases.forEach((release) => {
-        const compare = compareVer(version, release.name);
+        const releaseVersion = release.tag_name || release.name || '';
+        const releaseTitle = release.name || release.tag_name || 'Release';
+        const compare = compareVer(version, releaseVersion);
         if (compare === 0 || compare === 1) {
-          this.changelog += `## ${release.name}\n ${release.body}\n\n ___ \n`;
+          this.changelog += `## ${releaseTitle}\n ${release.body || ''}\n\n ___ \n`;
         }
       });
     }
