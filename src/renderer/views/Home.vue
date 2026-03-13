@@ -111,6 +111,9 @@ const sharp = require('sharp');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const config = require('../../utilities/config');
+const EMPTY_IMAGE =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+const THUMBNAIL_CONCURRENCY = 4;
 
 let dir = normalizeFolder(config.get('screenshotFolder'));
 
@@ -161,9 +164,7 @@ async function ensureThumbnail(sourceFile, thumbFile) {
     .toFile(thumbFile);
 }
 
-async function loadGallery(items) {
-  items.splice(0, items.length);
-
+async function listGalleryEntries() {
   ensureDirectory(dir);
   ensureDirectory(getCacheDir());
 
@@ -173,52 +174,47 @@ async function loadGallery(items) {
     files = await fs.promises.readdir(dir);
   } catch (error) {
     console.log(error);
-    return;
+    return [];
   }
 
   const entries = await Promise.all(
     files.map(async (fileName) => {
       const fullPath = path.join(dir, fileName);
-      const stats = await fs.promises.stat(fullPath);
-      return {
-        fullPath,
-        modified: stats.mtimeMs,
-        extension: path.extname(fileName).toLowerCase()
-      };
+      try {
+        const stats = await fs.promises.stat(fullPath);
+        return {
+          fullPath,
+          modified: stats.mtimeMs,
+          extension: path.extname(fileName).toLowerCase()
+        };
+      } catch (error) {
+        console.log(error);
+        return null;
+      }
     })
   );
 
-  const pngFiles = entries
+  return entries
+    .filter(Boolean)
     .filter((entry) => entry.extension === '.png')
     .sort((a, b) => b.modified - a.modified);
+}
 
-  for (const entry of pngFiles) {
-    const thumbPath = getThumbnailPath(entry.fullPath);
-    try {
-      await ensureThumbnail(entry.fullPath, thumbPath);
-      items.push({
-        file: toDisplayPath(entry.fullPath),
-        thumb: toDisplayPath(thumbPath)
-      });
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
+async function cleanupThumbnailCache(entries) {
   try {
-    const keep = new Set(items.map((item) => normalizeComparePath(toFsPath(item.thumb))));
+    const keep = new Set(entries.map((entry) => normalizeComparePath(entry.thumbFsPath)));
     const cacheFiles = await fs.promises.readdir(getCacheDir());
 
-    for (const fileName of cacheFiles) {
+    await Promise.all(cacheFiles.map(async (fileName) => {
       if (path.extname(fileName).toLowerCase() !== '.webp') {
-        continue;
+        return;
       }
 
       const fullPath = path.join(getCacheDir(), fileName);
       if (!keep.has(normalizeComparePath(fullPath))) {
-        fs.unlinkSync(fullPath);
+        await fs.promises.unlink(fullPath);
       }
-    }
+    }));
   } catch (error) {
     console.log(error);
   }
@@ -235,6 +231,7 @@ export default Vue.extend({
       resolution: '',
       selected: 0,
       carouselScrollBound: false,
+      galleryLoadId: 0,
       options: [
         {
           name: 'Open Externally',
@@ -257,7 +254,7 @@ export default Vue.extend({
   },
   methods: {
     getImageUrl(item) {
-      return item ? item.thumb : '';
+      return item ? item.thumb : EMPTY_IMAGE;
     },
     screenshot(data) {
       ipcRenderer.send('resize-screenshot', data);
@@ -322,6 +319,85 @@ export default Vue.extend({
       this.selected = Math.max(0, Math.min(this.selected, this.items.length - 1));
       this.currentURL = this.items[this.selected].file;
     },
+    setSelectionFromItems() {
+      if (this.items.length === 0) {
+        this.selected = 0;
+        this.currentURL = '';
+        return;
+      }
+
+      const currentIndex = this.items.findIndex((item) => item.file === this.currentURL);
+      if (currentIndex !== -1) {
+        this.selected = currentIndex;
+        return;
+      }
+
+      this.selected = Math.max(0, Math.min(this.selected, this.items.length - 1));
+      this.currentURL = this.items[this.selected].file;
+    },
+    async createMissingThumbnails(items, loadId) {
+      const queue = items.filter((item) => item.thumb === EMPTY_IMAGE);
+      const workerCount = Math.min(THUMBNAIL_CONCURRENCY, queue.length);
+
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0) {
+          const item = queue.shift();
+
+          if (!item) {
+            return;
+          }
+
+          try {
+            await ensureThumbnail(item.sourcePath, item.thumbFsPath);
+          } catch (error) {
+            console.log(error);
+            continue;
+          }
+
+          if (loadId !== this.galleryLoadId) {
+            return;
+          }
+
+          this.$set(item, 'thumb', item.thumbDisplayPath);
+        }
+      });
+
+      await Promise.all(workers);
+    },
+    async loadGallery() {
+      const loadId = this.galleryLoadId + 1;
+      this.galleryLoadId = loadId;
+      this.items = [];
+      this.setSelectionFromItems();
+
+      const entries = (await listGalleryEntries()).map((entry) => {
+        const thumbFsPath = getThumbnailPath(entry.fullPath);
+        const thumbDisplayPath = toDisplayPath(thumbFsPath);
+        const hasThumbnail = fs.existsSync(thumbFsPath);
+
+        return {
+          file: toDisplayPath(entry.fullPath),
+          thumb: hasThumbnail ? thumbDisplayPath : EMPTY_IMAGE,
+          thumbDisplayPath,
+          thumbFsPath,
+          sourcePath: entry.fullPath
+        };
+      });
+
+      if (loadId !== this.galleryLoadId) {
+        return;
+      }
+
+      this.items = entries;
+      this.setSelectionFromItems();
+
+      if (this.items.length !== 0) {
+        this.$nextTick(() => this.bindCarouselScroll());
+      }
+
+      void cleanupThumbnailCache(entries);
+      void this.createMissingThumbnails(entries, loadId);
+    },
     bindCarouselScroll() {
       if (this.carouselScrollBound) {
         return;
@@ -349,20 +425,28 @@ export default Vue.extend({
 
       const thumbPath = getThumbnailPath(filePath);
       ensureDirectory(getCacheDir());
-
-      try {
-        await ensureThumbnail(filePath, thumbPath);
-      } catch (error) {
-        console.log(error);
-      }
-
-      this.items.unshift({
+      const item = {
         file: toDisplayPath(filePath),
-        thumb: toDisplayPath(thumbPath)
-      });
+        thumb: fs.existsSync(thumbPath) ? toDisplayPath(thumbPath) : EMPTY_IMAGE,
+        thumbDisplayPath: toDisplayPath(thumbPath),
+        thumbFsPath: thumbPath,
+        sourcePath: filePath
+      };
+
+      this.items.unshift(item);
       copyImageToClipboard(filePath);
       this.selected = 0;
       this.currentURL = toDisplayPath(filePath);
+
+      if (item.thumb === EMPTY_IMAGE) {
+        void ensureThumbnail(filePath, thumbPath)
+          .then(() => {
+            this.$set(item, 'thumb', item.thumbDisplayPath);
+          })
+          .catch((error) => {
+            console.log(error);
+          });
+      }
 
       this.$nextTick(() => {
         const indicator = document.querySelector('.carousel-indicator');
@@ -373,22 +457,14 @@ export default Vue.extend({
       });
     });
 
-    loadGallery(this.items);
+    void this.loadGallery();
 
     config.onDidChange('screenshotFolder', (newValue) => {
       dir = normalizeFolder(newValue);
-      loadGallery(this.items);
+      void this.loadGallery();
     });
   },
   watch: {
-    items() {
-      if (this.items.length !== 0) {
-        this.currentURL = this.items[0].file;
-        this.$nextTick(() => this.bindCarouselScroll());
-      } else {
-        this.currentURL = '';
-      }
-    },
     currentURL() {
       if (this.currentURL === '') {
         this.fileName = '';
@@ -397,8 +473,13 @@ export default Vue.extend({
       }
 
       this.fileName = this.currentURL.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
-      const dimensions = sizeOf(toFsPath(this.currentURL));
-      this.resolution = `${dimensions.width} x ${dimensions.height}`;
+      try {
+        const dimensions = sizeOf(toFsPath(this.currentURL));
+        this.resolution = `${dimensions.width} x ${dimensions.height}`;
+      } catch (error) {
+        console.log(error);
+        this.resolution = '';
+      }
     }
   }
 });
