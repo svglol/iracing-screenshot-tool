@@ -117,6 +117,27 @@ export default {
     }
   },
   methods: {
+    escapeHtml (value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+    normalizeScreenshotError (payload) {
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        return {
+          message: payload.message || 'Unknown screenshot error',
+          logFile: payload.logFile || ''
+        };
+      }
+
+      return {
+        message: String(payload || 'Unknown screenshot error'),
+        logFile: ''
+      };
+    },
     hideCursorDuringCapture () {
       document.body.style.cursor = 'none';
     },
@@ -210,9 +231,17 @@ export default {
     ipcRenderer.on('screenshot-error', (event, arg) => {
       this.restoreCursorAfterCapture();
       this.takingScreenshot = false;
+      const error = this.normalizeScreenshotError(arg);
+      const escapedMessage = this.escapeHtml(error.message);
+      const escapedLogFile = this.escapeHtml(error.logFile);
+      const logHint = escapedLogFile
+        ? `<br><small>Log: ${escapedLogFile}</small>`
+        : '';
       this.$buefy.notification.open({
-        message: 'An error has occured when taking a screenshot :(',
-        type: 'is-danger'
+        message: `Screenshot failed: ${escapedMessage}${logHint}`,
+        type: 'is-danger',
+        duration: 10000,
+        queue: false
       });
       ipcRenderer.send('request-iracing-status', '');
     });

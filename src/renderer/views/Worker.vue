@@ -16,6 +16,43 @@ let telemetry = null;
 let windowID = null;
 let crop = false;
 
+function createScreenshotErrorPayload(errorLike, context, meta = {}) {
+  if (
+    errorLike &&
+    typeof errorLike === 'object' &&
+    !Array.isArray(errorLike) &&
+    typeof errorLike.message === 'string'
+  ) {
+    return {
+      message: String(errorLike.message),
+      stack: String(errorLike.stack || ''),
+      source: 'worker',
+      context,
+      meta
+    };
+  }
+
+  const message = String(errorLike || 'Unknown screenshot error');
+  const error = errorLike instanceof Error ? errorLike : new Error(message);
+
+  return {
+    message: error.message || message,
+    stack: String(error.stack || ''),
+    source: 'worker',
+    context,
+    meta
+  };
+}
+
+function sendScreenshotError(errorLike, context, meta = {}) {
+  const payload = createScreenshotErrorPayload(errorLike, context, meta);
+  console.error('Screenshot worker error:', payload.message);
+  if (payload.stack) {
+    console.error(payload.stack);
+  }
+  ipcRenderer.send('screenshot-error', payload);
+}
+
 function ensureDirectory(targetDir) {
   fs.mkdirSync(targetDir, { recursive: true });
 }
@@ -114,8 +151,11 @@ async function saveReshadeImage(sourceFile) {
       global.gc();
     }
   } catch (error) {
-    console.log(error);
-    ipcRenderer.send('screenshot-error', error.message || String(error));
+    sendScreenshotError(error, 'save-reshade-image', {
+      sourceFile,
+      screenshotDir: getScreenshotDir(),
+      crop
+    });
   }
 }
 
@@ -145,8 +185,10 @@ async function saveImage(blob) {
     console.timeEnd('Save Image');
     console.timeEnd('Screenshot');
   } catch (error) {
-    console.log(error);
-    ipcRenderer.send('screenshot-error', error.message || String(error));
+    sendScreenshotError(error, 'save-image', {
+      screenshotDir: getScreenshotDir(),
+      crop
+    });
   }
 }
 
@@ -193,8 +235,10 @@ async function fullscreenScreenshot(callback) {
   };
 
   const handleError = (error) => {
-    console.error('Screenshot capture failed', error);
-    ipcRenderer.send('screenshot-error', error.message || String(error));
+    sendScreenshotError(error, 'fullscreen-capture', {
+      windowID,
+      crop
+    });
   };
 
   await delay(1000);
@@ -241,7 +285,9 @@ export default {
       crop = input.crop;
 
       if (windowID === undefined) {
-        ipcRenderer.send('screenshot-error', 'iRacing window not found');
+        sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
+          request: input
+        });
         return;
       }
 

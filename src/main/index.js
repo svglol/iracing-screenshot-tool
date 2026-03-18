@@ -69,6 +69,88 @@ function broadcastToWindows(channel, ...args) {
   });
 }
 
+function createScreenshotErrorPayload(errorLike, defaults = {}) {
+  const payload =
+    errorLike &&
+    typeof errorLike === 'object' &&
+    !Array.isArray(errorLike) &&
+    (typeof errorLike.message === 'string' || typeof errorLike.error === 'string')
+      ? errorLike
+      : null;
+
+  if (payload) {
+    return {
+      message: String(payload.message || payload.error || defaults.message || 'Unknown screenshot error'),
+      stack: String(payload.stack || defaults.stack || ''),
+      source: String(payload.source || defaults.source || 'main'),
+      context: String(payload.context || defaults.context || ''),
+      meta:
+        payload.meta && typeof payload.meta === 'object' && !Array.isArray(payload.meta)
+          ? payload.meta
+          : defaults.meta || {}
+    };
+  }
+
+  const message = String(errorLike || defaults.message || 'Unknown screenshot error');
+  const error = errorLike instanceof Error ? errorLike : new Error(message);
+
+  return {
+    message: error.message || message,
+    stack: String(error.stack || ''),
+    source: String(defaults.source || 'main'),
+    context: String(defaults.context || ''),
+    meta: defaults.meta || {}
+  };
+}
+
+function getScreenshotErrorLogPath() {
+  return path.join(app.getPath('userData'), 'logs', 'screenshot-errors.log');
+}
+
+function writeScreenshotErrorLog(payload) {
+  const logPath = getScreenshotErrorLogPath();
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+
+  const lines = [
+    `[${new Date().toISOString()}] Screenshot failure`,
+    `Source: ${payload.source || 'unknown'}`,
+    `Context: ${payload.context || 'unknown'}`,
+    `Message: ${payload.message || 'Unknown screenshot error'}`
+  ];
+
+  if (payload.meta && Object.keys(payload.meta).length > 0) {
+    lines.push('Meta:');
+    lines.push(JSON.stringify(payload.meta, null, 2));
+  }
+
+  if (payload.stack) {
+    lines.push('Stack:');
+    lines.push(payload.stack);
+  }
+
+  lines.push('');
+
+  fs.appendFileSync(logPath, `${lines.join('\n')}\n`, 'utf8');
+  return logPath;
+}
+
+function reportScreenshotError(errorLike, defaults = {}) {
+  const payload = createScreenshotErrorPayload(errorLike, defaults);
+  const logFile = writeScreenshotErrorLog(payload);
+  const rendererPayload = { ...payload, logFile };
+
+  console.error('Screenshot error:', rendererPayload.message);
+  if (rendererPayload.stack) {
+    console.error(rendererPayload.stack);
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('screenshot-error', rendererPayload);
+  }
+
+  return rendererPayload;
+}
+
 function createWindow() {
   workerWindow = new BrowserWindow({
     show: isDev,
@@ -269,12 +351,18 @@ app.on('ready', async () => {
     }
 
     if (!iracing.telemetry || !iracing.sessionInfo) {
-      mainWindow.webContents.send('screenshot-error', 'iRacing telemetry is not available');
+      reportScreenshotError('iRacing telemetry is not available', {
+        context: 'resize-screenshot:telemetry',
+        meta: { request: data }
+      });
       return;
     }
 
     if (!workerReady) {
-      mainWindow.webContents.send('screenshot-error', 'Screenshot worker is still loading');
+      reportScreenshotError('Screenshot worker is still loading', {
+        context: 'resize-screenshot:worker-ready',
+        meta: { request: data }
+      });
       return;
     }
 
@@ -286,7 +374,13 @@ app.on('ready', async () => {
 
     if (id === undefined) {
       restoreScreenshotState();
-      mainWindow.webContents.send('screenshot-error', 'iRacing window not found');
+      reportScreenshotError('iRacing window not found', {
+        context: 'resize-screenshot:window-not-found',
+        meta: {
+          request: data,
+          defaultScreen: { width, height, left, top }
+        }
+      });
       return;
     }
 
@@ -313,7 +407,13 @@ app.on('ready', async () => {
       workerWindow.webContents.send('screenshot-reshade', reshadeFile);
     } catch (error) {
       restoreScreenshotState();
-      mainWindow.webContents.send('screenshot-error', error.message || String(error));
+      reportScreenshotError(error, {
+        context: 'resize-screenshot:reshade',
+        meta: {
+          request: data,
+          reshadeFile: config.get('reshadeFile')
+        }
+      });
     }
   });
 
@@ -328,7 +428,10 @@ app.on('ready', async () => {
 
   ipcMain.on('screenshot-error', (event, data) => {
     restoreScreenshotState();
-    mainWindow.webContents.send('screenshot-error', data);
+    reportScreenshotError(data, {
+      source: 'worker',
+      context: 'worker:screenshot-error'
+    });
   });
 
   ipcMain.on('screenshotKeybind-change', (event, data) => {
