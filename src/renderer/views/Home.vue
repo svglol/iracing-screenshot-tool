@@ -11,7 +11,10 @@
       "
     >
       <SideBar v-on:click="screenshot" />
-      <Settings />
+      <div class="sidebar-footer">
+        <PromoCard class="sidebar-promo" />
+        <Settings />
+      </div>
     </div>
 
     <div class="column">
@@ -100,6 +103,7 @@
 
 <script>
 import SideBar from '../components/SideBar.vue';
+import PromoCard from '../components/PromoCard.vue';
 import Settings from '../components/Settings.vue';
 import Vue from 'vue';
 
@@ -222,7 +226,7 @@ async function cleanupThumbnailCache(entries) {
 
 export default Vue.extend({
   name: 'Home',
-  components: { SideBar, Settings },
+  components: { SideBar, PromoCard, Settings },
   data() {
     return {
       items: [],
@@ -567,6 +571,14 @@ body {
   display: flex;
   flex-direction: column;
   max-width: calc(100vw - 240px)
+}
+
+.sidebar-footer {
+  margin-top: auto;
+}
+
+.sidebar-promo {
+  margin: 0 0.75rem 0.75rem;
 }
 </style>
 
