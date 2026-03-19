@@ -1,4 +1,57 @@
 const { spawnSync } = require('child_process');
+const IRACING_PROCESS_NAME = 'iRacingSim64DX11';
+
+function getIracingWindowDetails() {
+  const script = `
+$ErrorActionPreference = 'Stop'
+
+$process = Get-Process -Name '${IRACING_PROCESS_NAME}' -ErrorAction SilentlyContinue |
+  Where-Object { $_.MainWindowHandle -ne 0 } |
+  Select-Object -First 1
+
+if (-not $process) {
+  exit 0
+}
+
+[pscustomobject]@{
+  handle = [string]([int64]$process.MainWindowHandle)
+  title = [string]$process.MainWindowTitle
+} | ConvertTo-Json -Compress
+`;
+
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
+
+  if (result.status !== 0) {
+    if (result.stderr) {
+      console.error(result.stderr.trim());
+    }
+
+    return undefined;
+  }
+
+  const output = result.stdout.trim();
+  if (!output) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(output);
+    if (!parsed || !parsed.handle) {
+      return undefined;
+    }
+
+    return {
+      handle: String(parsed.handle),
+      title: String(parsed.title || '')
+    };
+  } catch (error) {
+    console.error(error);
+    return undefined;
+  }
+}
 
 function resizeIracingWindow(width, height, left, top) {
   const script = `
@@ -28,7 +81,7 @@ public static class Win32 {
 }
 "@
 
-$process = Get-Process -Name 'iRacingSim64DX11' -ErrorAction SilentlyContinue |
+$process = Get-Process -Name '${IRACING_PROCESS_NAME}' -ErrorAction SilentlyContinue |
   Where-Object { $_.MainWindowHandle -ne 0 } |
   Select-Object -First 1
 
@@ -71,5 +124,6 @@ Write-Output ([int64]$window)
 }
 
 module.exports = {
-  resizeIracingWindow
+  resizeIracingWindow,
+  getIracingWindowDetails
 };

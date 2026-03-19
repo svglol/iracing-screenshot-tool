@@ -7,7 +7,7 @@ const loadIniFile = require('read-ini-file');
 const path = require('path');
 
 const irsdk = require('./iracing-sdk');
-const { resizeIracingWindow } = require('./window-utils');
+const { resizeIracingWindow, getIracingWindowDetails } = require('./window-utils');
 
 let width;
 let height;
@@ -255,15 +255,37 @@ ipcMain.handle('dialog:showOpen', (event, options) => {
   return dialog.showOpenDialog(browserWindow || undefined, options);
 });
 ipcMain.handle('desktop-capturer:get-source-id', async (event, windowHandle) => {
-  const targetId = String(windowHandle || '');
+  const requestedHandle = normalizeWindowHandle(windowHandle);
+  const currentWindow = getIracingWindowDetails();
+  const currentHandle = normalizeWindowHandle(currentWindow?.handle);
   const sources = await desktopCapturer.getSources({
     types: ['window'],
     thumbnailSize: { width: 0, height: 0 },
     fetchWindowIcons: false
   });
 
-  const match = sources.find((source) => source.id.startsWith('window:' + targetId + ':'));
-  return match ? match.id : null;
+  const handleMatch = findSourceByWindowHandles(sources, [requestedHandle, currentHandle]);
+  if (handleMatch) {
+    if (requestedHandle && currentHandle && requestedHandle !== currentHandle) {
+      console.log(`Desktop capture source matched refreshed handle ${currentHandle} instead of ${requestedHandle}`);
+    }
+
+    return handleMatch.id;
+  }
+
+  const titleMatch = findSourceByWindowTitle(sources, currentWindow?.title);
+  if (titleMatch) {
+    console.log(`Desktop capture source matched fallback title "${currentWindow?.title}"`);
+    return titleMatch.id;
+  }
+
+  const processFallbackMatch = findSourceByKnownIracingTitle(sources);
+  if (processFallbackMatch) {
+    console.log(`Desktop capture source matched known iRacing title "${processFallbackMatch.name}"`);
+    return processFallbackMatch.id;
+  }
+
+  return null;
 });
 
 ipcMain.on('window-control', (event, action) => {
@@ -771,6 +793,61 @@ function parseCameraState(iracingCameraState = []) {
   if (!iracingCameraState.includes('CamToolActive')) {
     cameraState += 4;
   }
+}
+
+function normalizeWindowHandle(windowHandle) {
+  return String(windowHandle || '').trim();
+}
+
+function normalizeWindowTitle(title) {
+  return String(title || '').trim().toLowerCase();
+}
+
+function isExternalWindowSource(source = {}) {
+  return typeof source.id === 'string' && source.id.startsWith('window:') && source.id.endsWith(':0');
+}
+
+function findSourceByWindowHandles(sources = [], handles = []) {
+  const candidates = [...new Set(handles.filter(Boolean))];
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return (
+    sources.find((source) => candidates.some((handle) => source.id.startsWith(`window:${handle}:`))) ||
+    null
+  );
+}
+
+function findSourceByWindowTitle(sources = [], title = '') {
+  const normalizedTitle = normalizeWindowTitle(title);
+  if (!normalizedTitle) {
+    return null;
+  }
+
+  const externalSources = sources.filter(isExternalWindowSource);
+
+  return (
+    externalSources.find((source) => normalizeWindowTitle(source.name) === normalizedTitle) ||
+    externalSources.find((source) => {
+      const sourceTitle = normalizeWindowTitle(source.name);
+      return sourceTitle && (normalizedTitle.includes(sourceTitle) || sourceTitle.includes(normalizedTitle));
+    }) ||
+    null
+  );
+}
+
+function findSourceByKnownIracingTitle(sources = []) {
+  const fallbackTitles = ['iracing.com simulator', 'iracing simulator'];
+  const externalSources = sources.filter(isExternalWindowSource);
+
+  return (
+    externalSources.find((source) => {
+      const sourceTitle = normalizeWindowTitle(source.name);
+      return fallbackTitles.some((title) => sourceTitle.includes(title));
+    }) ||
+    null
+  );
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
