@@ -73,12 +73,43 @@ function getThumbnailPath(fileName) {
   return path.join(getCacheDir(), `${fileName}.webp`);
 }
 
+function normalizeComparePath(filePath) {
+  return path.resolve(filePath).toLowerCase();
+}
+
 function sanitizeFilePart(value, fallback) {
   const sanitized = String(value || '')
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
     .trim();
 
   return sanitized || fallback;
+}
+
+async function removeFileWithRetries(filePath, attempts = 8, intervalMs = 250) {
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      await fs.promises.unlink(filePath);
+      return;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return;
+      }
+
+      if (index === attempts - 1) {
+        throw error;
+      }
+
+      await delay(intervalMs);
+    }
+  }
+}
+
+async function cleanupReshadeSourceFile(sourceFile, destinationFile) {
+  if (normalizeComparePath(sourceFile) === normalizeComparePath(destinationFile)) {
+    return;
+  }
+
+  await removeFileWithRetries(sourceFile);
 }
 
 async function createThumbnail(fileName, fileKey) {
@@ -145,6 +176,7 @@ async function saveReshadeImage(sourceFile) {
       await image.toFile(fileName);
     }
 
+    await cleanupReshadeSourceFile(sourceFile, fileName);
     await createThumbnail(fileName, fileKey);
     ipcRenderer.send('screenshot-response', fileName);
     if (global.gc) {

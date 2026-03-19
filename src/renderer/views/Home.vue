@@ -71,7 +71,7 @@
             <figure class="al image" :draggable="false">
               <img
                 :draggable="false"
-                v-lazy="items[i].thumb"
+                v-lazy="getViewerImageUrl(items[i], i)"
                 style="max-height: calc(100vh - 41px - 24px - 95px); object-fit: contain;padding:1rem"
                 @contextmenu.prevent.stop="handleClick($event, items[i])"
               >
@@ -259,6 +259,13 @@ export default Vue.extend({
   methods: {
     getImageUrl(item) {
       return item ? item.thumb : EMPTY_IMAGE;
+    },
+    getViewerImageUrl(item, index) {
+      if (!item) {
+        return EMPTY_IMAGE;
+      }
+
+      return index === this.selected ? item.file : item.thumb;
     },
     screenshot(data) {
       ipcRenderer.send('resize-screenshot', data);

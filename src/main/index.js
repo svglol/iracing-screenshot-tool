@@ -4,6 +4,7 @@ const remoteMain = require('@electron/remote/main');
 const { app, BrowserWindow, screen, globalShortcut, Menu, ipcMain, dialog, desktopCapturer } = require('electron');
 const fs = require('fs');
 const loadIniFile = require('read-ini-file');
+const os = require('os');
 const path = require('path');
 
 const irsdk = require('./iracing-sdk');
@@ -20,6 +21,7 @@ let mainWindow;
 let workerWindow;
 let workerReady = false;
 let cancelReshadeWait = null;
+const knownUserProfileFolders = new Set(['desktop', 'documents', 'downloads', 'music', 'pictures', 'videos']);
 
 app.name = productName;
 app.commandLine.appendSwitch('js-flags', '--expose_gc');
@@ -418,10 +420,13 @@ app.on('ready', async () => {
       return;
     }
 
+    let reshadeLocation = null;
+
     try {
-      const reshadeIni = loadIniFile.sync(config.get('reshadeFile'));
-      const folder = getReshadeScreenshotFolder(reshadeIni);
-      const reshadeFile = await waitForReshadeScreenshot(folder);
+      const reshadeIniPath = config.get('reshadeFile');
+      const reshadeIni = loadIniFile.sync(reshadeIniPath);
+      reshadeLocation = getReshadeScreenshotFolder(reshadeIni, reshadeIniPath);
+      const reshadeFile = await waitForReshadeScreenshot(reshadeLocation.folder);
 
       restoreScreenshotState();
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
@@ -433,7 +438,9 @@ app.on('ready', async () => {
         context: 'resize-screenshot:reshade',
         meta: {
           request: data,
-          reshadeFile: config.get('reshadeFile')
+          reshadeFile: config.get('reshadeFile'),
+          ...(reshadeLocation || {}),
+          ...(error && error.meta ? error.meta : {})
         }
       });
     }
@@ -548,14 +555,104 @@ function restoreScreenshotState() {
   takingScreenshot = false;
 }
 
-function getReshadeScreenshotFolder(reshadeIni = {}) {
-  const folder = reshadeIni.SCREENSHOT?.SavePath || reshadeIni.GENERAL?.ScreenshotPath;
+function createReshadeConfigError(message, meta = {}) {
+  const error = new Error(message);
+  error.meta = meta;
+  return error;
+}
 
-  if (!folder) {
-    throw new Error('Unable to determine the ReShade screenshot folder');
+function trimWrappedQuotes(value = '') {
+  return String(value).trim().replace(/^"(.*)"$/, '$1');
+}
+
+function expandWindowsEnvironmentVariables(value = '') {
+  return String(value).replace(/%([^%]+)%/g, (match, name) => {
+    const envValue = process.env[name];
+    return typeof envValue === 'string' && envValue.length > 0 ? envValue : match;
+  });
+}
+
+function normalizeComparableWindowsPath(value = '') {
+  return path.win32.normalize(String(value || '')).replace(/[\\\/]+$/, '').toLowerCase();
+}
+
+function getWindowsUserProfileRoot(value = '') {
+  const match = String(value || '').match(/^[a-z]:\\users\\[^\\]+/i);
+  return match ? match[0] : '';
+}
+
+function resolveReshadeBasePath(reshadeIni = {}, reshadeIniPath = '') {
+  const iniDir = reshadeIniPath ? path.dirname(reshadeIniPath) : process.cwd();
+  const rawBasePath = trimWrappedQuotes(expandWindowsEnvironmentVariables(reshadeIni.INSTALL?.BasePath || ''));
+
+  if (!rawBasePath) {
+    return iniDir;
   }
 
-  return path.resolve(folder);
+  return path.win32.isAbsolute(rawBasePath)
+    ? path.win32.normalize(rawBasePath)
+    : path.win32.resolve(iniDir, rawBasePath);
+}
+
+function remapForeignUserProfileFolder(folder) {
+  const normalizedFolder = path.win32.normalize(folder);
+  const currentProfileRoot = getWindowsUserProfileRoot(path.win32.resolve(os.homedir()));
+  const targetProfileRoot = getWindowsUserProfileRoot(normalizedFolder);
+
+  if (!currentProfileRoot || !targetProfileRoot) {
+    return {
+      folder: normalizedFolder,
+      remappedFrom: ''
+    };
+  }
+
+  if (normalizeComparableWindowsPath(currentProfileRoot) === normalizeComparableWindowsPath(targetProfileRoot)) {
+    return {
+      folder: normalizedFolder,
+      remappedFrom: ''
+    };
+  }
+
+  const relativePath = path.win32.relative(targetProfileRoot, normalizedFolder);
+  const [topLevelFolder] = relativePath.split(/[\\\/]+/);
+
+  if (!relativePath || relativePath.startsWith('..') || !knownUserProfileFolders.has(String(topLevelFolder || '').toLowerCase())) {
+    return {
+      folder: normalizedFolder,
+      remappedFrom: ''
+    };
+  }
+
+  return {
+    folder: path.win32.join(currentProfileRoot, relativePath),
+    remappedFrom: normalizedFolder
+  };
+}
+
+function getReshadeScreenshotFolder(reshadeIni = {}, reshadeIniPath = '') {
+  const rawFolder = reshadeIni.SCREENSHOT?.SavePath || reshadeIni.GENERAL?.ScreenshotPath;
+
+  if (!rawFolder) {
+    throw createReshadeConfigError('Unable to determine the ReShade screenshot folder');
+  }
+
+  const expandedFolder = trimWrappedQuotes(expandWindowsEnvironmentVariables(rawFolder));
+  const basePath = resolveReshadeBasePath(reshadeIni, reshadeIniPath);
+  const resolvedFolder = path.win32.isAbsolute(expandedFolder)
+    ? path.win32.normalize(expandedFolder)
+    : path.win32.resolve(basePath, expandedFolder);
+  const { folder, remappedFrom } = remapForeignUserProfileFolder(resolvedFolder);
+
+  if (remappedFrom) {
+    console.log(`ReShade screenshot folder remapped from "${remappedFrom}" to "${folder}"`);
+  }
+
+  return {
+    folder,
+    rawFolder,
+    basePath,
+    remappedFrom
+  };
 }
 
 function normalizeFileKey(filePath) {
