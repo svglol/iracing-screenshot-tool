@@ -9,6 +9,15 @@ const path = require('path');
 
 const irsdk = require('./iracing-sdk');
 const { resizeIracingWindow, getIracingWindowDetails } = require('./window-utils');
+const {
+  normalizeWindowHandle,
+  normalizeWindowTitle,
+  normalizeCaptureBounds,
+  findSourceByWindowHandles,
+  findSourceByWindowTitle,
+  findSourceByKnownIracingTitle,
+  findDisplaySourceByDisplayId
+} = require('../utilities/desktop-capture');
 
 let width;
 let height;
@@ -71,6 +80,154 @@ function broadcastToWindows(channel, ...args) {
   });
 }
 
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergePlainObjects(...objects) {
+  return objects.reduce((result, value) => {
+    if (!isPlainObject(value)) {
+      return result;
+    }
+
+    Object.entries(value).forEach(([key, entryValue]) => {
+      if (isPlainObject(entryValue) && isPlainObject(result[key])) {
+        result[key] = mergePlainObjects(result[key], entryValue);
+        return;
+      }
+
+      if (isPlainObject(entryValue)) {
+        result[key] = mergePlainObjects(entryValue);
+        return;
+      }
+
+      if (Array.isArray(entryValue)) {
+        result[key] = entryValue.slice();
+        return;
+      }
+
+      result[key] = entryValue;
+    });
+
+    return result;
+  }, {});
+}
+
+function serializeBounds(bounds) {
+  return normalizeCaptureBounds(bounds);
+}
+
+function serializeDisplay(display) {
+  if (!display || typeof display !== 'object') {
+    return null;
+  }
+
+  return {
+    id: display.id,
+    label: String(display.label || ''),
+    bounds: serializeBounds(display.bounds),
+    workArea: serializeBounds(display.workArea),
+    scaleFactor: Number(display.scaleFactor || 0),
+    rotation: Number(display.rotation || 0),
+    internal: Boolean(display.internal),
+    touchSupport: String(display.touchSupport || 'unknown')
+  };
+}
+
+function summarizeDesktopSource(source) {
+  return {
+    id: String(source?.id || ''),
+    name: String(source?.name || ''),
+    display_id: String(source?.display_id || '')
+  };
+}
+
+function summarizeDesktopSources(sources = [], limit = 10) {
+  return sources.slice(0, limit).map(summarizeDesktopSource);
+}
+
+function getConfigDiagnosticValue(key) {
+  if (!config) {
+    return undefined;
+  }
+
+  try {
+    return config.get(key);
+  } catch (error) {
+    return `[config read failed: ${error.message}]`;
+  }
+}
+
+function buildMainScreenshotDiagnostics() {
+  const cpus = os.cpus() || [];
+  const displays = screen.getAllDisplays().map(serializeDisplay);
+
+  return {
+    app: {
+      productName,
+      version: app.getVersion(),
+      isPackaged: app.isPackaged,
+      processType: process.type || 'browser',
+      electron: String(process.versions.electron || ''),
+      chrome: String(process.versions.chrome || ''),
+      node: String(process.versions.node || ''),
+      v8: String(process.versions.v8 || ''),
+      exePath: app.getPath('exe'),
+      appPath: app.getAppPath(),
+      userDataPath: app.getPath('userData')
+    },
+    system: {
+      platform: process.platform,
+      arch: process.arch,
+      release: os.release(),
+      version: typeof os.version === 'function' ? os.version() : '',
+      hostname: os.hostname(),
+      totalMemory: os.totalmem(),
+      freeMemory: os.freemem(),
+      cpuModel: String(cpus[0]?.model || ''),
+      cpuCount: cpus.length,
+      uptimeSeconds: Math.round(os.uptime()),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      locale: typeof app.getLocale === 'function' ? app.getLocale() : ''
+    },
+    displays: {
+      count: displays.length,
+      primary: serializeDisplay(screen.getPrimaryDisplay()),
+      all: displays
+    },
+    screenshot: {
+      takingScreenshot,
+      workerReady,
+      activeCaptureArea: { width, height, left, top },
+      config: {
+        crop: getConfigDiagnosticValue('crop'),
+        reshade: getConfigDiagnosticValue('reshade'),
+        screenshotFolder: getConfigDiagnosticValue('screenshotFolder'),
+        reshadeFile: getConfigDiagnosticValue('reshadeFile'),
+        defaultScreenWidth: getConfigDiagnosticValue('defaultScreenWidth'),
+        defaultScreenHeight: getConfigDiagnosticValue('defaultScreenHeight'),
+        defaultScreenLeft: getConfigDiagnosticValue('defaultScreenLeft'),
+        defaultScreenTop: getConfigDiagnosticValue('defaultScreenTop')
+      },
+      iracing: {
+        telemetryReady: Boolean(iracing.telemetry),
+        sessionInfoReady: Boolean(iracing.sessionInfo),
+        window: getIracingWindowDetails() || null
+      }
+    }
+  };
+}
+
+function getMainScreenshotDiagnostics() {
+  try {
+    return buildMainScreenshotDiagnostics();
+  } catch (error) {
+    return {
+      diagnosticsError: error.message || String(error)
+    };
+  }
+}
+
 function createScreenshotErrorPayload(errorLike, defaults = {}) {
   const payload =
     errorLike &&
@@ -86,10 +243,8 @@ function createScreenshotErrorPayload(errorLike, defaults = {}) {
       stack: String(payload.stack || defaults.stack || ''),
       source: String(payload.source || defaults.source || 'main'),
       context: String(payload.context || defaults.context || ''),
-      meta:
-        payload.meta && typeof payload.meta === 'object' && !Array.isArray(payload.meta)
-          ? payload.meta
-          : defaults.meta || {}
+      meta: mergePlainObjects(defaults.meta, payload.meta),
+      diagnostics: mergePlainObjects(defaults.diagnostics, payload.diagnostics)
     };
   }
 
@@ -101,7 +256,8 @@ function createScreenshotErrorPayload(errorLike, defaults = {}) {
     stack: String(error.stack || ''),
     source: String(defaults.source || 'main'),
     context: String(defaults.context || ''),
-    meta: defaults.meta || {}
+    meta: mergePlainObjects(defaults.meta),
+    diagnostics: mergePlainObjects(defaults.diagnostics)
   };
 }
 
@@ -125,6 +281,11 @@ function writeScreenshotErrorLog(payload) {
     lines.push(JSON.stringify(payload.meta, null, 2));
   }
 
+  if (payload.diagnostics && Object.keys(payload.diagnostics).length > 0) {
+    lines.push('Diagnostics:');
+    lines.push(JSON.stringify(payload.diagnostics, null, 2));
+  }
+
   if (payload.stack) {
     lines.push('Stack:');
     lines.push(payload.stack);
@@ -137,7 +298,12 @@ function writeScreenshotErrorLog(payload) {
 }
 
 function reportScreenshotError(errorLike, defaults = {}) {
-  const payload = createScreenshotErrorPayload(errorLike, defaults);
+  const payload = createScreenshotErrorPayload(errorLike, {
+    ...defaults,
+    diagnostics: mergePlainObjects(defaults.diagnostics, {
+      main: getMainScreenshotDiagnostics()
+    })
+  });
   const logFile = writeScreenshotErrorLog(payload);
   const rendererPayload = { ...payload, logFile };
 
@@ -256,38 +422,121 @@ ipcMain.handle('dialog:showOpen', (event, options) => {
   const browserWindow = BrowserWindow.fromWebContents(event.sender);
   return dialog.showOpenDialog(browserWindow || undefined, options);
 });
-ipcMain.handle('desktop-capturer:get-source-id', async (event, windowHandle) => {
-  const requestedHandle = normalizeWindowHandle(windowHandle);
+ipcMain.handle('desktop-capturer:get-source-id', async (event, request) => {
+  const captureRequest =
+    request && typeof request === 'object' && !Array.isArray(request) ? request : { windowID: request };
+  const requestedHandle = normalizeWindowHandle(captureRequest.windowID);
+  const requestedBounds = normalizeCaptureBounds(captureRequest.captureBounds);
   const currentWindow = getIracingWindowDetails();
   const currentHandle = normalizeWindowHandle(currentWindow?.handle);
-  const sources = await desktopCapturer.getSources({
+  const windowSources = await desktopCapturer.getSources({
     types: ['window'],
     thumbnailSize: { width: 0, height: 0 },
     fetchWindowIcons: false
   });
+  const captureDiagnostics = {
+    requestedHandle,
+    requestedBounds,
+    currentWindow: currentWindow || null,
+    availableWindowSourceCount: windowSources.length,
+    iracingLikeWindowSources: summarizeDesktopSources(
+      windowSources.filter((source) => normalizeWindowTitle(source.name).includes('iracing'))
+    )
+  };
 
-  const handleMatch = findSourceByWindowHandles(sources, [requestedHandle, currentHandle]);
+  const handleMatch = findSourceByWindowHandles(windowSources, [requestedHandle, currentHandle]);
   if (handleMatch) {
     if (requestedHandle && currentHandle && requestedHandle !== currentHandle) {
       console.log(`Desktop capture source matched refreshed handle ${currentHandle} instead of ${requestedHandle}`);
     }
 
-    return handleMatch.id;
+    return {
+      id: handleMatch.id,
+      kind: 'window',
+      diagnostics: mergePlainObjects(captureDiagnostics, {
+        matchedSource: summarizeDesktopSource(handleMatch),
+        matchStrategy: 'window-handle'
+      })
+    };
   }
 
-  const titleMatch = findSourceByWindowTitle(sources, currentWindow?.title);
+  const titleMatch = findSourceByWindowTitle(windowSources, currentWindow?.title);
   if (titleMatch) {
     console.log(`Desktop capture source matched fallback title "${currentWindow?.title}"`);
-    return titleMatch.id;
+    return {
+      id: titleMatch.id,
+      kind: 'window',
+      diagnostics: mergePlainObjects(captureDiagnostics, {
+        matchedSource: summarizeDesktopSource(titleMatch),
+        matchStrategy: 'window-title'
+      })
+    };
   }
 
-  const processFallbackMatch = findSourceByKnownIracingTitle(sources);
+  const processFallbackMatch = findSourceByKnownIracingTitle(windowSources);
   if (processFallbackMatch) {
     console.log(`Desktop capture source matched known iRacing title "${processFallbackMatch.name}"`);
-    return processFallbackMatch.id;
+    return {
+      id: processFallbackMatch.id,
+      kind: 'window',
+      diagnostics: mergePlainObjects(captureDiagnostics, {
+        matchedSource: summarizeDesktopSource(processFallbackMatch),
+        matchStrategy: 'known-iracing-title'
+      })
+    };
   }
 
-  return null;
+  if (requestedBounds) {
+    const matchedDisplay = screen.getDisplayMatching(requestedBounds);
+    const screenSources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 0, height: 0 }
+    });
+    const displayMatch = findDisplaySourceByDisplayId(screenSources, matchedDisplay?.id);
+    const displayDiagnostics = {
+      matchedDisplay: serializeDisplay(matchedDisplay),
+      availableScreenSourceCount: screenSources.length,
+      screenSources: summarizeDesktopSources(screenSources)
+    };
+
+    if (displayMatch && matchedDisplay) {
+      console.log(
+        `Desktop capture source matched display ${matchedDisplay.id} for window ${requestedHandle || currentHandle || 'unknown'}`
+      );
+
+      return {
+        id: displayMatch.id,
+        kind: 'display',
+        captureBounds: requestedBounds,
+        displayBounds: {
+          x: matchedDisplay.bounds.x,
+          y: matchedDisplay.bounds.y,
+          width: matchedDisplay.bounds.width,
+          height: matchedDisplay.bounds.height
+        },
+        diagnostics: mergePlainObjects(captureDiagnostics, displayDiagnostics, {
+          matchedSource: summarizeDesktopSource(displayMatch),
+          matchStrategy: 'display-fallback'
+        })
+      };
+    }
+
+    return {
+      id: '',
+      kind: 'window',
+      diagnostics: mergePlainObjects(captureDiagnostics, displayDiagnostics, {
+        matchStrategy: 'not-found'
+      })
+    };
+  }
+
+  return {
+    id: '',
+    kind: 'window',
+    diagnostics: mergePlainObjects(captureDiagnostics, {
+      matchStrategy: 'not-found'
+    })
+  };
 });
 
 ipcMain.on('window-control', (event, action) => {
@@ -415,7 +664,13 @@ app.on('ready', async () => {
         width: data.width,
         height: data.height,
         crop: data.crop,
-        windowID: id
+        windowID: id,
+        captureBounds: {
+          x: left,
+          y: top,
+          width: data.width,
+          height: data.height
+        }
       });
       return;
     }
@@ -890,61 +1145,6 @@ function parseCameraState(iracingCameraState = []) {
   if (!iracingCameraState.includes('CamToolActive')) {
     cameraState += 4;
   }
-}
-
-function normalizeWindowHandle(windowHandle) {
-  return String(windowHandle || '').trim();
-}
-
-function normalizeWindowTitle(title) {
-  return String(title || '').trim().toLowerCase();
-}
-
-function isExternalWindowSource(source = {}) {
-  return typeof source.id === 'string' && source.id.startsWith('window:') && source.id.endsWith(':0');
-}
-
-function findSourceByWindowHandles(sources = [], handles = []) {
-  const candidates = [...new Set(handles.filter(Boolean))];
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  return (
-    sources.find((source) => candidates.some((handle) => source.id.startsWith(`window:${handle}:`))) ||
-    null
-  );
-}
-
-function findSourceByWindowTitle(sources = [], title = '') {
-  const normalizedTitle = normalizeWindowTitle(title);
-  if (!normalizedTitle) {
-    return null;
-  }
-
-  const externalSources = sources.filter(isExternalWindowSource);
-
-  return (
-    externalSources.find((source) => normalizeWindowTitle(source.name) === normalizedTitle) ||
-    externalSources.find((source) => {
-      const sourceTitle = normalizeWindowTitle(source.name);
-      return sourceTitle && (normalizedTitle.includes(sourceTitle) || sourceTitle.includes(normalizedTitle));
-    }) ||
-    null
-  );
-}
-
-function findSourceByKnownIracingTitle(sources = []) {
-  const fallbackTitles = ['iracing.com simulator', 'iracing simulator'];
-  const externalSources = sources.filter(isExternalWindowSource);
-
-  return (
-    externalSources.find((source) => {
-      const sourceTitle = normalizeWindowTitle(source.name);
-      return fallbackTitles.some((title) => sourceTitle.includes(title));
-    }) ||
-    null
-  );
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,7 +1,7 @@
 {
     "name": "iracing-screenshot-tool",
     "productName": "iRacing Screenshot Tool",
-    "version": "2.0.3",
+    "version": "2.0.4",
     "description": "A tool for taking high resolution screenshots in iRacing",
     "repository": "AlessandroRomanelli/iracing-screenshot-tool",
     "author": {
@@ -28,6 +28,9 @@
                 "portable"
             ],
             "signAndEditExecutable": false
+        },
+        "nsis": {
+            "include": "_scripts/installer.nsh"
         },
         "electronDist": "node_modules/electron/dist"
     },
@@ -110,6 +113,8 @@
     },
     "scripts": {
         "build": "run-s rebuild:electron pack build:dir",
+        "build:dev": "run-s rebuild:electron pack build:dev:dir",
+        "build:dev:dir": "node _scripts/build-dev.js --dir",
         "build-publish": "run-s rebuild:electron pack && electron-builder --publish always",
         "debug": "run-s rebuild:electron debug-runner",
         "debug-runner": "node _scripts/dev-runner.js --remote-debug",

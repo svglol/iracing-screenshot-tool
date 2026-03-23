@@ -7,6 +7,11 @@ const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const {
+  normalizeCaptureBounds,
+  normalizeCaptureTarget,
+  resolveDisplayCaptureRect
+} = require('../../utilities/desktop-capture');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const config = require('../../utilities/config');
@@ -15,6 +20,71 @@ let sessionInfo = null;
 let telemetry = null;
 let windowID = null;
 let crop = false;
+let captureBounds = null;
+let captureTargetDiagnostics = null;
+
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergePlainObjects(...objects) {
+  return objects.reduce((result, value) => {
+    if (!isPlainObject(value)) {
+      return result;
+    }
+
+    Object.entries(value).forEach(([key, entryValue]) => {
+      if (isPlainObject(entryValue) && isPlainObject(result[key])) {
+        result[key] = mergePlainObjects(result[key], entryValue);
+        return;
+      }
+
+      if (isPlainObject(entryValue)) {
+        result[key] = mergePlainObjects(entryValue);
+        return;
+      }
+
+      if (Array.isArray(entryValue)) {
+        result[key] = entryValue.slice();
+        return;
+      }
+
+      result[key] = entryValue;
+    });
+
+    return result;
+  }, {});
+}
+
+function getWorkerScreenshotDiagnostics() {
+  return {
+    worker: {
+      processType: process.type || 'renderer',
+      electron: String(process.versions.electron || ''),
+      chrome: String(process.versions.chrome || ''),
+      node: String(process.versions.node || ''),
+      v8: String(process.versions.v8 || ''),
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      languages: Array.isArray(navigator.languages) ? navigator.languages.slice(0, 10) : [],
+      hardwareConcurrency: navigator.hardwareConcurrency || 0,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      screen: {
+        width: window.screen.width,
+        height: window.screen.height,
+        availWidth: window.screen.availWidth,
+        availHeight: window.screen.availHeight
+      },
+      captureState: {
+        windowID,
+        crop,
+        captureBounds,
+        captureTargetDiagnostics
+      }
+    }
+  };
+}
 
 function createScreenshotErrorPayload(errorLike, context, meta = {}) {
   if (
@@ -28,7 +98,8 @@ function createScreenshotErrorPayload(errorLike, context, meta = {}) {
       stack: String(errorLike.stack || ''),
       source: 'worker',
       context,
-      meta
+      meta,
+      diagnostics: mergePlainObjects(getWorkerScreenshotDiagnostics(), errorLike.diagnostics)
     };
   }
 
@@ -40,7 +111,8 @@ function createScreenshotErrorPayload(errorLike, context, meta = {}) {
     stack: String(error.stack || ''),
     source: 'worker',
     context,
-    meta
+    meta,
+    diagnostics: getWorkerScreenshotDiagnostics()
   };
 }
 
@@ -230,37 +302,58 @@ async function fullscreenScreenshot(callback) {
     let video = document.createElement('video');
 
     video.addEventListener('loadedmetadata', async function () {
-      video.style.height = this.videoHeight + 'px';
-      video.style.width = this.videoWidth + 'px';
-
-      video.play();
-      video.pause();
-      ipcRenderer.send('screenshot-finished', '');
-
-      console.time('Create OffscreenCanvas');
-      const offscreen = crop
-        ? new OffscreenCanvas(this.videoWidth - 54, this.videoHeight - 30)
-        : new OffscreenCanvas(this.videoWidth, this.videoHeight);
-
-      const offctx = offscreen.getContext('2d', { alpha: false });
-      offctx.drawImage(video, 0, 0, this.videoWidth, this.videoHeight);
-
-      video.srcObject = null;
-      video.remove();
-
       try {
-        stream.getTracks().forEach((track) => track.stop());
-        video = null;
-      } catch (error) {
-        console.log(error);
-      }
+        video.style.height = this.videoHeight + 'px';
+        video.style.width = this.videoWidth + 'px';
 
-      console.timeEnd('Create OffscreenCanvas');
-      console.time('To Blob');
-      const blob = await offscreen.convertToBlob({ type: 'image/png' });
-      console.timeEnd('To Blob');
-      console.timeEnd('Draw Image');
-      callback(blob);
+        video.play();
+        video.pause();
+        ipcRenderer.send('screenshot-finished', '');
+
+        const captureTarget = normalizeCaptureTarget(stream.__captureTarget);
+        const captureRect = resolveDisplayCaptureRect(this.videoWidth, this.videoHeight, captureTarget);
+        const outputWidth = crop ? captureRect.width - 54 : captureRect.width;
+        const outputHeight = crop ? captureRect.height - 30 : captureRect.height;
+
+        if (outputWidth < 1 || outputHeight < 1) {
+          throw new Error(`Capture output is too small (${outputWidth}x${outputHeight})`);
+        }
+
+        console.time('Create OffscreenCanvas');
+        const offscreen = new OffscreenCanvas(outputWidth, outputHeight);
+
+        const offctx = offscreen.getContext('2d', { alpha: false });
+        offctx.drawImage(
+          video,
+          captureRect.x,
+          captureRect.y,
+          captureRect.width,
+          captureRect.height,
+          0,
+          0,
+          captureRect.width,
+          captureRect.height
+        );
+
+        console.timeEnd('Create OffscreenCanvas');
+        console.time('To Blob');
+        const blob = await offscreen.convertToBlob({ type: 'image/png' });
+        console.timeEnd('To Blob');
+        console.timeEnd('Draw Image');
+        callback(blob);
+      } catch (error) {
+        handleError(error);
+      } finally {
+        video.srcObject = null;
+        video.remove();
+
+        try {
+          stream.getTracks().forEach((track) => track.stop());
+          video = null;
+        } catch (error) {
+          console.log(error);
+        }
+      }
     });
 
     video.srcObject = stream;
@@ -269,7 +362,8 @@ async function fullscreenScreenshot(callback) {
   const handleError = (error) => {
     sendScreenshotError(error, 'fullscreen-capture', {
       windowID,
-      crop
+      crop,
+      captureBounds
     });
   };
 
@@ -278,13 +372,20 @@ async function fullscreenScreenshot(callback) {
   console.time('Get Media');
 
   try {
-    const sourceId = await ipcRenderer.invoke('desktop-capturer:get-source-id', windowID);
+    const captureTarget = normalizeCaptureTarget(
+      await ipcRenderer.invoke('desktop-capturer:get-source-id', {
+        windowID,
+        captureBounds
+      })
+    );
+    const sourceId = captureTarget.id;
+    captureTargetDiagnostics = captureTarget.diagnostics;
 
     if (!sourceId) {
       throw new Error('No desktop capture source found for window ' + windowID);
     }
 
-    console.log('Using capture source ' + sourceId);
+    console.log(`Using capture source ${sourceId}${captureTarget.kind === 'display' ? ' (display fallback)' : ''}`);
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -300,6 +401,7 @@ async function fullscreenScreenshot(callback) {
       }
     });
 
+    stream.__captureTarget = captureTarget;
     handleStream(stream);
   } catch (error) {
     handleError(error);
@@ -315,10 +417,13 @@ export default {
       console.time('Screenshot');
       windowID = input.windowID;
       crop = input.crop;
+      captureBounds = normalizeCaptureBounds(input.captureBounds);
+      captureTargetDiagnostics = null;
 
       if (windowID === undefined) {
         sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
-          request: input
+          request: input,
+          captureBounds
         });
         return;
       }
