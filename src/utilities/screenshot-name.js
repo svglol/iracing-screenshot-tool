@@ -3,9 +3,10 @@
 function sanitizeFilePart(value, fallback = '') {
   const sanitized = String(value || '')
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .replace(/\s*-\s*/g, '-')
     .trim();
 
-  return sanitized || fallback;
+  return (sanitized ? sanitized.replace(/\s+/g, '_') : '') || fallback;
 }
 
 function normalizeTrackPart(value) {
@@ -52,7 +53,7 @@ function buildTrackFilePart(weekendInfo = {}) {
   addTrackPart(parts, primaryTrackName);
   addTrackPart(parts, weekendInfo.TrackConfigName);
 
-  return parts.join(' - ') || 'Track';
+  return parts.join('-') || 'Track';
 }
 
 function buildScreenshotFileKey({ weekendInfo = {}, driverName = 'Driver', count = 0 } = {}) {

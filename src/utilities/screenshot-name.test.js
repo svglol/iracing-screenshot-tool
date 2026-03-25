@@ -8,7 +8,8 @@ const {
 
 describe('screenshot naming helpers', () => {
   test('sanitizes invalid filename characters', () => {
-    expect(sanitizeFilePart('Spa: Francorchamps*', 'Track')).toBe('Spa Francorchamps');
+    expect(sanitizeFilePart('Spa: Francorchamps*', 'Track')).toBe('Spa_Francorchamps');
+    expect(sanitizeFilePart('Okayama International Circuit - Short', 'Track')).toBe('Okayama_International_Circuit-Short');
     expect(sanitizeFilePart('', 'Track')).toBe('Track');
   });
 
@@ -19,7 +20,7 @@ describe('screenshot naming helpers', () => {
         TrackConfigName: 'Full Course',
         TrackDisplayShortName: 'VIR Full'
       })
-    ).toBe('Virginia International Raceway - Full Course');
+    ).toBe('Virginia_International_Raceway-Full_Course');
   });
 
   test('avoids repeating layout information that is already part of the display name', () => {
@@ -29,7 +30,7 @@ describe('screenshot naming helpers', () => {
         TrackConfigName: 'Short',
         TrackDisplayShortName: 'Okayama Short'
       })
-    ).toBe('Okayama International Circuit - Short');
+    ).toBe('Okayama_International_Circuit-Short');
   });
 
   test('falls back through available track fields', () => {
@@ -38,13 +39,13 @@ describe('screenshot naming helpers', () => {
         TrackName: 'Circuit de Spa-Francorchamps',
         TrackConfigName: 'Grand Prix'
       })
-    ).toBe('Circuit de Spa-Francorchamps - Grand Prix');
+    ).toBe('Circuit_de_Spa-Francorchamps-Grand_Prix');
 
     expect(
       buildTrackFilePart({
         TrackDisplayShortName: 'Monza Road'
       })
-    ).toBe('Monza Road');
+    ).toBe('Monza_Road');
   });
 
   test('builds the full screenshot key with driver and count', () => {
@@ -57,6 +58,6 @@ describe('screenshot naming helpers', () => {
         driverName: 'Max Verstappen',
         count: 2
       })
-    ).toBe('Circuit de Spa-Francorchamps - Grand Prix-Max Verstappen-2');
+    ).toBe('Circuit_de_Spa-Francorchamps-Grand_Prix-Max_Verstappen-2');
   });
 });
