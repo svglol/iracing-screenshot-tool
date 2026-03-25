@@ -12,6 +12,10 @@ const {
   normalizeCaptureTarget,
   resolveDisplayCaptureRect
 } = require('../../utilities/desktop-capture');
+const {
+  sanitizeFilePart,
+  buildScreenshotFileKey
+} = require('../../utilities/screenshot-name');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const config = require('../../utilities/config');
@@ -149,14 +153,6 @@ function normalizeComparePath(filePath) {
   return path.resolve(filePath).toLowerCase();
 }
 
-function sanitizeFilePart(value, fallback) {
-  const sanitized = String(value || '')
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-    .trim();
-
-  return sanitized || fallback;
-}
-
 async function removeFileWithRetries(filePath, attempts = 8, intervalMs = 250) {
   for (let index = 0; index < attempts; index += 1) {
     try {
@@ -197,8 +193,6 @@ function getFileNameString() {
   const drivers = driverInfo.Drivers || [];
   const driverCarIdx = driverInfo.DriverCarIdx;
   const cameraCarIdx = telemetry?.values?.CamCarIdx;
-
-  const trackName = sanitizeFilePart(weekendInfo.TrackDisplayShortName, 'Track');
   let driverName = 'Driver';
 
   if (weekendInfo.TeamRacing === 1) {
@@ -212,11 +206,11 @@ function getFileNameString() {
   ensureDirectory(getScreenshotDir());
 
   let count = 0;
-  let fileName = `${trackName}-${driverName}-${count}`;
+  let fileName = buildScreenshotFileKey({ weekendInfo, driverName, count });
 
   while (fs.existsSync(getScreenshotPath(fileName))) {
     count += 1;
-    fileName = `${trackName}-${driverName}-${count}`;
+    fileName = buildScreenshotFileKey({ weekendInfo, driverName, count });
   }
 
   return fileName;
