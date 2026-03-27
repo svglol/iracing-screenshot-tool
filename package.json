@@ -21,6 +21,12 @@
             "node_modules/**/*",
             "static/icon.*"
         ],
+        "extraResources": [
+            {
+                "from": "static/icon.png",
+                "to": "icon.png"
+            }
+        ],
         "win": {
             "icon": "static/icon.png",
             "target": [

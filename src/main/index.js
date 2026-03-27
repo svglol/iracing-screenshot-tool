@@ -1,7 +1,17 @@
-const { productName } = require('../../package.json');
+const { productName, build } = require('../../package.json');
 const { autoUpdater } = require('electron-updater');
 const remoteMain = require('@electron/remote/main');
-const { app, BrowserWindow, screen, globalShortcut, Menu, ipcMain, dialog, desktopCapturer } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  screen,
+  globalShortcut,
+  Menu,
+  ipcMain,
+  dialog,
+  desktopCapturer,
+  nativeImage
+} = require('electron');
 const fs = require('fs');
 const loadIniFile = require('read-ini-file');
 const os = require('os');
@@ -31,12 +41,23 @@ let workerWindow;
 let workerReady = false;
 let cancelReshadeWait = null;
 const knownUserProfileFolders = new Set(['desktop', 'documents', 'downloads', 'music', 'pictures', 'videos']);
+const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 
 app.name = productName;
 app.commandLine.appendSwitch('js-flags', '--expose_gc');
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
 
 remoteMain.initialize();
+
+function createWindowIcon() {
+  const iconPath = process.resourcesPath
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(__dirname, '..', 'static', 'icon.png');
+  const icon = nativeImage.createFromPath(iconPath);
+  return icon.isEmpty() ? undefined : icon;
+}
+
+const windowIcon = createWindowIcon();
 
 const gotTheLock = app.requestSingleInstanceLock();
 const isDev = process.env.NODE_ENV === 'development';
@@ -322,6 +343,7 @@ function reportScreenshotError(errorLike, defaults = {}) {
 function createWindow() {
   workerWindow = new BrowserWindow({
     show: isDev,
+    icon: windowIcon,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -358,6 +380,7 @@ function createWindow() {
     minHeight: 655,
     backgroundColor: '#252525',
     frame: false,
+    icon: windowIcon,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -565,6 +588,10 @@ ipcMain.on('window-control', (event, action) => {
 });
 
 app.on('ready', async () => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(appId);
+  }
+
   loadConfig();
   createWindow();
 
