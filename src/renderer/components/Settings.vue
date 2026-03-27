@@ -59,18 +59,41 @@
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
-import { version } from '../../../package.json';
-const { shell, remote } = require('electron');
-const app = remote.app;
+const { version, repository } = require('../../../package.json');
+
+const { shell, ipcRenderer } = require('electron');
 const fs = require('fs');
-const fetch = require('fetch');
-const changelogFile = app.getPath('userData') + '\\releases' + '.json';
+const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
+const changelogFile = userDataPath + '\\releases.json';
+const changelogApiUrl = `https://api.github.com/repos/${getRepositorySlug(repository)}/releases`;
 
 const config = require('../../utilities/config');
 
+function getRepositorySlug(repo) {
+  const fallback = 'AlessandroRomanelli/iracing-screenshot-tool';
+  const raw = typeof repo === 'string' ? repo : repo?.url;
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const slug = raw
+    .replace(/^git\+/, '')
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/^git@github\.com:/i, '')
+    .replace(/^github:/i, '')
+    .replace(/\.git$/i, '')
+    .replace(/^\/+/, '')
+    .trim();
+
+  return slug || fallback;
+}
+
 export default {
   components: {
-    HelpModal, SettingsModal, ChangelogModal
+    HelpModal,
+    SettingsModal,
+    ChangelogModal
   },
   data () {
     return {
@@ -81,32 +104,35 @@ export default {
     };
   },
   mounted () {
-    var firstTime = config.get('firstTime');
+    const firstTime = config.get('firstTime');
     if (firstTime) {
       this.showHelp = true;
       config.set('firstTime', false);
     }
 
-    var configVersion = config.get('version');
-    if (configVersion == '' || configVersion !== version) {
-      var ctx = this;
-      config.set('version', version);
-      fetch.fetchUrl('https://api.github.com/repos/svglol/iracing-screenshot-tool/releases', function (error, meta, body) {
-        var releases = JSON.parse(body.toString());
-        if (Array.isArray(releases)) {
-          fs.writeFileSync(changelogFile, body);
-          if (!firstTime) {
-            ctx.showChangelog = true;
-          }
-        }
-      });
-    } else {
-      config.set('version', version);
-    }
+    const configVersion = config.get('version');
+    const showChangelogOnLoad = configVersion !== '' && configVersion !== version && !firstTime;
+    config.set('version', version);
+    this.loadReleases(showChangelogOnLoad);
   },
   methods: {
+    async loadReleases (showChangelogOnLoad) {
+      try {
+        const response = await fetch(changelogApiUrl);
+        const body = await response.text();
+        const releases = JSON.parse(body);
+        if (Array.isArray(releases)) {
+          fs.writeFileSync(changelogFile, body);
+          if (showChangelogOnLoad) {
+            this.showChangelog = true;
+          }
+        }
+      } catch (error) {
+        console.log(error);
+      }
+    },
     openDiscord () {
-      shell.openItem('https://discord.gg/GX2kSgN');
+      shell.openExternal('https://discord.gg/GX2kSgN');
     }
   }
 };
@@ -115,8 +141,6 @@ export default {
 <style scoped>
 .settings{
   margin-top: auto;
-  /* padding: 1rem; */
-  /* background-color: rgba(0, 0, 0, 0.3); */
   margin-bottom: 1.5rem;
 }
 
@@ -149,5 +173,7 @@ export default {
 .toolbar li a:hover {
   opacity: 0.5;
 }
-
 </style>
+
+
+

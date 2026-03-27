@@ -1,4 +1,5 @@
 'use strict';
+const { ipcRenderer } = require('electron');
 const Store = require('electron-store');
 const homedir = require('os').homedir();
 const dir = homedir + '\\Pictures\\Screenshots\\';
@@ -82,4 +83,27 @@ const schema = {
   }
 };
 
-module.exports = new Store({ schema });
+if (process.type === 'renderer') {
+  module.exports = {
+    get(key) {
+      return ipcRenderer.sendSync('config:get', key);
+    },
+    set(key, value) {
+      ipcRenderer.sendSync('config:set', { key, value });
+    },
+    onDidChange(key, callback) {
+      const channel = `config:changed:${key}`;
+      const handler = (event, newValue, oldValue) => {
+        callback(newValue, oldValue);
+      };
+
+      ipcRenderer.on(channel, handler);
+
+      return () => {
+        ipcRenderer.removeListener(channel, handler);
+      };
+    }
+  };
+} else {
+  module.exports = new Store({ schema });
+}

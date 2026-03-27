@@ -1,0 +1,2 @@
+
+Skip checkForUpdates because application is not packed and dev update config is not forced

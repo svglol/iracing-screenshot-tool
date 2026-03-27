@@ -1,134 +1,132 @@
-process.env.NODE_ENV = 'development'
-// process.env.ELECTRON_ENABLE_LOGGING = true
+process.env.NODE_ENV = 'development';
 
-const chalk = require('chalk')
-const electron = require('electron')
-const webpack = require('webpack')
-const WebpackDevServer = require('webpack-dev-server')
-const kill = require('tree-kill')
+const chalk = require('chalk');
+const electron = require('electron');
+const webpack = require('webpack');
+const WebpackDevServer = require('webpack-dev-server');
+const kill = require('tree-kill');
+const path = require('path');
+const { spawn } = require('child_process');
 
-const path = require('path')
-const { spawn } = require('child_process')
+const mainConfig = require('./webpack.main.config');
+const rendererConfig = require('./webpack.renderer.config');
 
-const mainConfig = require('./webpack.main.config')
-const rendererConfig = require('./webpack.renderer.config')
-
-let electronProcess = null
-let manualRestart = null
-const remoteDebugging = process.argv.includes('--remote-debug')
+let electronProcess = null;
+let manualRestart = false;
+const remoteDebugging = process.argv.includes('--remote-debug');
 
 if (remoteDebugging) {
-  // disable dvtools open in electron
-  process.env.RENDERER_REMOTE_DEBUGGING = true
+  process.env.RENDERER_REMOTE_DEBUGGING = true;
 }
 
-async function killElectron(pid) {
+function killElectron(pid) {
   return new Promise((resolve, reject) => {
-    if (pid) {
-      kill(pid, (err) => {
-        if (err) reject(err)
-
-        resolve()
-      })
-    } else {
-      resolve()
+    if (!pid) {
+      resolve();
+      return;
     }
-  })
+
+    kill(pid, (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 async function restartElectron() {
-  console.log(chalk.gray('\nStarting electron...'))
+  console.log(chalk.gray('\nStarting electron...'));
 
-  const { pid } = electronProcess || {}
-  await killElectron(pid)
+  const { pid } = electronProcess || {};
+  await killElectron(pid);
 
-  electronProcess = spawn(electron, [
-    path.join(__dirname, '../dist/main.js'),
-    // '--enable-logging', // Enable to show logs from all electron processes
-    remoteDebugging ? '--inspect=9222' : '',
-    remoteDebugging ? '--remote-debugging-port=9223' : '',
-  ])
+  const args = [path.join(__dirname, '../dist/main.js')].filter(Boolean);
+
+  if (remoteDebugging) {
+    args.push('--inspect=9222', '--remote-debugging-port=9223');
+  }
+
+  electronProcess = spawn(electron, args);
 
   electronProcess.stdout.on('data', (data) => {
-    console.log(chalk.white(data.toString()))
-  })
+    console.log(chalk.white(data.toString()));
+  });
 
   electronProcess.stderr.on('data', (data) => {
-    console.error(chalk.red(data.toString()))
-  })
+    console.error(chalk.red(data.toString()));
+  });
 
-  electronProcess.on('exit', (code, signal) => {
-    if (!manualRestart) process.exit(0)
-  })
+  electronProcess.on('exit', () => {
+    if (!manualRestart) {
+      process.exit(0);
+    }
+  });
 }
 
 function startMain() {
-  const webpackSetup = webpack([mainConfig])
+  const webpackSetup = webpack([mainConfig]);
 
   webpackSetup.compilers.forEach((compiler) => {
-    const { name } = compiler
+    compiler.hooks.done.tap('done', async () => {
+      console.log(chalk.gray(`\nCompiled ${compiler.name} script!`));
 
-    switch (name) {
-      case 'workers':
-        compiler.hooks.afterEmit.tap('afterEmit', async () => {
-          console.log(chalk.gray(`\nCompiled ${name} script!`))
-          console.log(
-            chalk.gray(`\nWatching file changes for ${name} script...`)
-          )
-        })
-        break
-      case 'main':
-      default:
-        compiler.hooks.afterEmit.tap('afterEmit', async () => {
-          console.log(chalk.gray(`\nCompiled ${name} script!`))
+      manualRestart = true;
+      await restartElectron();
 
-          manualRestart = true
-          await restartElectron()
+      setTimeout(() => {
+        manualRestart = false;
+      }, 1500);
 
-          setTimeout(() => {
-            manualRestart = false
-          }, 2500)
-
-          console.log(
-            chalk.gray(`\nWatching file changes for ${name} script...`)
-          )
-        })
-        break
-    }
-  })
+      console.log(chalk.gray(`\nWatching file changes for ${compiler.name} script...`));
+    });
+  });
 
   webpackSetup.watch(
     {
-      aggregateTimeout: 500,
+      aggregateTimeout: 500
     },
     (err) => {
-      if (err) console.error(chalk.red(err))
+      if (err) {
+        console.error(chalk.red(err));
+      }
     }
-  )
+  );
 }
 
 function startRenderer(callback) {
-  const compiler = webpack(rendererConfig)
-  const { name } = compiler
+  const compiler = webpack(rendererConfig);
 
-  compiler.hooks.afterEmit.tap('afterEmit', () => {
-    console.log(chalk.gray(`\nCompiled ${name} script!`))
-    console.log(chalk.gray(`\nWatching file changes for ${name} script...`))
-  })
+  compiler.hooks.done.tap('done', () => {
+    console.log(chalk.gray(`\nCompiled ${compiler.name} script!`));
+    console.log(chalk.gray(`\nWatching file changes for ${compiler.name} script...`));
+  });
 
-  const server = new WebpackDevServer(compiler, {
-    contentBase: path.join(__dirname, '../'),
-    hot: true,
-    noInfo: true,
-    overlay: true,
-    clientLogLevel: 'warning',
-  })
+  const server = new WebpackDevServer(
+    {
+      port: 9080,
+      static: {
+        directory: path.join(__dirname, '../')
+      },
+      hot: true,
+      client: {
+        logging: 'warn',
+        overlay: true
+      }
+    },
+    compiler
+  );
 
-  server.listen(9080, '', (err) => {
-    if (err) console.error(chalk.red(err))
+  server.startCallback((err) => {
+    if (err) {
+      console.error(chalk.red(err));
+      return;
+    }
 
-    callback()
-  })
+    callback();
+  });
 }
 
-startRenderer(startMain)
+startRenderer(startMain);
