@@ -70,7 +70,7 @@ const changelogApiUrl = `https://api.github.com/repos/${getRepositorySlug(reposi
 const config = require('../../utilities/config');
 
 function getRepositorySlug(repo) {
-  const fallback = 'AlessandroRomanelli/iracing-screenshot-tool';
+  const fallback = 'svglol/iracing-screenshot-tool';
   const raw = typeof repo === 'string' ? repo : repo?.url;
 
   if (!raw) {
