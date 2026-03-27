@@ -22,3 +22,4 @@ __coverage__
 yarn.lock
 /dist
 /build
+.claude/
