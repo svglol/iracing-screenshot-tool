@@ -65,6 +65,10 @@ const schema = {
     type: 'number',
     default: 0
   },
+  manualWindowRestore: {
+    type: 'boolean',
+    default: false
+  },
   firstTime: {
     type: 'boolean',
     default: true

@@ -78,48 +78,54 @@
               <span
                 class="label"
                 style="margin-bottom:0px;"
-              >Monitor Size & Position</span>
-              <span class="description">Width and height to resize iRacing window to after taking screenshot. Useful for people using an Ultrawide or Nvidia Surround</span>
+              >Manual Window Restore</span>
+              <span class="description">Override the automatic window restore with custom position and size. Useful for people using an Ultrawide or Nvidia Surround</span>
             </div>
+            <b-switch
+              v-model="manualWindowRestore"
+              style="margin-left:auto"
+            />
           </b-field>
-          <div class="columns settings-grid">
-            <div class="column">
-              <b-field label="Left">
-                <b-input
-                  v-model="screenLeft"
-                  type="number"
-                />
-              </b-field>
+          <div v-if="manualWindowRestore">
+            <div class="columns settings-grid">
+              <div class="column">
+                <b-field label="Left">
+                  <b-input
+                    v-model="screenLeft"
+                    type="number"
+                  />
+                </b-field>
+              </div>
+              <div class="column">
+                <b-field label="Top">
+                  <b-input
+                    v-model="screenTop"
+                    type="number"
+                  />
+                </b-field>
+              </div>
             </div>
-            <div class="column">
-              <b-field label="Top">
-                <b-input
-                  v-model="screenTop"
-                  type="number"
-                />
-              </b-field>
-            </div>
-          </div>
-          <div class="columns settings-grid">
-            <div class="column">
-              <b-field label="Width">
-                <b-input
-                  v-model="screenWidth"
-                  type="number"
-                  min="1280"
-                  max="10000"
-                />
-              </b-field>
-            </div>
-            <div class="column">
-              <b-field label="Height">
-                <b-input
-                  v-model="screenHeight"
-                  type="number"
-                  min="720"
-                  max="10000"
-                />
-              </b-field>
+            <div class="columns settings-grid">
+              <div class="column">
+                <b-field label="Width">
+                  <b-input
+                    v-model="screenWidth"
+                    type="number"
+                    min="1280"
+                    max="10000"
+                  />
+                </b-field>
+              </div>
+              <div class="column">
+                <b-field label="Height">
+                  <b-input
+                    v-model="screenHeight"
+                    type="number"
+                    min="720"
+                    max="10000"
+                  />
+                </b-field>
+              </div>
             </div>
           </div>
           <hr>
@@ -179,6 +185,7 @@ export default {
       screenHeight: config.get('defaultScreenHeight'),
       screenTop: config.get('defaultScreenTop'),
       screenLeft: config.get('defaultScreenLeft'),
+      manualWindowRestore: config.get('manualWindowRestore'),
       toolVersion: version,
       reshade: config.get('reshade'),
       reshadeFile: config.get('reshadeFile')
@@ -200,6 +207,9 @@ export default {
     },
     reshade () {
       config.set('reshade', this.reshade);
+    },
+    manualWindowRestore () {
+      config.set('manualWindowRestore', this.manualWindowRestore);
     },
     reshadeFile () {
       const file = this.reshadeFile;

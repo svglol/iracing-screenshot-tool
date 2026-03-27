@@ -34,6 +34,7 @@ let height;
 let left;
 let top;
 let takingScreenshot = false;
+let originalWindowBounds = null;
 let cameraState = 0;
 let config;
 let mainWindow;
@@ -667,6 +668,7 @@ app.on('ready', async () => {
     }
 
     takingScreenshot = true;
+    originalWindowBounds = getIracingWindowDetails();
     parseCameraState(iracing.telemetry.values.CamCameraState);
     iracing.camControls.setState(iracing.Consts.CameraState.UIHidden);
 
@@ -828,7 +830,15 @@ function restoreScreenshotState() {
     return;
   }
 
-  resize(width, height, left, top);
+  if (config.get('manualWindowRestore')) {
+    resize(width, height, left, top);
+  } else if (originalWindowBounds && originalWindowBounds.width > 0 && originalWindowBounds.height > 0) {
+    resize(originalWindowBounds.width, originalWindowBounds.height, originalWindowBounds.left, originalWindowBounds.top);
+  } else {
+    resize(width, height, left, top);
+  }
+
+  originalWindowBounds = null;
 
   if (iracing.camControls) {
     iracing.camControls.setState(cameraState);

@@ -5,6 +5,24 @@ function getIracingWindowDetails() {
   const script = `
 $ErrorActionPreference = 'Stop'
 
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class Win32Rect {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+  }
+
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+}
+"@
+
 $process = Get-Process -Name '${IRACING_PROCESS_NAME}' -ErrorAction SilentlyContinue |
   Where-Object { $_.MainWindowHandle -ne 0 } |
   Select-Object -First 1
@@ -13,9 +31,17 @@ if (-not $process) {
   exit 0
 }
 
+$hwnd = [IntPtr]$process.MainWindowHandle
+$rect = New-Object Win32Rect+RECT
+[void][Win32Rect]::GetWindowRect($hwnd, [ref]$rect)
+
 [pscustomobject]@{
-  handle = [string]([int64]$process.MainWindowHandle)
+  handle = [string]([int64]$hwnd)
   title = [string]$process.MainWindowTitle
+  left = $rect.Left
+  top = $rect.Top
+  width = $rect.Right - $rect.Left
+  height = $rect.Bottom - $rect.Top
 } | ConvertTo-Json -Compress
 `;
 
@@ -45,7 +71,11 @@ if (-not $process) {
 
     return {
       handle: String(parsed.handle),
-      title: String(parsed.title || '')
+      title: String(parsed.title || ''),
+      left: Number(parsed.left) || 0,
+      top: Number(parsed.top) || 0,
+      width: Number(parsed.width) || 0,
+      height: Number(parsed.height) || 0
     };
   } catch (error) {
     console.error(error);
