@@ -80,6 +80,17 @@
     </b-button>
 
     <b-message
+      v-for="(warning, index) in configWarnings"
+      :key="'cw-' + index"
+      type="is-warning"
+      aria-close-label="Close message"
+      size="is-small"
+      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
+    >
+      <strong>{{ warning }}</strong>
+    </b-message>
+
+    <b-message
       v-if="reshade && !disableTooltips"
       type="is-danger"
       aria-close-label="Close message"
@@ -95,6 +106,7 @@
 const config = require('../../utilities/config');
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
+const { checkIracingConfig } = require('../../utilities/iracing-config-checks');
 
 export default {
   props: ['screenshot'],
@@ -108,7 +120,8 @@ export default {
       iracingOpen: false,
       takingScreenshot: false,
       disableTooltips: config.get('disableTooltips'),
-      reshade: config.get('reshade')
+      reshade: config.get('reshade'),
+      configWarnings: checkIracingConfig()
     };
   },
   computed: {
