@@ -127,26 +127,37 @@ console.log('\n— Changelog:');
 console.log(changelog || '(no changes)');
 
 // ---------------------------------------------------------------------------
-// 10. Push commit + tag
+// 10. Push commit + tag to all remotes
 // ---------------------------------------------------------------------------
-const remotes = runCapture('git remote').split('\n');
-const remote = remotes.includes('alessandro') ? 'alessandro' : remotes[0];
+const remotes = runCapture('git remote').split('\n').filter(Boolean);
 const branch = runCapture('git rev-parse --abbrev-ref HEAD');
 
-console.log(`\n— Pushing to ${remote}/${branch}…`);
-run(`git push ${remote} ${branch}`);
-run(`git push ${remote} ${tag}`);
+for (const remote of remotes) {
+  console.log(`\n— Pushing to ${remote}/${branch}…`);
+  try {
+    run(`git push ${remote} ${branch}`);
+    run(`git push ${remote} ${tag}`);
+  } catch (error) {
+    console.error(`  Warning: failed to push to ${remote}, skipping.`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 11. Create GitHub release
 // ---------------------------------------------------------------------------
-console.log('\n— Creating GitHub release…');
+console.log('\n— Creating GitHub releases…');
 
-const repoSlug = getRepoSlug(remote);
-const releaseTitle = `${pkg.productName || pkg.name} ${tag}`;
 const releaseNotes = `## What's Changed\n\n${changelog || 'No changes.'}\n`;
 const assetFlags = artifacts.map((a) => `"${a}"`).join(' ');
 
-run(`gh release create ${tag} --repo ${repoSlug} --title "${releaseTitle}" --notes "${releaseNotes}" ${assetFlags}`);
+for (const remote of remotes) {
+  const repoSlug = getRepoSlug(remote);
+  console.log(`  Creating release on ${repoSlug}…`);
+  try {
+    run(`gh release create ${tag} --repo ${repoSlug} --title "${tag}" --notes "${releaseNotes}" ${assetFlags}`);
+  } catch (error) {
+    console.error(`  Warning: failed to create release on ${repoSlug}, skipping.`);
+  }
+}
 
 console.log(`\n✓ Released ${tag} successfully!`);
