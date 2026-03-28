@@ -253,6 +253,7 @@ export default {
     config.onDidChange('reshade', (newValue, oldValue) => {
       this.reshade = newValue;
     });
+
   },
   mounted () {
     this.crop = config.get('crop');

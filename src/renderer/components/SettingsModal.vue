@@ -111,8 +111,8 @@
                   <b-input
                     v-model="screenWidth"
                     type="number"
-                    min="1280"
-                    max="10000"
+                    min="1080"
+                    max="10320"
                   />
                 </b-field>
               </div>
@@ -122,11 +122,21 @@
                     v-model="screenHeight"
                     type="number"
                     min="720"
-                    max="10000"
+                    max="10320"
                   />
                 </b-field>
               </div>
             </div>
+            <b-button
+              type="is-info"
+              icon-left="expand-arrows-alt"
+              expanded
+              :disabled="!iracingOpen"
+              style="margin-top:.5rem"
+              @click="restoreNow"
+            >
+              Restore Now
+            </b-button>
           </div>
           <hr>
           <b-field>
@@ -188,8 +198,24 @@ export default {
       manualWindowRestore: config.get('manualWindowRestore'),
       toolVersion: version,
       reshade: config.get('reshade'),
-      reshadeFile: config.get('reshadeFile')
+      reshadeFile: config.get('reshadeFile'),
+      iracingOpen: false
     };
+  },
+  created () {
+    ipcRenderer.send('request-iracing-status', '');
+
+    ipcRenderer.on('iracing-status', (event, arg) => {
+      this.iracingOpen = arg;
+    });
+
+    ipcRenderer.on('iracing-connected', () => {
+      this.iracingOpen = true;
+    });
+
+    ipcRenderer.on('iracing-disconnected', () => {
+      this.iracingOpen = false;
+    });
   },
   watch: {
     screenshotFolder () {
@@ -220,13 +246,13 @@ export default {
   },
   beforeDestroy () {
     if (config.get('defaultScreenHeight') !== parseInt(this.screenHeight, 10)) {
-      if (this.screenHeight >= 720 && this.screenHeight <= 10000) {
+      if (this.screenHeight >= 720 && this.screenHeight <= 10320) {
         config.set('defaultScreenHeight', parseInt(this.screenHeight, 10));
         ipcRenderer.send('defaultScreenHeight', parseInt(this.screenHeight, 10));
       }
     }
     if (config.get('defaultScreenWidth') !== parseInt(this.screenWidth, 10)) {
-      if (this.screenWidth >= 1280 && this.screenWidth <= 10000) {
+      if (this.screenWidth >= 1080 && this.screenWidth <= 10320) {
         ipcRenderer.send('defaultScreenWidth', parseInt(this.screenWidth, 10));
         config.set('defaultScreenWidth', parseInt(this.screenWidth, 10));
       }
@@ -247,6 +273,12 @@ export default {
     }
   },
   methods: {
+    restoreNow () {
+      ipcRenderer.send('defaultScreenWidth', parseInt(this.screenWidth, 10));
+      ipcRenderer.send('defaultScreenHeight', parseInt(this.screenHeight, 10));
+      ipcRenderer.send('defaultScreenLeft', parseInt(this.screenLeft, 10));
+      ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop, 10));
+    },
     openFolderDialog () {
       ipcRenderer.invoke('dialog:showOpen', {
         defaultPath: config.get('screenshotFolder'),
