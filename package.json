@@ -142,7 +142,8 @@
         "test": "jest --passWithNoTests",
         "test:watch": "run-s rebuild:node jest:watch --passWithNoTests",
         "build:dir": "electron-builder --dir",
-        "build:installer": "run-s rebuild:electron pack && electron-builder"
+        "build:installer": "run-s rebuild:electron pack && electron-builder",
+        "release": "node _scripts/release.js"
     },
     "jest": {
         "testPathIgnorePatterns": [
