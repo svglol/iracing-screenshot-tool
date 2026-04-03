@@ -80,6 +80,17 @@
     </b-button>
 
     <b-message
+      v-for="(warning, index) in configWarnings"
+      :key="'cw-' + index"
+      type="is-warning"
+      aria-close-label="Close message"
+      size="is-small"
+      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
+    >
+      <strong>{{ warning }}</strong>
+    </b-message>
+
+    <b-message
       v-if="reshade && !disableTooltips"
       type="is-danger"
       aria-close-label="Close message"
@@ -95,6 +106,7 @@
 const config = require('../../utilities/config');
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
+const { checkIracingConfig } = require('../../utilities/iracing-config-checks');
 
 export default {
   props: ['screenshot'],
@@ -108,7 +120,8 @@ export default {
       iracingOpen: false,
       takingScreenshot: false,
       disableTooltips: config.get('disableTooltips'),
-      reshade: config.get('reshade')
+      reshade: config.get('reshade'),
+      configWarnings: checkIracingConfig()
     };
   },
   computed: {
@@ -116,78 +129,34 @@ export default {
       return iracingOpen;
     }
   },
-  created () {
-    ipcRenderer.send('request-iracing-status', '');
-
-    ipcRenderer.on('hotkey-screenshot', (event, arg) => {
-      if (this.iracingOpen && !this.takingScreenshot) {
-        this.takeScreenshot();
-      }
-    });
-
-    ipcRenderer.on('iracing-status', (event, arg) => {
-      this.iracingOpen = arg;
-    });
-
-    ipcRenderer.on('iracing-connected', (event, arg) => {
-      this.iracingOpen = true;
-    });
-
-    ipcRenderer.on('iracing-disconnected', (event, arg) => {
-      this.iracingOpen = false;
-    });
-
-    ipcRenderer.on('screenshot-response', (event, arg) => {
-      document.exitPointerLock();
-      document.body.style.cursor = 'auto';
-      if (fs.existsSync(arg)) {
-        this.takingScreenshot = false;
-        const file = arg.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
-        this.$buefy.notification.open({
-          message: file + ' saved successfully',
-          type: 'is-success'
-        });
-      }
-    });
-
-    ipcRenderer.on('screenshot-error', (event, arg) => {
-      document.exitPointerLock();
-      document.body.style.cursor = 'auto';
-      this.takingScreenshot = false;
-      this.$buefy.notification.open({
-        message: 'An error has occured when taking a screenshot :(',
-        type: 'is-danger'
-      });
-      ipcRenderer.send('request-iracing-status', '');
-    });
-
-    config.onDidChange('disableTooltips', (newValue, oldValue) => {
-      this.disableTooltips = newValue;
-    });
-
-    config.onDidChange('reshade', (newValue, oldValue) => {
-      this.reshade = newValue;
-    });
-  },
-  mounted () {
-    this.crop = config.get('crop');
-    this.customWidth = config.get('customWidth');
-    this.customHeight = config.get('customHeight');
-    this.resolution = config.get('resolution');
-    this.reshade = config.get('reshade');
-  },
-  updated () {
-    config.set('crop', this.crop);
-    config.set('reshade', this.reshade);
-    if (!isNaN(parseInt(this.customWidth))) {
-      config.set('customWidth', parseInt(this.customWidth));
-    }
-    if (!isNaN(parseInt(this.customHeight))) {
-      config.set('customHeight', parseInt(this.customHeight));
-    }
-    config.set('resolution', this.resolution);
-  },
   methods: {
+    escapeHtml (value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+    normalizeScreenshotError (payload) {
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        return {
+          message: payload.message || 'Unknown screenshot error',
+          logFile: payload.logFile || ''
+        };
+      }
+
+      return {
+        message: String(payload || 'Unknown screenshot error'),
+        logFile: ''
+      };
+    },
+    hideCursorDuringCapture () {
+      document.body.style.cursor = 'none';
+    },
+    restoreCursorAfterCapture () {
+      document.body.style.cursor = 'auto';
+    },
     takeScreenshot () {
       let w = 0;
       let h = 0;
@@ -236,9 +205,86 @@ export default {
       }
       this.takingScreenshot = true;
       this.$emit('click', { width: w, height: h, crop: this.crop });
-      document.body.requestPointerLock();
-      document.body.style.cursor = 'none';
+      this.hideCursorDuringCapture();
     }
+  },
+  created () {
+    ipcRenderer.send('request-iracing-status', '');
+
+    ipcRenderer.on('hotkey-screenshot', (event, arg) => {
+      if (this.iracingOpen && !this.takingScreenshot) {
+        this.takeScreenshot();
+      }
+    });
+
+    ipcRenderer.on('iracing-status', (event, arg) => {
+      this.iracingOpen = arg;
+    });
+
+    ipcRenderer.on('iracing-connected', (event, arg) => {
+      this.iracingOpen = true;
+    });
+
+    ipcRenderer.on('iracing-disconnected', (event, arg) => {
+      this.iracingOpen = false;
+    });
+
+    ipcRenderer.on('screenshot-response', (event, arg) => {
+      this.restoreCursorAfterCapture();
+      if (fs.existsSync(arg)) {
+        this.takingScreenshot = false;
+        const file = arg.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
+        this.$buefy.notification.open({
+          message: file + ' saved successfully',
+          type: 'is-success'
+        });
+      }
+    });
+
+    ipcRenderer.on('screenshot-error', (event, arg) => {
+      this.restoreCursorAfterCapture();
+      this.takingScreenshot = false;
+      const error = this.normalizeScreenshotError(arg);
+      const escapedMessage = this.escapeHtml(error.message);
+      const escapedLogFile = this.escapeHtml(error.logFile);
+      const logHint = escapedLogFile
+        ? `<br><small>Log: ${escapedLogFile}</small>`
+        : '';
+      this.$buefy.notification.open({
+        message: `Screenshot failed: ${escapedMessage}${logHint}`,
+        type: 'is-danger',
+        duration: 10000,
+        queue: false
+      });
+      ipcRenderer.send('request-iracing-status', '');
+    });
+
+    config.onDidChange('disableTooltips', (newValue, oldValue) => {
+      this.disableTooltips = newValue;
+    });
+
+    config.onDidChange('reshade', (newValue, oldValue) => {
+      this.reshade = newValue;
+    });
+
+  },
+  mounted () {
+    this.crop = config.get('crop');
+    this.customWidth = config.get('customWidth');
+    this.customHeight = config.get('customHeight');
+    this.resolution = config.get('resolution');
+    this.reshade = config.get('reshade');
+  },
+  updated () {
+    config.set('crop', this.crop);
+    config.set('reshade', this.reshade);
+    if (!isNaN(parseInt(this.customWidth))) {
+      config.set('customWidth', parseInt(this.customWidth));
+    }
+    if (!isNaN(parseInt(this.customHeight))) {
+      config.set('customHeight', parseInt(this.customHeight));
+    }
+    config.set('resolution', this.resolution);
   }
 };
 </script>

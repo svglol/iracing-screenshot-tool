@@ -5,6 +5,9 @@ build/*
 !build/icons
 coverage
 node_modules/
+.tools/
+.npm-cache/
+.npm-cache*/
 npm-debug.log
 npm-debug.log.*
 thumbs.db
@@ -19,3 +22,5 @@ __coverage__
 yarn.lock
 /dist
 /build
+.claude/
+.planning/

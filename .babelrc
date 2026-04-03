@@ -4,8 +4,7 @@
       "@babel/env",
       {
         "targets": {
-          "chrome": "73",
-          "node": 12
+          "electron": "41.0"
         }
       }
     ],
