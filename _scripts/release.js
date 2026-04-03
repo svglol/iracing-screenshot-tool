@@ -148,16 +148,23 @@ for (const remote of remotes) {
 console.log('\n— Creating GitHub releases…');
 
 const releaseNotes = `## What's Changed\n\n${changelog || 'No changes.'}\n`;
-const assetFlags = artifacts.map((a) => `"${a}"`).join(' ');
+const notesFile = path.join(BUILD_DIR, 'release-notes.md');
+fs.writeFileSync(notesFile, releaseNotes, 'utf8');
 
 for (const remote of remotes) {
   const repoSlug = getRepoSlug(remote);
   console.log(`  Creating release on ${repoSlug}…`);
   try {
-    run(`gh release create ${tag} --repo ${repoSlug} --title "${tag}" --notes "${releaseNotes}" ${assetFlags}`);
+    run(`gh release create ${tag} --repo ${repoSlug} --title "${tag}" --notes-file "${notesFile}"`);
+    for (const artifact of artifacts) {
+      console.log(`  Uploading ${path.basename(artifact)}…`);
+      run(`gh release upload ${tag} --repo ${repoSlug} "${artifact}"`);
+    }
   } catch (error) {
     console.error(`  Warning: failed to create release on ${repoSlug}, skipping.`);
   }
 }
+
+fs.unlinkSync(notesFile);
 
 console.log(`\n✓ Released ${tag} successfully!`);
