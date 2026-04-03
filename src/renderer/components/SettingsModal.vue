@@ -76,6 +76,51 @@
           <hr>
           <b-field>
             <div>
+              <span class="label" style="margin-bottom:0px;">Filename Format</span>
+              <span class="description">Click fields to add them to the format. Type separators (-, _, etc.) directly.</span>
+            </div>
+          </b-field>
+
+          <b-field>
+            <b-input
+              v-model="filenameFormat"
+              type="text"
+              placeholder="{track}-{driver}-{counter}"
+              style="width:100%"
+            />
+            <p class="control">
+              <b-button
+                class="button is-light"
+                style="width:80px"
+                @click="filenameFormat = defaultFormat"
+              >
+                Reset
+              </b-button>
+            </p>
+          </b-field>
+
+          <b-field>
+            <span class="description">Preview: <strong style="color:#fff">{{ filenamePreview }}</strong></span>
+          </b-field>
+
+          <div v-for="(fields, category) in fieldsByCategory" :key="category" style="margin-bottom: 0.5rem;">
+            <span class="description" style="display:block; margin-bottom:0.25rem;">{{ category }}</span>
+            <div class="field is-grouped is-grouped-multiline">
+              <div class="control" v-for="field in fields" :key="field.token">
+                <b-tag
+                  type="is-primary"
+                  style="cursor:pointer"
+                  @click.native="insertField(field.token)"
+                >
+                  {{ field.label }}
+                </b-tag>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+          <b-field>
+            <div>
               <span
                 class="label"
                 style="margin-bottom:0px;"
@@ -182,6 +227,7 @@
 <script>
 import { version } from '../../../package.json';
 const config = require('../../utilities/config');
+const { FILENAME_FIELDS, DEFAULT_FORMAT } = require('../../utilities/filenameFormat');
 const { ipcRenderer } = require('electron');
 const { dialog } = require('electron').remote;
 
@@ -198,10 +244,57 @@ export default {
       screenLeft: config.get('defaultScreenLeft'),
       toolVersion: version,
       reshade: config.get('reshade'),
-      reshadeFile: config.get('reshadeFile')
+      reshadeFile: config.get('reshadeFile'),
+      filenameFormat: config.get('filenameFormat'),
+      filenameFields: FILENAME_FIELDS,
+      defaultFormat: DEFAULT_FORMAT
     };
   },
+  computed: {
+    filenamePreview () {
+      const examples = {
+        '{track}': 'Daytona',
+        '{trackFull}': 'Daytona International Speedway',
+        '{trackCity}': 'Daytona Beach',
+        '{trackCountry}': 'USA',
+        '{trackType}': 'road course',
+        '{driver}': 'Max Verstappen',
+        '{driverAbbrev}': 'M. Verstappen',
+        '{driverInitials}': 'MV',
+        '{team}': 'Red Bull Racing',
+        '{carNumber}': '1',
+        '{car}': 'MCL36',
+        '{carFull}': 'McLaren MCL36',
+        '{carClass}': 'GTP',
+        '{iRating}': '5231',
+        '{sessionType}': 'Race',
+        '{sessionName}': 'RACE',
+        '{lap}': '12',
+        '{date}': '2026-04-03',
+        '{time}': '14-30-00',
+        '{datetime}': '2026-04-03_14-30-00',
+        '{counter}': '0'
+      };
+      let preview = this.filenameFormat || '';
+      for (const [token, value] of Object.entries(examples)) {
+        preview = preview.split(token).join(value);
+      }
+      return preview + '.png';
+    },
+    fieldsByCategory () {
+      return this.filenameFields.reduce((acc, field) => {
+        if (!acc[field.category]) acc[field.category] = [];
+        acc[field.category].push(field);
+        return acc;
+      }, {});
+    }
+  },
   watch: {
+    filenameFormat () {
+      if (config.get('filenameFormat') !== this.filenameFormat) {
+        config.set('filenameFormat', this.filenameFormat);
+      }
+    },
     screenshotFolder () {
       let folder = this.screenshotFolder;
       if (config.get('screenshotFolder') !== folder) {
@@ -308,6 +401,9 @@ export default {
           }
         }
       });
+    },
+    insertField (token) {
+      this.filenameFormat = (this.filenameFormat || '') + token;
     },
     openChangelog () {
 

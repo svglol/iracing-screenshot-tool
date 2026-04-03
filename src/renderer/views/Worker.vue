@@ -9,6 +9,7 @@ const sharp = require('sharp');
 const app = remote.app;
 
 const config = require('../../utilities/config');
+const { resolveFilenameFormat } = require('../../utilities/filenameFormat');
 let sessionInfo, telemetry, windowID, crop;
 
 export default {
@@ -119,36 +120,38 @@ function saveImage (blob) {
 }
 
 function getFileNameString () {
-  const trackName = sessionInfo.data.WeekendInfo.TrackDisplayShortName;
-  let driverName = '';
+  const formatString = config.get('filenameFormat') || '{track}-{driver}-{counter}';
 
-  if (sessionInfo.data.WeekendInfo.TeamRacing === 1) {
-    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-      if (sessionInfo.data.DriverInfo.DriverCarIdx === item.CarIdx) {
-        driverName = item.TeamName;
-      }
-    });
-  } else {
-    sessionInfo.data.DriverInfo.Drivers.forEach((item) => {
-      if (telemetry.values.CamCarIdx === item.CarIdx) {
-        driverName = item.UserName;
-      }
-    });
-  }
+  // Resolve all tokens except {counter}
+  let resolved = resolveFilenameFormat(formatString, sessionInfo, telemetry);
 
-  var unique = false;
-  var count = 0;
-  var file = trackName + '-' + driverName + '-' + count;
-  var screenshotFolder = config.get('screenshotFolder');
-  while (!unique) {
-    if (fs.existsSync(screenshotFolder + file + '.png')) {
-      count++;
-      file = trackName + '-' + driverName + '-' + count;
-    } else {
-      unique = true;
+  // Handle {counter} - find unique filename
+  if (resolved.includes('{counter}')) {
+    var unique = false;
+    var count = 0;
+    var screenshotFolder = config.get('screenshotFolder');
+    var file = resolved.replace('{counter}', count);
+    while (!unique) {
+      if (fs.existsSync(screenshotFolder + file + '.png')) {
+        count++;
+        file = resolved.replace('{counter}', count);
+      } else {
+        unique = true;
+      }
     }
+    return file;
+  } else {
+    // No counter - still need uniqueness, append counter if file exists
+    var screenshotFolder = config.get('screenshotFolder');
+    if (fs.existsSync(screenshotFolder + resolved + '.png')) {
+      var count = 1;
+      while (fs.existsSync(screenshotFolder + resolved + '-' + count + '.png')) {
+        count++;
+      }
+      return resolved + '-' + count;
+    }
+    return resolved;
   }
-  return file;
 }
 
 async function fullscreenScreenshot (callback) {
