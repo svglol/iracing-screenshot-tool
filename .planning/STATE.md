@@ -17,3 +17,9 @@ Phase 1: Filename Format Configurator - Complete
 
 ### Blockers/Concerns
 None
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260403-evq | Implement UI format configurator for picture naming with session field chips and custom text | 2026-04-03 | See git log | Verified | [260403-evq-implement-ui-format-configurator-for-pic](./quick/260403-evq-implement-ui-format-configurator-for-pic/) |
