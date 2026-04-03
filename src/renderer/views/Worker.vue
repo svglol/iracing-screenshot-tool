@@ -189,7 +189,8 @@ async function createThumbnail(fileName, fileKey) {
 }
 
 function getFileNameString() {
-  const formatString = config.get('filenameFormat') || '{track}-{driver}-{counter}';
+  const useCustom = config.get('customFilenameFormat');
+  const formatString = useCustom ? (config.get('filenameFormat') || '{track}-{driver}-{counter}') : '{track}-{driver}-{counter}';
 
   // Resolve all tokens except {counter}
   const resolved = resolveFilenameFormat(formatString, sessionInfo, telemetry);

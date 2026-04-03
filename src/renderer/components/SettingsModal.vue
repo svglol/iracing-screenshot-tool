@@ -61,44 +61,53 @@
           <hr>
           <b-field>
             <div>
-              <span class="label" style="margin-bottom:0px;">Filename Format</span>
-              <span class="description">Click fields to add them to the format. Type separators (-, _, etc.) directly.</span>
+              <span class="label" style="margin-bottom:0px;">Custom Filename Format</span>
+              <span class="description">Use a custom pattern instead of the default ({track}-{driver}-{counter})</span>
             </div>
-          </b-field>
-
-          <b-field>
-            <b-input
-              v-model="filenameFormat"
-              type="text"
-              placeholder="{track}-{driver}-{counter}"
-              style="width:100%"
+            <b-switch
+              v-model="customFilenameFormat"
+              style="margin-left:auto"
             />
-            <p class="control">
-              <b-button
-                class="button is-light"
-                style="width:80px"
-                @click="filenameFormat = defaultFormat"
-              >
-                Reset
-              </b-button>
-            </p>
           </b-field>
+          <div v-if="customFilenameFormat">
+            <b-field>
+              <span class="description">Click fields to add them to the format. Type separators (-, _, etc.) directly.</span>
+            </b-field>
 
-          <b-field>
-            <span class="description">Preview: <strong style="color:#fff">{{ filenamePreview }}</strong></span>
-          </b-field>
-
-          <div v-for="(fields, category) in fieldsByCategory" :key="category" style="margin-bottom: 0.5rem;">
-            <span class="description" style="display:block; margin-bottom:0.25rem;">{{ category }}</span>
-            <div class="field is-grouped is-grouped-multiline">
-              <div class="control" v-for="field in fields" :key="field.token">
-                <b-tag
-                  type="is-primary"
-                  style="cursor:pointer"
-                  @click.native="insertField(field.token)"
+            <b-field>
+              <b-input
+                v-model="filenameFormat"
+                type="text"
+                placeholder="{track}-{driver}-{counter}"
+                style="width:100%"
+              />
+              <p class="control">
+                <b-button
+                  class="button is-light"
+                  style="width:80px"
+                  @click="filenameFormat = defaultFormat"
                 >
-                  {{ field.label }}
-                </b-tag>
+                  Reset
+                </b-button>
+              </p>
+            </b-field>
+
+            <b-field>
+              <span class="description">Preview: <strong style="color:#fff">{{ filenamePreview }}</strong></span>
+            </b-field>
+
+            <div v-for="(fields, category) in fieldsByCategory" :key="category" style="margin-bottom: 0.5rem;">
+              <span class="description" style="display:block; margin-bottom:0.25rem;">{{ category }}</span>
+              <div class="field is-grouped is-grouped-multiline">
+                <div class="control" v-for="field in fields" :key="field.token">
+                  <b-tag
+                    type="is-primary"
+                    style="cursor:pointer"
+                    @click.native="insertField(field.token)"
+                  >
+                    {{ field.label }}
+                  </b-tag>
+                </div>
               </div>
             </div>
           </div>
@@ -245,6 +254,7 @@ export default {
       toolVersion: version,
       reshade: config.get('reshade'),
       reshadeFile: config.get('reshadeFile'),
+      customFilenameFormat: config.get('customFilenameFormat'),
       filenameFormat: config.get('filenameFormat'),
       filenameFields: FILENAME_FIELDS,
       defaultFormat: DEFAULT_FORMAT,
@@ -306,6 +316,9 @@ export default {
     });
   },
   watch: {
+    customFilenameFormat () {
+      config.set('customFilenameFormat', this.customFilenameFormat);
+    },
     filenameFormat () {
       if (config.get('filenameFormat') !== this.filenameFormat) {
         config.set('filenameFormat', this.filenameFormat);

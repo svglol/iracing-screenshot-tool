@@ -45,6 +45,10 @@ const schema = {
     type: 'string',
     default: 'Control+PrintScreen'
   },
+  customFilenameFormat: {
+    type: 'boolean',
+    default: false
+  },
   filenameFormat: {
     type: 'string',
     default: '{track}-{driver}-{counter}'
