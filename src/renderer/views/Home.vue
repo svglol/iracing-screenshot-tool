@@ -312,9 +312,10 @@ export default Vue.extend({
     },
     async removeItem(filePath) {
       try {
-        await shell.trashItem(toFsPath(filePath));
+        await fs.promises.unlink(toFsPath(filePath));
       } catch (error) {
         console.log(error);
+        return;
       }
 
       const index = this.items.findIndex((item) => item.file === filePath);
