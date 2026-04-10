@@ -200,8 +200,8 @@ export default {
       }
 
       if (this.crop) {
-        w += 54;
-        h += 30;
+        w += Math.ceil(w * 0.03);
+        h += Math.ceil(h * 0.03);
       }
       this.takingScreenshot = true;
       this.$emit('click', { width: w, height: h, crop: this.crop });

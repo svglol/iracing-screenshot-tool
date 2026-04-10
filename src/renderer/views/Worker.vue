@@ -233,13 +233,13 @@ async function saveReshadeImage(sourceFile) {
     const image = sharp(sourceFile);
     const metadata = await image.metadata();
 
-    if (!metadata.width || !metadata.height || metadata.width < 54 || metadata.height < 30) {
+    if (!metadata.width || !metadata.height || metadata.width < 100 || metadata.height < 100) {
       throw new Error('image is too small');
     }
 
     if (crop) {
       await image
-        .extract({ left: 0, top: 0, width: metadata.width - 54, height: metadata.height - 30 })
+        .extract({ left: 0, top: 0, width: metadata.width - Math.ceil(metadata.width * 0.03), height: metadata.height - Math.ceil(metadata.height * 0.03) })
         .toFile(fileName);
     } else {
       await image.toFile(fileName);
@@ -309,8 +309,8 @@ async function fullscreenScreenshot(callback) {
 
         const captureTarget = normalizeCaptureTarget(stream.__captureTarget);
         const captureRect = resolveDisplayCaptureRect(this.videoWidth, this.videoHeight, captureTarget);
-        const outputWidth = crop ? captureRect.width - 54 : captureRect.width;
-        const outputHeight = crop ? captureRect.height - 30 : captureRect.height;
+        const outputWidth = crop ? captureRect.width - Math.ceil(captureRect.width * 0.03) : captureRect.width;
+        const outputHeight = crop ? captureRect.height - Math.ceil(captureRect.height * 0.03) : captureRect.height;
 
         if (outputWidth < 1 || outputHeight < 1) {
           throw new Error(`Capture output is too small (${outputWidth}x${outputHeight})`);
