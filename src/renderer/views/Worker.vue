@@ -25,6 +25,7 @@ let sessionInfo = null;
 let telemetry = null;
 let windowID = null;
 let crop = false;
+let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
 
@@ -84,6 +85,7 @@ function getWorkerScreenshotDiagnostics() {
       captureState: {
         windowID,
         crop,
+        cropTopLeft,
         captureBounds,
         captureTargetDiagnostics
       }
@@ -229,6 +231,7 @@ async function saveReshadeImage(sourceFile) {
 
     sharp.cache(false);
     crop = config.get('crop');
+    const cropTopLeftFlag = config.get('cropTopLeft');
 
     const image = sharp(sourceFile);
     const metadata = await image.metadata();
@@ -237,9 +240,27 @@ async function saveReshadeImage(sourceFile) {
       throw new Error('image is too small');
     }
 
-    if (crop) {
+    if (crop && cropTopLeftFlag) {
+      // Legacy: crop 3% from bottom-right
       await image
-        .extract({ left: 0, top: 0, width: metadata.width - Math.ceil(metadata.width * 0.03), height: metadata.height - Math.ceil(metadata.height * 0.03) })
+        .extract({
+          left: 0,
+          top: 0,
+          width: metadata.width - Math.ceil(metadata.width * 0.03),
+          height: metadata.height - Math.ceil(metadata.height * 0.03)
+        })
+        .toFile(fileName);
+    } else if (crop) {
+      // Default: crop 3% from each side
+      const cropX = Math.ceil(metadata.width * 0.03);
+      const cropY = Math.ceil(metadata.height * 0.03);
+      await image
+        .extract({
+          left: cropX,
+          top: cropY,
+          width: metadata.width - cropX * 2,
+          height: metadata.height - cropY * 2
+        })
         .toFile(fileName);
     } else {
       await image.toFile(fileName);
@@ -309,8 +330,26 @@ async function fullscreenScreenshot(callback) {
 
         const captureTarget = normalizeCaptureTarget(stream.__captureTarget);
         const captureRect = resolveDisplayCaptureRect(this.videoWidth, this.videoHeight, captureTarget);
-        const outputWidth = crop ? captureRect.width - Math.ceil(captureRect.width * 0.03) : captureRect.width;
-        const outputHeight = crop ? captureRect.height - Math.ceil(captureRect.height * 0.03) : captureRect.height;
+
+        let outputWidth, outputHeight, srcX, srcY;
+        if (crop && cropTopLeft) {
+          // Legacy: crop 3% from bottom-right only
+          outputWidth = captureRect.width - Math.ceil(captureRect.width * 0.03);
+          outputHeight = captureRect.height - Math.ceil(captureRect.height * 0.03);
+          srcX = captureRect.x;
+          srcY = captureRect.y;
+        } else if (crop) {
+          // Default: crop 3% from each side (6% total expansion, center extract)
+          outputWidth = captureRect.width - Math.ceil(captureRect.width * 0.06);
+          outputHeight = captureRect.height - Math.ceil(captureRect.height * 0.06);
+          srcX = captureRect.x + Math.ceil(captureRect.width * 0.03);
+          srcY = captureRect.y + Math.ceil(captureRect.height * 0.03);
+        } else {
+          outputWidth = captureRect.width;
+          outputHeight = captureRect.height;
+          srcX = captureRect.x;
+          srcY = captureRect.y;
+        }
 
         if (outputWidth < 1 || outputHeight < 1) {
           throw new Error(`Capture output is too small (${outputWidth}x${outputHeight})`);
@@ -322,14 +361,14 @@ async function fullscreenScreenshot(callback) {
         const offctx = offscreen.getContext('2d', { alpha: false });
         offctx.drawImage(
           video,
-          captureRect.x,
-          captureRect.y,
-          captureRect.width,
-          captureRect.height,
+          srcX,
+          srcY,
+          outputWidth,
+          outputHeight,
           0,
           0,
-          captureRect.width,
-          captureRect.height
+          outputWidth,
+          outputHeight
         );
 
         console.timeEnd('Create OffscreenCanvas');
@@ -410,10 +449,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export default {
   mounted() {
     ipcRenderer.on('screenshot-request', (event, input) => {
-      console.log(`Screenshot - ${input.width}x${input.height} Crop - ${input.crop}`);
+      console.log(`Screenshot - ${input.width}x${input.height} Crop - ${input.crop} TopLeft - ${input.cropTopLeft}`);
       console.time('Screenshot');
       windowID = input.windowID;
       crop = input.crop;
+      cropTopLeft = input.cropTopLeft || false;
       captureBounds = normalizeCaptureBounds(input.captureBounds);
       captureTargetDiagnostics = null;
 
