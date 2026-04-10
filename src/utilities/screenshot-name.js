@@ -2,6 +2,7 @@
 
 function sanitizeFilePart(value, fallback = '') {
   const sanitized = String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
     .replace(/\s*-\s*/g, '-')
     .trim();

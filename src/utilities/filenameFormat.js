@@ -279,6 +279,10 @@ function resolveFilenameFormat (formatString, sessionInfo, telemetry) {
     }
   }
 
+  // Transliterate accented / special Unicode characters to ASCII equivalents
+  // (e.g. Nürburgring → Nurburgring, Räikkönen → Raikkonen)
+  result = result.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
   // Sanitize: replace Windows-filename-unsafe characters with underscore
   result = result.replace(/[\\/:*?"<>|]/g, '_');
 

@@ -196,7 +196,7 @@ describe('buildTrackFilePart', () => {
       buildTrackFilePart({
         TrackDisplayName: 'Nürburgring: GP'
       })
-    ).toBe('Nürburgring_GP');
+    ).toBe('Nurburgring_GP');
   });
 
   test('handles config name with special characters', () => {
@@ -329,6 +329,6 @@ describe('buildScreenshotFileKey', () => {
         driverName: "Kimi Räikkönen",
         count: 42
       })
-    ).toBe('Circuit_of_the_Americas-Grand_Prix-Kimi_Räikkönen-42');
+    ).toBe('Circuit_of_the_Americas-Grand_Prix-Kimi_Raikkonen-42');
   });
 });
