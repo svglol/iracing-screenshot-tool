@@ -58,15 +58,6 @@
       Crop Watermark
     </b-switch>
 
-    <b-switch
-      v-model="cropTopLeft"
-      v-if="crop"
-      dense
-      style="padding-top: 0; padding-bottom: .5rem; padding-left: 1.5rem;"
-    >
-      Prefer top-left watermark crop
-    </b-switch>
-
     <b-message
       v-if="crop && !disableTooltips"
       type="is-info"
@@ -124,7 +115,6 @@ export default {
       items: ['1080p', '2k', '4k', '5k', '6k', '7k', '8k', 'Custom'],
       resolution: '1080p',
       crop: true,
-      cropTopLeft: false,
       customWidth: '0',
       customHeight: '0',
       iracingOpen: false,
@@ -209,7 +199,8 @@ export default {
           h = 1080;
       }
 
-      if (this.crop && this.cropTopLeft) {
+      const cropTopLeft = config.get('cropTopLeft');
+      if (this.crop && cropTopLeft) {
         // Legacy: expand 3% so cropping bottom-right removes watermark
         w += Math.ceil(w * 0.03);
         h += Math.ceil(h * 0.03);
@@ -219,7 +210,7 @@ export default {
         h += Math.ceil(h * 0.06);
       }
       this.takingScreenshot = true;
-      this.$emit('click', { width: w, height: h, crop: this.crop, cropTopLeft: this.cropTopLeft });
+      this.$emit('click', { width: w, height: h, crop: this.crop, cropTopLeft });
       this.hideCursorDuringCapture();
     }
   },
@@ -285,7 +276,6 @@ export default {
   },
   mounted () {
     this.crop = config.get('crop');
-    this.cropTopLeft = config.get('cropTopLeft');
     this.customWidth = config.get('customWidth');
     this.customHeight = config.get('customHeight');
     this.resolution = config.get('resolution');
@@ -293,7 +283,6 @@ export default {
   },
   updated () {
     config.set('crop', this.crop);
-    config.set('cropTopLeft', this.cropTopLeft);
     config.set('reshade', this.reshade);
     if (!isNaN(parseInt(this.customWidth))) {
       config.set('customWidth', parseInt(this.customWidth));

@@ -132,6 +132,20 @@
               <span
                 class="label"
                 style="margin-bottom:0px;"
+              >Prefer top-left watermark crop</span>
+              <span class="description">Crops only the bottom-right corner (3% expansion). When off, the screenshot is expanded by 6% and cropped equally from all sides for a centered result.</span>
+            </div>
+            <b-switch
+              v-model="cropTopLeft"
+              style="margin-left:auto"
+            />
+          </b-field>
+          <hr>
+          <b-field>
+            <div>
+              <span
+                class="label"
+                style="margin-bottom:0px;"
               >Manual Window Restore</span>
               <span class="description">Override the automatic window restore with custom position and size. Useful for people using an Ultrawide or Nvidia Surround</span>
             </div>
@@ -245,6 +259,7 @@ export default {
       screenshotFolder: config.get('screenshotFolder'),
       screenshotKeybind: config.get('screenshotKeybind'),
       bindingKey: false,
+      cropTopLeft: config.get('cropTopLeft'),
       disableTooltips: config.get('disableTooltips'),
       screenWidth: config.get('defaultScreenWidth'),
       screenHeight: config.get('defaultScreenHeight'),
@@ -333,6 +348,9 @@ export default {
         }
         config.set('screenshotFolder', folder);
       }
+    },
+    cropTopLeft () {
+      config.set('cropTopLeft', this.cropTopLeft);
     },
     disableTooltips () {
       config.set('disableTooltips', this.disableTooltips);
