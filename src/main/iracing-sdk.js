@@ -17,7 +17,7 @@ class IRacingBridge extends EventEmitter {
     this.sessionInfo = null;
     this.Consts = { CameraState };
     this.camControls = {
-      setState: (state) => this.sdk.changeCameraState(state)
+      setState: (state) => this.sdk.broadcastUnsafe(2, state, 0, 0)
     };
 
     this.start();

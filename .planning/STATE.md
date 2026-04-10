@@ -2,7 +2,7 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** 1.2 - Feature Enhancements
-**Last activity:** 2026-04-03 - Completed quick task 260403-evq (filename format configurator)
+**Last activity:** 2026-04-10 - Completed quick task 260410-n97 (crop watermark relative %)
 
 ### Current Phase
 Phase 1: Filename Format Configurator - Complete
@@ -23,3 +23,4 @@ None
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
 | 260403-evq | Implement UI format configurator for picture naming with session field chips and custom text | 2026-04-03 | See git log | Verified | [260403-evq-implement-ui-format-configurator-for-pic](./quick/260403-evq-implement-ui-format-configurator-for-pic/) |
+| 260410-n97 | Change crop watermark from hardcoded 54/30px to relative 3% of dimensions | 2026-04-10 | 0a9d8f5 | | [260410-n97-change-crop-watermark-from-hardcoded-54-](./quick/260410-n97-change-crop-watermark-from-hardcoded-54-/) |

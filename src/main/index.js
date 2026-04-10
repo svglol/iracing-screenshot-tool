@@ -591,7 +591,20 @@ app.on('ready', async () => {
     takingScreenshot = true;
     originalWindowBounds = getIracingWindowDetails();
     parseCameraState(iracing.telemetry.values.CamCameraState);
-    iracing.camControls.setState(iracing.Consts.CameraState.UIHidden);
+    iracing.camControls.setState(cameraState | iracing.Consts.CameraState.UIHidden);
+
+    // Wait for iRacing to confirm UIHidden before capturing
+    const uiHideTimeout = 500;
+    const uiHidePoll = 16;
+    let waited = 0;
+    while (waited < uiHideTimeout) {
+      await delay(uiHidePoll);
+      waited += uiHidePoll;
+      if (iracing.telemetry && iracing.telemetry.values.CamCameraState &&
+          iracing.telemetry.values.CamCameraState.includes('UIHidden')) {
+        break;
+      }
+    }
 
     const id = resize(data.width, data.height, left, top);
 
@@ -655,7 +668,7 @@ app.on('ready', async () => {
     if (takingScreenshot && iracing.telemetry) {
       const currentState = iracing.telemetry.values.CamCameraState || [];
       if (!currentState.includes('UseTemporaryEdits')) {
-        iracing.camControls.setState(iracing.Consts.CameraState.UIHidden);
+        iracing.camControls.setState(cameraState | iracing.Consts.CameraState.UIHidden);
       }
     }
   });
