@@ -627,6 +627,7 @@ app.on('ready', async () => {
         width: data.width,
         height: data.height,
         crop: data.crop,
+        cropTopLeft: data.cropTopLeft,
         windowID: id,
         captureBounds: {
           x: left,

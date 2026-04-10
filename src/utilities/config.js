@@ -21,6 +21,10 @@ const schema = {
     type: 'boolean',
     default: true
   },
+  cropTopLeft: {
+    type: 'boolean',
+    default: false
+  },
   winPosX: {
     type: 'number',
     default: 0
