@@ -28,6 +28,8 @@ let crop = false;
 let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
+let targetWidth = null;
+let targetHeight = null;
 
 function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
@@ -299,6 +301,7 @@ async function saveImage(blob) {
     await createThumbnail(fileName, fileKey);
     console.timeEnd('Save Thumbnail');
 
+    ipcRenderer.send('screenshot-finished', '');
     ipcRenderer.send('screenshot-response', fileName);
     if (global.gc) {
       global.gc();
@@ -307,6 +310,7 @@ async function saveImage(blob) {
     console.timeEnd('Save Image');
     console.timeEnd('Screenshot');
   } catch (error) {
+    ipcRenderer.send('screenshot-finished', '');
     sendScreenshotError(error, 'save-image', {
       screenshotDir: getScreenshotDir(),
       crop
@@ -326,7 +330,6 @@ async function fullscreenScreenshot(callback) {
 
         video.play();
         video.pause();
-        ipcRenderer.send('screenshot-finished', '');
 
         const captureTarget = normalizeCaptureTarget(stream.__captureTarget);
         const captureRect = resolveDisplayCaptureRect(this.videoWidth, this.videoHeight, captureTarget);
@@ -396,6 +399,7 @@ async function fullscreenScreenshot(callback) {
   };
 
   const handleError = (error) => {
+    ipcRenderer.send('screenshot-finished', '');
     sendScreenshotError(error, 'fullscreen-capture', {
       windowID,
       crop,
@@ -403,11 +407,14 @@ async function fullscreenScreenshot(callback) {
     });
   };
 
-  await delay(1000);
   console.time('Draw Image');
   console.time('Get Media');
 
-  try {
+  const RETRY_DELAY_MS = 300;
+  const MAX_WAIT_MS = 8000;
+  const startTime = Date.now();
+
+  const acquireStream = async () => {
     const captureTarget = normalizeCaptureTarget(
       await ipcRenderer.invoke('desktop-capturer:get-source-id', {
         windowID,
@@ -438,6 +445,50 @@ async function fullscreenScreenshot(callback) {
     });
 
     stream.__captureTarget = captureTarget;
+    return stream;
+  };
+
+  try {
+    // Initial settling delay — give the OS time to resize the window before
+    // the first capture attempt.
+    await delay(500);
+
+    let stream = await acquireStream();
+
+    // If we have a target resolution, verify the stream delivered it.
+    // If not, release and retry until the window has finished resizing or we
+    // exceed MAX_WAIT_MS, then proceed with whatever dimensions we have.
+    if (targetWidth && targetHeight) {
+      const track = stream.getVideoTracks()[0];
+      const settings = track ? track.getSettings() : {};
+      let streamW = settings.width || 0;
+      let streamH = settings.height || 0;
+
+      while (
+        (streamW !== targetWidth || streamH !== targetHeight) &&
+        Date.now() - startTime < MAX_WAIT_MS
+      ) {
+        console.log(
+          `Stream dimensions ${streamW}x${streamH} do not match target ${targetWidth}x${targetHeight} — retrying in ${RETRY_DELAY_MS}ms`
+        );
+        stream.getTracks().forEach((t) => t.stop());
+        await delay(RETRY_DELAY_MS);
+        stream = await acquireStream();
+        const retryTrack = stream.getVideoTracks()[0];
+        const retrySettings = retryTrack ? retryTrack.getSettings() : {};
+        streamW = retrySettings.width || 0;
+        streamH = retrySettings.height || 0;
+      }
+
+      if (streamW !== targetWidth || streamH !== targetHeight) {
+        console.warn(
+          `Timed out waiting for target dimensions ${targetWidth}x${targetHeight}; proceeding with ${streamW}x${streamH}`
+        );
+      } else {
+        console.log(`Stream dimensions confirmed: ${streamW}x${streamH}`);
+      }
+    }
+
     handleStream(stream);
   } catch (error) {
     handleError(error);
@@ -456,6 +507,8 @@ export default {
       cropTopLeft = input.cropTopLeft || false;
       captureBounds = normalizeCaptureBounds(input.captureBounds);
       captureTargetDiagnostics = null;
+      targetWidth = input.width || null;
+      targetHeight = input.height || null;
 
       if (windowID === undefined) {
         sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
