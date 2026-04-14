@@ -320,12 +320,13 @@ async function saveImage(blob) {
     log.info('Screenshot saved', { file: fileName });
     console.timeEnd('Save Image to file');
 
+    // Restore window immediately — thumbnail doesn't need to block it
+    ipcRenderer.send('screenshot-finished', '');
+    ipcRenderer.send('screenshot-response', fileName);
+
     console.time('Save Thumbnail');
     await createThumbnail(fileName, fileKey);
     console.timeEnd('Save Thumbnail');
-
-    ipcRenderer.send('screenshot-finished', '');
-    ipcRenderer.send('screenshot-response', fileName);
     if (global.gc) {
       global.gc();
     }
