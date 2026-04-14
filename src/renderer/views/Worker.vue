@@ -20,6 +20,8 @@ const {
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const config = require('../../utilities/config');
 const { resolveFilenameFormat } = require('../../utilities/filenameFormat');
+const { createLogger } = require('../../utilities/logger');
+const log = createLogger('worker');
 
 let sessionInfo = null;
 let telemetry = null;
@@ -125,6 +127,7 @@ function createScreenshotErrorPayload(errorLike, context, meta = {}) {
 
 function sendScreenshotError(errorLike, context, meta = {}) {
   const payload = createScreenshotErrorPayload(errorLike, context, meta);
+  log.info('Screenshot error', { context, message: payload.message });
   console.error('Screenshot worker error:', payload.message);
   if (payload.stack) {
     console.error(payload.stack);
@@ -185,9 +188,12 @@ async function cleanupReshadeSourceFile(sourceFile, destinationFile) {
 
 async function createThumbnail(fileName, fileKey) {
   const thumbPath = getThumbnailPath(fileKey);
+  const thumbStart = performance.now();
   await sharp(fileName)
     .resize(1280, 720, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .toFile(thumbPath);
+  log.debug('Thumbnail write', { elapsed: Math.round(performance.now() - thumbStart), file: thumbPath });
+  log.info('Thumbnail created', { file: thumbPath });
 }
 
 function getFileNameString() {
@@ -235,11 +241,13 @@ async function saveReshadeImage(sourceFile) {
 
     const image = sharp(sourceFile);
     const metadata = await image.metadata();
+    log.debug('ReShade image metadata', { width: metadata.width, height: metadata.height });
 
     if (!metadata.width || !metadata.height || metadata.width < 100 || metadata.height < 100) {
       throw new Error('image is too small');
     }
 
+    const reshadeProcessStart = performance.now();
     if (crop && cropTopLeftFlag) {
       // Legacy: crop 3% from bottom-right
       await image
@@ -265,6 +273,8 @@ async function saveReshadeImage(sourceFile) {
     } else {
       await image.toFile(fileName);
     }
+    log.debug('ReShade image processed', { elapsed: Math.round(performance.now() - reshadeProcessStart), file: fileName });
+    log.info('ReShade screenshot saved', { file: fileName, crop, cropTopLeft: cropTopLeftFlag });
 
     await cleanupReshadeSourceFile(sourceFile, fileName);
     await createThumbnail(fileName, fileKey);
@@ -292,7 +302,10 @@ async function saveImage(blob) {
     const buffer = Buffer.from(await blob.arrayBuffer());
 
     console.time('Save Image to file');
+    const fileWriteStart = performance.now();
     await fs.promises.writeFile(fileName, buffer);
+    log.debug('File write', { elapsed: Math.round(performance.now() - fileWriteStart), file: fileName, bytes: buffer.length });
+    log.info('Screenshot saved', { file: fileName });
     console.timeEnd('Save Image to file');
 
     console.time('Save Thumbnail');
@@ -360,6 +373,7 @@ async function fullscreenScreenshot(callback) {
         const offscreen = new OffscreenCanvas(outputWidth, outputHeight);
 
         const offctx = offscreen.getContext('2d', { alpha: false });
+        const drawStart = performance.now();
         offctx.drawImage(
           video,
           srcX,
@@ -371,10 +385,13 @@ async function fullscreenScreenshot(callback) {
           outputWidth,
           outputHeight
         );
+        log.debug('Canvas draw', { elapsed: Math.round(performance.now() - drawStart), outputWidth, outputHeight });
 
         console.timeEnd('Create OffscreenCanvas');
         console.time('To Blob');
+        const blobStart = performance.now();
         const blob = await offscreen.convertToBlob({ type: 'image/png' });
+        log.debug('Blob conversion', { elapsed: Math.round(performance.now() - blobStart), type: 'image/png' });
         console.timeEnd('To Blob');
         console.timeEnd('Draw Image');
         callback(blob);
@@ -410,7 +427,9 @@ async function fullscreenScreenshot(callback) {
 
   try {
     // Brief settling delay for iRacing to re-render at the new resolution.
+    log.debug('Settling delay start', { ms: 200 });
     await delay(200);
+    log.debug('Settling delay end');
 
     let sourceId = preResolvedSourceId;
     let captureTarget = null;
@@ -418,10 +437,12 @@ async function fullscreenScreenshot(callback) {
     if (sourceId) {
       // Fast path: source ID was pre-resolved by the main process during
       // resize, skipping the expensive IPC round-trip (~2-3s).
+      log.debug('Using pre-resolved source', { sourceId });
       console.log(`Using capture source ${sourceId} (pre-resolved)`);
       captureTarget = { id: sourceId, kind: 'window' };
     } else {
       // Slow fallback: full desktop source enumeration via IPC
+      log.debug('Falling back to source enumeration');
       console.log('No pre-resolved source ID, falling back to source enumeration');
       captureTarget = normalizeCaptureTarget(
         await ipcRenderer.invoke('desktop-capturer:get-source-id', {
@@ -431,12 +452,14 @@ async function fullscreenScreenshot(callback) {
       );
       sourceId = captureTarget.id;
       captureTargetDiagnostics = captureTarget.diagnostics;
+      log.debug('Source enumeration result', { sourceId, kind: captureTarget.kind });
     }
 
     if (!sourceId) {
       throw new Error('No desktop capture source found for window ' + windowID);
     }
 
+    const t0 = performance.now();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -450,6 +473,7 @@ async function fullscreenScreenshot(callback) {
         }
       }
     });
+    log.debug('getUserMedia complete', { elapsed: Math.round(performance.now() - t0) });
 
     stream.__captureTarget = captureTarget;
     handleStream(stream);
@@ -471,6 +495,7 @@ export default {
       captureBounds = normalizeCaptureBounds(input.captureBounds);
       captureTargetDiagnostics = null;
       preResolvedSourceId = input.sourceId || null;
+      log.info('Screenshot capture started', { width: input.width, height: input.height, crop: input.crop, cropTopLeft: input.cropTopLeft });
       if (windowID === undefined) {
         sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
           request: input,
