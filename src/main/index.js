@@ -19,6 +19,8 @@ const path = require('path');
 
 const irsdk = require('./iracing-sdk');
 const { resizeIracingWindow, resizeIracingWindowAsync, getIracingWindowDetails } = require('./window-utils');
+const { createLogger } = require('../utilities/logger');
+const log = createLogger('main');
 const {
   normalizeWindowHandle,
   normalizeWindowTitle,
@@ -341,6 +343,7 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    log.info('App exiting');
     console.log('\nApplication exiting...');
   });
 }
@@ -355,12 +358,17 @@ ipcMain.on('config:set', (event, payload) => {
   event.returnValue = true;
 
   if (oldValue !== payload.value) {
+    log.debug('Config changed', { key: payload.key });
     broadcastToWindows(`config:changed:${payload.key}`, payload.value, oldValue);
   }
 });
 
 ipcMain.on('app:getPath-sync', (event, name) => {
   event.returnValue = app.getPath(name);
+});
+
+ipcMain.on('app:isDevBuild-sync', (event) => {
+  event.returnValue = !app.isPackaged || app.getVersion().includes('+');
 });
 
 ipcMain.handle('dialog:showOpen', (event, options) => {
@@ -395,6 +403,7 @@ ipcMain.handle('desktop-capturer:get-source-id', async (event, request) => {
       console.log(`Desktop capture source matched refreshed handle ${currentHandle} instead of ${requestedHandle}`);
     }
 
+    log.debug('Capture source matched', { strategy: 'window-handle', sourceId: handleMatch.id });
     return {
       id: handleMatch.id,
       kind: 'window',
@@ -466,6 +475,7 @@ ipcMain.handle('desktop-capturer:get-source-id', async (event, request) => {
       };
     }
 
+    log.debug('Capture source not found', { requestedHandle, availableSources: windowSources.length });
     return {
       id: '',
       kind: 'window',
@@ -475,6 +485,7 @@ ipcMain.handle('desktop-capturer:get-source-id', async (event, request) => {
     };
   }
 
+  log.debug('Capture source not found', { requestedHandle, availableSources: windowSources.length });
   return {
     id: '',
     kind: 'window',
@@ -532,6 +543,8 @@ app.on('ready', async () => {
     height = screen.getPrimaryDisplay().bounds.height;
   }
 
+  log.info('App started', { version: app.getVersion(), isPackaged: app.isPackaged });
+
   if (isDev) {
     installDevTools();
     mainWindow.webContents.openDevTools();
@@ -544,6 +557,7 @@ app.on('ready', async () => {
   }
 
   ipcMain.on('screenshot-response', (event, output) => {
+    log.info('Screenshot complete', { file: output });
     mainWindow.webContents.send('screenshot-response', output);
   });
 
@@ -568,11 +582,15 @@ app.on('ready', async () => {
   });
 
   ipcMain.on('resize-screenshot', async (event, data) => {
+    log.info('Screenshot requested', { width: data.width, height: data.height, reshade: config.get('reshade'), crop: data.crop });
+
     if (takingScreenshot) {
+      log.info('Screenshot rejected', { reason: 'already-taking-screenshot' });
       return;
     }
 
     if (!iracing.telemetry || !iracing.sessionInfo) {
+      log.info('Screenshot rejected', { reason: 'no-telemetry' });
       reportScreenshotError('iRacing telemetry is not available', {
         context: 'resize-screenshot:telemetry',
         meta: { request: data }
@@ -581,6 +599,7 @@ app.on('ready', async () => {
     }
 
     if (!workerReady) {
+      log.info('Screenshot rejected', { reason: 'worker-not-ready' });
       reportScreenshotError('Screenshot worker is still loading', {
         context: 'resize-screenshot:worker-ready',
         meta: { request: data }
@@ -605,6 +624,7 @@ app.on('ready', async () => {
         break;
       }
     }
+    log.debug('UI hide wait', { waited, confirmed: iracing.telemetry?.values?.CamCameraState?.includes('UIHidden') || false });
 
     if (!config.get('reshade')) {
       // Run resize and source enumeration concurrently. spawnSync blocks the
@@ -620,6 +640,7 @@ app.on('ready', async () => {
       ]);
 
       if (id === undefined) {
+        log.info('iRacing window not found');
         restoreScreenshotState();
         reportScreenshotError('iRacing window not found', {
           context: 'resize-screenshot:window-not-found',
@@ -631,12 +652,16 @@ app.on('ready', async () => {
         return;
       }
 
+      log.info('iRacing window resized', { width: data.width, height: data.height, handle: id });
+
       let sourceId = null;
       const match = findSourceByWindowHandles(windowSources, [String(id)]);
       if (match) {
         sourceId = match.id;
       }
+      log.debug('Source enumeration', { windowSourceCount: windowSources.length, matchedSourceId: sourceId });
 
+      log.info('Capture request sent to worker', { width: data.width, height: data.height, sourceId });
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
       workerWindow.webContents.send('telemetry', iracing.telemetry);
       workerWindow.webContents.send('screenshot-request', {
@@ -660,6 +685,7 @@ app.on('ready', async () => {
     const id = resize(data.width, data.height, left, top);
 
     if (id === undefined) {
+      log.info('iRacing window not found');
       restoreScreenshotState();
       reportScreenshotError('iRacing window not found', {
         context: 'resize-screenshot:window-not-found',
@@ -671,6 +697,8 @@ app.on('ready', async () => {
       return;
     }
 
+    log.info('iRacing window resized', { width: data.width, height: data.height, handle: id });
+
     let reshadeLocation = null;
 
     try {
@@ -679,6 +707,7 @@ app.on('ready', async () => {
       reshadeLocation = getReshadeScreenshotFolder(reshadeIni, reshadeIniPath);
       const reshadeFile = await waitForReshadeScreenshot(reshadeLocation.folder);
 
+      log.info('ReShade screenshot received', { file: reshadeFile });
       restoreScreenshotState();
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
       workerWindow.webContents.send('telemetry', iracing.telemetry);
@@ -812,6 +841,7 @@ function restoreScreenshotState() {
   }
 
   takingScreenshot = false;
+  log.info('iRacing window restored');
 }
 
 async function listReshadeScreenshotFiles(folder) {
