@@ -606,6 +606,16 @@ app.on('ready', async () => {
       }
     }
 
+    // Start source enumeration BEFORE resize so the native work overlaps
+    // with the synchronous PowerShell spawnSync call (~500-1000ms).
+    const sourcesPromise = !config.get('reshade')
+      ? desktopCapturer.getSources({
+          types: ['window'],
+          thumbnailSize: { width: 0, height: 0 },
+          fetchWindowIcons: false
+        })
+      : null;
+
     const id = resize(data.width, data.height, left, top);
 
     if (id === undefined) {
@@ -621,6 +631,18 @@ app.on('ready', async () => {
     }
 
     if (!config.get('reshade')) {
+      // Resolve source ID from pre-fetched sources
+      let sourceId = null;
+      try {
+        const windowSources = await sourcesPromise;
+        const match = findSourceByWindowHandles(windowSources, [String(id)]);
+        if (match) {
+          sourceId = match.id;
+        }
+      } catch (err) {
+        console.error('Pre-resolve source ID failed:', err);
+      }
+
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
       workerWindow.webContents.send('telemetry', iracing.telemetry);
       workerWindow.webContents.send('screenshot-request', {
@@ -629,6 +651,7 @@ app.on('ready', async () => {
         crop: data.crop,
         cropTopLeft: data.cropTopLeft,
         windowID: id,
+        sourceId,
         captureBounds: {
           x: left,
           y: top,

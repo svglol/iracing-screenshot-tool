@@ -28,6 +28,7 @@ let crop = false;
 let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
+let preResolvedSourceId = null;
 function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -407,23 +408,41 @@ async function fullscreenScreenshot(callback) {
   console.time('Draw Image');
   console.time('Get Media');
 
-  // Fast path: construct source ID directly from the window handle returned
-  // by resize(). This skips the expensive desktop-capturer:get-source-id IPC
-  // which spawns PowerShell + desktopCapturer.getSources() (~2-3s combined).
-  // If direct capture fails, fall back to the full enumeration path.
-  const directSourceId = `window:${windowID}:0`;
-
   try {
     // Brief settling delay for iRacing to re-render at the new resolution.
     await delay(200);
 
-    console.log(`Using capture source ${directSourceId} (direct)`);
+    let sourceId = preResolvedSourceId;
+    let captureTarget = null;
+
+    if (sourceId) {
+      // Fast path: source ID was pre-resolved by the main process during
+      // resize, skipping the expensive IPC round-trip (~2-3s).
+      console.log(`Using capture source ${sourceId} (pre-resolved)`);
+      captureTarget = { id: sourceId, kind: 'window' };
+    } else {
+      // Slow fallback: full desktop source enumeration via IPC
+      console.log('No pre-resolved source ID, falling back to source enumeration');
+      captureTarget = normalizeCaptureTarget(
+        await ipcRenderer.invoke('desktop-capturer:get-source-id', {
+          windowID,
+          captureBounds
+        })
+      );
+      sourceId = captureTarget.id;
+      captureTargetDiagnostics = captureTarget.diagnostics;
+    }
+
+    if (!sourceId) {
+      throw new Error('No desktop capture source found for window ' + windowID);
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         mandatory: {
           chromeMediaSource: 'desktop',
-          chromeMediaSourceId: directSourceId,
+          chromeMediaSourceId: sourceId,
           minWidth: 1280,
           maxWidth: 10000,
           minHeight: 720,
@@ -432,46 +451,10 @@ async function fullscreenScreenshot(callback) {
       }
     });
 
-    stream.__captureTarget = { id: directSourceId, kind: 'window' };
+    stream.__captureTarget = captureTarget;
     handleStream(stream);
-  } catch (directError) {
-    // Slow fallback: full desktop source enumeration via IPC
-    console.log(`Direct capture failed (${directError.message}), falling back to source enumeration`);
-    try {
-      const captureTarget = normalizeCaptureTarget(
-        await ipcRenderer.invoke('desktop-capturer:get-source-id', {
-          windowID,
-          captureBounds
-        })
-      );
-      const sourceId = captureTarget.id;
-      captureTargetDiagnostics = captureTarget.diagnostics;
-
-      if (!sourceId) {
-        throw new Error('No desktop capture source found for window ' + windowID);
-      }
-
-      console.log(`Using capture source ${sourceId}${captureTarget.kind === 'display' ? ' (display fallback)' : ''}`);
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: sourceId,
-            minWidth: 1280,
-            maxWidth: 10000,
-            minHeight: 720,
-            maxHeight: 10000
-          }
-        }
-      });
-
-      stream.__captureTarget = captureTarget;
-      handleStream(stream);
-    } catch (fallbackError) {
-      handleError(fallbackError);
-    }
+  } catch (error) {
+    handleError(error);
   }
 }
 
@@ -487,6 +470,7 @@ export default {
       cropTopLeft = input.cropTopLeft || false;
       captureBounds = normalizeCaptureBounds(input.captureBounds);
       captureTargetDiagnostics = null;
+      preResolvedSourceId = input.sourceId || null;
       if (windowID === undefined) {
         sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
           request: input,
