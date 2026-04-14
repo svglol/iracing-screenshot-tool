@@ -407,33 +407,23 @@ async function fullscreenScreenshot(callback) {
   console.time('Draw Image');
   console.time('Get Media');
 
+  // Fast path: construct source ID directly from the window handle returned
+  // by resize(). This skips the expensive desktop-capturer:get-source-id IPC
+  // which spawns PowerShell + desktopCapturer.getSources() (~2-3s combined).
+  // If direct capture fails, fall back to the full enumeration path.
+  const directSourceId = `window:${windowID}:0`;
+
   try {
-    // Run the settling delay and desktop source enumeration in parallel.
-    // The delay lets iRacing re-render at the new resolution after SetWindowPos;
-    // the source lookup (getIracingWindowDetails + desktopCapturer.getSources)
-    // is expensive (~1-2s) but doesn't depend on the render being complete.
-    const [, captureTarget] = await Promise.all([
-      delay(500),
-      ipcRenderer.invoke('desktop-capturer:get-source-id', {
-        windowID,
-        captureBounds
-      }).then(normalizeCaptureTarget)
-    ]);
-    const sourceId = captureTarget.id;
-    captureTargetDiagnostics = captureTarget.diagnostics;
+    // Brief settling delay for iRacing to re-render at the new resolution.
+    await delay(200);
 
-    if (!sourceId) {
-      throw new Error('No desktop capture source found for window ' + windowID);
-    }
-
-    console.log(`Using capture source ${sourceId}${captureTarget.kind === 'display' ? ' (display fallback)' : ''}`);
-
+    console.log(`Using capture source ${directSourceId} (direct)`);
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         mandatory: {
           chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sourceId,
+          chromeMediaSourceId: directSourceId,
           minWidth: 1280,
           maxWidth: 10000,
           minHeight: 720,
@@ -442,10 +432,46 @@ async function fullscreenScreenshot(callback) {
       }
     });
 
-    stream.__captureTarget = captureTarget;
+    stream.__captureTarget = { id: directSourceId, kind: 'window' };
     handleStream(stream);
-  } catch (error) {
-    handleError(error);
+  } catch (directError) {
+    // Slow fallback: full desktop source enumeration via IPC
+    console.log(`Direct capture failed (${directError.message}), falling back to source enumeration`);
+    try {
+      const captureTarget = normalizeCaptureTarget(
+        await ipcRenderer.invoke('desktop-capturer:get-source-id', {
+          windowID,
+          captureBounds
+        })
+      );
+      const sourceId = captureTarget.id;
+      captureTargetDiagnostics = captureTarget.diagnostics;
+
+      if (!sourceId) {
+        throw new Error('No desktop capture source found for window ' + windowID);
+      }
+
+      console.log(`Using capture source ${sourceId}${captureTarget.kind === 'display' ? ' (display fallback)' : ''}`);
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: sourceId,
+            minWidth: 1280,
+            maxWidth: 10000,
+            minHeight: 720,
+            maxHeight: 10000
+          }
+        }
+      });
+
+      stream.__captureTarget = captureTarget;
+      handleStream(stream);
+    } catch (fallbackError) {
+      handleError(fallbackError);
+    }
   }
 }
 
