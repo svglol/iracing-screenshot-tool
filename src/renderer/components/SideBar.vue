@@ -199,6 +199,9 @@ export default {
           h = 1080;
       }
 
+      const targetWidth = w;
+      const targetHeight = h;
+
       const cropTopLeft = config.get('cropTopLeft');
       if (this.crop && cropTopLeft) {
         // Legacy: expand 3% so cropping bottom-right removes watermark
@@ -210,7 +213,7 @@ export default {
         h += Math.ceil(h * 0.06);
       }
       this.takingScreenshot = true;
-      this.$emit('click', { width: w, height: h, crop: this.crop, cropTopLeft });
+      this.$emit('click', { width: w, height: h, targetWidth, targetHeight, crop: this.crop, cropTopLeft });
       this.hideCursorDuringCapture();
     }
   },

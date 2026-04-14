@@ -667,6 +667,8 @@ app.on('ready', async () => {
       workerWindow.webContents.send('screenshot-request', {
         width: data.width,
         height: data.height,
+        targetWidth: data.targetWidth,
+        targetHeight: data.targetHeight,
         crop: data.crop,
         cropTopLeft: data.cropTopLeft,
         windowID: id,

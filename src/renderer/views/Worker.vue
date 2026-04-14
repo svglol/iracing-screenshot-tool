@@ -42,6 +42,8 @@ let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
 let preResolvedSourceId = null;
+let targetWidth = null;
+let targetHeight = null;
 function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -260,30 +262,26 @@ async function saveReshadeImage(sourceFile) {
     }
 
     const reshadeProcessStart = performance.now();
-    if (crop && cropTopLeftFlag) {
-      // Legacy: crop 3% from bottom-right — recover original from expanded / 1.03
-      const outW = Math.round(metadata.width / 1.03);
-      const outH = Math.round(metadata.height / 1.03);
+    if (crop && cropTopLeftFlag && targetWidth && targetHeight) {
+      // Legacy: crop bottom-right — output is the original target resolution
       await image
         .extract({
           left: 0,
           top: 0,
-          width: outW,
-          height: outH
+          width: targetWidth,
+          height: targetHeight
         })
         .toFile(fileName);
-    } else if (crop) {
-      // Default: crop 3% from each side — recover original from expanded / 1.06
-      const outW = Math.round(metadata.width / 1.06);
-      const outH = Math.round(metadata.height / 1.06);
-      const cropX = Math.round((metadata.width - outW) / 2);
-      const cropY = Math.round((metadata.height - outH) / 2);
+    } else if (crop && targetWidth && targetHeight) {
+      // Default: crop from each side — center-extract the original target resolution
+      const cropX = Math.round((metadata.width - targetWidth) / 2);
+      const cropY = Math.round((metadata.height - targetHeight) / 2);
       await image
         .extract({
           left: cropX,
           top: cropY,
-          width: outW,
-          height: outH
+          width: targetWidth,
+          height: targetHeight
         })
         .toFile(fileName);
     } else {
@@ -363,18 +361,16 @@ async function fullscreenScreenshot(callback) {
         const captureRect = resolveDisplayCaptureRect(this.videoWidth, this.videoHeight, captureTarget);
 
         let outputWidth, outputHeight, srcX, srcY;
-        if (crop && cropTopLeft) {
-          // Legacy: crop 3% from bottom-right only
-          // SideBar expanded by ceil(original * 0.03), so original = round(expanded / 1.03)
-          outputWidth = Math.round(captureRect.width / 1.03);
-          outputHeight = Math.round(captureRect.height / 1.03);
+        if (crop && cropTopLeft && targetWidth && targetHeight) {
+          // Legacy: crop bottom-right — output is the original target resolution
+          outputWidth = targetWidth;
+          outputHeight = targetHeight;
           srcX = captureRect.x;
           srcY = captureRect.y;
-        } else if (crop) {
-          // Default: crop 3% from each side (6% total expansion, center extract)
-          // SideBar expanded by ceil(original * 0.06), so original = round(expanded / 1.06)
-          outputWidth = Math.round(captureRect.width / 1.06);
-          outputHeight = Math.round(captureRect.height / 1.06);
+        } else if (crop && targetWidth && targetHeight) {
+          // Default: crop from each side — center-extract the original target resolution
+          outputWidth = targetWidth;
+          outputHeight = targetHeight;
           const cropX = Math.round((captureRect.width - outputWidth) / 2);
           const cropY = Math.round((captureRect.height - outputHeight) / 2);
           srcX = captureRect.x + cropX;
@@ -519,6 +515,8 @@ export default {
       captureBounds = normalizeCaptureBounds(input.captureBounds);
       captureTargetDiagnostics = null;
       preResolvedSourceId = input.sourceId || null;
+      targetWidth = input.targetWidth || null;
+      targetHeight = input.targetHeight || null;
       log.info('Screenshot capture started', { width: input.width, height: input.height, crop: input.crop, cropTopLeft: input.cropTopLeft });
       if (windowID === undefined) {
         sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
