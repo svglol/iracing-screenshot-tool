@@ -408,16 +408,17 @@ async function fullscreenScreenshot(callback) {
   console.time('Get Media');
 
   try {
-    // Allow the OS and iRacing time to settle at the new resolution after
-    // the main process resized the window via SetWindowPos.
-    await delay(1000);
-
-    const captureTarget = normalizeCaptureTarget(
-      await ipcRenderer.invoke('desktop-capturer:get-source-id', {
+    // Run the settling delay and desktop source enumeration in parallel.
+    // The delay lets iRacing re-render at the new resolution after SetWindowPos;
+    // the source lookup (getIracingWindowDetails + desktopCapturer.getSources)
+    // is expensive (~1-2s) but doesn't depend on the render being complete.
+    const [, captureTarget] = await Promise.all([
+      delay(500),
+      ipcRenderer.invoke('desktop-capturer:get-source-id', {
         windowID,
         captureBounds
-      })
-    );
+      }).then(normalizeCaptureTarget)
+    ]);
     const sourceId = captureTarget.id;
     captureTargetDiagnostics = captureTarget.diagnostics;
 
