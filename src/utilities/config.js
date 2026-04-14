@@ -57,6 +57,11 @@ const schema = {
     type: 'string',
     default: '{track}-{driver}-{counter}'
   },
+  outputFormat: {
+    type: 'string',
+    default: 'jpeg',
+    enum: ['jpeg', 'png', 'webp']
+  },
   disableTooltips: {
     type: 'boolean',
     default: false

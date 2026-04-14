@@ -113,6 +113,14 @@
           </div>
 
           <hr>
+          <b-field label="Output Format">
+            <b-select v-model="outputFormat">
+              <option value="jpeg">JPEG (quality 95%)</option>
+              <option value="png">PNG (lossless)</option>
+              <option value="webp">WebP (quality 95%)</option>
+            </b-select>
+          </b-field>
+          <hr>
           <b-field>
             <div>
               <span
@@ -271,6 +279,7 @@ export default {
       reshadeFile: config.get('reshadeFile'),
       customFilenameFormat: config.get('customFilenameFormat'),
       filenameFormat: config.get('filenameFormat'),
+      outputFormat: config.get('outputFormat'),
       filenameFields: FILENAME_FIELDS,
       defaultFormat: DEFAULT_FORMAT,
       iracingOpen: false
@@ -305,7 +314,8 @@ export default {
       for (const [token, value] of Object.entries(examples)) {
         preview = preview.split(token).join(value);
       }
-      return preview + '.png';
+      const extMap = { jpeg: '.jpg', png: '.png', webp: '.webp' };
+      return preview + (extMap[this.outputFormat] || '.jpg');
     },
     fieldsByCategory () {
       return this.filenameFields.reduce((acc, field) => {
@@ -331,6 +341,9 @@ export default {
     });
   },
   watch: {
+    outputFormat () {
+      config.set('outputFormat', this.outputFormat);
+    },
     customFilenameFormat () {
       config.set('customFilenameFormat', this.customFilenameFormat);
     },
