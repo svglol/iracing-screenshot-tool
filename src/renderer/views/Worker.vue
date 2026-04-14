@@ -148,7 +148,7 @@ function getCacheDir() {
 }
 
 function getScreenshotPath(fileName) {
-  return path.join(getScreenshotDir(), `${fileName}.png`);
+  return path.join(getScreenshotDir(), `${fileName}.jpg`);
 }
 
 function getThumbnailPath(fileName) {
@@ -390,8 +390,8 @@ async function fullscreenScreenshot(callback) {
         console.timeEnd('Create OffscreenCanvas');
         console.time('To Blob');
         const blobStart = performance.now();
-        const blob = await offscreen.convertToBlob({ type: 'image/png' });
-        log.debug('Blob conversion', { elapsed: Math.round(performance.now() - blobStart), type: 'image/png' });
+        const blob = await offscreen.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
+        log.debug('Blob conversion', { elapsed: Math.round(performance.now() - blobStart), type: 'image/jpeg' });
         console.timeEnd('To Blob');
         console.timeEnd('Draw Image');
         callback(blob);

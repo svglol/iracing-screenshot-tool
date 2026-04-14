@@ -2,7 +2,7 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** 1.2 - Feature Enhancements
-**Last activity:** 2026-04-10 - Completed quick task 260410-v7a (top-left watermark crop toggle)
+**Last activity:** 2026-04-14 - Completed quick task 260414-r9x (file-based INFO/DEBUG logging system)
 
 ### Current Phase
 Phase 1: Filename Format Configurator - Complete
@@ -25,3 +25,4 @@ None
 | 260403-evq | Implement UI format configurator for picture naming with session field chips and custom text | 2026-04-03 | See git log | Verified | [260403-evq-implement-ui-format-configurator-for-pic](./quick/260403-evq-implement-ui-format-configurator-for-pic/) |
 | 260410-n97 | Change crop watermark from hardcoded 54/30px to relative 3% of dimensions | 2026-04-10 | 0a9d8f5 | | [260410-n97-change-crop-watermark-from-hardcoded-54-](./quick/260410-n97-change-crop-watermark-from-hardcoded-54-/) |
 | 260410-v7a | Add prefer top-left watermark crop toggle with alternative 6% all-sides crop | 2026-04-10 | 13251e5 | | [260410-v7a-add-prefer-top-left-watermark-crop-toggl](./quick/260410-v7a-add-prefer-top-left-watermark-crop-toggl/) |
+| 260414-r9x | Add file-based INFO/DEBUG logging system across the capture pipeline | 2026-04-14 | 3cb1b09 | | [260414-r9x-add-file-based-info-debug-logging-system](./quick/260414-r9x-add-file-based-info-debug-logging-system/) |
