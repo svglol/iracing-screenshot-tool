@@ -23,6 +23,17 @@ const { resolveFilenameFormat } = require('../../utilities/filenameFormat');
 const { createLogger } = require('../../utilities/logger');
 const log = createLogger('worker');
 
+const FORMAT_MAP = {
+  jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 0.95 },
+  png:  { mime: 'image/png',  ext: '.png', quality: undefined },
+  webp: { mime: 'image/webp', ext: '.webp', quality: 0.95 }
+};
+
+function getOutputFormat() {
+  const key = config.get('outputFormat') || 'jpeg';
+  return FORMAT_MAP[key] || FORMAT_MAP.jpeg;
+}
+
 let sessionInfo = null;
 let telemetry = null;
 let windowID = null;
@@ -148,7 +159,8 @@ function getCacheDir() {
 }
 
 function getScreenshotPath(fileName) {
-  return path.join(getScreenshotDir(), `${fileName}.jpg`);
+  const fmt = getOutputFormat();
+  return path.join(getScreenshotDir(), `${fileName}${fmt.ext}`);
 }
 
 function getThumbnailPath(fileName) {
@@ -390,8 +402,11 @@ async function fullscreenScreenshot(callback) {
         console.timeEnd('Create OffscreenCanvas');
         console.time('To Blob');
         const blobStart = performance.now();
-        const blob = await offscreen.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
-        log.debug('Blob conversion', { elapsed: Math.round(performance.now() - blobStart), type: 'image/jpeg' });
+        const fmt = getOutputFormat();
+        const blobOpts = { type: fmt.mime };
+        if (fmt.quality !== undefined) blobOpts.quality = fmt.quality;
+        const blob = await offscreen.convertToBlob(blobOpts);
+        log.debug('Blob conversion', { elapsed: Math.round(performance.now() - blobStart), type: fmt.mime });
         console.timeEnd('To Blob');
         console.timeEnd('Draw Image');
         callback(blob);
