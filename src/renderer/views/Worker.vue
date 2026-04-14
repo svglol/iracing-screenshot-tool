@@ -28,9 +28,6 @@ let crop = false;
 let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
-let targetWidth = null;
-let targetHeight = null;
-
 function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -410,11 +407,11 @@ async function fullscreenScreenshot(callback) {
   console.time('Draw Image');
   console.time('Get Media');
 
-  const RETRY_DELAY_MS = 300;
-  const MAX_WAIT_MS = 8000;
-  const startTime = Date.now();
+  try {
+    // Allow the OS and iRacing time to settle at the new resolution after
+    // the main process resized the window via SetWindowPos.
+    await delay(1000);
 
-  const acquireStream = async () => {
     const captureTarget = normalizeCaptureTarget(
       await ipcRenderer.invoke('desktop-capturer:get-source-id', {
         windowID,
@@ -445,51 +442,6 @@ async function fullscreenScreenshot(callback) {
     });
 
     stream.__captureTarget = captureTarget;
-    return stream;
-  };
-
-  try {
-    // Initial settling delay — give the OS time to resize the window before
-    // the first capture attempt.
-    await delay(500);
-
-    let stream = await acquireStream();
-
-    // In window-capture mode, verify the stream dimensions match the target.
-    // In display-capture mode, the stream is the full display and
-    // resolveDisplayCaptureRect extracts the correct sub-region, so skip the check.
-    const captureKind = normalizeCaptureTarget(stream.__captureTarget).kind;
-    if (targetWidth && targetHeight && captureKind !== 'display') {
-      const track = stream.getVideoTracks()[0];
-      const settings = track ? track.getSettings() : {};
-      let streamW = settings.width || 0;
-      let streamH = settings.height || 0;
-
-      while (
-        (streamW !== targetWidth || streamH !== targetHeight) &&
-        Date.now() - startTime < MAX_WAIT_MS
-      ) {
-        console.log(
-          `Stream dimensions ${streamW}x${streamH} do not match target ${targetWidth}x${targetHeight} — retrying in ${RETRY_DELAY_MS}ms`
-        );
-        stream.getTracks().forEach((t) => t.stop());
-        await delay(RETRY_DELAY_MS);
-        stream = await acquireStream();
-        const retryTrack = stream.getVideoTracks()[0];
-        const retrySettings = retryTrack ? retryTrack.getSettings() : {};
-        streamW = retrySettings.width || 0;
-        streamH = retrySettings.height || 0;
-      }
-
-      if (streamW !== targetWidth || streamH !== targetHeight) {
-        console.warn(
-          `Timed out waiting for target dimensions ${targetWidth}x${targetHeight}; proceeding with ${streamW}x${streamH}`
-        );
-      } else {
-        console.log(`Stream dimensions confirmed: ${streamW}x${streamH}`);
-      }
-    }
-
     handleStream(stream);
   } catch (error) {
     handleError(error);
@@ -508,9 +460,6 @@ export default {
       cropTopLeft = input.cropTopLeft || false;
       captureBounds = normalizeCaptureBounds(input.captureBounds);
       captureTargetDiagnostics = null;
-      targetWidth = input.width || null;
-      targetHeight = input.height || null;
-
       if (windowID === undefined) {
         sendScreenshotError('iRacing window not found', 'worker:screenshot-request', {
           request: input,
