@@ -1,4 +1,4 @@
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const IRACING_PROCESS_NAME = 'iRacingSim64DX11';
 
 function getIracingWindowDetails() {
@@ -153,7 +153,85 @@ Write-Output ([int64]$window)
   return Number.isNaN(handle) ? undefined : handle;
 }
 
+function resizeIracingWindowAsync(width, height, left, top) {
+  const script = `
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class Win32 {
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+  [DllImport("user32.dll")]
+  public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+  [DllImport("user32.dll")]
+  public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern bool BringWindowToTop(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr SetFocus(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr SetActiveWindow(IntPtr hWnd);
+}
+"@
+
+$process = Get-Process -Name '${IRACING_PROCESS_NAME}' -ErrorAction SilentlyContinue |
+  Where-Object { $_.MainWindowHandle -ne 0 } |
+  Select-Object -First 1
+
+if (-not $process) {
+  Write-Output 'NOT_FOUND'
+  exit 0
+}
+
+$window = [IntPtr]$process.MainWindowHandle
+[Win32]::SetWindowPos($window, [IntPtr](-2), ${left}, ${top}, ${width}, ${height}, 0) | Out-Null
+[Win32]::ShowWindow($window, 9) | Out-Null
+[Win32]::BringWindowToTop($window) | Out-Null
+[Win32]::SetForegroundWindow($window) | Out-Null
+[Win32]::SetFocus($window) | Out-Null
+[Win32]::SetActiveWindow($window) | Out-Null
+Write-Output ([int64]$window)
+`;
+
+  return new Promise((resolve) => {
+    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+      windowsHide: true
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (data) => { stdout += data; });
+    child.stderr.on('data', (data) => { stderr += data; });
+    child.on('close', (code) => {
+      if (code !== 0) {
+        if (stderr.trim()) {
+          console.error(stderr.trim());
+        }
+        resolve(undefined);
+        return;
+      }
+
+      const output = stdout.trim();
+      if (!output || output === 'NOT_FOUND') {
+        resolve(undefined);
+        return;
+      }
+
+      const handle = Number.parseInt(output, 10);
+      resolve(Number.isNaN(handle) ? undefined : handle);
+    });
+  });
+}
+
 module.exports = {
   resizeIracingWindow,
+  resizeIracingWindowAsync,
   getIracingWindowDetails
 };

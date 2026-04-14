@@ -18,7 +18,7 @@ const os = require('os');
 const path = require('path');
 
 const irsdk = require('./iracing-sdk');
-const { resizeIracingWindow, getIracingWindowDetails } = require('./window-utils');
+const { resizeIracingWindow, resizeIracingWindowAsync, getIracingWindowDetails } = require('./window-utils');
 const {
   normalizeWindowHandle,
   normalizeWindowTitle,
@@ -606,41 +606,35 @@ app.on('ready', async () => {
       }
     }
 
-    // Start source enumeration BEFORE resize so the native work overlaps
-    // with the synchronous PowerShell spawnSync call (~500-1000ms).
-    const sourcesPromise = !config.get('reshade')
-      ? desktopCapturer.getSources({
+    if (!config.get('reshade')) {
+      // Run resize and source enumeration concurrently. spawnSync blocks the
+      // event loop so desktopCapturer.getSources can't overlap with it — using
+      // the async resize variant lets both run in parallel.
+      const [id, windowSources] = await Promise.all([
+        resizeIracingWindowAsync(data.width, data.height, left, top),
+        desktopCapturer.getSources({
           types: ['window'],
           thumbnailSize: { width: 0, height: 0 },
           fetchWindowIcons: false
         })
-      : null;
+      ]);
 
-    const id = resize(data.width, data.height, left, top);
+      if (id === undefined) {
+        restoreScreenshotState();
+        reportScreenshotError('iRacing window not found', {
+          context: 'resize-screenshot:window-not-found',
+          meta: {
+            request: data,
+            defaultScreen: { width, height, left, top }
+          }
+        });
+        return;
+      }
 
-    if (id === undefined) {
-      restoreScreenshotState();
-      reportScreenshotError('iRacing window not found', {
-        context: 'resize-screenshot:window-not-found',
-        meta: {
-          request: data,
-          defaultScreen: { width, height, left, top }
-        }
-      });
-      return;
-    }
-
-    if (!config.get('reshade')) {
-      // Resolve source ID from pre-fetched sources
       let sourceId = null;
-      try {
-        const windowSources = await sourcesPromise;
-        const match = findSourceByWindowHandles(windowSources, [String(id)]);
-        if (match) {
-          sourceId = match.id;
-        }
-      } catch (err) {
-        console.error('Pre-resolve source ID failed:', err);
+      const match = findSourceByWindowHandles(windowSources, [String(id)]);
+      if (match) {
+        sourceId = match.id;
       }
 
       workerWindow.webContents.send('session-info', iracing.sessionInfo);
@@ -657,6 +651,21 @@ app.on('ready', async () => {
           y: top,
           width: data.width,
           height: data.height
+        }
+      });
+      return;
+    }
+
+    // ReShade path: sync resize is fine since we don't need source enumeration
+    const id = resize(data.width, data.height, left, top);
+
+    if (id === undefined) {
+      restoreScreenshotState();
+      reportScreenshotError('iRacing window not found', {
+        context: 'resize-screenshot:window-not-found',
+        meta: {
+          request: data,
+          defaultScreen: { width, height, left, top }
         }
       });
       return;
