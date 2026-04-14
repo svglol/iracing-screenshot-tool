@@ -455,10 +455,11 @@ async function fullscreenScreenshot(callback) {
 
     let stream = await acquireStream();
 
-    // If we have a target resolution, verify the stream delivered it.
-    // If not, release and retry until the window has finished resizing or we
-    // exceed MAX_WAIT_MS, then proceed with whatever dimensions we have.
-    if (targetWidth && targetHeight) {
+    // In window-capture mode, verify the stream dimensions match the target.
+    // In display-capture mode, the stream is the full display and
+    // resolveDisplayCaptureRect extracts the correct sub-region, so skip the check.
+    const captureKind = normalizeCaptureTarget(stream.__captureTarget).kind;
+    if (targetWidth && targetHeight && captureKind !== 'display') {
       const track = stream.getVideoTracks()[0];
       const settings = track ? track.getSettings() : {};
       let streamW = settings.width || 0;
