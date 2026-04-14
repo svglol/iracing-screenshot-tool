@@ -261,25 +261,29 @@ async function saveReshadeImage(sourceFile) {
 
     const reshadeProcessStart = performance.now();
     if (crop && cropTopLeftFlag) {
-      // Legacy: crop 3% from bottom-right
+      // Legacy: crop 3% from bottom-right — recover original from expanded / 1.03
+      const outW = Math.round(metadata.width / 1.03);
+      const outH = Math.round(metadata.height / 1.03);
       await image
         .extract({
           left: 0,
           top: 0,
-          width: metadata.width - Math.ceil(metadata.width * 0.03),
-          height: metadata.height - Math.ceil(metadata.height * 0.03)
+          width: outW,
+          height: outH
         })
         .toFile(fileName);
     } else if (crop) {
-      // Default: crop 3% from each side
-      const cropX = Math.ceil(metadata.width * 0.03);
-      const cropY = Math.ceil(metadata.height * 0.03);
+      // Default: crop 3% from each side — recover original from expanded / 1.06
+      const outW = Math.round(metadata.width / 1.06);
+      const outH = Math.round(metadata.height / 1.06);
+      const cropX = Math.round((metadata.width - outW) / 2);
+      const cropY = Math.round((metadata.height - outH) / 2);
       await image
         .extract({
           left: cropX,
           top: cropY,
-          width: metadata.width - cropX * 2,
-          height: metadata.height - cropY * 2
+          width: outW,
+          height: outH
         })
         .toFile(fileName);
     } else {
@@ -361,16 +365,20 @@ async function fullscreenScreenshot(callback) {
         let outputWidth, outputHeight, srcX, srcY;
         if (crop && cropTopLeft) {
           // Legacy: crop 3% from bottom-right only
-          outputWidth = captureRect.width - Math.ceil(captureRect.width * 0.03);
-          outputHeight = captureRect.height - Math.ceil(captureRect.height * 0.03);
+          // SideBar expanded by ceil(original * 0.03), so original = round(expanded / 1.03)
+          outputWidth = Math.round(captureRect.width / 1.03);
+          outputHeight = Math.round(captureRect.height / 1.03);
           srcX = captureRect.x;
           srcY = captureRect.y;
         } else if (crop) {
           // Default: crop 3% from each side (6% total expansion, center extract)
-          outputWidth = captureRect.width - Math.ceil(captureRect.width * 0.06);
-          outputHeight = captureRect.height - Math.ceil(captureRect.height * 0.06);
-          srcX = captureRect.x + Math.ceil(captureRect.width * 0.03);
-          srcY = captureRect.y + Math.ceil(captureRect.height * 0.03);
+          // SideBar expanded by ceil(original * 0.06), so original = round(expanded / 1.06)
+          outputWidth = Math.round(captureRect.width / 1.06);
+          outputHeight = Math.round(captureRect.height / 1.06);
+          const cropX = Math.round((captureRect.width - outputWidth) / 2);
+          const cropY = Math.round((captureRect.height - outputHeight) / 2);
+          srcX = captureRect.x + cropX;
+          srcY = captureRect.y + cropY;
         } else {
           outputWidth = captureRect.width;
           outputHeight = captureRect.height;
