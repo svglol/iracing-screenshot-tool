@@ -31,12 +31,16 @@
 	},
 	"devDependencies": {
 		"@babel/preset-env": "7.29.2",
+		"babel-plugin-transform-import-meta": "2.3.3",
 		"jest": "25.3.0"
 	},
 	"jest": {
 		"testEnvironment": "node",
 		"testPathIgnorePatterns": [
 			"/node_modules/"
-		]
+		],
+		"moduleNameMapper": {
+			"^discord\\.js$": "<rootDir>/test-helpers/discord.js.cjs"
+		}
 	}
 }
