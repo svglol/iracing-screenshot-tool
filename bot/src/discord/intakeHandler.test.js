@@ -14,6 +14,11 @@
 // intake would make the triage command a no-op and misrepresent the state.
 // Both the happy-path test AND a dedicated `.not.toContain('triaged')`
 // assertion pin this so a future refactor cannot silently regress it.
+//
+// Mock naming convention: every mocked function's variable name starts with
+// `mock` so Jest's mock-hoisting heuristic permits it to be referenced from
+// inside the `jest.mock(..., factory)` body. Without that prefix Jest rejects
+// the access as an uninitialised-variable reference.
 // ---------------------------------------------------------------------------
 
 jest.mock('../config.js', () => ({
@@ -31,39 +36,40 @@ jest.mock('../config.js', () => ({
 	}
 }));
 
-const mockIssues = {
-	createIssue: jest.fn(),
-	updateIssue: jest.fn()
-};
+// Mock functions defined INSIDE the factory so the jest.mock hoisting is safe.
+// Retrieved after module init via `require(...)`-style access on the mocked
+// module. This pattern is ugly but is the only hoisting-compliant shape with
+// Jest 25's babel-hoist transformation.
 jest.mock('../github/issues.js', () => ({
 	__esModule: true,
-	...mockIssues
+	createIssue: jest.fn(),
+	updateIssue: jest.fn()
 }));
 
-const mockMappings = { insert: jest.fn() };
 jest.mock('../storage/mappings.js', () => ({
 	__esModule: true,
-	...mockMappings
+	insert: jest.fn()
 }));
 
-const mockRateLimitRecord = jest.fn();
-const mockRateLimitCheck = jest.fn().mockReturnValue({ ok: true });
 jest.mock('../rateLimit.js', () => ({
 	__esModule: true,
-	record: mockRateLimitRecord,
-	check: mockRateLimitCheck
+	record: jest.fn(),
+	check: jest.fn().mockReturnValue({ ok: true })
 }));
 
-const mockCollect = jest.fn();
 jest.mock('./attachmentCollector.js', () => ({
 	__esModule: true,
-	collectAttachments: mockCollect
+	collectAttachments: jest.fn()
 }));
 
 import {
 	handleBugModalSubmit,
 	handleFeatureModalSubmit
 } from './intakeHandler.js';
+import * as mockIssues from '../github/issues.js';
+import * as mockMappings from '../storage/mappings.js';
+import * as mockRateLimit from '../rateLimit.js';
+import * as mockAttachments from './attachmentCollector.js';
 
 function makeInteraction({
 	kind = 'bug',
@@ -107,8 +113,8 @@ function makeInteraction({
 
 beforeEach(() => {
 	jest.clearAllMocks();
-	mockCollect.mockResolvedValue([]);
-	mockRateLimitCheck.mockReturnValue({ ok: true });
+	mockAttachments.collectAttachments.mockResolvedValue([]);
+	mockRateLimit.check.mockReturnValue({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -136,8 +142,12 @@ describe('handleBugModalSubmit', () => {
 				discord_message_id: 'msg-1'
 			})
 		);
-		expect(mockRateLimitRecord).toHaveBeenCalledWith('user-1');
-		expect(mockCollect).toHaveBeenCalledWith(expect.any(Object), 'user-1', 42);
+		expect(mockRateLimit.record).toHaveBeenCalledWith('user-1');
+		expect(mockAttachments.collectAttachments).toHaveBeenCalledWith(
+			expect.any(Object),
+			'user-1',
+			42
+		);
 		expect(ix.editReply).toHaveBeenCalled();
 	});
 
@@ -186,7 +196,7 @@ describe('handleBugModalSubmit', () => {
 
 	test('when attachments returned, updateIssue receives body with appended markdown', async () => {
 		mockIssues.createIssue.mockResolvedValue({ number: 7, html_url: 'x' });
-		mockCollect.mockResolvedValue([
+		mockAttachments.collectAttachments.mockResolvedValue([
 			{ name: 'pic.png', url: 'https://raw/pic.png' }
 		]);
 		const ix = makeInteraction();
@@ -199,7 +209,7 @@ describe('handleBugModalSubmit', () => {
 
 	test('when attachments empty, updateIssue is NOT called', async () => {
 		mockIssues.createIssue.mockResolvedValue({ number: 7, html_url: 'x' });
-		mockCollect.mockResolvedValue([]);
+		mockAttachments.collectAttachments.mockResolvedValue([]);
 		const ix = makeInteraction();
 		await handleBugModalSubmit(ix);
 		expect(mockIssues.updateIssue).not.toHaveBeenCalled();
@@ -213,7 +223,7 @@ describe('handleBugModalSubmit', () => {
 			content: expect.stringContaining('Failed to create')
 		});
 		expect(mockMappings.insert).not.toHaveBeenCalled();
-		expect(mockCollect).not.toHaveBeenCalled();
+		expect(mockAttachments.collectAttachments).not.toHaveBeenCalled();
 	});
 
 	test('channel-fetch failure → falls back to link in editReply; no mapping insert', async () => {
