@@ -32,6 +32,17 @@ jest.mock('../../github/issues.js', () => ({
 	removeLabel: jest.fn()
 }));
 
+// labels.js pulls in @octokit/rest transitively via client.js; virtual mock
+// keeps the test hermetic while letting us import the REAL LABEL_TAXONOMY.
+jest.mock(
+	'@octokit/rest',
+	() => ({
+		__esModule: true,
+		Octokit: jest.fn().mockImplementation(() => ({ rest: {} }))
+	}),
+	{ virtual: true }
+);
+
 // Use the REAL LABEL_TAXONOMY so the allowlist stays in sync with the source.
 
 import { canTriage } from '../../permissions.js';
