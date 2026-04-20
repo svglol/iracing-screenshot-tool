@@ -1,9 +1,8 @@
 'use strict';
 
 // Prevent dotenv from reading a real .env while the test file is loaded.
+// This mock is hoisted by babel-jest above all requires.
 jest.mock('dotenv/config', () => ({}));
-
-import { loadConfig, MissingConfigError, InvalidConfigError } from './config.js';
 
 // Minimal env that satisfies every `required: true` schema entry. Every test
 // either uses this as-is or spreads over it to override one key.
@@ -16,6 +15,39 @@ const baseEnv = {
 	GITHUB_TOKEN: 'gh',
 	GITHUB_WEBHOOK_SECRET: 'sec'
 };
+
+// The module evaluates `const config = loadConfig()` at import time as a
+// fail-fast guard (see acceptance criteria for 02-02 Task 1). To exercise
+// `loadConfig` with synthetic envs we therefore seed process.env with a
+// baseline that lets module init succeed, THEN require the module lazily
+// inside a function so require() happens after the seeding. Static ESM
+// imports would be hoisted above the seeding by babel-jest.
+let originalEnv = null;
+let loadConfig;
+let MissingConfigError;
+let InvalidConfigError;
+
+beforeAll(() => {
+	originalEnv = { ...process.env };
+	for (const [k, v] of Object.entries(baseEnv)) {
+		process.env[k] = v;
+	}
+	const mod = require('./config.js');
+	loadConfig = mod.loadConfig;
+	MissingConfigError = mod.MissingConfigError;
+	InvalidConfigError = mod.InvalidConfigError;
+});
+
+afterAll(() => {
+	// Restore process.env so later test files are not polluted.
+	for (const k of Object.keys(baseEnv)) {
+		if (originalEnv[k] === undefined) {
+			delete process.env[k];
+		} else {
+			process.env[k] = originalEnv[k];
+		}
+	}
+});
 
 // ---------------------------------------------------------------------------
 // loadConfig
