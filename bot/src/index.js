@@ -34,6 +34,7 @@ import * as readyEvt from './discord/events/ready.js';
 import * as interactionEvt from './discord/events/interactionCreate.js';
 import * as reactAddEvt from './discord/events/messageReactionAdd.js';
 import * as reactRemEvt from './discord/events/messageReactionRemove.js';
+import { start as startWebhook } from './webhook/server.js';
 
 const log = createLogger('bot:main');
 
@@ -50,6 +51,18 @@ async function main() {
 	} catch (err) {
 		log.error('seedLabels threw', { err: String((err && err.message) || err) });
 	}
+
+	// 2b. Webhook server — started in parallel with Discord login. Failure
+	//     here (port in use, Fastify plugin crash) is LOGGED but does NOT
+	//     abort the bot: Discord-side functionality must stay available even
+	//     if the inbound HTTP listener fails to bind. We don't `await` the
+	//     listen() because we don't want a long plugin init to delay the
+	//     Discord gateway connection.
+	startWebhook().catch((err) => {
+		log.error('Webhook server failed to start', {
+			err: String((err && err.message) || err)
+		});
+	});
 
 	// 3. Command loader — must run BEFORE interactionCreate is wired.
 	const here = fileURLToPath(import.meta.url);
