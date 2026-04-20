@@ -70,18 +70,31 @@ describe('scheduleMirror coalescing', () => {
 	});
 
 	test('firing the scheduled timer calls fetchCount exactly once', async () => {
-		// Use delayMs: 0 + setImmediate drain — no fake timers needed. The first
-		// drain covers the setTimeout macrotask, the second covers the async body.
+		// Use delayMs: 0 + a real-time poll — no fake timers needed. Under a
+		// busy Jest runner, `setImmediate` drains alone aren't always enough
+		// because the setTimeout(0) macrotask may land after several microtask
+		// queues have already been flushed by the test harness itself. Polling
+		// the timer map + a bounded real-time ceiling is deterministic (the
+		// timer WILL fire) and still fast (single-digit ms in practice).
 		const fetchCount = jest.fn().mockResolvedValue(3);
 		snapshots.getSnapshot.mockReturnValue(null);
 		issues.getIssue.mockResolvedValue({ labels: [] });
+		issues.addLabels.mockResolvedValue({});
 
 		scheduleMirror(42, { delayMs: 0, fetchCount });
 		scheduleMirror(42, { delayMs: 0, fetchCount });
 		scheduleMirror(42, { delayMs: 0, fetchCount });
 
-		await new Promise((r) => setImmediate(r));
-		await new Promise((r) => setImmediate(r));
+		// Wait up to 500ms for the timer to fire AND the async flush body to
+		// settle. Poll with 5ms sleeps — exits as soon as both conditions are
+		// observed, so the typical run is a few ms.
+		const deadline = Date.now() + 500;
+		while (
+			(_getTimerCountForTests() > 0 || fetchCount.mock.calls.length === 0) &&
+			Date.now() < deadline
+		) {
+			await new Promise((r) => setTimeout(r, 5));
+		}
 
 		expect(fetchCount).toHaveBeenCalledTimes(1);
 		expect(_getTimerCountForTests()).toBe(0); // cleared after fire

@@ -32,6 +32,8 @@ import { getClient } from './discord/client.js';
 import { loadCommands } from './discord/commands/index.js';
 import * as readyEvt from './discord/events/ready.js';
 import * as interactionEvt from './discord/events/interactionCreate.js';
+import * as reactAddEvt from './discord/events/messageReactionAdd.js';
+import * as reactRemEvt from './discord/events/messageReactionRemove.js';
 
 const log = createLogger('bot:main');
 
@@ -67,6 +69,11 @@ async function main() {
 		client.on(readyEvt.name, (...args) => readyEvt.execute(...args));
 	}
 	client.on(interactionEvt.name, (...args) => interactionEvt.execute(...args));
+	// Reaction events — D-04 vote aggregation (Plan 02-09). Partials are
+	// already enabled in discord/client.js so reactions on messages posted
+	// before the last bot restart still deliver events.
+	client.on(reactAddEvt.name, (...args) => reactAddEvt.execute(...args));
+	client.on(reactRemEvt.name, (...args) => reactRemEvt.execute(...args));
 
 	// 6. Login — opens the gateway connection.
 	await client.login(config.discordToken);
