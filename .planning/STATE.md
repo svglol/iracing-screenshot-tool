@@ -2,10 +2,10 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** 1.2 - Feature Enhancements
-**Last activity:** 2026-04-14 - Completed quick task 260414-rvd (add output format selector JPEG/PNG/WebP)
+**Last activity:** 2026-04-20 - Completed Plan 02-01 (Discord bot repo scaffolding: /bot/ subtree, Node 24 pinned deps, electron-builder + root-Jest exclusions)
 
 ### Current Phase
-Phase 1: Filename Format Configurator - Complete
+Phase 2: Discord Bug & Feature Tracker Bot - In Progress (Plan 1 of 10 complete)
 
 ### Completed Quick Tasks
 - **260403-evq** (2026-04-03): Implemented UI filename format configurator — user-configurable token-based screenshot filename format with live preview, replacing hardcoded track-driver-counter pattern.
@@ -17,6 +17,16 @@ Phase 1: Filename Format Configurator - Complete
 - Token replacement uses split/join (literal, not regex) for field tokens; global regex for sanitization
 - {counter} resolution deferred to Worker.vue for filesystem uniqueness checks
 - Settings preview uses hardcoded example values (no live session dependency)
+- Phase 2 bot lives in /bot/ subtree with its own package.json (ESM, Node 24+), NOT an npm workspace
+- Phase 2 bot deps pinned exact (no ^/~) per RESEARCH.md §Standard Stack verified 2026-04-19 on npm registry
+- Root electron-builder `build.files` adds defensive `"!bot/**/*"` negation even though allowlist already excludes /bot/ (belt-and-suspenders)
+- Root `jest.testPathIgnorePatterns` includes `/bot/` so root CommonJS Jest skips bot ESM tests (bot tests run via `cd bot && npm test`)
+
+### Performance Metrics
+
+| Phase | Plan | Duration | Tasks | Files | Completed |
+|-------|------|----------|-------|-------|-----------|
+| 02 | 01 | 12 min | 2 | 7 | 2026-04-20 |
 
 ### Blockers/Concerns
 None
