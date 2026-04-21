@@ -24,13 +24,13 @@ A two-part project:
 **Goal:** Ship user-visible UI polish via isolated, low-risk dependency upgrades — independent of the Vue 2/3 migration track.
 
 **Target upgrades:**
-- Font Awesome 5.13 / core 1.2 → 7.x (icons packages; keep `vue-fontawesome` at 0.1.x since 3.x requires Vue 3)
-- Bulma 0.9.4 → 1.0.2 (native CSS variables + dark-mode capability)
+- Font Awesome 5.13 / core 1.2 → **v6.x** (icons packages + `vue-fontawesome` 0.1.x → 2.x; v7 requires Vue 3, deferred to v2.0)
 - Prettier 2.0.2 → 3.3 (codebase-wide reformat in a single commit)
 
 **Key context:**
-- All three upgrades are isolated from Vue 2 and from each other
-- `bulma-pro` 0.1.8 must be verified against Bulma 1.0 or dropped with a documented replacement decision
+- Both upgrades are isolated from Vue 2 and from each other
+- Bulma 1.0 upgrade was originally in scope but is **moved to v2.0**: Buefy 0.9.29 is unmaintained and tied to Bulma 0.9's SASS API (`findColorInvert`, old `$colors` map). Bulma 1.0 adopts CSS-variable theming and would likely break Buefy styling. Since v2.0 is already slated to replace Buefy (no Vue 3 version exists), Bulma 1.0 naturally belongs in that milestone.
+- FA target was originally v7 but retargeted to v6: `@fortawesome/vue-fontawesome@3.x` (needed for FA core 7.x) requires Vue 3. FA v6 via `vue-fontawesome` 2.x is the ceiling on Vue 2.
 - Jimp 1.6 upgrade that was in the original v1.3 plan is **already done upstream** (dependabot) — removed from scope
 - Derived from dependency analysis captured in `.planning/notes/dependency-analysis-2026-04.md` and `.planning/seeds/v1.3-ui-refresh.md`
 
@@ -38,8 +38,7 @@ A two-part project:
 
 ### Active
 
-- [ ] Font Awesome upgraded from v5 to v7 across icon packages (UI-01 — v1.3)
-- [ ] Bulma upgraded from 0.9.4 to 1.0.2 with bulma-pro compatibility resolved (UI-02 — v1.3)
+- [ ] Font Awesome upgraded from v5 to v6 with `vue-fontawesome` 0.1 → 2 (UI-01 — v1.3)
 - [ ] Codebase formatted with Prettier 3 conventions (TOOL-01 — v1.3)
 
 ### Validated
@@ -58,7 +57,9 @@ A two-part project:
 - Automatic crash/telemetry reporting — privacy scope to be defined first
 - Release announcements on Discord via electron-updater — nice-to-have, not tracker-related
 - Mac/Linux build of the Electron app — iRacing is Windows-only
-- `@fortawesome/vue-fontawesome` 0.1 → 3 — requires Vue 3, deferred to v2.0
+- **Font Awesome v7 in v1.3** — requires `vue-fontawesome` 3.x which requires Vue 3; v6 is the Vue-2 ceiling. FA7 deferred to v2.0.
+- **Bulma 1.0 in v1.3** — Buefy 0.9.29 is tied to Bulma 0.9's SASS API; Bulma 1.0 would likely break Buefy styling. Moved to v2.0 alongside Buefy replacement.
+- `@fortawesome/vue-fontawesome` 0.1 → 3 — requires Vue 3, deferred to v2.0 (v1.3 takes it to 2.x only).
 - Vue 2 → Vue 3 migration — scope too large; dedicated v2.0 milestone
 - TypeScript 3 → 5, ESLint 7 → 9 — deferred to v1.4 tooling modernization
 - Jest 25 → 30, Jimp 0.10 → 1.6 — already handled by upstream dependabot

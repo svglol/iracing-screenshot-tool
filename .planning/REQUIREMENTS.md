@@ -2,7 +2,7 @@
 
 **Milestone goal:** Ship user-visible UI polish via isolated, low-risk dependency upgrades — independent of the Vue 2/3 migration track.
 
-Derived from dependency analysis (`.planning/notes/dependency-analysis-2026-04.md`) and the v1.3 UI Refresh seed (`.planning/seeds/v1.3-ui-refresh.md`), updated to reflect upstream dependabot changes (Jimp 1.6 already shipped).
+Derived from dependency analysis (`.planning/notes/dependency-analysis-2026-04.md`) and the v1.3 UI Refresh seed (`.planning/seeds/v1.3-ui-refresh.md`), updated after codebase scout revealed Vue-2 ceilings on Font Awesome and Bulma.
 
 ---
 
@@ -10,8 +10,7 @@ Derived from dependency analysis (`.planning/notes/dependency-analysis-2026-04.m
 
 ### UI — User-visible upgrades
 
-- [ ] **UI-01**: Font Awesome upgraded from v5.13 / core 1.2 to v7.x across `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, and `@fortawesome/free-solid-svg-icons`. All existing icon usage continues to render; `@fortawesome/vue-fontawesome` remains at 0.1.x (Vue 3 required for v3.x).
-- [ ] **UI-02**: Bulma upgraded from 0.9.4 to 1.0.2 with native CSS-variable theming in place. `bulma-pro` 0.1.8 compatibility with Bulma 1.0 is verified OR the package is removed with a documented replacement decision.
+- [ ] **UI-01**: Font Awesome upgraded from v5.13 / core 1.2 to **v6.x** across `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, and `@fortawesome/free-solid-svg-icons`, PLUS `@fortawesome/vue-fontawesome` 0.1.x → 2.x (required pairing for FA core 6.x on Vue 2). All existing icon usage continues to render; no visual regressions on existing glyphs.
 
 ### TOOL — Developer-facing upgrades
 
@@ -32,8 +31,9 @@ From `v2.0-vue-3-migration.md` seed — deferred to milestone v2.0:
 
 - Vue 2.7.16 → Vue 3.5.x (EOL-driven; infectious migration)
 - `buefy` 0.9.29 replacement (no Vue 3 version exists — Oruga / PrimeVue / Vuetify 3)
-- `vue-router` 3 → 4, `@fortawesome/vue-fontawesome` 0.1 → 3, `vue-loader` 15 → 17
-- `vue-devtools` 5.1.3 → `@vue/devtools` 7.x
+- **Bulma 0.9.4 → 1.0.2** (moved here from v1.3 after codebase scout — Buefy's SCSS depends on Bulma 0.9's `findColorInvert` / old `$colors` map; Bulma 1.0 CSS-variable theming would break Buefy. Natural fit once Buefy is replaced in v2.0.)
+- **Font Awesome v6 → v7** (`@fortawesome/vue-fontawesome` 2 → 3 requires Vue 3)
+- `vue-router` 3 → 4, `vue-loader` 15 → 17, `vue-devtools` 5 → 7
 - Bundler switch: webpack → Vite + Electron (`electron-vite`)
 - Test runner: Jest 30 → Vitest (Jest 30 already done by dependabot, but Vite switch favours Vitest)
 - `eslint-plugin-vue` 6 → 9, `vue-eslint-parser` 7 → 9
@@ -53,7 +53,9 @@ Removed from milestone scope:
 
 ## Out of Scope for v1.3
 
-- **`@fortawesome/vue-fontawesome` 0.1 → 3** — requires Vue 3; deferred to v2.0.
+- **Font Awesome v7** — requires `vue-fontawesome` 3.x which requires Vue 3; v6 is the Vue-2 ceiling. Deferred to v2.0.
+- **Bulma 1.0** — would break Buefy 0.9.29's SCSS; natural fit for v2.0 alongside Buefy replacement.
+- **`@fortawesome/vue-fontawesome` 0.1 → 3** — requires Vue 3; v1.3 takes it to 2.x only, v3.x deferred to v2.0.
 - **Vue 2 → Vue 3 migration** — scope too large; dedicated v2.0 milestone.
 - **TypeScript 3 → 5** — deferred to v1.4 (paired with ESLint 9 and `@typescript-eslint/*` 8).
 - **ESLint 7 → 9 flat config** — deferred to v1.4.
@@ -66,12 +68,11 @@ Removed from milestone scope:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| UI-01 (Font Awesome 7) | Phase 3 | Pending |
-| UI-02 (Bulma 1.0) | Phase 3 | Pending |
+| UI-01 (Font Awesome v5 → v6 + vue-fontawesome 0.1 → 2) | Phase 3 | Pending |
 | TOOL-01 (Prettier 3) | Phase 4 | Pending |
 
 100% of v1.3 requirements mapped to phases.
 
 ---
 
-*Created: 2026-04-21 at milestone v1.3 kickoff (rewritten on master after upstream sync revealed Jimp already at 1.6).*
+*Created: 2026-04-21 at milestone v1.3 kickoff. Rescoped after codebase scout: FA target dropped v7 → v6, Bulma 1.0 moved to v2.0.*

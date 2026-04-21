@@ -17,27 +17,28 @@
 
 ### 🚧 v1.3 UI Refresh (Phases 3-4) — IN PROGRESS
 
-- [ ] **Phase 3: UI Dependency Refresh** — Font Awesome 5 → 7 + Bulma 0.9 → 1.0 (user-visible)
+- [ ] **Phase 3: Font Awesome v5 → v6 Upgrade** — FA core 1.2 → 6, free-solid/brands 5 → 6, vue-fontawesome 0.1 → 2 (user-visible)
 - [ ] **Phase 4: Prettier 3 Codebase Reformat** — Prettier 2 → 3 (developer-facing, single-requirement phase)
 
 ---
 
 ## Phase Details — v1.3
 
-### Phase 3: UI Dependency Refresh
+### Phase 3: Font Awesome v5 → v6 Upgrade
 
-**Goal:** Upgrade the user-visible UI dependency stack (Font Awesome 5 → 7, Bulma 0.9 → 1.0) with zero visual regressions while enabling future dark-mode support.
+**Goal:** Upgrade the Font Awesome stack from v5 to v6 (the Vue 2 ceiling) with zero visual regressions on existing icons. Unlocks sharp/thin styles and 1500+ new icons for future phases.
 
-**Requirements:** UI-01, UI-02
+**Requirements:** UI-01
 
 **Depends on:** None
 
+**Key constraint:** `@fortawesome/vue-fontawesome` must move from 0.1.x to 2.x as a PAIRED upgrade with FA core 1.x → 6.x. The 3.x line requires Vue 3 (deferred to v2.0). FA v7 likewise requires vue-fontawesome 3.x and is out of scope.
+
 **Success criteria:**
-1. All icons in the Vue UI continue to render correctly after Font Awesome 7 upgrade — no missing/broken glyphs across every route and component.
-2. Visual parity with v1.2 after Bulma 1.0 migration (or intentional style updates are documented) — confirmed via manual UAT across Settings, Gallery, and Capture views.
-3. `bulma-pro` 0.1.8 integrates cleanly with Bulma 1.0 OR is removed with a documented replacement (pure Bulma 1.0 themes, or no replacement needed).
-4. App runs in `npm run dev` and in a production `electron-builder` install without console errors/warnings originating from FA7 or Bulma 1.0.
-5. Bundle size does not regress meaningfully (tolerance: ≤ 10% increase, ideally a decrease).
+1. All 11 icons currently registered in `src/renderer/main.js` (faUserCog, faInfoCircle, faCog, faExternalLinkAlt, faFolder, faTrash, faCamera, faCopy, faQuestionCircle, faArrowDown, faDiscord) continue to render correctly after the FA v6 upgrade — visual parity against v1.2 confirmed.
+2. `<font-awesome-icon>` component registration in `main.js` migrates to the FA 6 / vue-fontawesome 2.x API (import paths, `library.add()` shape, component props) without runtime warnings.
+3. App runs in `npm run dev` and in a production `electron-builder` install without console errors/warnings originating from FA.
+4. Bundle size does not regress meaningfully (tolerance: ≤ 10% increase, ideally a decrease — tree-shaking of individual icon imports should keep this tight).
 
 ### Phase 4: Prettier 3 Codebase Reformat
 
@@ -45,7 +46,7 @@
 
 **Requirements:** TOOL-01
 
-**Depends on:** Phase 3 (avoids a conflict between the Prettier reformat and FA/Bulma SFC changes)
+**Depends on:** Phase 3 (avoids a conflict between the Prettier reformat and FA-related `main.js` edits)
 
 **Success criteria:**
 1. `npm run prettier` completes cleanly on the entire codebase using Prettier 3.3; the reformat is captured as a single `format: prettier 3` commit for clean blame.
