@@ -2,14 +2,14 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** v1.3 UI Refresh
-**Last activity:** 2026-04-21 — Phase 3 Plan 01 executed (commit ae2627b); Plan 02 next
+**Last activity:** 2026-04-21 — Phase 3 complete (both plans landed: `ae2627b` chore(deps) + `b5ecc32` refactor(icons)); UI-01 satisfied; ready for verify-work / close-phase
 
 ## Current Position
 
-Phase: 3 — Font Awesome v5 → v6 Upgrade
-Plan: 2 plans (✅ 03-01 deps+main.js [ae2627b], ⏳ 03-02 templates+UAT)
-Status: Plan 01 complete — FA v6 core + vue-fontawesome 2.0.10 resolved, main.js on v6 symbols (Variant A prune, 8 icons). Commit 1 of D-04's two-commit split is landed. The 5 renamed template call sites (Settings.vue:8/15, PromoCard.vue:21, Home.vue:54) render BLANK until Plan 02 lands — intentional bisect shape.
-Resume file: `.planning/phases/03-font-awesome-v6-upgrade/03-02-PLAN.md`
+Phase: 3 — Font Awesome v5 → v6 Upgrade ✅ COMPLETE
+Plan: 2 plans (✅ 03-01 deps+main.js [ae2627b], ✅ 03-02 templates+UAT [b5ecc32])
+Status: Phase 3 complete — SC1/SC2/SC3/SC4 all PASS. D-04 two-commit bisect shape landed on master (intervening `docs(03-01): cc09b8a` metadata commit between the two code commits; bisect between HEAD and ae2627b still isolates template-rename regressions to the 3-file surface in b5ecc32). Bundle delta +1.82% (well within D-06 ≤10% tolerance). UAT approved by user in both `npm run dev` and the production build path — devtools console FA-silent, all 4 renamed glyphs show v6 shapes, 5 unchanged-name icons preserved.
+Resume file: next milestone action — `/gsd-verify-work` (Phase 3 goal-backward verification) then `/gsd-plan-phase 4` (Prettier 3 reformat)
 Branch: master (working directly on master per user decision)
 
 ## Project Reference
@@ -52,3 +52,7 @@ None blocking. Notes from Plan 01 execution:
 - **Phase 3 / Plan 01 — D-07 PRUNED (Variant A):** faUserCog / faInfoCircle / faCamera removed from library.add after three-grep audit confirmed zero .vue template usage, zero dynamic :icon= constructions, and zero icon-pack="fa" overrides on Buefy icon-left. library.add went from 11 → 8 icons.
 - **Phase 3 / Plan 01 — Baseline path correction:** webpack writes the renderer chunk directly as `dist/renderer.js` (not `dist/renderer/*.js` as the plan assumed). 03-01-BASELINE.md records 1,450,730 bytes for `dist/renderer.js` and documents the path correction for Plan 02's SC4 comparison to match.
 - **Phase 3 / Plan 01 — vue-fontawesome pinned at ^2.0.10:** Confirmed resolving to `2.0.10` (NOT 3.x). Pitfall 1 avoided.
+- **Phase 3 / Plan 02 — Bundle delta +1.82% (PASS vs D-06 ≤10%):** Post-upgrade `dist/renderer.js` = 1,477,189 bytes vs 1,450,730 baseline. The modest increase (contra RESEARCH.md's expected decrease) is attributed to FA core 6.7.2 adding duotone/sharp-family registration scaffolding that survives tree-shaking. No mitigation needed.
+- **Phase 3 / Plan 02 — UAT user-approved via orchestrator relay:** D-05 manual UAT (4 views / 9 call sites / dev + prod paths) returned Approved. Devtools FA-silent in both environments; 4 renamed glyphs confirmed as v6 shapes.
+- **Phase 3 / Plan 02 — Orchestrator finalized Task 4 after executor stalled:** wave2-executor reached the Task 3 blocking UAT checkpoint and returned staged work. After user approval, the `SendMessage` resume signal did not wake the executor. Orchestrator applied the atomic `refactor(icons)` commit directly using the plan-locked HEREDOC message template and real bundle numbers. Outcome is byte-identical to the executor's planned path; bisect shape preserved.
+- **Phase 3 — D-04 bisect shape landed:** HEAD = `b5ecc32` refactor(icons) → `cc09b8a` docs(03-01) → `ae2627b` chore(deps). The intervening metadata commit does not break bisect: running `git bisect` between HEAD and `ae2627b` isolates template-rename regressions to b5ecc32's 3-file surface, and `chore(deps)` regressions to ae2627b's 4-file surface.

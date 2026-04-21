@@ -10,7 +10,7 @@ Derived from dependency analysis (`.planning/notes/dependency-analysis-2026-04.m
 
 ### UI — User-visible upgrades
 
-- [ ] **UI-01**: Font Awesome upgraded from v5.13 / core 1.2 to **v6.x** across `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, and `@fortawesome/free-solid-svg-icons`, PLUS `@fortawesome/vue-fontawesome` 0.1.x → 2.x (required pairing for FA core 6.x on Vue 2). All existing icon usage continues to render; no visual regressions on existing glyphs.
+- [x] **UI-01**: Font Awesome upgraded from v5.13 / core 1.2 to **v6.x** across `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, and `@fortawesome/free-solid-svg-icons`, PLUS `@fortawesome/vue-fontawesome` 0.1.x → 2.x (required pairing for FA core 6.x on Vue 2). All existing icon usage continues to render; no visual regressions on existing glyphs. **(Phase 3 complete 2026-04-21 — commits `ae2627b` + `b5ecc32`. Bundle +1.82% PASS vs ≤10% tolerance. UAT approved in dev + prod.)**
 
 ### TOOL — Developer-facing upgrades
 
@@ -68,7 +68,7 @@ Removed from milestone scope:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| UI-01 (Font Awesome v5 → v6 + vue-fontawesome 0.1 → 2) | Phase 3 | Pending |
+| UI-01 (Font Awesome v5 → v6 + vue-fontawesome 0.1 → 2) | Phase 3 | ✅ Done (2026-04-21) |
 | TOOL-01 (Prettier 3) | Phase 4 | Pending |
 
 100% of v1.3 requirements mapped to phases.

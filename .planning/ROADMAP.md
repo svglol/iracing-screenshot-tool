@@ -17,7 +17,7 @@
 
 ### 🚧 v1.3 UI Refresh (Phases 3-4) — IN PROGRESS
 
-- [ ] **Phase 3: Font Awesome v5 → v6 Upgrade** — FA core 1.2 → 6, free-solid/brands 5 → 6, vue-fontawesome 0.1 → 2 (user-visible)
+- [x] **Phase 3: Font Awesome v5 → v6 Upgrade** — FA core 1.2 → 6, free-solid/brands 5 → 6, vue-fontawesome 0.1 → 2 (completed 2026-04-21 — commits `ae2627b` chore(deps) + `b5ecc32` refactor(icons))
 - [ ] **Phase 4: Prettier 3 Codebase Reformat** — Prettier 2 → 3 (developer-facing, single-requirement phase)
 
 ---
@@ -36,7 +36,7 @@
 
 Plans:
 - [x] 03-01-PLAN.md — Bump FA v6 deps + vue-fontawesome 2.x + rewrite main.js imports/library.add (commit 1: chore(deps)) — **completed 2026-04-21 (commit `ae2627b`)**
-- [ ] 03-02-PLAN.md — Migrate 4 template strings across 3 Vue files + bundle-size regression check + UAT (commit 2: refactor(icons))
+- [x] 03-02-PLAN.md — Migrate 4 template strings across 3 Vue files + bundle-size regression check + UAT (commit 2: refactor(icons)) — **completed 2026-04-21 (commit `b5ecc32`; bundle +1.82% PASS; UAT approved in dev + prod)**
 
 **Key constraint:** `@fortawesome/vue-fontawesome` must move from 0.1.x to 2.x as a PAIRED upgrade with FA core 1.x → 6.x. The 3.x line requires Vue 3 (deferred to v2.0). FA v7 likewise requires vue-fontawesome 3.x and is out of scope.
 
