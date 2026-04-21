@@ -62,7 +62,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Wave 1: `fix(HelpModal): remove orphan p tags` (pre-reformat HTML source prep + pre-upgrade baseline capture for lint/bundle denominators)
+- [x] 04-01-PLAN.md — Wave 1: `fix(HelpModal): remove orphan p tags` (pre-reformat HTML source prep + pre-upgrade baseline capture for lint/bundle denominators) — **completed 2026-04-21 (commit `62f7abc`; baselines captured: lint 1929, prettier-check 35, dist/renderer.js 1,477,180 bytes)**
 - [ ] 04-02-PLAN.md — Wave 2: `chore(deps): bump Prettier to v3 + ESLint-Prettier plugins` (package.json 3-line devDep bump + `npm install --legacy-peer-deps` + lint/test no-regression gates)
 - [ ] 04-03-PLAN.md — Wave 3: `format: prettier 3` (run `npm run prettier`, automated gates SC1/SC2/SC3a, D-12 blocking manual smoke, atomic reformat commit)
 

@@ -69,7 +69,7 @@ Removed from milestone scope:
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | UI-01 (Font Awesome v5 → v6 + vue-fontawesome 0.1 → 2) | Phase 3 | ✅ Done (2026-04-21) |
-| TOOL-01 (Prettier 3) | Phase 4 | Pending |
+| TOOL-01 (Prettier 3) | Phase 4 | In progress (Wave 1 complete 2026-04-21 — HelpModal parser-error unblock + baselines captured; Waves 2+3 remaining) |
 
 100% of v1.3 requirements mapped to phases.
 
