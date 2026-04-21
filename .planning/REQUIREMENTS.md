@@ -14,7 +14,7 @@ Derived from dependency analysis (`.planning/notes/dependency-analysis-2026-04.m
 
 ### TOOL — Developer-facing upgrades
 
-- [ ] **TOOL-01**: Codebase reformatted with Prettier 3.3 in a single "format: prettier 3" commit for clean git blame. ESLint + Prettier integration (`eslint-config-prettier`, `eslint-plugin-prettier`) continues to pass with no new warnings.
+- [x] **TOOL-01**: Codebase reformatted with Prettier 3.3 in a single "format: prettier 3" commit for clean git blame. ESLint + Prettier integration (`eslint-config-prettier`, `eslint-plugin-prettier`) continues to pass with no new warnings. **(Phase 4 complete 2026-04-21 — commits `62f7abc` + `1082d7d` + `e0e4923`. Resolved prettier@3.8.3 / eslint-config-prettier@9.1.2 / eslint-plugin-prettier@5.5.5. Lint 1881 = -48 below baseline 1929; tests 256/256; pack:renderer clean; bundle +0.042% within tolerance; D-12 UAT approved.)**
 
 ---
 
@@ -69,7 +69,7 @@ Removed from milestone scope:
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | UI-01 (Font Awesome v5 → v6 + vue-fontawesome 0.1 → 2) | Phase 3 | ✅ Done (2026-04-21) |
-| TOOL-01 (Prettier 3) | Phase 4 | In progress (Wave 1 complete 2026-04-21 — HelpModal parser-error unblock + baselines captured; Waves 2+3 remaining) |
+| TOOL-01 (Prettier 3) | Phase 4 | ✅ Done (2026-04-21) |
 
 100% of v1.3 requirements mapped to phases.
 
