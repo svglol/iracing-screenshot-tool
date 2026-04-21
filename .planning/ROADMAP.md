@@ -32,6 +32,12 @@
 
 **Depends on:** None
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Bump FA v6 deps + vue-fontawesome 2.x + rewrite main.js imports/library.add (commit 1: chore(deps))
+- [ ] 03-02-PLAN.md — Migrate 4 template strings across 3 Vue files + bundle-size regression check + UAT (commit 2: refactor(icons))
+
 **Key constraint:** `@fortawesome/vue-fontawesome` must move from 0.1.x to 2.x as a PAIRED upgrade with FA core 1.x → 6.x. The 3.x line requires Vue 3 (deferred to v2.0). FA v7 likewise requires vue-fontawesome 3.x and is out of scope.
 
 **Success criteria:**
