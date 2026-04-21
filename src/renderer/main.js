@@ -9,15 +9,12 @@ import Buefy from 'buefy';
 import VueLazyload from 'vue-lazyload';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import {
-  faUserCog,
-  faInfoCircle,
-  faCog,
-  faExternalLinkAlt,
+  faGear,
+  faUpRightFromSquare,
   faFolder,
   faTrash,
-  faCamera,
   faCopy,
-  faQuestionCircle,
+  faCircleQuestion,
   faArrowDown
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
@@ -33,15 +30,12 @@ Vue.use(vClickOutside);
 Vue.use(VueMarkdownPlus);
 
 library.add(
-  faUserCog,
-  faInfoCircle,
-  faCog,
-  faExternalLinkAlt,
+  faGear,
+  faUpRightFromSquare,
   faFolder,
   faTrash,
-  faCamera,
   faCopy,
-  faQuestionCircle,
+  faCircleQuestion,
   faArrowDown,
   faDiscord
 );
