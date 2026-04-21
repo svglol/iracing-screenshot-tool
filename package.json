@@ -81,7 +81,7 @@
         "copy-webpack-plugin": "^14.0.0",
         "css-loader": "^7.1.4",
         "deepmerge": "^4.2.2",
-        "electron": "^41.0.0",
+        "electron": "^41.2.1",
         "electron-builder": "^26.8.1",
         "electron-debug": "^3.0.1",
         "eslint": "^7.10.0",
