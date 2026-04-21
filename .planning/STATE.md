@@ -2,10 +2,10 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** 1.2 - Feature Enhancements
-**Last activity:** 2026-04-20 - Phase 2 complete: Discord Bug & Feature Tracker Bot implemented (10/10 plans, 294 bot tests passing, code 18/19 verified; deployment walkthrough tracked in 02-HUMAN-UAT.md)
+**Last activity:** 2026-04-20 - Phase 2 shipped — PR #25 opened against svglol/iracing-screenshot-tool (feat/discord-bot → master, 41 commits, 294 bot tests, 18/19 code + 7/7 deployment UAT verified)
 
 ### Current Phase
-Phase 2: Discord Bug & Feature Tracker Bot — Complete (code verified, deployment walkthrough pending in 02-HUMAN-UAT.md)
+Phase 2: Discord Bug & Feature Tracker Bot — Shipped (PR #25 https://github.com/svglol/iracing-screenshot-tool/pull/25)
 
 ### Completed Quick Tasks
 - **260403-evq** (2026-04-03): Implemented UI filename format configurator — user-configurable token-based screenshot filename format with live preview, replacing hardcoded track-driver-counter pattern.
