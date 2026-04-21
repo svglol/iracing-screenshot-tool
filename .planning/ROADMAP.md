@@ -59,6 +59,13 @@ Plans:
 2. `npm run lint` passes with the Prettier-3-compatible ESLint plugin versions (`eslint-config-prettier`, `eslint-plugin-prettier` may need minor bumps to their v3-compatible lines); no new warnings introduced.
 3. `npm run build` produces a working production build post-reformat; manual smoke test of a screenshot capture round-trips successfully.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Wave 1: `fix(HelpModal): remove orphan p tags` (pre-reformat HTML source prep + pre-upgrade baseline capture for lint/bundle denominators)
+- [ ] 04-02-PLAN.md — Wave 2: `chore(deps): bump Prettier to v3 + ESLint-Prettier plugins` (package.json 3-line devDep bump + `npm install --legacy-peer-deps` + lint/test no-regression gates)
+- [ ] 04-03-PLAN.md — Wave 3: `format: prettier 3` (run `npm run prettier`, automated gates SC1/SC2/SC3a, D-12 blocking manual smoke, atomic reformat commit)
+
 ---
 
 ## Next Milestone Candidates
