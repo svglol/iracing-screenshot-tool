@@ -24,7 +24,6 @@
         <span class="heading">Issues</span>
         <p>If you have any issues please report them on the <a @click="openDiscord">Discord</a> </p>
         <span class="heading">Instructions</span>
-        <p>
           <ol>
             <li>iRacing <b>must</b> be running in Windowed Borderless Mode</li>
             <li>Run iRacing and setup the camera in the position you want to take the screenshot</li>
@@ -34,7 +33,6 @@
             <li>Depending on the resolution selected this may take a few seconds, once your iRacing screen resizes to its normal size it is finished</li>
             <li>Your screenshot will be saved to 'C:\Users\{User}\Pictures\Screenshots'</li>
           </ol>
-        </p>
       </div>
     </section>
   </div>
