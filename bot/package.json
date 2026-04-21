@@ -1,0 +1,46 @@
+{
+	"name": "iracing-screenshot-tool-bot",
+	"private": true,
+	"version": "0.1.0",
+	"description": "Discord bug & feature tracker bot for iRacing Screenshot Tool",
+	"repository": "svglol/iracing-screenshot-tool",
+	"type": "module",
+	"main": "src/index.js",
+	"engines": {
+		"node": ">=24.0.0"
+	},
+	"scripts": {
+		"start": "node src/index.js",
+		"dev": "node --watch src/index.js",
+		"register-commands": "node src/discord/registerCommands.js",
+		"jest": "jest",
+		"jest:watch": "jest --watch",
+		"jest:coverage": "jest --collect-coverage",
+		"test": "jest --passWithNoTests",
+		"lint": "eslint --fix --ext .js ./"
+	},
+	"dependencies": {
+		"@octokit/rest": "22.0.1",
+		"better-sqlite3": "12.9.0",
+		"discord.js": "14.26.3",
+		"dotenv": "17.4.2",
+		"fastify": "5.8.5",
+		"fastify-raw-body": "5.0.0",
+		"pino": "10.3.1",
+		"pino-roll": "4.0.0"
+	},
+	"devDependencies": {
+		"@babel/preset-env": "7.29.2",
+		"babel-plugin-transform-import-meta": "2.3.3",
+		"jest": "25.3.0"
+	},
+	"jest": {
+		"testEnvironment": "node",
+		"testPathIgnorePatterns": [
+			"/node_modules/"
+		],
+		"moduleNameMapper": {
+			"^discord\\.js$": "<rootDir>/test-helpers/discord.js.cjs"
+		}
+	}
+}

@@ -19,7 +19,8 @@
             "package.json",
             "dist/**/*",
             "node_modules/**/*",
-            "static/icon.*"
+            "static/icon.*",
+            "!bot/**/*"
         ],
         "extraResources": [
             {
@@ -150,7 +151,8 @@
             "/node_modules/",
             "/.tools/",
             "/dist/",
-            "/build/"
+            "/build/",
+            "/bot/"
         ]
     }
 }

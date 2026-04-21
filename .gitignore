@@ -24,3 +24,9 @@ yarn.lock
 /build
 .claude/
 .planning/
+
+# Bot subtree (Phase 2)
+bot/node_modules
+bot/.env
+bot/data/
+bot/logs/
