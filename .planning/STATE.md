@@ -1,110 +1,36 @@
 # Project State
 
 **Project:** iRacing Screenshot Tool
-**Current Milestone:** 1.2 - Feature Enhancements
-**Last activity:** 2026-04-20 - Phase 2 shipped — PR #25 opened against svglol/iracing-screenshot-tool (feat/discord-bot → master, 41 commits, 294 bot tests, 18/19 code + 7/7 deployment UAT verified)
+**Current Milestone:** — (v1.2 shipped 2026-04-20; awaiting `/gsd-new-milestone`)
+**Last activity:** 2026-04-21 - Milestone v1.2 closed and archived — see `.planning/milestones/v1.2-ROADMAP.md`
 
-### Current Phase
-Phase 2: Discord Bug & Feature Tracker Bot — Shipped (PR #25 https://github.com/svglol/iracing-screenshot-tool/pull/25)
+## Project Reference
 
-### Completed Quick Tasks
-- **260403-evq** (2026-04-03): Implemented UI filename format configurator — user-configurable token-based screenshot filename format with live preview, replacing hardcoded track-driver-counter pattern.
+See: [.planning/PROJECT.md](./PROJECT.md) (updated 2026-04-21 after v1.2 milestone)
 
-### Roadmap Evolution
-- Phase 2 added: Implement a Discord bot for this project to report and track bugs and request features
+**Core value:** Make great-looking race screenshots effortless for sim racers, and gather community signal without friction.
+**Current focus:** Planning next milestone (v1.3 or v2.0)
 
-### Decisions
-- Token replacement uses split/join (literal, not regex) for field tokens; global regex for sanitization
-- {counter} resolution deferred to Worker.vue for filesystem uniqueness checks
-- Settings preview uses hardcoded example values (no live session dependency)
-- Phase 2 bot lives in /bot/ subtree with its own package.json (ESM, Node 24+), NOT an npm workspace
-- Phase 2 bot deps pinned exact (no ^/~) per RESEARCH.md §Standard Stack verified 2026-04-19 on npm registry
-- Root electron-builder `build.files` adds defensive `"!bot/**/*"` negation even though allowlist already excludes /bot/ (belt-and-suspenders)
-- Root `jest.testPathIgnorePatterns` includes `/bot/` so root CommonJS Jest skips bot ESM tests (bot tests run via `cd bot && npm test`)
-- Bot tests run under babel-jest via `@babel/preset-env@7.29.2` (exact-pinned bot devDep) because Jest 25 has no native ESM support; runtime bot still executes as native ESM via Node 24
-- Bot `config.js` default export is eagerly validated at module init so downstream `import config from './config.js'` crashes the process on missing required env vars (fail-fast before partial initialization)
-- Bot `createBotErrorPayload` enforces a source allowlist (`discord | github | webhook | storage | bot`) — arbitrary sources coerce to `'bot'` to keep the aggregated log stream consistent
-- Bot `logger.js` uses bare `fs` / `path` specifiers (not `node:fs` / `node:path`) because Jest 25's resolver rejects the `node:` scheme; Node 24 resolves both to the same builtin at runtime
-- Bot logger is total (never throws): every fs call wrapped in try/catch so logging failures degrade to line loss rather than process crash
-- Bot storage uses better-sqlite3 singleton via getDb(); tests override path to ':memory:' with beforeEach(getDb)/afterEach(closeDb) for hermetic per-test databases
-- Bot storage schema is declared as one idempotent db.exec() block with CREATE TABLE IF NOT EXISTS for all four tables — future migrations append rather than branch on version
-- webhook_deliveries table ships in plan 02-03 even though no webhook code ships until 02-09, so HMAC replay protection is ready day-one
-- Bot storage tests mock config.js at file scope (`jest.mock('../config.js', ...)`) rather than seeding process.env — only config.test.js needs the full env-seeding dance
-- Bot permission gate (permissions.js) is total/null-safe/boolean-returning: hasMaintainerRole checks `typeof cache.has === 'function'` rather than instanceof Map so test doubles work without prototype patching
-- Bot rateLimit.js facade is intentionally trivial (3 effective lines) — every line of logic that lives there is a line the storage-layer tests do NOT cover
-- Bot github/*.js tests use `jest.mock('@octokit/rest', ..., { virtual: true })` because Jest 25's resolver cannot parse the exports-field-only ESM `@octokit/rest@22` package — virtual:true accepts the specifier and the factory fully replaces it; runtime bot still uses plain `import { Octokit } from '@octokit/rest'` (Node 24 resolves exports)
-- Bot github/issues.js uses deferred config accessors (owner = () => config.githubOwner) instead of module-level destructuring so jest.mock('../config.js') values are read at call time, not captured at import time
-- Bot github/issues.js safe(label, fn) helper wraps every Octokit call: single place for try/catch + log-on-failure + null-or-[]-return, so no thrown exception crosses the module boundary
-- Bot github/labels.js seedLabels is LIST-first then diff-and-create — never updates existing labels so human color/description edits are preserved; per-label create failure does NOT abort the seed loop; votes:N labels are excluded from the taxonomy (runtime-managed by Plan 02-09)
-- Bot github/attachments.js re-hosts Discord CDN files to the orphan branch `bug-attachments` (D-18): getBranch check → on 404 create orphan via empty tree + parentless commit + createRef; committed path is `<issueNumber>/<sanitizedFilename>`; returned URL uses raw.githubusercontent.com pointing at the orphan branch — main branch NEVER receives attachment commits
-- Bot attachments filename sanitization is extension-allowlist-first then 120-char truncation preserving the extension: the allowlist check must stay meaningful after truncation, so we cap the stem rather than the whole filename (otherwise `a...a.png` → 120 `a`s with no ext → rejected by allowlist despite the original being valid)
-- Bot attachment pipeline order: sanitize filename → check empty bytes → check 10 MB cap → ensure orphan branch → get existing sha → commit. Pure/sync validations gate every network call so malicious inputs never cost an Octokit request.
-- Bot renderIssueBody neutralizes Discord @everyone/@here via zero-width-space (@\u200beveryone): Discord sees plain text, GitHub renders invisibly. Backslash-escape does NOT work (Discord's mention parser ignores it). Applied to username AND title fields because both are user-controlled.
-- Bot renderIssueBody wraps every user-supplied modal field (steps, expected, actual, version, useCase, why, niceToHave) in fenced code blocks — inline triple-backticks are ZWSP-padded so users can't close the fence early to inject markdown
-- Bot renderIssueBody attribution format `_Reported by Discord user <@${id}> (${username})_` embeds the Discord user ID in every issue body so Plan 02-09's D-17 status-change flow can ping the original reporter by parsing the ID straight out of the issue body
-- Bot intake handler applies ONLY the type label (`['bug']` or `['feature']`) at issue creation — NEVER auto-applies `triaged`. `triaged` is reserved for `/assign-status triaged` (Plan 02-08) which marks the issue as reviewed/accepted; auto-applying at intake would make the triage command a no-op. Two `.not.toContain('triaged')` tests (one per path) pin the contract against refactor regressions
-- Bot intake handler calls `deferReply({ flags: MessageFlags.Ephemeral })` as the FIRST await — buys 15 minutes against Discord's 3-second interaction ack timeout (RESEARCH.md §Pitfall 7). A runtime call-order test instruments both mocks and asserts `callOrder[0] === 'deferReply'` so a refactor that moves GitHub calls before the ack cannot regress this
-- Bot `/bug` and `/feature` commands gate on `rateLimit.check(userId)` BEFORE `interaction.showModal` — rejected users never see the form (D-14 UX). `rateLimit.record(userId)` fires only on successful modal submit so modal opens that never submit do NOT consume a daily slot
-- Bot mapping insert is skipped on public-post failure (channel.send throws): without a posted Discord message there's nothing for Plan 02-09's webhook to edit later, and a mapping row with an invalid message ID would cause confusing follow-up failures — acceptable degraded behaviour
-- Bot Jest discord.js stub via `moduleNameMapper` (bot/test-helpers/discord.js.cjs): re-exports `ModalBuilder`/`TextInputBuilder`/`SlashCommandBuilder`/`EmbedBuilder`/`ActionRowBuilder` from `@discordjs/builders` and `TextInputStyle`/`MessageFlags` from `discord-api-types/v10`; minimal shims for Client/REST/Routes/Events/GatewayIntentBits/Partials. Tests get genuine builder output without loading discord.js's gateway machinery (which pulls in `node:events` that Jest 25 cannot resolve)
-- Bot `babel-plugin-transform-import-meta@2.3.3` devDep rewrites `import.meta.url` → `require('url').pathToFileURL(__filename).toString()` under babel-jest only. The bot runtime is native ESM and never invokes babel; plugin only runs to let `commands/index.js` and `registerCommands.js` (which use `import.meta.url` to resolve commands dir) load under Jest 25
-- Bot attachment collector's per-attachment failure is logged + skipped (not fatal to the batch): CDN 404, oversized, bad extension, commit error on one attachment does NOT abort collection — losing one pic must not lose the others. Timeout (`awaitMessages` errors=['time']) is treated as "no attachments", not an error. Literal `'done'` message from reporter breaks the window early
-- Bot shared formatters.js is the single source of truth for Discord-safe issue rendering across all 4 query commands. truncateForDiscord default max=1900 leaves 100-char headroom under Discord's 2000 hard limit so trailing newlines + client rendering quirks don't push the response into 400 Bad Request territory. formatIssueList appends the 'see more on GitHub' footer link ONLY when truncation actually fires — short lists stay noise-free
-- Bot renderIssueSummary excludes `votes:N` labels from the rendered Labels list while parseVotesLabel still reads the count — output is `(bug, triaged · 5 votes · @alice)` not `(bug, triaged, votes:5 · 5 votes · @alice)`. Em-dash ('—') is the empty-label fallback to avoid the degenerate `(· 5 votes · @alice)` rendering
-- Bot /list 'mine' branch uses `mappings.listByReporter(discord_user_id)` (local SQLite) — NOT a GitHub `author:` query. D-05 reporters file via Discord without GitHub accounts, so GitHub has no link between their Discord username and its own users. The test pins both directions: mappings.listByReporter IS called AND issues.listIssues is NOT called
-- Bot /search footer URL uses `encodeURIComponent(q)` so queries like 'q&p' become 'q%26p' — without encoding the '&' would split GitHub's `?q=q&p` URL at the ampersand and silently drop the '&p' portion. Test forces truncation (50 long issues) to make the footer actually appear in rendered output before asserting on the encoded URL
-- Bot /top-features pulls 100 open feature issues and sorts in-memory by parseVotesLabel descending, capping at top 10. Acceptable ceiling for project size; GitHub's `sort:reactions-+1-desc` search parameter is the fallback if the queue ever exceeds 100. Test uses 25 issues with votes 0-24 and asserts BOTH #25/#16 present AND #15/#1 absent to catch off-by-one errors like `.slice(0, 11)`
-- Bot every query command (/status /list /top-features /search) defers ephemeral as the FIRST await in its execute() body — BEFORE any GitHub call. RESEARCH.md §Pitfall 7: Discord's 3-second interaction ack window is too small for an Octokit round-trip. Four runtime call-order tests instrument deferReply + the GitHub mock and assert deferReply is first in the callOrder array
-- Bot zero live uses of deprecated `{ ephemeral: true }` across all 6 commands — every ephemeral response goes through `{ flags: MessageFlags.Ephemeral }`. Negative assertions `expect(arg.ephemeral).toBeUndefined()` on three of the new commands (/status /list /search) catch the copy-paste regression from outdated discord.js snippets
-- Bot triage commands (/close /label /assign-status /mark-duplicate) use guard-first canTriage() pattern — the FIRST statement after entry in each command's execute() is `if (!canTriage(interaction)) return reject` with an ephemeral "🚫 You need the Maintainer role" reply, BEFORE any interaction.deferReply or GitHub call. Every test file starts with the non-maintainer reject test asserting ALL mocked GitHub functions (addLabels, addComment, closeIssue, removeLabel, getIssue) are `.not.toHaveBeenCalled()`. canTriage imports ONLY in the 4 triage source files — `Grep('canTriage', commands/*.js)` returns close.js, label.js, assignStatus.js, markDuplicate.js; never the 6 public commands (bug, feature, status, list, topFeatures, search)
-- Bot /close command's REASON_MAP is a module-scope Object.freeze'd constant: fixed→{state_reason:'completed',label:'fixed'}, wontfix→{state_reason:'not_planned',label:'wontfix'}, 'not-planned'→{state_reason:'not_planned',label:null}, duplicate→{state_reason:'duplicate',label:'duplicate'}. Default reason when unset is 'fixed'. Label is added BEFORE closeIssue (pinned by call-order test) so there's no race window where GitHub's webhook subscribers see the closed issue without the matching status label — Plan 02-09's webhook classifiers would otherwise get the pre-triage state
-- Bot /label command enforces LABEL_TAXONOMY allowlist TWICE — as addChoices in the Discord UI (client-side, bypassable) AND as a runtime Set-based check derived from `LABEL_TAXONOMY.map(l => l.name)` (server-side, gate to GitHub). Defence-in-depth — a name not in the taxonomy never reaches issues.addLabels/removeLabel. votes:N labels are intentionally excluded from the taxonomy (runtime-managed by Plan 02-09's reaction aggregator) so /label cannot touch them manually
-- Bot /assign-status replaces a single-valued status label from STATUS_VALUES = {triaged, in-progress, fixed, wontfix, needs-repro}. Iteration pattern: for each s in STATUS_VALUES, if `s !== target && currentNames.has(s)` call removeLabel; then addLabels([target]). Skip-when-already-present (target already in currentNames) means idempotent re-assign is a true no-op on GitHub — zero removeLabel requests, one no-op addLabels — preventing spurious label-removed events on Plan 02-09's webhook stream
-- Bot /mark-duplicate executes the D-16 three-step ordered sequence: addLabels(['duplicate']) → addComment(`Marked as duplicate of #${orig} by <@${callerId}> via bot.`) → closeIssue(state_reason='duplicate'). Order pinned by a callOrder array + `toEqual(['addLabels','addComment','closeIssue'])` assertion to block Promise.all 'optimisations' that would scramble the GitHub audit trail. Self-duplication (issue === of-issue) rejected BEFORE deferReply for immediate feedback within the 3-sec interaction window
-- Bot /mark-duplicate posts a best-effort Discord cross-link in the duplicate's ORIGINAL Discord channel when a mapping exists (via mappings.findByIssueNumber). Uses `channel.send({ reply: { messageReference: mapping.discord_message_id, failIfNotExists: false } })` for proper Discord threading that survives deleted original messages. Wrapped in try/catch; failures logged as 'Could not post Discord duplicate cross-link' and SWALLOWED — the final editReply still signals success because GitHub-side work is already done. Elevating Discord-post success to a hard requirement would mean a single channel-permissions misconfiguration could silently block every /mark-duplicate
-- Bot triage tests use virtual @octokit/rest mock in label.test.js ONLY — because label.js imports the REAL LABEL_TAXONOMY from github/labels.js which transitively imports github/client.js which imports @octokit/rest (Jest 25 cannot resolve @octokit/rest@22's ESM exports field). Other triage tests (close/assignStatus/markDuplicate) don't touch labels.js so they don't need the shim — minimising cross-test mock setup
-- Bot voteAggregator debounced mirror coalesces bursts via per-issue setTimeout Map (`if (_timers.has(issueNumber)) return` guard). Coalescing proven DETERMINISTICALLY via `_getTimerCountForTests()` introspection hook — three synchronous schedules assert `_timers.size === 1` directly, NO `jest.useFakeTimers()` anywhere (Jest 25's fake-timers are fragile around native-Promise microtasks per Plan 02-06 SUMMARY)
-- Bot voteAggregator timer-firing test uses REAL-TIME polling with a 500ms deadline instead of fixed-count `setImmediate` drain loops. Under a busy jest runner (27+ test suites in parallel), setImmediate drains alone don't reliably wait for `setTimeout(0)` to fire — test passed in isolation but flaked in full-suite runs. Polling every 5ms with an upper bound (typically resolves in <20ms) is deterministic under any runner load
-- Bot voteAggregator.updateVotesLabel fast-path requires `existingVoteLabels.length === 1 AND existingVoteLabels[0] === newLabel` — a bug state with TWO votes: labels (e.g., `votes:5` AND `votes:7` from an aborted mirror) would otherwise short-circuit; requiring exactly-one forces the remove-pass to clean duplicates
-- Bot webhook HMAC verification over RAW body (fastify-raw-body { runFirst: true, global: false }, per-route config.rawBody: true) per Pitfall 4 — parsed-and-re-stringified JSON is NOT byte-identical to what GitHub signed (whitespace, key ordering, unicode normalization differ). `crypto.timingSafeEqual` with EXPLICIT length-guard BEFORE the call — timingSafeEqual THROWS on mismatched Buffer lengths, a subtle footgun that a tampered shorter/longer signature would trigger
-- Bot webhook replay protection via webhook_deliveries UUID + 5-min window. INSERT ... ON CONFLICT DO UPDATE SET received_at (idempotent write — genuine replay updates timestamp, doesn't crash on PRIMARY KEY violation). Replays respond 200 `{ok:true, replay:true}` NOT 4xx — GitHub's retry policy exponentially backs off on non-2xx and would retry the same delivery forever on a 4xx
-- Bot webhook handlers swallow ALL Discord errors (channel.fetch, msg.edit, msg.reply) rather than throwing. A throw would bubble to Fastify → 500 → GitHub retry storm on a single permission-revoked or message-deleted case. Handler logs the error and dispatch() returns cleanly → 200 → GitHub moves on. Reporter ping is best-effort by D-17 design anyway
-- Bot webhook state-change icons: ✅ (state_reason='completed') / 🔒 (not_planned) / 🔁 (duplicate) / 🔄 (reopened). Default on missing state_reason is 'completed' (legacy pre-2023 issues have state_reason: null)
-- Bot webhook onIssueLabeled suppresses votes:* labels (regex /^votes:/) — Plan 02-09's aggregator thrashes that label on every reaction change, and pinging the reporter on every upvote would be unusable. Regex match runs BEFORE mappings lookup to keep the hot path cheap
-- Bot webhook reporter pings use `msg.reply({ allowedMentions: { users: [reporterId] } })` — preserves Discord's per-user/role mute semantics (D-17) AND prevents @-mention smuggling via maliciously-crafted label names or issue-body content
-- Bot index.js starts webhook via `startWebhook().catch(log-and-continue)` WITHOUT await — Discord login proceeds even if port-bind fails. Failure in inbound HTTP listener must NOT take Discord functionality offline; GitHub retries for 24h so a brief missed window at boot is recovered automatically
-- Bot README.md is the single entry point for new-maintainer onboarding (194 lines): Configuration table documents all 16 .env.example vars (not just the 7 required) because a maintainer overriding GITHUB_OWNER/GITHUB_REPO for a fork needs the defaults column. Drill-down docs under bot/docs/ exist for happy-path setup, not troubleshooting — README's own Troubleshooting section covers 11 common post-deploy failures
-- Bot docs/discord-app-setup.md explicitly instructs disabling MESSAGE CONTENT INTENT and SERVER MEMBERS INTENT per RESEARCH §Pattern 1 CRITICAL — enabling either is a footgun (100-server verification requirement + unnecessary data access) and the bot genuinely does not need them (only reacts to its own posts + scoped follow-ups whose message IDs it already knows)
-- Bot docs/github-webhook-setup.md uses `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` for the shared secret (32 bytes → 64 hex chars → 256 bits entropy) — matches the HMAC verifier's expectation and does not require openssl or any non-Node tool on a maintainer's workstation
-- Bot docs/cloudflare-tunnel.md recommends named tunnel for prod and quick tunnel only for dev — the quick-tunnel URL changes per restart, which would force GitHub webhook reconfiguration on every bounce. Named tunnel + DNS route yields a stable URL that survives restarts and reboots
-- Bot docs/deploy-linux-systemd.md unit uses ProtectSystem=strict + explicit ReadWritePaths allowlist for logs/+data/ — stronger than ProtectSystem=full because it also blocks /etc writes; paired with NoNewPrivileges + PrivateTmp + RestrictAddressFamilies it reduces the bot's blast radius if any dep is ever compromised
-- Bot docs/deploy-windows-nssm.md threads through the 10 GUI tabs in fixed order (Application → Details → Log on → Dependencies → Process → Shutdown → Exit actions → I/O → File rotation → Environment) — matches the flow a maintainer actually sees rather than grouping by concern; includes Log on and Dependencies tabs even when left at defaults because a maintainer might otherwise wonder what they are
-- Both deployment docs (NSSM + systemd) reference /webhook/github and port 3001 even though they don't directly configure either (the bot does) — cross-consistency check ensures all six docs agree on the webhook URL shape and default port, catching future drift via the plan-level verification block
+## Previous Milestones
 
-### Performance Metrics
+- **v1.2 Feature Enhancements** (2026-04-20) — [archive](./milestones/v1.2-ROADMAP.md) · Filename configurator + Discord Bug & Feature Tracker Bot (10 plans, 294 tests, PR #25)
 
-| Phase | Plan | Duration | Tasks | Files | Completed |
-|-------|------|----------|-------|-------|-----------|
-| 02 | 01 | 12 min | 2 | 7 | 2026-04-20 |
-| 02 | 02 |  7 min | 2 | 9 | 2026-04-20 |
-| 02 | 03 |  5 min | 2 | 12 | 2026-04-20 |
-| 02 | 04 |  4 min | 2 | 5 | 2026-04-20 |
-| 02 | 05 |  4 min | 2 | 4 | 2026-04-20 |
-| 02 | 06 | 10 min | 2 | 17 | 2026-04-20 |
-| 02 | 07 |  4 min | 2 | 10 | 2026-04-20 |
-| 02 | 08 |  5 min | 2 |  8 | 2026-04-20 |
-| 02 | 09 |  8 min | 2 | 12 | 2026-04-20 |
-| 02 | 10 |  8 min | 2 |  6 | 2026-04-20 |
+## Deferred Items
 
-### Blockers/Concerns
-Phase 2 code complete. 7 deployment walkthrough items tracked in 02-HUMAN-UAT.md (Discord app creation, PAT, webhook config, Cloudflare Tunnel, NSSM/systemd service, /bug smoke test, GitHub→Discord status-sync) — these need your credentials and will be verified at deploy time via `/gsd-verify-work 2`.
+Items acknowledged and deferred at v1.2 close on 2026-04-21:
 
-### Quick Tasks Completed
+| Category | Item | Status |
+|----------|------|--------|
+| debug | capture-resolution-no-reshade | verifying |
+| debug | gallery-delete-not-removing-file | awaiting_human_verify |
+| quick_task | 260403-evq-implement-ui-format-configurator-for-pic | missing (close marker pending) |
+| quick_task | 260410-n97-change-crop-watermark-from-hardcoded-54- | missing (close marker pending) |
+| quick_task | 260410-v7a-add-prefer-top-left-watermark-crop-toggl | missing (close marker pending) |
+| quick_task | 260414-r9x-add-file-based-info-debug-logging-system | missing (close marker pending) |
+| quick_task | 260414-rvd-add-output-format-selector-jpeg-png-webp | missing (close marker pending) |
 
-| # | Description | Date | Commit | Status | Directory |
-|---|-------------|------|--------|--------|-----------|
-| 260403-evq | Implement UI format configurator for picture naming with session field chips and custom text | 2026-04-03 | See git log | Verified | [260403-evq-implement-ui-format-configurator-for-pic](./quick/260403-evq-implement-ui-format-configurator-for-pic/) |
-| 260410-n97 | Change crop watermark from hardcoded 54/30px to relative 3% of dimensions | 2026-04-10 | 0a9d8f5 | | [260410-n97-change-crop-watermark-from-hardcoded-54-](./quick/260410-n97-change-crop-watermark-from-hardcoded-54-/) |
-| 260410-v7a | Add prefer top-left watermark crop toggle with alternative 6% all-sides crop | 2026-04-10 | 13251e5 | | [260410-v7a-add-prefer-top-left-watermark-crop-toggl](./quick/260410-v7a-add-prefer-top-left-watermark-crop-toggl/) |
-| 260414-r9x | Add file-based INFO/DEBUG logging system across the capture pipeline | 2026-04-14 | 3cb1b09 | | [260414-r9x-add-file-based-info-debug-logging-system](./quick/260414-r9x-add-file-based-info-debug-logging-system/) |
-| 260414-rvd | Add output format selector (JPEG/PNG/WebP) with config persistence and format-aware capture pipeline | 2026-04-14 | 22d1cd5 | | [260414-rvd-add-output-format-selector-jpeg-png-webp](./quick/260414-rvd-add-output-format-selector-jpeg-png-webp/) |
+Quick tasks were delivered in v1.2 but their VERIFICATION.md files lack formal close markers — run `/gsd-cleanup` to add retroactively. Debug sessions carried into next milestone.
+
+## Blockers/Concerns
+
+PR #25 (feat/discord-bot → master) is open and awaits merge upstream on svglol/iracing-screenshot-tool. Local `master` is 42 commits ahead of `origin/master` until the PR merges.
