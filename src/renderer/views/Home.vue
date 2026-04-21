@@ -51,7 +51,7 @@
                 ><font-awesome-icon :icon="['fas', 'copy']" /></a>
               </li>
               <li>
-                <a @click="openExternally" v-show="false"><font-awesome-icon :icon="['fas', 'external-link-alt']" /></a>
+                <a @click="openExternally" v-show="false"><font-awesome-icon :icon="['fas', 'up-right-from-square']" /></a>
               </li>
             </ul>
           </div>

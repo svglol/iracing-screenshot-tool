@@ -18,7 +18,7 @@
       @click="openPost"
     >
       <span>See the Instagram post</span>
-      <font-awesome-icon :icon="['fas', 'external-link-alt']" />
+      <font-awesome-icon :icon="['fas', 'up-right-from-square']" />
     </button>
   </section>
 </template>

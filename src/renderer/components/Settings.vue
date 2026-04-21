@@ -5,14 +5,14 @@
       style="padding:.5rem"
     >
       <li>
-        <a @click="showSettings = true"><font-awesome-icon :icon="['fas', 'cog']" /></a>
+        <a @click="showSettings = true"><font-awesome-icon :icon="['fas', 'gear']" /></a>
       </li>
       <li>
         <a
           v-shortkey.push="['f1']"
           @click="showHelp = true"
           @shortkey="showHelp = true"
-        ><font-awesome-icon :icon="['fas', 'question-circle']" /></a>
+        ><font-awesome-icon :icon="['fas', 'circle-question']" /></a>
       </li>
 
       <li>
