@@ -9,13 +9,13 @@ import Buefy from 'buefy';
 import VueLazyload from 'vue-lazyload';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import {
-  faGear,
-  faUpRightFromSquare,
-  faFolder,
-  faTrash,
-  faCopy,
-  faCircleQuestion,
-  faArrowDown
+	faGear,
+	faUpRightFromSquare,
+	faFolder,
+	faTrash,
+	faCopy,
+	faCircleQuestion,
+	faArrowDown,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -30,14 +30,14 @@ Vue.use(vClickOutside);
 Vue.use(VueMarkdownPlus);
 
 library.add(
-  faGear,
-  faUpRightFromSquare,
-  faFolder,
-  faTrash,
-  faCopy,
-  faCircleQuestion,
-  faArrowDown,
-  faDiscord
+	faGear,
+	faUpRightFromSquare,
+	faFolder,
+	faTrash,
+	faCopy,
+	faCircleQuestion,
+	faArrowDown,
+	faDiscord
 );
 
 Vue.component('font-awesome-icon', FontAwesomeIcon);
@@ -49,17 +49,17 @@ Vue.config.performance = process.env.NODE_ENV === 'development';
 Vue.config.productionTip = false;
 
 new Vue({
-  el: '#app',
-  router,
-  render: (h) => h(App)
+	el: '#app',
+	router,
+	render: (h) => h(App),
 });
 
 if (window && window.process && window.process.type === 'renderer') {
-  const { ipcRenderer } = require('electron');
+	const { ipcRenderer } = require('electron');
 
-  ipcRenderer.on('change-view', (event, data) => {
-    if (data.route) {
-      router.push(data.route);
-    }
-  });
+	ipcRenderer.on('change-view', (event, data) => {
+		if (data.route) {
+			router.push(data.route);
+		}
+	});
 }

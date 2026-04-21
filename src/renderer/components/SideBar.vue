@@ -1,105 +1,118 @@
 <template>
-  <div style="padding: 1rem; padding-top:.5rem">
-    <b-field label="Resolution">
-      <b-select
-        v-model="resolution"
-        expanded
-        placeholder="Resolution"
-      >
-        <option
-          v-for="option in items"
-          :key="option"
-          :value="option"
-        >
-          {{ option }}
-        </option>
-      </b-select>
-    </b-field>
+	<div style="padding: 1rem; padding-top: 0.5rem">
+		<b-field label="Resolution">
+			<b-select v-model="resolution" expanded placeholder="Resolution">
+				<option v-for="option in items" :key="option" :value="option">
+					{{ option }}
+				</option>
+			</b-select>
+		</b-field>
 
-    <b-field
-      v-if="resolution === 'Custom'"
-      label="Width"
-    >
-      <b-input
-        v-model="customWidth"
-        type="number"
-        min="0"
-        max="10000"
-      />
-    </b-field>
+		<b-field v-if="resolution === 'Custom'" label="Width">
+			<b-input v-model="customWidth" type="number" min="0" max="10000" />
+		</b-field>
 
-    <b-field
-      v-if="resolution === 'Custom'"
-      label="Height"
-    >
-      <b-input
-        v-model="customHeight"
-        type="number"
-        min="0"
-        max="10000"
-      />
-    </b-field>
+		<b-field v-if="resolution === 'Custom'" label="Height">
+			<b-input v-model="customHeight" type="number" min="0" max="10000" />
+		</b-field>
 
-    <b-message
-      v-if="(resolution == '4k' || resolution == '5k' || resolution == '6k' || resolution == '7k' || resolution == '8k')&& !disableTooltips "
-      type="is-warning"
-      aria-close-label="Close message"
-      size="is-small"
-      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
-    >
-      <strong> High resolutions may crash iRacing if you run out of VRAM. Certain track/car combinations will require more VRAM</strong>
-    </b-message>
+		<b-message
+			v-if="
+				(resolution == '4k' ||
+					resolution == '5k' ||
+					resolution == '6k' ||
+					resolution == '7k' ||
+					resolution == '8k') &&
+				!disableTooltips
+			"
+			type="is-warning"
+			aria-close-label="Close message"
+			size="is-small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
+				color: yellow;
+			"
+		>
+			<strong>
+				High resolutions may crash iRacing if you run out of VRAM. Certain
+				track/car combinations will require more VRAM</strong
+			>
+		</b-message>
 
-    <b-switch
-      v-model="crop"
-      dense
-      style="padding-top: 0.5rem; padding-bottom: .5rem;"
-    >
-      Crop Watermark
-    </b-switch>
+		<b-switch
+			v-model="crop"
+			dense
+			style="padding-top: 0.5rem; padding-bottom: 0.5rem"
+		>
+			Crop Watermark
+		</b-switch>
 
-    <b-message
-      v-if="crop && !disableTooltips"
-      type="is-info"
-      aria-close-label="Close message"
-      size="is-small"
-      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
-    >
-      <strong>Shrink iRacing UI to as small as possible with Ctrl+PgDwn before taking screenshot</strong>
-    </b-message>
-    <b-button
-      type="is-primary"
-      icon-left="camera"
-      expanded
-      :loading="takingScreenshot"
-      :disabled="!iracingOpen || takingScreenshot"
-      style="margin-top:.5rem"
-      @click="takeScreenshot"
-    >
-      Screenshot
-    </b-button>
+		<b-message
+			v-if="crop && !disableTooltips"
+			type="is-info"
+			aria-close-label="Close message"
+			size="is-small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
+				color: yellow;
+			"
+		>
+			<strong
+				>Shrink iRacing UI to as small as possible with Ctrl+PgDwn before
+				taking screenshot</strong
+			>
+		</b-message>
+		<b-button
+			type="is-primary"
+			icon-left="camera"
+			expanded
+			:loading="takingScreenshot"
+			:disabled="!iracingOpen || takingScreenshot"
+			style="margin-top: 0.5rem"
+			@click="takeScreenshot"
+		>
+			Screenshot
+		</b-button>
 
-    <b-message
-      v-for="(warning, index) in configWarnings"
-      :key="'cw-' + index"
-      type="is-warning"
-      aria-close-label="Close message"
-      size="is-small"
-      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
-    >
-      <strong>{{ warning }}</strong>
-    </b-message>
+		<b-message
+			v-for="(warning, index) in configWarnings"
+			:key="'cw-' + index"
+			type="is-warning"
+			aria-close-label="Close message"
+			size="is-small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
+				color: yellow;
+			"
+		>
+			<strong>{{ warning }}</strong>
+		</b-message>
 
-    <b-message
-      v-if="reshade && !disableTooltips"
-      type="is-danger"
-      aria-close-label="Close message"
-      size="is-small"
-      style="background-color: rgba(0, 0, 0, 0.3)!important; margin-top:.5rem; margin-bottom:.5rem; color:yellow"
-    >
-      <strong>After pressing the screenshot button in the iRacing Screenshot Tool, you will need to press the keybind for taking a screenshot for ReShade</strong>
-    </b-message>
-  </div>
+		<b-message
+			v-if="reshade && !disableTooltips"
+			type="is-danger"
+			aria-close-label="Close message"
+			size="is-small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
+				color: yellow;
+			"
+		>
+			<strong
+				>After pressing the screenshot button in the iRacing Screenshot
+				Tool, you will need to press the keybind for taking a screenshot for
+				ReShade</strong
+			>
+		</b-message>
+	</div>
 </template>
 
 <script>
@@ -109,206 +122,220 @@ const fs = require('fs');
 const { checkIracingConfig } = require('../../utilities/iracing-config-checks');
 
 export default {
-  props: ['screenshot'],
-  data () {
-    return {
-      items: ['1080p', '2k', '4k', '5k', '6k', '7k', '8k', 'Custom'],
-      resolution: '1080p',
-      crop: true,
-      customWidth: '0',
-      customHeight: '0',
-      iracingOpen: false,
-      takingScreenshot: false,
-      disableTooltips: config.get('disableTooltips'),
-      reshade: config.get('reshade'),
-      configWarnings: checkIracingConfig()
-    };
-  },
-  computed: {
-    disabled () {
-      return iracingOpen;
-    }
-  },
-  methods: {
-    escapeHtml (value) {
-      return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    },
-    normalizeScreenshotError (payload) {
-      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-        return {
-          message: payload.message || 'Unknown screenshot error',
-          logFile: payload.logFile || ''
-        };
-      }
+	props: ['screenshot'],
+	data() {
+		return {
+			items: ['1080p', '2k', '4k', '5k', '6k', '7k', '8k', 'Custom'],
+			resolution: '1080p',
+			crop: true,
+			customWidth: '0',
+			customHeight: '0',
+			iracingOpen: false,
+			takingScreenshot: false,
+			disableTooltips: config.get('disableTooltips'),
+			reshade: config.get('reshade'),
+			configWarnings: checkIracingConfig(),
+		};
+	},
+	computed: {
+		disabled() {
+			return iracingOpen;
+		},
+	},
+	methods: {
+		escapeHtml(value) {
+			return String(value || '')
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#39;');
+		},
+		normalizeScreenshotError(payload) {
+			if (
+				payload &&
+				typeof payload === 'object' &&
+				!Array.isArray(payload)
+			) {
+				return {
+					message: payload.message || 'Unknown screenshot error',
+					logFile: payload.logFile || '',
+				};
+			}
 
-      return {
-        message: String(payload || 'Unknown screenshot error'),
-        logFile: ''
-      };
-    },
-    hideCursorDuringCapture () {
-      document.body.style.cursor = 'none';
-    },
-    restoreCursorAfterCapture () {
-      document.body.style.cursor = 'auto';
-    },
-    takeScreenshot () {
-      let w = 0;
-      let h = 0;
+			return {
+				message: String(payload || 'Unknown screenshot error'),
+				logFile: '',
+			};
+		},
+		hideCursorDuringCapture() {
+			document.body.style.cursor = 'none';
+		},
+		restoreCursorAfterCapture() {
+			document.body.style.cursor = 'auto';
+		},
+		takeScreenshot() {
+			let w = 0;
+			let h = 0;
 
-      switch (this.resolution) {
-        case '1080p':
-          w = 1920;
-          h = 1080;
-          break;
-        case '2k':
-          w = 2560;
-          h = 1440;
-          break;
-        case '4k':
-          w = 3840;
-          h = 2160;
-          break;
-        case '5k':
-          w = 5120;
-          h = 2880;
-          break;
-        case '6k':
-          w = 6400;
-          h = 3600;
-          break;
-        case '7k':
-          w = 7168;
-          h = 4032;
-          break;
-        case '8k':
-          w = 7680;
-          h = 4320;
-          break;
-        case 'Custom':
-          w = parseInt(this.customWidth, 10);
-          h = parseInt(this.customHeight, 10);
-          break;
-        default:
-          w = 1920;
-          h = 1080;
-      }
+			switch (this.resolution) {
+				case '1080p':
+					w = 1920;
+					h = 1080;
+					break;
+				case '2k':
+					w = 2560;
+					h = 1440;
+					break;
+				case '4k':
+					w = 3840;
+					h = 2160;
+					break;
+				case '5k':
+					w = 5120;
+					h = 2880;
+					break;
+				case '6k':
+					w = 6400;
+					h = 3600;
+					break;
+				case '7k':
+					w = 7168;
+					h = 4032;
+					break;
+				case '8k':
+					w = 7680;
+					h = 4320;
+					break;
+				case 'Custom':
+					w = parseInt(this.customWidth, 10);
+					h = parseInt(this.customHeight, 10);
+					break;
+				default:
+					w = 1920;
+					h = 1080;
+			}
 
-      const targetWidth = w;
-      const targetHeight = h;
+			const targetWidth = w;
+			const targetHeight = h;
 
-      const cropTopLeft = config.get('cropTopLeft');
-      if (this.crop && cropTopLeft) {
-        // Legacy: expand 3% so cropping bottom-right removes watermark
-        w += Math.ceil(w * 0.03);
-        h += Math.ceil(h * 0.03);
-      } else if (this.crop) {
-        // Default: expand 6% so cropping 3% from each side removes watermark
-        w += Math.ceil(w * 0.06);
-        h += Math.ceil(h * 0.06);
-      }
-      this.takingScreenshot = true;
-      this.$emit('click', { width: w, height: h, targetWidth, targetHeight, crop: this.crop, cropTopLeft });
-      this.hideCursorDuringCapture();
-    }
-  },
-  created () {
-    ipcRenderer.send('request-iracing-status', '');
+			const cropTopLeft = config.get('cropTopLeft');
+			if (this.crop && cropTopLeft) {
+				// Legacy: expand 3% so cropping bottom-right removes watermark
+				w += Math.ceil(w * 0.03);
+				h += Math.ceil(h * 0.03);
+			} else if (this.crop) {
+				// Default: expand 6% so cropping 3% from each side removes watermark
+				w += Math.ceil(w * 0.06);
+				h += Math.ceil(h * 0.06);
+			}
+			this.takingScreenshot = true;
+			this.$emit('click', {
+				width: w,
+				height: h,
+				targetWidth,
+				targetHeight,
+				crop: this.crop,
+				cropTopLeft,
+			});
+			this.hideCursorDuringCapture();
+		},
+	},
+	created() {
+		ipcRenderer.send('request-iracing-status', '');
 
-    ipcRenderer.on('hotkey-screenshot', (event, arg) => {
-      if (this.iracingOpen && !this.takingScreenshot) {
-        this.takeScreenshot();
-      }
-    });
+		ipcRenderer.on('hotkey-screenshot', (event, arg) => {
+			if (this.iracingOpen && !this.takingScreenshot) {
+				this.takeScreenshot();
+			}
+		});
 
-    ipcRenderer.on('iracing-status', (event, arg) => {
-      this.iracingOpen = arg;
-    });
+		ipcRenderer.on('iracing-status', (event, arg) => {
+			this.iracingOpen = arg;
+		});
 
-    ipcRenderer.on('iracing-connected', (event, arg) => {
-      this.iracingOpen = true;
-    });
+		ipcRenderer.on('iracing-connected', (event, arg) => {
+			this.iracingOpen = true;
+		});
 
-    ipcRenderer.on('iracing-disconnected', (event, arg) => {
-      this.iracingOpen = false;
-    });
+		ipcRenderer.on('iracing-disconnected', (event, arg) => {
+			this.iracingOpen = false;
+		});
 
-    ipcRenderer.on('screenshot-response', (event, arg) => {
-      this.restoreCursorAfterCapture();
-      if (fs.existsSync(arg)) {
-        this.takingScreenshot = false;
-        const file = arg.split(/[\\/]/).pop().split('.').slice(0, -1).join('.');
-        this.$buefy.notification.open({
-          message: file + ' saved successfully',
-          type: 'is-success'
-        });
-      }
-    });
+		ipcRenderer.on('screenshot-response', (event, arg) => {
+			this.restoreCursorAfterCapture();
+			if (fs.existsSync(arg)) {
+				this.takingScreenshot = false;
+				const file = arg
+					.split(/[\\/]/)
+					.pop()
+					.split('.')
+					.slice(0, -1)
+					.join('.');
+				this.$buefy.notification.open({
+					message: file + ' saved successfully',
+					type: 'is-success',
+				});
+			}
+		});
 
-    ipcRenderer.on('screenshot-error', (event, arg) => {
-      this.restoreCursorAfterCapture();
-      this.takingScreenshot = false;
-      const error = this.normalizeScreenshotError(arg);
-      const escapedMessage = this.escapeHtml(error.message);
-      const escapedLogFile = this.escapeHtml(error.logFile);
-      const logHint = escapedLogFile
-        ? `<br><small>Log: ${escapedLogFile}</small>`
-        : '';
-      this.$buefy.notification.open({
-        message: `Screenshot failed: ${escapedMessage}${logHint}`,
-        type: 'is-danger',
-        duration: 10000,
-        queue: false
-      });
-      ipcRenderer.send('request-iracing-status', '');
-    });
+		ipcRenderer.on('screenshot-error', (event, arg) => {
+			this.restoreCursorAfterCapture();
+			this.takingScreenshot = false;
+			const error = this.normalizeScreenshotError(arg);
+			const escapedMessage = this.escapeHtml(error.message);
+			const escapedLogFile = this.escapeHtml(error.logFile);
+			const logHint = escapedLogFile
+				? `<br><small>Log: ${escapedLogFile}</small>`
+				: '';
+			this.$buefy.notification.open({
+				message: `Screenshot failed: ${escapedMessage}${logHint}`,
+				type: 'is-danger',
+				duration: 10000,
+				queue: false,
+			});
+			ipcRenderer.send('request-iracing-status', '');
+		});
 
-    config.onDidChange('disableTooltips', (newValue, oldValue) => {
-      this.disableTooltips = newValue;
-    });
+		config.onDidChange('disableTooltips', (newValue, oldValue) => {
+			this.disableTooltips = newValue;
+		});
 
-    config.onDidChange('reshade', (newValue, oldValue) => {
-      this.reshade = newValue;
-    });
-
-  },
-  mounted () {
-    this.crop = config.get('crop');
-    this.customWidth = config.get('customWidth');
-    this.customHeight = config.get('customHeight');
-    this.resolution = config.get('resolution');
-    this.reshade = config.get('reshade');
-  },
-  updated () {
-    config.set('crop', this.crop);
-    config.set('reshade', this.reshade);
-    if (!isNaN(parseInt(this.customWidth))) {
-      config.set('customWidth', parseInt(this.customWidth));
-    }
-    if (!isNaN(parseInt(this.customHeight))) {
-      config.set('customHeight', parseInt(this.customHeight));
-    }
-    config.set('resolution', this.resolution);
-  }
+		config.onDidChange('reshade', (newValue, oldValue) => {
+			this.reshade = newValue;
+		});
+	},
+	mounted() {
+		this.crop = config.get('crop');
+		this.customWidth = config.get('customWidth');
+		this.customHeight = config.get('customHeight');
+		this.resolution = config.get('resolution');
+		this.reshade = config.get('reshade');
+	},
+	updated() {
+		config.set('crop', this.crop);
+		config.set('reshade', this.reshade);
+		if (!isNaN(parseInt(this.customWidth))) {
+			config.set('customWidth', parseInt(this.customWidth));
+		}
+		if (!isNaN(parseInt(this.customHeight))) {
+			config.set('customHeight', parseInt(this.customHeight));
+		}
+		config.set('resolution', this.resolution);
+	},
 };
 </script>
 
-<style >
-.message.is-warning .message-body{
-  color:#ffdd57!important;
+<style>
+.message.is-warning .message-body {
+	color: #ffdd57 !important;
 }
 
-.control-label{
-  font-weight: 700;
+.control-label {
+	font-weight: 700;
 }
 
-.message.is-info .message-body{
-  color:rgb(50, 152, 220)!important;
+.message.is-info .message-body {
+	color: rgb(50, 152, 220) !important;
 }
-
 </style>
