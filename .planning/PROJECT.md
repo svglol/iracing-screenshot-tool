@@ -17,29 +17,23 @@ A two-part project:
 ## Current State
 
 - **v1.2 shipped** (2026-04-20) — PR #25 merged upstream. Phase 1 (filename format configurator) and Phase 2 (Discord bug & feature tracker bot) complete.
+- **v1.3 shipped** (2026-04-21) — Phases 3-4. Font Awesome v5 → v6 upgrade + Prettier 3 codebase reformat landed on master as a five-commit chain (two atomic D-04 / D-07 bisect pairs). Tests 256/256 pass. Bundle +1.82% (FA) and +0.042% (Prettier) — both well within tolerance.
 - **Dependabot (upstream, since PR #25 merge):** `jimp` 0.10 → 1.6.1, `jest` 25 → 30.3.0 (main + bot), `np` 6 → 11.2.0, `got` bumped. These shipped via PRs #26–#43 consolidations.
 
-## Current Milestone: v1.3 UI Refresh
+## Next Milestone: v1.4 Tooling Modernization (planned)
 
-**Goal:** Ship user-visible UI polish via isolated, low-risk dependency upgrades — independent of the Vue 2/3 migration track.
+**Trigger:** after v1.3 ships ✓
 
-**Target upgrades:**
-- Font Awesome 5.13 / core 1.2 → **v6.x** (icons packages + `vue-fontawesome` 0.1.x → 2.x; v7 requires Vue 3, deferred to v2.0)
-- Prettier 2.0.2 → 3.3 (codebase-wide reformat in a single commit)
+**Anticipated scope (from seeds + v1.3 post-close tech debt):**
+- TypeScript 3.8 → 5.7 with `@typescript-eslint/*` 2 → 8
+- ESLint 7 → 9 with flat config migration
+- Full `eslint-plugin-prettier` integration (`plugin:prettier/recommended`) — resolves the Pitfall 4 minimum-scope wiring from v1.3
+- Retire deprecated `babel-runtime` 6.x (→ `@babel/runtime`) and `babel-eslint` 10.x (→ `@babel/eslint-parser`)
+- `eslint-config-prettier` 9 → 10 (drops ESLint 7 support; requires ESLint 9 migration first)
 
-**Key context:**
-- Both upgrades are isolated from Vue 2 and from each other
-- Bulma 1.0 upgrade was originally in scope but is **moved to v2.0**: Buefy 0.9.29 is unmaintained and tied to Bulma 0.9's SASS API (`findColorInvert`, old `$colors` map). Bulma 1.0 adopts CSS-variable theming and would likely break Buefy styling. Since v2.0 is already slated to replace Buefy (no Vue 3 version exists), Bulma 1.0 naturally belongs in that milestone.
-- FA target was originally v7 but retargeted to v6: `@fortawesome/vue-fontawesome@3.x` (needed for FA core 7.x) requires Vue 3. FA v6 via `vue-fontawesome` 2.x is the ceiling on Vue 2.
-- Jimp 1.6 upgrade that was in the original v1.3 plan is **already done upstream** (dependabot) — removed from scope
-- Derived from dependency analysis captured in `.planning/notes/dependency-analysis-2026-04.md` and `.planning/seeds/v1.3-ui-refresh.md`
+Run `/gsd-new-milestone` to kick off v1.4 scoping.
 
 ## Requirements
-
-### Active
-
-- [ ] Font Awesome upgraded from v5 to v6 with `vue-fontawesome` 0.1 → 2 (UI-01 — v1.3)
-- [ ] Codebase formatted with Prettier 3 conventions (TOOL-01 — v1.3)
 
 ### Validated
 - ✓ User-configurable screenshot filename format with session-field tokens — v1.2
@@ -50,6 +44,12 @@ A two-part project:
 - ✓ Reaction-based feature upvoting with debounced `votes:N` label mirror — v1.2
 - ✓ Maintainer-gated triage commands (/close, /label, /assign-status, /mark-duplicate) — v1.2
 - ✓ Reporter pings on GitHub state change via HMAC-verified webhook — v1.2
+- ✓ Font Awesome upgraded from v5 to v6 with `vue-fontawesome` 0.1 → 2 — v1.3 (UI-01)
+- ✓ Codebase formatted with Prettier 3 conventions — v1.3 (TOOL-01)
+
+### Active
+
+_None — next milestone scoping pending via `/gsd-new-milestone`._
 
 ### Out of Scope
 - In-app "Report a bug" button from the Electron app itself — privacy + scope implications, defer to future milestone
@@ -91,6 +91,12 @@ A two-part project:
 | Cloudflare Tunnel over port-forward | v1.2 | ✓ Good — Windows-native, no TLS cert management |
 | Reaction debounce via setTimeout Map + deterministic test hook | v1.2 | ✓ Good — avoided Jest 25 fake-timer fragility |
 | HMAC verification with `timingSafeEqual` + length guard | v1.2 | ✓ Good — guards the length-mismatch throw footgun |
+| D-04 two-commit bisect shape (`chore(deps):` + content commit) | v1.3 Phase 3 | ✓ Good — reused as D-07 in Phase 4; bisect between HEAD and chore(deps) isolates dep regressions from content regressions |
+| D-07 icon library pruning via three-grep audit (template + dynamic + Buefy iconpack) | v1.3 Phase 3 | ✓ Good — confirmed 3 icons unused; `library.add` dropped 11 → 8 |
+| Explicit `^2` pin on `vue-fontawesome` (NOT bare `latest`) | v1.3 Phase 3 | ✓ Good — dodged Pitfall 1 (npm `latest` resolves to v3 which requires Vue 3) |
+| `--legacy-peer-deps` on npm install | v1.3 | ⚠️ Revisit in v1.4 — now load-bearing for 2 conflicts (typescript-eslint vs eslint-7 + eslint-plugin-prettier@5 vs eslint-7) |
+| Preserve `.prettierrc` byte-for-byte through Prettier 3 upgrade | v1.3 Phase 4 | ✓ Good — explicit `trailingComma: "es5"` dodged Prettier 3's default flip; reformat diff narrow to intentional algorithmic changes |
+| Wire `eslint-config-prettier` into `.eslintrc.js` one milestone early (Pitfall 4 derogation) | v1.3 Phase 4 | ✓ Good — 1-line minimum-scope fix resolved latent `useTabs:true` vs `no-tabs:error` clash; lint dropped -48 below baseline |
 
 ## Evolution
 
@@ -111,4 +117,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-04-21 — milestone v1.3 (UI Refresh) started on master after upstream dependabot sync.*
+*Last updated: 2026-04-21 — after v1.3 UI Refresh milestone.*
