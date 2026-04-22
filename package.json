@@ -145,6 +145,7 @@
         "rebuild:node": "npm rebuild",
         "test": "jest --passWithNoTests",
         "test:watch": "run-s rebuild:node jest:watch --passWithNoTests",
+        "type-check": "tsc --noEmit",
         "build:dir": "electron-builder --dir",
         "build:installer": "run-s rebuild:electron pack && electron-builder",
         "release": "node _scripts/release.js"
