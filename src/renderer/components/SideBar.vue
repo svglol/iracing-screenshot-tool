@@ -142,6 +142,88 @@ export default {
 			return iracingOpen;
 		},
 	},
+	created() {
+		ipcRenderer.send('request-iracing-status', '');
+
+		ipcRenderer.on('hotkey-screenshot', (event, arg) => {
+			if (this.iracingOpen && !this.takingScreenshot) {
+				this.takeScreenshot();
+			}
+		});
+
+		ipcRenderer.on('iracing-status', (event, arg) => {
+			this.iracingOpen = arg;
+		});
+
+		ipcRenderer.on('iracing-connected', (event, arg) => {
+			this.iracingOpen = true;
+		});
+
+		ipcRenderer.on('iracing-disconnected', (event, arg) => {
+			this.iracingOpen = false;
+		});
+
+		ipcRenderer.on('screenshot-response', (event, arg) => {
+			this.restoreCursorAfterCapture();
+			if (fs.existsSync(arg)) {
+				this.takingScreenshot = false;
+				const file = arg
+					.split(/[\\/]/)
+					.pop()
+					.split('.')
+					.slice(0, -1)
+					.join('.');
+				this.$oruga.notification.open({
+					message: file + ' saved successfully',
+					variant: 'success',
+				});
+			}
+		});
+
+		ipcRenderer.on('screenshot-error', (event, arg) => {
+			this.restoreCursorAfterCapture();
+			this.takingScreenshot = false;
+			const error = this.normalizeScreenshotError(arg);
+			const escapedMessage = this.escapeHtml(error.message);
+			const escapedLogFile = this.escapeHtml(error.logFile);
+			const logHint = escapedLogFile
+				? `<br><small>Log: ${escapedLogFile}</small>`
+				: '';
+			this.$oruga.notification.open({
+				message: `Screenshot failed: ${escapedMessage}${logHint}`,
+				variant: 'danger',
+				duration: 10000,
+				queue: false,
+			});
+			ipcRenderer.send('request-iracing-status', '');
+		});
+
+		config.onDidChange('disableTooltips', (newValue, oldValue) => {
+			this.disableTooltips = newValue;
+		});
+
+		config.onDidChange('reshade', (newValue, oldValue) => {
+			this.reshade = newValue;
+		});
+	},
+	mounted() {
+		this.crop = config.get('crop');
+		this.customWidth = config.get('customWidth');
+		this.customHeight = config.get('customHeight');
+		this.resolution = config.get('resolution');
+		this.reshade = config.get('reshade');
+	},
+	updated() {
+		config.set('crop', this.crop);
+		config.set('reshade', this.reshade);
+		if (!isNaN(parseInt(this.customWidth))) {
+			config.set('customWidth', parseInt(this.customWidth));
+		}
+		if (!isNaN(parseInt(this.customHeight))) {
+			config.set('customHeight', parseInt(this.customHeight));
+		}
+		config.set('resolution', this.resolution);
+	},
 	methods: {
 		escapeHtml(value) {
 			return String(value || '')
@@ -240,88 +322,6 @@ export default {
 			});
 			this.hideCursorDuringCapture();
 		},
-	},
-	created() {
-		ipcRenderer.send('request-iracing-status', '');
-
-		ipcRenderer.on('hotkey-screenshot', (event, arg) => {
-			if (this.iracingOpen && !this.takingScreenshot) {
-				this.takeScreenshot();
-			}
-		});
-
-		ipcRenderer.on('iracing-status', (event, arg) => {
-			this.iracingOpen = arg;
-		});
-
-		ipcRenderer.on('iracing-connected', (event, arg) => {
-			this.iracingOpen = true;
-		});
-
-		ipcRenderer.on('iracing-disconnected', (event, arg) => {
-			this.iracingOpen = false;
-		});
-
-		ipcRenderer.on('screenshot-response', (event, arg) => {
-			this.restoreCursorAfterCapture();
-			if (fs.existsSync(arg)) {
-				this.takingScreenshot = false;
-				const file = arg
-					.split(/[\\/]/)
-					.pop()
-					.split('.')
-					.slice(0, -1)
-					.join('.');
-				this.$oruga.notification.open({
-					message: file + ' saved successfully',
-					variant: 'success',
-				});
-			}
-		});
-
-		ipcRenderer.on('screenshot-error', (event, arg) => {
-			this.restoreCursorAfterCapture();
-			this.takingScreenshot = false;
-			const error = this.normalizeScreenshotError(arg);
-			const escapedMessage = this.escapeHtml(error.message);
-			const escapedLogFile = this.escapeHtml(error.logFile);
-			const logHint = escapedLogFile
-				? `<br><small>Log: ${escapedLogFile}</small>`
-				: '';
-			this.$oruga.notification.open({
-				message: `Screenshot failed: ${escapedMessage}${logHint}`,
-				variant: 'danger',
-				duration: 10000,
-				queue: false,
-			});
-			ipcRenderer.send('request-iracing-status', '');
-		});
-
-		config.onDidChange('disableTooltips', (newValue, oldValue) => {
-			this.disableTooltips = newValue;
-		});
-
-		config.onDidChange('reshade', (newValue, oldValue) => {
-			this.reshade = newValue;
-		});
-	},
-	mounted() {
-		this.crop = config.get('crop');
-		this.customWidth = config.get('customWidth');
-		this.customHeight = config.get('customHeight');
-		this.resolution = config.get('resolution');
-		this.reshade = config.get('reshade');
-	},
-	updated() {
-		config.set('crop', this.crop);
-		config.set('reshade', this.reshade);
-		if (!isNaN(parseInt(this.customWidth))) {
-			config.set('customWidth', parseInt(this.customWidth));
-		}
-		if (!isNaN(parseInt(this.customHeight))) {
-			config.set('customHeight', parseInt(this.customHeight));
-		}
-		config.set('resolution', this.resolution);
 	},
 };
 </script>

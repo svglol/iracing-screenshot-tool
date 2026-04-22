@@ -16,7 +16,7 @@
 					title
 				}}</span>
 			</div>
-			<div class="button" v-if="updateReady" @click="onUpdate">
+			<div v-if="updateReady" class="button" @click="onUpdate">
 				<font-awesome-icon
 					:style="{ color: 'green' }"
 					:icon="['fas', 'arrow-down']"
@@ -41,6 +41,11 @@ export default {
 			updateReady: false,
 		};
 	},
+	mounted() {
+		ipcRenderer.on('update-available', () => {
+			this.updateReady = true;
+		});
+	},
 	methods: {
 		onClose() {
 			ipcRenderer.send('window-control', 'close');
@@ -54,11 +59,6 @@ export default {
 		onUpdate() {
 			ipcRenderer.send('install-update', '');
 		},
-	},
-	mounted() {
-		ipcRenderer.on('update-available', () => {
-			this.updateReady = true;
-		});
 	},
 };
 </script>

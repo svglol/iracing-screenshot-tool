@@ -51,9 +51,7 @@ const config = {
 						options: {
 							implementation: require('sass'),
 							sassOptions: {
-								loadPaths: [
-									path.join(__dirname, '../node_modules'),
-								],
+								loadPaths: [path.join(__dirname, '../node_modules')],
 							},
 						},
 					},

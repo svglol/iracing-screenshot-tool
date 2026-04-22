@@ -113,9 +113,9 @@
 							>
 							<div class="field is-grouped is-grouped-multiline">
 								<div
-									class="control"
 									v-for="field in fields"
 									:key="field.token"
+									class="control"
 								>
 									<o-tag
 										variant="primary"
@@ -336,21 +336,6 @@ export default {
 			}, {});
 		},
 	},
-	created() {
-		ipcRenderer.send('request-iracing-status', '');
-
-		ipcRenderer.on('iracing-status', (event, arg) => {
-			this.iracingOpen = arg;
-		});
-
-		ipcRenderer.on('iracing-connected', () => {
-			this.iracingOpen = true;
-		});
-
-		ipcRenderer.on('iracing-disconnected', () => {
-			this.iracingOpen = false;
-		});
-	},
 	watch: {
 		outputFormat() {
 			config.set('outputFormat', this.outputFormat);
@@ -391,6 +376,21 @@ export default {
 				config.set('reshadeFile', file);
 			}
 		},
+	},
+	created() {
+		ipcRenderer.send('request-iracing-status', '');
+
+		ipcRenderer.on('iracing-status', (event, arg) => {
+			this.iracingOpen = arg;
+		});
+
+		ipcRenderer.on('iracing-connected', () => {
+			this.iracingOpen = true;
+		});
+
+		ipcRenderer.on('iracing-disconnected', () => {
+			this.iracingOpen = false;
+		});
 	},
 	beforeUnmount() {
 		if (

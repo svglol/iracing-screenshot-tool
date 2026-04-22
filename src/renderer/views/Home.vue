@@ -10,7 +10,7 @@
 				max-width: 240px;
 			"
 		>
-			<SideBar v-on:click="screenshot" />
+			<SideBar @click="screenshot" />
 			<div class="sidebar-footer">
 				<PromoCard class="sidebar-promo" />
 				<Settings />
@@ -50,29 +50,29 @@
 						>
 							<li>
 								<a
-									@click="deleteFile"
-									v-shortkey="['del']"
-									@shortkey="deleteFile"
 									v-show="false"
+									v-shortkey="['del']"
+									@click="deleteFile"
+									@shortkey="deleteFile"
 									><font-awesome-icon :icon="['fas', 'trash']"
 								/></a>
 							</li>
 							<li>
-								<a @click="openFolder" v-show="false"
+								<a v-show="false" @click="openFolder"
 									><font-awesome-icon :icon="['fas', 'folder']"
 								/></a>
 							</li>
 							<li>
 								<a
+									v-show="false"
 									v-shortkey="['ctrl', 'c']"
 									@shortkey="copy"
 									@click="copy"
-									v-show="false"
 									><font-awesome-icon :icon="['fas', 'copy']"
 								/></a>
 							</li>
 							<li>
-								<a @click="openExternally" v-show="false"
+								<a v-show="false" @click="openExternally"
 									><font-awesome-icon
 										:icon="['fas', 'up-right-from-square']"
 								/></a>
@@ -82,20 +82,20 @@
 				</div>
 
 				<o-carousel
+					id="carousel"
+					v-model="selected"
 					:animated="'fade'"
 					:arrow="false"
 					:autoplay="false"
 					:has-drag="false"
 					indicator-custom
 					:indicator-inside="false"
-					v-model="selected"
-					id="carousel"
 				>
 					<o-carousel-item v-for="(item, i) in items" :key="i">
 						<figure class="al image" :draggable="false">
 							<img
-								:draggable="false"
 								v-lazy="getViewerImageUrl(items[i], i)"
+								:draggable="false"
 								style="
 									max-height: calc(100vh - 41px - 24px - 95px);
 									object-fit: contain;
@@ -110,14 +110,14 @@
 					<template #indicator="props">
 						<figure class="al image" :draggable="false">
 							<img
-								:draggable="false"
 								v-lazy="getImageUrl(items[props.index])"
-								@click="selectImage(items[props.index].file)"
+								:draggable="false"
 								style="
 									max-height: 70px;
 									object-fit: contain;
 									height: 70px;
 								"
+								@click="selectImage(items[props.index].file)"
 								@contextmenu.prevent.stop="
 									handleClick($event, items[props.index])
 								"
@@ -127,9 +127,9 @@
 				</o-carousel>
 
 				<vue-simple-context-menu
-					:elementId="'myUniqueId'"
-					:options="options"
 					:ref="'vueSimpleContextMenu'"
+					:element-id="'myUniqueId'"
+					:options="options"
 					@option-clicked="optionClicked"
 				/>
 			</div>
@@ -297,6 +297,78 @@ export default {
 				},
 			],
 		};
+	},
+	watch: {
+		currentURL() {
+			if (this.currentURL === '') {
+				this.fileName = '';
+				this.resolution = '';
+				return;
+			}
+
+			this.fileName = this.currentURL
+				.split(/[\\/]/)
+				.pop()
+				.split('.')
+				.slice(0, -1)
+				.join('.');
+			try {
+				const dimensions = sizeOf(toFsPath(this.currentURL));
+				this.resolution = `${dimensions.width} x ${dimensions.height}`;
+			} catch (error) {
+				console.log(error);
+				this.resolution = '';
+			}
+		},
+	},
+	mounted() {
+		ipcRenderer.on('screenshot-response', async (event, filePath) => {
+			if (!fs.existsSync(filePath)) {
+				return;
+			}
+
+			const thumbPath = getThumbnailPath(filePath);
+			ensureDirectory(getCacheDir());
+			const item = {
+				file: toDisplayPath(filePath),
+				thumb: fs.existsSync(thumbPath)
+					? toDisplayPath(thumbPath)
+					: EMPTY_IMAGE,
+				thumbDisplayPath: toDisplayPath(thumbPath),
+				thumbFsPath: thumbPath,
+				sourcePath: filePath,
+			};
+
+			this.items.unshift(item);
+			copyImageToClipboard(filePath);
+			this.selected = 0;
+			this.currentURL = toDisplayPath(filePath);
+
+			if (item.thumb === EMPTY_IMAGE) {
+				void ensureThumbnail(filePath, thumbPath)
+					.then(() => {
+						item.thumb = item.thumbDisplayPath;
+					})
+					.catch((error) => {
+						console.log(error);
+					});
+			}
+
+			this.$nextTick(() => {
+				const indicator = document.querySelector('.carousel-indicator');
+				if (indicator) {
+					indicator.scrollLeft = 0;
+				}
+				this.bindCarouselScroll();
+			});
+		});
+
+		void this.loadGallery();
+
+		config.onDidChange('screenshotFolder', (newValue) => {
+			dir = normalizeFolder(newValue);
+			void this.loadGallery();
+		});
 	},
 	methods: {
 		getImageUrl(item) {
@@ -481,78 +553,6 @@ export default {
 			);
 
 			this.carouselScrollBound = true;
-		},
-	},
-	mounted() {
-		ipcRenderer.on('screenshot-response', async (event, filePath) => {
-			if (!fs.existsSync(filePath)) {
-				return;
-			}
-
-			const thumbPath = getThumbnailPath(filePath);
-			ensureDirectory(getCacheDir());
-			const item = {
-				file: toDisplayPath(filePath),
-				thumb: fs.existsSync(thumbPath)
-					? toDisplayPath(thumbPath)
-					: EMPTY_IMAGE,
-				thumbDisplayPath: toDisplayPath(thumbPath),
-				thumbFsPath: thumbPath,
-				sourcePath: filePath,
-			};
-
-			this.items.unshift(item);
-			copyImageToClipboard(filePath);
-			this.selected = 0;
-			this.currentURL = toDisplayPath(filePath);
-
-			if (item.thumb === EMPTY_IMAGE) {
-				void ensureThumbnail(filePath, thumbPath)
-					.then(() => {
-						item.thumb = item.thumbDisplayPath;
-					})
-					.catch((error) => {
-						console.log(error);
-					});
-			}
-
-			this.$nextTick(() => {
-				const indicator = document.querySelector('.carousel-indicator');
-				if (indicator) {
-					indicator.scrollLeft = 0;
-				}
-				this.bindCarouselScroll();
-			});
-		});
-
-		void this.loadGallery();
-
-		config.onDidChange('screenshotFolder', (newValue) => {
-			dir = normalizeFolder(newValue);
-			void this.loadGallery();
-		});
-	},
-	watch: {
-		currentURL() {
-			if (this.currentURL === '') {
-				this.fileName = '';
-				this.resolution = '';
-				return;
-			}
-
-			this.fileName = this.currentURL
-				.split(/[\\/]/)
-				.pop()
-				.split('.')
-				.slice(0, -1)
-				.join('.');
-			try {
-				const dimensions = sizeOf(toFsPath(this.currentURL));
-				this.resolution = `${dimensions.width} x ${dimensions.height}`;
-			} catch (error) {
-				console.log(error);
-				this.resolution = '';
-			}
 		},
 	},
 };
