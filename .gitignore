@@ -22,6 +22,8 @@ __coverage__
 yarn.lock
 /dist
 /build
+out
+/out
 .claude/
 .planning/
 

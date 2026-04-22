@@ -24,6 +24,7 @@ module.exports = [
 		ignores: [
 			'bot/**',
 			'dist/**',
+			'out/**',
 			'node_modules/**',
 			'build/**',
 			'.planning/**',
