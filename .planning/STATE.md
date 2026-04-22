@@ -2,13 +2,13 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** v2.0 Vue 3 Migration
-**Last activity:** 2026-04-22 — v2.0 milestone kicked off. REQUIREMENTS.md defined (18 requirements across VUE3/UI/BUNDLER/TS/LINT/FIX). ROADMAP.md created with 9 phases (8-16). Architectural decisions locked: A1 Oruga (Bulma-compat), B2 Vue 3-first, C1 FA v7 in scope.
+**Last activity:** 2026-04-22 — v2.0 milestone kicked off. REQUIREMENTS.md defined (18 requirements). ROADMAP.md created with 9 phases (8-16), then **merged to 6 phases (8-13)** on 2026-04-22 after codebase scout revealed Buefy + vue-fontawesome v2 + Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone would break the app. Merged phases 8+9+10+13 into one Phase 8; renumbered 11→9, 12→10, 14→11, 15→12, 16→13. All 18 REQ-IDs still covered.
 
 ## Current Position
 
-Phase: Phase 8 — Vue 2 → Vue 3 core (NOT STARTED)
-Plan: —
-Status: Defining first phase — run `/gsd-discuss-phase 8` next
+Phase: Phase 8 (MERGED) — Vue 3 core + vue-router 4 + vue-loader 17 + @vue/devtools + Buefy→Oruga + Bulma 1.0 + FA CDN cleanup + FA v7 + vue-fontawesome 3.x
+Plan: — (CONTEXT captured 2026-04-22; plan-phase next)
+Status: CONTEXT.md written at `.planning/phases/08-vue3-core-merged/08-CONTEXT.md`. Ready for `/gsd-plan-phase 8`.
 Branch: master
 
 ## Project Reference

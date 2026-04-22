@@ -92,26 +92,28 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| VUE3-01 | Phase 8 | pending |
-| VUE3-02 | Phase 9 | pending |
-| VUE3-03 | Phase 9 | pending |
-| VUE3-04 | Phase 9 | pending |
-| UI-02 | Phase 10 | pending |
-| UI-03 | Phase 10 | pending |
-| UI-04 | Phase 10 | pending |
-| UI-05 | Phase 13 | pending |
-| BUNDLER-01 | Phase 11 | pending |
-| BUNDLER-02 | Phase 12 | pending |
-| TS-03 | Phase 15 | pending |
-| TS-04 | Phase 15 | pending |
-| LINT-04 | Phase 14 | pending |
-| LINT-05 | Phase 14 | pending |
-| LINT-06 | Phase 14 | pending |
-| LINT-07 | Phase 14 | pending |
-| LINT-08 | Phase 14 | pending |
-| FIX-01 | Phase 16 | pending |
+| VUE3-01 | Phase 8 (merged) | pending |
+| VUE3-02 | Phase 8 (merged) | pending |
+| VUE3-03 | Phase 8 (merged) | pending |
+| VUE3-04 | Phase 8 (merged) | pending |
+| UI-02 | Phase 8 (merged) | pending |
+| UI-03 | Phase 8 (merged) | pending |
+| UI-04 | Phase 8 (merged) | pending |
+| UI-05 | Phase 8 (merged) | pending |
+| BUNDLER-01 | Phase 9 (was 11) | pending |
+| BUNDLER-02 | Phase 10 (was 12) | pending |
+| LINT-04 | Phase 11 (was 14) | pending |
+| LINT-05 | Phase 11 (was 14) | pending |
+| LINT-06 | Phase 11 (was 14) | pending |
+| LINT-07 | Phase 11 (was 14) | pending |
+| LINT-08 | Phase 11 (was 14) | pending |
+| TS-03 | Phase 12 (was 15) | pending |
+| TS-04 | Phase 12 (was 15) | pending |
+| FIX-01 | Phase 13 (was 16) | pending |
 
 **Coverage:** 18/18 requirements mapped — no orphans, no duplicates.
+
+**Phase merge note (2026-04-22):** Original phases 8, 9, 10, 13 merged into one Phase 8 after codebase scout revealed Buefy + vue-fontawesome v2 + Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone would break the app. Phases renumbered: 11→9, 12→10, 14→11, 15→12, 16→13. All 18 REQ-IDs still covered.
 
 ---
 
