@@ -19,8 +19,8 @@
 
 - [ ] **UI-02**: Buefy → Oruga UI framework migrated — all Buefy components replaced with Oruga equivalents; visual identity preserved (Bulma-native, same CSS customization surface); all existing UI behavior (modals, dropdowns, buttons, form inputs, navigation) functional
 - [ ] **UI-03**: Bulma 0.9 → 1.0 SASS migration — updated Bulma mixins/variables; compiled CSS bundle works with Oruga's Bulma-native theming; no SASS compile errors under the new version
-- [ ] **UI-04**: `main.scss` Font Awesome v5.2.0 CDN `@import` removed (line 153) — the legacy `@import "https://use.fontawesome.com/releases/v5.2.0/css/..."` is retired; FA styling comes entirely from `@fortawesome/vue-fontawesome` 3.x + `@fortawesome/fontawesome-svg-core` (no CDN dependency)
-- [ ] **UI-05**: Font Awesome v6 → v7 upgraded — `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, `@fortawesome/free-solid-svg-icons` all at v7.x; `@fortawesome/vue-fontawesome` 2.x → 3.x (requires Vue 3)
+- [x] **UI-04**: `main.scss` Font Awesome v5.2.0 CDN `@import` removed (line 153) — the legacy `@import "https://use.fontawesome.com/releases/v5.2.0/css/..."` is retired; FA styling comes entirely from `@fortawesome/vue-fontawesome` 3.x + `@fortawesome/fontawesome-svg-core` (no CDN dependency) — CLOSED 2026-04-22 in Phase 8 Plan 05 (verified via `grep -rc "use.fontawesome.com" src/` = 0; CDN was already removed in Plan 03's main.scss rewrite to Bulma 1.0 `@use`, Plan 05 verifies it stays gone)
+- [x] **UI-05**: Font Awesome v6 → v7 upgraded — `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, `@fortawesome/free-solid-svg-icons` all at v7.x; `@fortawesome/vue-fontawesome` 2.x → 3.x (requires Vue 3) — CLOSED 2026-04-22 in Phase 8 Plan 05 (all 4 FA pins now `^7.2.0` / `^3.2.0`; three-grep icon audit confirmed A8 CLEAN — zero v6→v7 renames on our surface; `npm run pack:renderer` exit 0; `npm test` 256/256)
 
 ### Bundler (BUNDLER)
 
@@ -98,8 +98,8 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 | VUE3-04 | Phase 8 (merged) | pending |
 | UI-02 | Phase 8 (merged) | pending |
 | UI-03 | Phase 8 (merged) | pending |
-| UI-04 | Phase 8 (merged) | pending |
-| UI-05 | Phase 8 (merged) | pending |
+| UI-04 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
+| UI-05 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
 | BUNDLER-01 | Phase 9 (was 11) | pending |
 | BUNDLER-02 | Phase 10 (was 12) | pending |
 | LINT-04 | Phase 11 (was 14) | pending |
