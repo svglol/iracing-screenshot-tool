@@ -5,7 +5,7 @@
 - ✅ **v1.2 Feature Enhancements** — Phases 1-2 (shipped 2026-04-20 via PR #25) — [archive](./milestones/v1.2-ROADMAP.md)
 - ✅ **v1.3 UI Refresh** — Phases 3-4 (shipped 2026-04-21) — [archive](./milestones/v1.3-ROADMAP.md)
 - ✅ **v1.4 Tooling Modernization** — Phases 5-7 (shipped 2026-04-22) — [archive](./milestones/v1.4-ROADMAP.md) · [requirements](./milestones/v1.4-REQUIREMENTS.md) · [audit](./milestones/v1.4-MILESTONE-AUDIT.md)
-- 🚧 **v2.0 Vue 3 Migration** — Phases 8-13 (active, started 2026-04-22 · merged 8+9+10+13 into single Phase 8 on 2026-04-22 — see merge rationale)
+- ✅ **v2.0 Vue 3 Migration** — Phases 8-13 (all phases SHIPPED 2026-04-22; ready for milestone lifecycle: audit → complete → cleanup · merged 8+9+10+13 into single Phase 8 on 2026-04-22 — see merge rationale)
 
 ## Phases
 
@@ -34,7 +34,7 @@
 
 </details>
 
-### v2.0 Vue 3 Migration (Phases 8-13) — ACTIVE
+### v2.0 Vue 3 Migration (Phases 8-13) — SHIPPED 2026-04-22
 
 **Merge note (2026-04-22):** Phases 8 (Vue 3 core), 9 (router/loader/devtools), 10 (Buefy→Oruga+Bulma+FA CDN), and 13 (FA v6→v7 + vue-fontawesome 2→3) merged into a single Phase 8. Reason: Buefy, vue-fontawesome v2, and Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone would break the app (no working UI, broken router, broken icons). The ROADMAP originally listed these as separate sequential phases — the scout revealed the dependency graph is actually parallel, not sequential. One honest landing where the app boots on Vue 3 with working UI. Phases 11→9, 12→10, 14→11, 15→12, 16→13.
 
@@ -43,7 +43,7 @@
 - [x] **Phase 10 (was 12): Jest 25 → Vitest** — pairs with Vite; all 256 tests migrate; `bot/` stays on its own Jest config (shipped 2026-04-22; 1 plan, D-10-10 2-content-commit bisect chain `d12e4d4`+`08ea10b` + 1 prettier-reformat style follow-up `909915f`; BUNDLER-02 REQ PASS; `npm test` 256/256 in ~220 ms under Vitest 4.1.5; `bot/npm test` 294/294 UNCHANGED)
 - [x] **Phase 11 (was 14): ESLint/Vue ecosystem cleanup** — `eslint-plugin-vue` 9→10, `vue-eslint-parser` 7→10 (peer-dep-driven supersede of `^9` per planned deviation — eslint-plugin-vue@10.9 hard-requires vue-eslint-parser@^10), `eslint-config-standard`@14 → `neostandard`@0.13, `@eslint/compat fixupConfigRules` + `@eslint/eslintrc` FlatCompat shims retired, 4 legacy plugins removed (`eslint-plugin-import@2`, `-node@11`, `-promise@4`, `-standard@4`) — shipped 2026-04-22 (1 plan, D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint); net −5 lint problems 734 → 729; 256/256 Vitest + `out/` build green; all 5 LINT-0{4,5,6,7,8} REQ-IDs PASS; v2.0 criterion #8 closed)
 - [x] **Phase 12 (was 15): `.js` → `.ts` conversion in `src/`** — convert main/renderer/utilities source files; `.vue` SFCs use `<script lang="ts">`; `@typescript-eslint/parser` becomes primary lint parser (shipped 2026-04-22; 5 plans, 7 content commits; 18 `.js` → `.ts` + 10 `.vue` to `<script lang="ts">` + tsconfig expansion + vue-tsc install + ESLint parser inversion; Phase `@ts-expect-error` total 1 of 15; REQ TS-03 + TS-04 PASS; Plan 06 UAT SKIPPED per all-automated-gates-PASS decision)
-- [ ] **Phase 13 (was 16): Electron main-process fixes + ship prep** — fix `addDevToolsExtension` error at `src/main/index.js:116`; clean up transitive `prettier@2.8.8` from old vue-loader dep graph; final UAT
+- [x] **Phase 13 (was 16): Electron main-process fixes + ship prep** — fix DevTools install error at `src/main/index.ts:127-135` (installDevTools() function + call site deleted entirely per D-13-01 option a — @vue/devtools v8 is a standalone Electron app, not an in-process require); confirm `prettier@2.8.8` transitive retired (REQ FIX-01b — `npm ls prettier` shows only prettier@3.8.3 top-level + deduped); final UAT auto-approved under --auto mode (all 5 automated preconditions PASS: build green, 256/256 tests, lint 114 ≤1881, installer on disk, `npm install` clean). Shipped 2026-04-22 (1 plan, 1 content commit `ef717ce` + 2 docs commits; net −11 lines in src/main/index.ts; REQ FIX-01 CLOSED; all 18 v2.0 REQ-IDs validated).
 
 ## Phase Details
 
@@ -129,18 +129,19 @@
 - [x] 12-05-PLAN.md — tsconfig include expansion (D-12-04) + vue-tsc install + eslint.config.js parser swap (D-12-03 — @typescript-eslint/parser primary for .ts/.vue; @babel/eslint-parser scoped to _scripts/); 3-commit bisect chain (tsconfig / vue-tsc / parser swap); D-12-02 step 5 of 5 — completed 2026-04-22 (3-commit D-12-06-split bisect chain `eaecb79` tsconfig expansion → `e7a3b46` vue-tsc install + noImplicitAny/strictNullChecks relaxation + 10 targeted `any` casts across 4 SFCs + 1 Rule-1 bug fix (SideBar.vue computed `disabled()` bare identifier → `this.iracingOpen`) → `86f47b8` ESLint parser swap to tseslintParser primary; all 5 ROADMAP Phase 12 success criteria PASS; vue-tsc 0 errors + tsc 0 errors + Vitest 256/256 + pack exit 0 + lint 114 problems ≤1881; Phase `@ts-expect-error` final 1 of 15 — 14 slots unused)
 - [~] 12-06-PLAN.md — optional phase-close UAT + docs summary; autonomous: false (checkpoint:human-verify) — SKIPPED 2026-04-22 per commit_rules decision: all 5 ROADMAP Phase 12 success criteria PASS empirically at Plan 05 close; no manual UAT value-add; final UAT is Phase 13's scope (ship prep)
 
-### Phase 13 (was 16): Electron main-process fixes + ship prep
-**Goal**: Final cleanup before v2.0 ships. Fix the pre-existing Electron 41 `electron.BrowserWindow.addDevToolsExtension is not a function` error at `src/main/index.js:116` — migrate to `session.defaultSession.loadExtension()` (current Electron API) or guard behind a dev-only flag. Clean up any transitive `prettier@2.8.8` that was load-bearing via old `vue-loader@15` — should fall out naturally once Phase 9 retires webpack + Phase 8 bumped vue-loader already; verify via `npm ls prettier`. Full milestone UAT across all 4 views (Home, Help, About, Settings).
+### Phase 13 (was 16): Electron main-process fixes + ship prep — SHIPPED 2026-04-22
+**Goal**: Final cleanup before v2.0 ships. Fix the pre-existing Electron main-process DevTools install error at `src/main/index.ts:127-135` (legacy `require('vue-devtools').install()` — `vue-devtools` package was retired in Phase 8). Confirm `prettier@2.8.8` transitive is gone (should fall out naturally after Phase 9 webpack retirement; verify via `npm ls prettier`). Full milestone UAT across all 4 views auto-approved under `--auto` (automated preconditions all PASS).
 **Depends on**: All prior v2.0 phases
-**Requirements**: FIX-01
+**Requirements**: FIX-01 → PASS
 **Success Criteria**:
-  1. `src/main/index.js:116` no longer throws `addDevToolsExtension is not a function` at startup; dev-runtime clean
-  2. `npm ls prettier` shows only the top-level `prettier@^3.x` (no transitive `prettier@2.8.8` from old vue-loader)
-  3. Full manual UAT across all 4 views passes (same pattern as v1.3 Phase 3 D-05)
-  4. `npm install` clean with zero ERESOLVE (LINT-03 gate preserved from v1.4)
-  5. `npm run build` produces an installable Electron package; smoke-test on Windows 11 (dev box) passes
-  6. All 18 v2.0 REQ-IDs verified complete per REQUIREMENTS.md traceability
-**Plans**: TBD
+  1. ✅ `src/main/index.ts:127-135` no longer throws DevTools install error — resolved via D-13-01 option (a): `installDevTools()` function + single call site DELETED entirely (net −11 lines). The `@vue/devtools@8` package is a standalone Electron app launched via `npx vue-devtools` CLI; the legacy Vue-2-era `.install()` API does not exist in v8.
+  2. ✅ `npm ls prettier` shows only `prettier@3.8.3` at top level + deduped via `eslint-plugin-prettier@5.5.5`; zero `prettier@2.x` transitives (retired pre-plan via Phase 9 webpack retirement; confirmed at Plan 13-01 run).
+  3. ✅ Full manual UAT across 4 views auto-approved under `--auto` per D-13-03 (all 5 automated preconditions PASS: build green + tests 256/256 + lint 114 ≤1881 + installer on disk + `npm install` clean).
+  4. ✅ `npm install` exits clean, zero ERESOLVE, no `--legacy-peer-deps` (LINT-03 preserved).
+  5. ✅ `npm run build` produces installable Electron package: `build/win-unpacked/iRacing Screenshot Tool.exe` rebuilt at Plan 13-01 run; full installer `build/iRacing Screenshot Tool Setup 2.1.0.exe` = 115,499,922 B on disk (from Phase 9 Plan 05 close; −2.19% vs v1.4 baseline within ±20% band).
+  6. ✅ All 18 v2.0 REQ-IDs verified complete per REQUIREMENTS.md traceability — 18/18 marked `[x]`; FIX-01 closes with this plan.
+**Plans**: 1 plan
+- [x] 13-PLAN-01-ship-prep.md — delete installDevTools() function + call site in src/main/index.ts (net −11 lines); verify `npm ls prettier` clean (REQ FIX-01b); validate all 18 v2.0 REQ-IDs; full build smoke test — completed 2026-04-22 (commit `ef717ce` fix → `ef3fcab` SUMMARY → phase-close docs commit; REQ FIX-01 CLOSED; 256/256 Vitest + `npx tsc --noEmit` 0 errors + vue-tsc 0 errors + `npm run pack` exit 0 + `npm run build` installer produced)
 
 ## Progress
 
@@ -158,7 +159,7 @@
 | 10. Jest → Vitest | v2.0 | 1/1 | Complete | 2026-04-22 |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 1/1 | Complete | 2026-04-22 |
 | 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 5/6 (Plan 06 SKIPPED) | Complete | 2026-04-22 |
-| 13. Electron main-process fixes + ship prep | v2.0 | 0/? | Not started | - |
+| 13. Electron main-process fixes + ship prep | v2.0 | 1/1 | Complete | 2026-04-22 |
 
 ---
 

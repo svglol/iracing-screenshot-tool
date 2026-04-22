@@ -42,7 +42,7 @@
 
 ### Pre-existing Fixes (FIX)
 
-- [ ] **FIX-01**: Electron main-process `electron.BrowserWindow.addDevToolsExtension is not a function` error fixed at `src/main/index.js:116` — either migrated to `session.defaultSession.loadExtension()` (current Electron API) or feature-flagged behind dev-only guard
+- [x] **FIX-01**: Electron main-process `electron.BrowserWindow.addDevToolsExtension is not a function` / `Cannot find module 'vue-devtools'` error fixed at `src/main/index.ts:127-135` — resolved via D-13-01 option (a): `installDevTools()` function + its single call site deleted entirely (legacy `require('vue-devtools').install()` API from Vue 2 era does not exist in `@vue/devtools@8`; v8 is a standalone Electron app launched via `npx vue-devtools`, not an in-process require). Sub-REQ FIX-01b (`prettier@2.8.8` transitive retirement) confirmed clean: `npm ls prettier` shows only `prettier@3.8.3` top-level + deduped via `eslint-plugin-prettier@5.5.5`; zero `prettier@2.x` anywhere (retired pre-plan via Phase 9 webpack retirement). — CLOSED 2026-04-22 in Phase 13 Plan 01 (commit `ef717ce`; net −11 lines in src/main/index.ts; vue-tsc 0 errors + npm test 256/256 + npm run pack exit 0 + npm run build produces installer artifact)
 
 ---
 
@@ -109,7 +109,7 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 | LINT-08 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
 | TS-03 | Phase 12 (was 15) | complete (2026-04-22, Plans 01-05) |
 | TS-04 | Phase 12 (was 15) | complete (2026-04-22, Plan 05) |
-| FIX-01 | Phase 13 (was 16) | pending |
+| FIX-01 | Phase 13 (was 16) | complete (2026-04-22, Plan 01) |
 
 **Coverage:** 18/18 requirements mapped — no orphans, no duplicates.
 
