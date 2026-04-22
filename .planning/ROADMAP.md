@@ -57,7 +57,9 @@
   3. `eslint-config-prettier` is at v10.x and `eslint-plugin-prettier` is wired via `plugin:prettier/recommended` (not the v1.3 minimum-scope `eslint-config-prettier`-only wiring)
   4. `npm run prettier -- --check` passes — FMT-01 full integration did not break the v1.3 Prettier 3 format baseline
   5. `npm run test` passes 256/256 (lint config churn produced no runtime regressions)
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 06-01-PLAN.md — chore(deps): eslint 9 + eslint-config-prettier 10 (bump eslint 7->9.39.4, eslint-config-prettier 9->10.1.8; install @eslint/eslintrc ^3.3.5 + globals ^15.15.0 for flat-config migration in plan 06-02; rewrite npm run lint to drop --ext flag per research Pitfall 1; capture 06-01-BASELINE.md)
+- [ ] 06-02-PLAN.md — refactor(eslint): migrate to flat config with full prettier wiring (create eslint.config.js with 5-entry array: global ignores + FlatCompat extends chain + native languageOptions+rules + .vue parser override with STRING parserOptions.parser per Pitfall 6 + prettierRecommended last for FMT-01; delete .eslintrc.js and .eslintignore via git rm)
 
 ### Phase 7: TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps
 **Goal**: Upgrade TypeScript 3.8 → 5.7 and `@typescript-eslint/*` 2.25 → 8.x (which requires the ESLint 9 foundation from Phase 6), triage the inference-driven error backlog, and close the milestone by verifying `npm install` succeeds without `--legacy-peer-deps`.
@@ -77,7 +79,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 5. Babel Package Renames | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
-| 6. ESLint 9 Flat Config + Prettier Full Wiring | 0/? | Not started | - |
+| 6. ESLint 9 Flat Config + Prettier Full Wiring | 0/2 | Planned — ready for execution | - |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 0/? | Not started | - |
 
 ---
