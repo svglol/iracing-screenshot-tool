@@ -15,14 +15,14 @@
 
 ### ESLint (LINT)
 
-- [ ] **LINT-01**: ESLint upgraded from 7.10 to 9.x
-- [ ] **LINT-02**: Lint configuration migrated from legacy `.eslintrc.js` to flat `eslint.config.js` (parity verified against v1.3 baseline lint count of 1881)
+- [x] **LINT-01**: ESLint upgraded from 7.10 to 9.x (Phase 6 plan 06-01, 2026-04-22; commit `15b7042` installs eslint@9.39.4; Phase 6 plan 06-02 commit `96fe918` wires ESLint 9 against flat config — no `ESLINT_USE_FLAT_CONFIG=false` escape hatch)
+- [x] **LINT-02**: Lint configuration migrated from legacy `.eslintrc.js` to flat `eslint.config.js` (parity verified against v1.3 baseline lint count of 1881) (Phase 6 plan 06-02, 2026-04-22; commit `96fe918` creates eslint.config.js + `git rm` .eslintrc.js / .eslintignore; post-migration count 735 ≤ 1881 SC2 ceiling; D-11 rule-parity audit confirms no silent drops — +13 delta fully attributable to D-01 Amendment v6→v9 upgrade)
 - [ ] **LINT-03**: `--legacy-peer-deps` npm flag removed from install workflow — no remaining peer-dependency conflicts after LINT-01 + TS-02 + FMT-02
 
 ### Formatter Wiring (FMT)
 
-- [ ] **FMT-01**: `eslint-plugin-prettier` wired via `plugin:prettier/recommended` for full rule integration, superseding the v1.3 Phase 4 Pitfall 4 minimum-scope `eslint-config-prettier`-only derogation
-- [ ] **FMT-02**: `eslint-config-prettier` upgraded from 9 to 10 (ESLint-7 support drop aligned with LINT-01)
+- [x] **FMT-01**: `eslint-plugin-prettier` wired via `plugin:prettier/recommended` for full rule integration, superseding the v1.3 Phase 4 Pitfall 4 minimum-scope `eslint-config-prettier`-only derogation (Phase 6 plan 06-02, 2026-04-22; commit `96fe918` adds `require('eslint-plugin-prettier/recommended')` as LAST entry in eslint.config.js — `prettier/prettier: error` rule now fires; 0 firings post-migration; `npm run prettier -- --check` exits 0)
+- [x] **FMT-02**: `eslint-config-prettier` upgraded from 9 to 10 (ESLint-7 support drop aligned with LINT-01) (Phase 6 plan 06-01, 2026-04-22; commit `15b7042` bumps eslint-config-prettier 9.1.0 → 10.1.8; bundled into prettierRecommended's disables via plan 06-02)
 
 ### Babel Package Renames (BABEL)
 
@@ -76,15 +76,15 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 |--------|-------|--------|
 | BABEL-01 | Phase 5 | **complete** (2026-04-22, commit `eef6a7a`) |
 | BABEL-02 | Phase 5 | **complete** (2026-04-22, commit `74e112f`) |
-| LINT-01 | Phase 6 | pending |
-| LINT-02 | Phase 6 | pending |
-| FMT-01 | Phase 6 | pending |
-| FMT-02 | Phase 6 | pending |
+| LINT-01 | Phase 6 | **complete** (2026-04-22, commits `15b7042` + `96fe918`) |
+| LINT-02 | Phase 6 | **complete** (2026-04-22, commit `96fe918`) |
+| FMT-01 | Phase 6 | **complete** (2026-04-22, commit `96fe918`) |
+| FMT-02 | Phase 6 | **complete** (2026-04-22, commits `15b7042` + `96fe918`) |
 | TS-01 | Phase 7 | pending |
 | TS-02 | Phase 7 | pending |
 | LINT-03 | Phase 7 | pending |
 
-**Coverage:** 9/9 requirements mapped — no orphans, no duplicates. **Completed:** 2/9 (BABEL-01, BABEL-02 via Phase 5).
+**Coverage:** 9/9 requirements mapped — no orphans, no duplicates. **Completed:** 6/9 (BABEL-01, BABEL-02 via Phase 5; LINT-01, LINT-02, FMT-01, FMT-02 via Phase 6).
 
 ---
 

@@ -58,8 +58,8 @@
   4. `npm run prettier -- --check` passes — FMT-01 full integration did not break the v1.3 Prettier 3 format baseline
   5. `npm run test` passes 256/256 (lint config churn produced no runtime regressions)
 **Plans**: 2 plans
-- [ ] 06-01-PLAN.md — chore(deps): eslint 9 + eslint-config-prettier 10 (bump eslint 7->9.39.4, eslint-config-prettier 9->10.1.8; install @eslint/eslintrc ^3.3.5 + globals ^15.15.0 for flat-config migration in plan 06-02; rewrite npm run lint to drop --ext flag per research Pitfall 1; capture 06-01-BASELINE.md)
-- [ ] 06-02-PLAN.md — refactor(eslint): migrate to flat config with full prettier wiring (create eslint.config.js with 5-entry array: global ignores + FlatCompat extends chain + native languageOptions+rules + .vue parser override with STRING parserOptions.parser per Pitfall 6 + prettierRecommended last for FMT-01; delete .eslintrc.js and .eslintignore via git rm)
+- [x] 06-01-PLAN.md — chore(deps): eslint 9 + eslint-config-prettier 10 (bump eslint 7->9.39.4, eslint-config-prettier 9->10.1.8; install @eslint/eslintrc ^3.3.5 + globals ^15.15.0 for flat-config migration in plan 06-02; rewrite npm run lint to drop --ext flag per research Pitfall 1; capture 06-01-BASELINE.md) — completed 2026-04-22 via commit `15b7042`
+- [x] 06-02-PLAN.md — refactor(eslint): migrate to flat config with full prettier wiring (create eslint.config.js with 5-entry array: global ignores + FlatCompat extends chain + native languageOptions+rules + .vue parser override with STRING parserOptions.parser per Pitfall 6 + prettierRecommended last for FMT-01; delete .eslintrc.js and .eslintignore via git rm) — completed 2026-04-22 via commit `96fe918`. **D-01 Amendment:** eslint-plugin-vue bumped ^6.2.2 → ^9.33.0 after v6 crashed under ESLint 9 via removed `codePath.currentSegments` API; @eslint/compat@^2.0.5 added to shim remaining legacy-plugin context APIs via `fixupConfigRules`. Post-migration: 735 findings (+13 vs 722 baseline — +6 new v9 Vue rules, +7 node/promise scope-analysis rules now firing correctly), 0 prettier/prettier firings, 256/256 tests, builds clean. SC1-5 all satisfied.
 
 ### Phase 7: TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps
 **Goal**: Upgrade TypeScript 3.8 → 5.7 and `@typescript-eslint/*` 2.25 → 8.x (which requires the ESLint 9 foundation from Phase 6), triage the inference-driven error backlog, and close the milestone by verifying `npm install` succeeds without `--legacy-peer-deps`.
@@ -79,7 +79,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 5. Babel Package Renames | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
-| 6. ESLint 9 Flat Config + Prettier Full Wiring | 0/2 | Planned — ready for execution | - |
+| 6. ESLint 9 Flat Config + Prettier Full Wiring | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 0/? | Not started | - |
 
 ---
