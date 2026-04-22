@@ -140,7 +140,7 @@
 | 5. Babel Package Renames | v1.4 | 2/2 | Complete | 2026-04-22 |
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | v1.4 | 2/2 | Complete | 2026-04-22 |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | v1.4 | 4/4 | Complete | 2026-04-22 |
-| 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 5/6 | In Progress | - |
+| 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 6/6 | Complete | 2026-04-22 |
 | 9. webpack → Vite bundler | v2.0 | 0/? | Not started | - |
 | 10. Jest → Vitest | v2.0 | 0/? | Not started | - |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 0/? | Not started | - |
