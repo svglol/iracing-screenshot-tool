@@ -17,7 +17,7 @@
         },
         "files": [
             "package.json",
-            "dist/**/*",
+            "out/**/*",
             "node_modules/**/*",
             "static/icon.*",
             "!bot/**/*"
@@ -41,7 +41,7 @@
         },
         "electronDist": "node_modules/electron/dist"
     },
-    "main": "./dist/main.js",
+    "main": "./out/main/index.js",
     "dependencies": {
         "@electron/remote": "^2.1.3",
         "@fortawesome/fontawesome-svg-core": "^7.2.0",
@@ -113,8 +113,8 @@
         "dev": "run-s rebuild:electron electron-vite-dev",
         "electron-builder-install": "electron-builder install-app-deps",
         "electron-rebuild": "electron-rebuild -f --which-module irsdk-node,sharp",
-        "electron-vite-debug": "electron-vite dev --entry out/main/index.js --inspect=9222",
-        "electron-vite-dev": "electron-vite dev --entry out/main/index.js",
+        "electron-vite-debug": "electron-vite dev --inspect=9222",
+        "electron-vite-dev": "electron-vite dev",
         "jest": "jest",
         "jest:coverage": "jest --collect-coverage",
         "jest:watch": "jest --watch",
