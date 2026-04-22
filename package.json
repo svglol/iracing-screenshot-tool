@@ -48,7 +48,6 @@
         "@fortawesome/free-brands-svg-icons": "^6.7.2",
         "@fortawesome/free-solid-svg-icons": "^6.7.2",
         "@fortawesome/vue-fontawesome": "^2.0.10",
-        "babel-runtime": "^6.26.0",
         "buefy": "^0.9.29",
         "bulma": "^0.9.4",
         "bulma-pro": "^0.1.8",
@@ -68,6 +67,7 @@
     },
     "devDependencies": {
         "@babel/core": "^7.9.0",
+        "@babel/eslint-parser": "^7.28.6",
         "@babel/plugin-proposal-class-properties": "^7.8.3",
         "@babel/plugin-proposal-object-rest-spread": "^7.9.0",
         "@babel/preset-env": "^7.9.0",
@@ -75,7 +75,6 @@
         "@electron/rebuild": "^4.0.3",
         "@typescript-eslint/eslint-plugin": "^2.25.0",
         "@typescript-eslint/parser": "^2.25.0",
-        "babel-eslint": "^10.1.0",
         "babel-loader": "^8.1.0",
         "chalk": "^3.0.0",
         "copy-webpack-plugin": "^14.0.0",
