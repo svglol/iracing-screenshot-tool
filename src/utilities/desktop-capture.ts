@@ -8,12 +8,11 @@ interface CaptureBounds {
 	height: number;
 }
 
-interface DesktopCaptureSourceLike {
-	id?: unknown;
-	name?: unknown;
-	display_id?: unknown;
-	[key: string]: unknown;
-}
+// Loose shape: tests and electron sources both pass through these helpers.
+// Typed as `any` per D-12-08 to accept both object literals with extra props
+// (tests) and Electron's DesktopCapturerSource (with thumbnail, appIcon, etc.).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DesktopCaptureSourceLike = any;
 
 interface NormalizedCaptureTarget {
 	id: string;

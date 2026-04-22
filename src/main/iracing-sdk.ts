@@ -1,12 +1,24 @@
-const { EventEmitter } = require('events');
-const { IRacingSDK, CameraState } = require('irsdk-node');
-const { flattenTelemetry } = require('./iracing-sdk-utils');
+import { EventEmitter } from 'events';
+import { IRacingSDK, CameraState } from 'irsdk-node';
+import { flattenTelemetry } from './iracing-sdk-utils';
 
-function delay(ms) {
+function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type FlattenedTelemetry = { values: Record<string, unknown> };
+type SessionInfo = { data: unknown };
+
 class IRacingBridge extends EventEmitter {
+	// irsdk-node SDK surface is untyped upstream; `any` is transitional per D-12-01.
+	sdk: any;
+	connected: boolean;
+	loopActive: boolean;
+	telemetry: FlattenedTelemetry | null;
+	sessionInfo: SessionInfo | null;
+	Consts: { CameraState: any };
+	camControls: { setState: (state: number) => void };
+
 	constructor() {
 		super();
 
@@ -17,13 +29,13 @@ class IRacingBridge extends EventEmitter {
 		this.sessionInfo = null;
 		this.Consts = { CameraState };
 		this.camControls = {
-			setState: (state) => this.sdk.broadcastUnsafe(2, state, 0, 0),
+			setState: (state: number) => this.sdk.broadcastUnsafe(2, state, 0, 0),
 		};
 
 		this.start();
 	}
 
-	async start() {
+	async start(): Promise<void> {
 		if (this.loopActive) {
 			return;
 		}
@@ -68,14 +80,20 @@ class IRacingBridge extends EventEmitter {
 	}
 }
 
-let instance = null;
+let instance: IRacingBridge | null = null;
 
-module.exports = {
-	getInstance() {
-		if (!instance) {
-			instance = new IRacingBridge();
-		}
+export function getInstance(): IRacingBridge {
+	if (!instance) {
+		instance = new IRacingBridge();
+	}
 
-		return instance;
-	},
-};
+	return instance;
+}
+
+export { IRacingBridge };
+
+// Preserve CommonJS interop for existing `const irsdk = require('./iracing-sdk');
+// irsdk.getInstance()` callers in index.ts. Dual-form is legal; ESM `export`
+// statements above coexist with this assignment under our tsconfig settings.
+module.exports = { getInstance, IRacingBridge };
+module.exports.default = { getInstance, IRacingBridge };

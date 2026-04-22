@@ -103,8 +103,10 @@ const schema = {
 	},
 };
 
-// @ts-expect-error — process.type is Electron-injected at runtime; not in @types/node Process
-if (process.type === 'renderer') {
+// process.type is Electron-injected at runtime. When electron types are loaded
+// (src/main/ scope) it is declared; when not (src/utilities/ scope alone), plain
+// @types/node does not declare it. Cast through a loose shape to work in both.
+if ((process as { type?: string }).type === 'renderer') {
 	module.exports = {
 		get(key: string): unknown {
 			return ipcRenderer.sendSync('config:get', key);

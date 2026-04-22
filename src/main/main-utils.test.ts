@@ -3,7 +3,7 @@
 const path = require('path');
 const os = require('os');
 
-const {
+import {
 	isPlainObject,
 	mergePlainObjects,
 	serializeBounds,
@@ -21,7 +21,7 @@ const {
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
 	parseCameraState,
-} = require('./main-utils');
+} from './main-utils';
 
 // ---------------------------------------------------------------------------
 // isPlainObject
@@ -181,7 +181,7 @@ describe('serializeDisplay', () => {
 			internal: true,
 			touchSupport: 'available',
 		};
-		const result = serializeDisplay(display);
+		const result = serializeDisplay(display)!;
 		expect(result.id).toBe(1);
 		expect(result.label).toBe('Main Display');
 		expect(result.scaleFactor).toBe(1.5);
@@ -203,7 +203,7 @@ describe('serializeDisplay', () => {
 			bounds: { x: 0, y: 0, width: 100, height: 100 },
 			workArea: { x: 0, y: 0, width: 100, height: 100 },
 		};
-		expect(serializeDisplay(display).label).toBe('');
+		expect(serializeDisplay(display)!.label).toBe('');
 	});
 
 	test('defaults touchSupport to unknown', () => {
@@ -212,7 +212,7 @@ describe('serializeDisplay', () => {
 			bounds: { x: 0, y: 0, width: 100, height: 100 },
 			workArea: { x: 0, y: 0, width: 100, height: 100 },
 		};
-		expect(serializeDisplay(display).touchSupport).toBe('unknown');
+		expect(serializeDisplay(display)!.touchSupport).toBe('unknown');
 	});
 });
 

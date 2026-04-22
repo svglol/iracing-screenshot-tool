@@ -1,7 +1,7 @@
-const { productName, build } = require('../../package.json');
-const { autoUpdater } = require('electron-updater');
-const remoteMain = require('@electron/remote/main');
-const {
+import { productName, build } from '../../package.json';
+import { autoUpdater } from 'electron-updater';
+import * as remoteMain from '@electron/remote/main';
+import {
 	app,
 	BrowserWindow,
 	screen,
@@ -11,21 +11,25 @@ const {
 	dialog,
 	desktopCapturer,
 	nativeImage,
-} = require('electron');
-const fs = require('fs');
+} from 'electron';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+// read-ini-file has no @types/* published upstream; keep CommonJS require so we
+// can avoid a namespace-import mismatch. The loadIniFile.sync path is the only
+// API we call.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const loadIniFile = require('read-ini-file');
-const os = require('os');
-const path = require('path');
 
-const irsdk = require('./iracing-sdk');
-const {
+import * as irsdk from './iracing-sdk';
+import {
 	resizeIracingWindow,
 	resizeIracingWindowAsync,
 	getIracingWindowDetails,
-} = require('./window-utils');
-const { createLogger } = require('../utilities/logger');
+} from './window-utils';
+import { createLogger } from '../utilities/logger';
 const log = createLogger('main');
-const {
+import {
 	normalizeWindowHandle,
 	normalizeWindowTitle,
 	normalizeCaptureBounds,
@@ -33,8 +37,8 @@ const {
 	findSourceByWindowTitle,
 	findSourceByKnownIracingTitle,
 	findDisplaySourceByDisplayId,
-} = require('../utilities/desktop-capture');
-const {
+} from '../utilities/desktop-capture';
+import {
 	isPlainObject,
 	mergePlainObjects,
 	serializeBounds,
@@ -51,25 +55,34 @@ const {
 	createReshadeConfigError,
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
-	parseCameraState: parseCameraStateFromArray,
-} = require('./main-utils');
+	parseCameraState as parseCameraStateFromArray,
+} from './main-utils';
 
-let width;
-let height;
-let left;
-let top;
+let width: number;
+let height: number;
+let left: number;
+let top: number;
 let takingScreenshot = false;
-let originalWindowBounds = null;
+let originalWindowBounds: {
+	handle: string;
+	title: string;
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+} | null = null;
 let cameraState = 0;
-let config;
-let mainWindow;
-let workerWindow;
+// electron-store v5 dynamic schema; typed `any` on purpose per D-12-01
+let config: any;
+let mainWindow: BrowserWindow | null;
+let workerWindow: BrowserWindow | null;
 let workerReady = false;
-let cancelReshadeWait = null;
+let cancelReshadeWait: ((reason: string) => void) | null = null;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 
 app.name = productName;
 app.commandLine.appendSwitch('js-flags', '--expose_gc');
+// @ts-expect-error — ELECTRON_DISABLE_SECURITY_WARNINGS typed as string | undefined; legacy assignment preserved
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
 
 remoteMain.initialize();
@@ -105,6 +118,7 @@ if (!isDev) {
 		process.exit(0);
 	}
 } else {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	require('electron-debug')({
 		showDevTools: false,
 	});
@@ -112,13 +126,15 @@ if (!isDev) {
 
 async function installDevTools() {
 	try {
+		// vue-devtools is a legacy dev-only module without types; Phase 13 removes entirely.
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		require('vue-devtools').install();
 	} catch (err) {
 		console.log(err);
 	}
 }
 
-function broadcastToWindows(channel, ...args) {
+function broadcastToWindows(channel: string, ...args: unknown[]): void {
 	[mainWindow, workerWindow].forEach((window) => {
 		if (window && !window.isDestroyed()) {
 			window.webContents.send(channel, ...args);
@@ -126,7 +142,7 @@ function broadcastToWindows(channel, ...args) {
 	});
 }
 
-function getConfigDiagnosticValue(key) {
+function getConfigDiagnosticValue(key: string): unknown {
 	if (!config) {
 		return undefined;
 	}
@@ -134,7 +150,7 @@ function getConfigDiagnosticValue(key) {
 	try {
 		return config.get(key);
 	} catch (error) {
-		return `[config read failed: ${error.message}]`;
+		return `[config read failed: ${(error as Error).message}]`;
 	}
 }
 
@@ -200,21 +216,28 @@ function buildMainScreenshotDiagnostics() {
 	};
 }
 
-function getMainScreenshotDiagnostics() {
+function getMainScreenshotDiagnostics(): Record<string, unknown> {
 	try {
 		return buildMainScreenshotDiagnostics();
 	} catch (error) {
 		return {
-			diagnosticsError: error.message || String(error),
+			diagnosticsError: (error as Error).message || String(error),
 		};
 	}
 }
 
-function getScreenshotErrorLogPath() {
+function getScreenshotErrorLogPath(): string {
 	return path.join(app.getPath('userData'), 'logs', 'screenshot-errors.log');
 }
 
-function writeScreenshotErrorLog(payload) {
+function writeScreenshotErrorLog(payload: {
+	source?: string;
+	context?: string;
+	message?: string;
+	meta?: Record<string, unknown>;
+	diagnostics?: Record<string, unknown>;
+	stack?: string;
+}): string {
 	const logPath = getScreenshotErrorLogPath();
 	fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
@@ -246,7 +269,15 @@ function writeScreenshotErrorLog(payload) {
 	return logPath;
 }
 
-function reportScreenshotError(errorLike, defaults = {}) {
+function reportScreenshotError(
+	errorLike: unknown,
+	defaults: {
+		source?: string;
+		context?: string;
+		meta?: Record<string, unknown>;
+		diagnostics?: Record<string, unknown>;
+	} = {}
+) {
 	const payload = createScreenshotErrorPayload(errorLike, {
 		...defaults,
 		diagnostics: mergePlainObjects(defaults.diagnostics, {
@@ -268,7 +299,7 @@ function reportScreenshotError(errorLike, defaults = {}) {
 	return rendererPayload;
 }
 
-function createWindow() {
+function createWindow(): void {
 	workerWindow = new BrowserWindow({
 		show: isDev,
 		icon: windowIcon,
@@ -296,6 +327,7 @@ function createWindow() {
 		workerWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
 			hash: '/worker',
 		});
+		// @ts-expect-error — global.__static is a legacy Vue-CLI static-assets bridge; Phase 13 removes
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 
@@ -325,12 +357,15 @@ function createWindow() {
 		mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
 	} else {
 		mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+		// @ts-expect-error — global.__static is a legacy Vue-CLI static-assets bridge; Phase 13 removes
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 
 	mainWindow.on('ready-to-show', () => {
-		mainWindow.show();
-		mainWindow.focus();
+		if (mainWindow) {
+			mainWindow.show();
+			mainWindow.focus();
+		}
 	});
 
 	mainWindow.on('close', () => {
@@ -341,11 +376,13 @@ function createWindow() {
 			workerWindow.close();
 		}
 
-		const bounds = mainWindow.getBounds();
-		config.set('winPosX', bounds.x);
-		config.set('winPosY', bounds.y);
-		config.set('winWidth', bounds.width);
-		config.set('winHeight', bounds.height);
+		if (mainWindow) {
+			const bounds = mainWindow.getBounds();
+			config.set('winPosX', bounds.x);
+			config.set('winPosY', bounds.y);
+			config.set('winWidth', bounds.width);
+			config.set('winHeight', bounds.height);
+		}
 	});
 
 	mainWindow.on('closed', () => {
@@ -354,26 +391,29 @@ function createWindow() {
 	});
 }
 
-ipcMain.on('config:get', (event, key) => {
+ipcMain.on('config:get', (event, key: string) => {
 	event.returnValue = config.get(key);
 });
 
-ipcMain.on('config:set', (event, payload) => {
-	const oldValue = config.get(payload.key);
-	config.set(payload.key, payload.value);
-	event.returnValue = true;
+ipcMain.on(
+	'config:set',
+	(event, payload: { key: string; value: unknown }) => {
+		const oldValue = config.get(payload.key);
+		config.set(payload.key, payload.value);
+		event.returnValue = true;
 
-	if (oldValue !== payload.value) {
-		log.debug('Config changed', { key: payload.key });
-		broadcastToWindows(
-			`config:changed:${payload.key}`,
-			payload.value,
-			oldValue
-		);
+		if (oldValue !== payload.value) {
+			log.debug('Config changed', { key: payload.key });
+			broadcastToWindows(
+				`config:changed:${payload.key}`,
+				payload.value,
+				oldValue
+			);
+		}
 	}
-});
+);
 
-ipcMain.on('app:getPath-sync', (event, name) => {
+ipcMain.on('app:getPath-sync', (event, name: Parameters<typeof app.getPath>[0]) => {
 	event.returnValue = app.getPath(name);
 });
 
@@ -381,14 +421,14 @@ ipcMain.on('app:isDevBuild-sync', (event) => {
 	event.returnValue = !app.isPackaged || app.getVersion().includes('+');
 });
 
-ipcMain.handle('dialog:showOpen', (event, options) => {
+ipcMain.handle('dialog:showOpen', (event, options: Electron.OpenDialogOptions) => {
 	const browserWindow = BrowserWindow.fromWebContents(event.sender);
-	return dialog.showOpenDialog(browserWindow || undefined, options);
+	return dialog.showOpenDialog(browserWindow || (undefined as unknown as BrowserWindow), options);
 });
-ipcMain.handle('desktop-capturer:get-source-id', async (event, request) => {
+ipcMain.handle('desktop-capturer:get-source-id', async (event, request: unknown) => {
 	const captureRequest =
 		request && typeof request === 'object' && !Array.isArray(request)
-			? request
+			? (request as Record<string, unknown>)
 			: { windowID: request };
 	const requestedHandle = normalizeWindowHandle(captureRequest.windowID);
 	const requestedBounds = normalizeCaptureBounds(captureRequest.captureBounds);
@@ -545,7 +585,7 @@ ipcMain.handle('desktop-capturer:get-source-id', async (event, request) => {
 	};
 });
 
-ipcMain.on('window-control', (event, action) => {
+ipcMain.on('window-control', (event, action: string) => {
 	const browserWindow = BrowserWindow.fromWebContents(event.sender);
 	if (!browserWindow) {
 		return;
@@ -603,18 +643,18 @@ app.on('ready', async () => {
 
 	if (isDev) {
 		installDevTools();
-		mainWindow.webContents.openDevTools();
-		workerWindow.webContents.openDevTools();
+		mainWindow?.webContents.openDevTools();
+		workerWindow?.webContents.openDevTools();
 	}
 
 	if (isDebug) {
-		mainWindow.webContents.openDevTools();
-		workerWindow.webContents.openDevTools();
+		mainWindow?.webContents.openDevTools();
+		workerWindow?.webContents.openDevTools();
 	}
 
 	ipcMain.on('screenshot-response', (event, output) => {
 		log.info('Screenshot complete', { file: output });
-		mainWindow.webContents.send('screenshot-response', output);
+		mainWindow?.webContents.send('screenshot-response', output);
 	});
 
 	ipcMain.on('screenshot-finished', () => {
@@ -637,7 +677,7 @@ app.on('ready', async () => {
 		}
 	});
 
-	ipcMain.on('resize-screenshot', async (event, data) => {
+	ipcMain.on('resize-screenshot', async (event, data: any) => {
 		log.info('Screenshot requested', {
 			width: data.width,
 			height: data.height,
@@ -671,8 +711,8 @@ app.on('ready', async () => {
 		}
 
 		takingScreenshot = true;
-		originalWindowBounds = getIracingWindowDetails();
-		parseCameraState(iracing.telemetry.values.CamCameraState);
+		originalWindowBounds = getIracingWindowDetails() || null;
+		parseCameraState((iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState);
 		iracing.camControls.setState(
 			cameraState | iracing.Consts.CameraState.UIHidden
 		);
@@ -684,18 +724,17 @@ app.on('ready', async () => {
 		while (waited < uiHideTimeout) {
 			await delay(uiHidePoll);
 			waited += uiHidePoll;
-			if (
-				iracing.telemetry &&
-				iracing.telemetry.values.CamCameraState &&
-				iracing.telemetry.values.CamCameraState.includes('UIHidden')
-			) {
+			const cam = (iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState;
+			if (cam && cam.includes('UIHidden')) {
 				break;
 			}
 		}
 		log.debug('UI hide wait', {
 			waited,
 			confirmed:
-				iracing.telemetry?.values?.CamCameraState?.includes('UIHidden') ||
+				((iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState?.includes(
+					'UIHidden'
+				)) ||
 				false,
 		});
 
@@ -731,10 +770,10 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			let sourceId = null;
+			let sourceId: string | null = null;
 			const match = findSourceByWindowHandles(windowSources, [String(id)]);
 			if (match) {
-				sourceId = match.id;
+				sourceId = String(match.id);
 			}
 			log.debug('Source enumeration', {
 				windowSourceCount: windowSources.length,
@@ -746,9 +785,9 @@ app.on('ready', async () => {
 				height: data.height,
 				sourceId,
 			});
-			workerWindow.webContents.send('session-info', iracing.sessionInfo);
-			workerWindow.webContents.send('telemetry', iracing.telemetry);
-			workerWindow.webContents.send('screenshot-request', {
+			workerWindow?.webContents.send('session-info', iracing.sessionInfo);
+			workerWindow?.webContents.send('telemetry', iracing.telemetry);
+			workerWindow?.webContents.send('screenshot-request', {
 				width: data.width,
 				height: data.height,
 				targetWidth: data.targetWidth,
@@ -789,7 +828,12 @@ app.on('ready', async () => {
 			handle: id,
 		});
 
-		let reshadeLocation = null;
+		let reshadeLocation: {
+			folder: string;
+			rawFolder: string;
+			basePath: string;
+			remappedFrom: string;
+		} | null = null;
 
 		try {
 			const reshadeIniPath = config.get('reshadeFile');
@@ -804,9 +848,9 @@ app.on('ready', async () => {
 
 			log.info('ReShade screenshot received', { file: reshadeFile });
 			restoreScreenshotState();
-			workerWindow.webContents.send('session-info', iracing.sessionInfo);
-			workerWindow.webContents.send('telemetry', iracing.telemetry);
-			workerWindow.webContents.send('screenshot-reshade', reshadeFile);
+			workerWindow?.webContents.send('session-info', iracing.sessionInfo);
+			workerWindow?.webContents.send('telemetry', iracing.telemetry);
+			workerWindow?.webContents.send('screenshot-reshade', reshadeFile);
 		} catch (error) {
 			restoreScreenshotState();
 			reportScreenshotError(error, {
@@ -815,7 +859,9 @@ app.on('ready', async () => {
 					request: data,
 					reshadeFile: config.get('reshadeFile'),
 					...(reshadeLocation || {}),
-					...(error && error.meta ? error.meta : {}),
+					...(error && (error as { meta?: Record<string, unknown> }).meta
+						? (error as { meta: Record<string, unknown> }).meta
+						: {}),
 				},
 			});
 		}
@@ -823,7 +869,9 @@ app.on('ready', async () => {
 
 	iracing.on('update', () => {
 		if (takingScreenshot && iracing.telemetry) {
-			const currentState = iracing.telemetry.values.CamCameraState || [];
+			const currentState =
+				((iracing.telemetry.values as { CamCameraState?: string[] })
+					.CamCameraState) || [];
 			if (!currentState.includes('UseTemporaryEdits')) {
 				iracing.camControls.setState(
 					cameraState | iracing.Consts.CameraState.UIHidden
@@ -840,39 +888,42 @@ app.on('ready', async () => {
 		});
 	});
 
-	ipcMain.on('screenshotKeybind-change', (event, data) => {
-		globalShortcut.unregister(data.oldValue);
-		globalShortcut.register(data.newValue, () => {
-			mainWindow.webContents.send('hotkey-screenshot', '');
-		});
-	});
+	ipcMain.on(
+		'screenshotKeybind-change',
+		(event, data: { oldValue: string; newValue: string }) => {
+			globalShortcut.unregister(data.oldValue);
+			globalShortcut.register(data.newValue, () => {
+				mainWindow?.webContents.send('hotkey-screenshot', '');
+			});
+		}
+	);
 
 	globalShortcut.register(config.get('screenshotKeybind'), () => {
-		mainWindow.webContents.send('hotkey-screenshot', '');
+		mainWindow?.webContents.send('hotkey-screenshot', '');
 	});
 
-	ipcMain.on('defaultScreenHeight', (event, data) => {
+	ipcMain.on('defaultScreenHeight', (event, data: number) => {
 		height = data;
 		if (!takingScreenshot) {
 			resize(width, height, left, top);
 		}
 	});
 
-	ipcMain.on('defaultScreenWidth', (event, data) => {
+	ipcMain.on('defaultScreenWidth', (event, data: number) => {
 		width = data;
 		if (!takingScreenshot) {
 			resize(width, height, left, top);
 		}
 	});
 
-	ipcMain.on('defaultScreenLeft', (event, data) => {
+	ipcMain.on('defaultScreenLeft', (event, data: number) => {
 		left = data;
 		if (!takingScreenshot) {
 			resize(width, height, left, top);
 		}
 	});
 
-	ipcMain.on('defaultScreenTop', (event, data) => {
+	ipcMain.on('defaultScreenTop', (event, data: number) => {
 		top = data;
 		if (!takingScreenshot) {
 			resize(width, height, left, top);
@@ -908,7 +959,7 @@ app.on('ready', () => {
 	}
 });
 
-function clearPendingReshadeWait(reason = 'Screenshot cancelled') {
+function clearPendingReshadeWait(reason = 'Screenshot cancelled'): void {
 	if (typeof cancelReshadeWait !== 'function') {
 		return;
 	}
@@ -918,7 +969,7 @@ function clearPendingReshadeWait(reason = 'Screenshot cancelled') {
 	cancel(reason);
 }
 
-function restoreScreenshotState() {
+function restoreScreenshotState(): void {
 	if (!takingScreenshot) {
 		return;
 	}
@@ -950,21 +1001,30 @@ function restoreScreenshotState() {
 	log.info('iRacing window restored');
 }
 
-async function listReshadeScreenshotFiles(folder) {
+interface ReshadeFileInfo {
+	fullPath: string;
+	key: string;
+	mtimeMs: number;
+	size: number;
+}
+
+async function listReshadeScreenshotFiles(
+	folder: string
+): Promise<ReshadeFileInfo[]> {
 	const supportedExtensions = new Set(['.bmp', '.jpeg', '.jpg', '.png']);
-	let entries = [];
+	let entries: fs.Dirent[] = [];
 
 	try {
 		entries = await fs.promises.readdir(folder, { withFileTypes: true });
 	} catch (error) {
-		if (error.code === 'ENOENT') {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
 			return [];
 		}
 
 		throw error;
 	}
 
-	const files = [];
+	const files: ReshadeFileInfo[] = [];
 
 	for (const entry of entries) {
 		if (!entry.isFile()) {
@@ -994,7 +1054,11 @@ async function listReshadeScreenshotFiles(folder) {
 	return files;
 }
 
-async function findLatestReshadeScreenshot(folder, baselineFiles, startedAt) {
+async function findLatestReshadeScreenshot(
+	folder: string,
+	baselineFiles: Map<string, ReshadeFileInfo>,
+	startedAt: number
+): Promise<ReshadeFileInfo | null> {
 	const files = await listReshadeScreenshotFiles(folder);
 	const candidates = files.filter((file) => {
 		const previous = baselineFiles.get(file.key);
@@ -1010,8 +1074,12 @@ async function findLatestReshadeScreenshot(folder, baselineFiles, startedAt) {
 	return candidates[0] || null;
 }
 
-async function waitForFileToSettle(filePath, attempts = 12, intervalMs = 250) {
-	let previousStats = null;
+async function waitForFileToSettle(
+	filePath: string,
+	attempts = 12,
+	intervalMs = 250
+): Promise<void> {
+	let previousStats: { size: number; mtimeMs: number } | null = null;
 
 	for (let index = 0; index < attempts; index += 1) {
 		try {
@@ -1040,22 +1108,28 @@ async function waitForFileToSettle(filePath, attempts = 12, intervalMs = 250) {
 	}
 }
 
-async function waitForReshadeScreenshot(folder, timeoutMs = 30000) {
+async function waitForReshadeScreenshot(
+	folder: string,
+	timeoutMs = 30000
+): Promise<string> {
 	fs.mkdirSync(folder, { recursive: true });
 
-	const baselineFiles = new Map(
+	const baselineFiles = new Map<string, ReshadeFileInfo>(
 		(await listReshadeScreenshotFiles(folder)).map((file) => [file.key, file])
 	);
 	const startedAt = Date.now();
 
-	return new Promise((resolve, reject) => {
+	return new Promise<string>((resolve, reject) => {
 		let settled = false;
 		let scanInFlight = false;
-		let watcher;
-		let poller;
-		let timeoutId;
+		let watcher: fs.FSWatcher | undefined;
+		let poller: NodeJS.Timeout | undefined;
+		let timeoutId: NodeJS.Timeout | undefined;
 
-		const finish = (callback, value) => {
+		const finish = <T,>(
+			callback: (value: T) => void,
+			value: T
+		): void => {
 			if (settled) {
 				return;
 			}
@@ -1081,11 +1155,11 @@ async function waitForReshadeScreenshot(folder, timeoutMs = 30000) {
 			callback(value);
 		};
 
-		const cancel = (reason) => {
+		const cancel = (reason: string): void => {
 			finish(reject, new Error(reason));
 		};
 
-		const scan = async () => {
+		const scan = async (): Promise<void> => {
 			if (settled || scanInFlight) {
 				return;
 			}
@@ -1104,7 +1178,7 @@ async function waitForReshadeScreenshot(folder, timeoutMs = 30000) {
 					finish(resolve, candidate.fullPath);
 				}
 			} catch (error) {
-				finish(reject, error);
+				finish(reject, error as Error);
 			} finally {
 				scanInFlight = false;
 			}
@@ -1115,7 +1189,7 @@ async function waitForReshadeScreenshot(folder, timeoutMs = 30000) {
 				void scan();
 			});
 		} catch (error) {
-			finish(reject, error);
+			finish(reject, error as Error);
 			return;
 		}
 
@@ -1132,21 +1206,29 @@ async function waitForReshadeScreenshot(folder, timeoutMs = 30000) {
 	});
 }
 
-function resize(targetWidth, targetHeight, targetLeft, targetTop) {
+function resize(
+	targetWidth: number,
+	targetHeight: number,
+	targetLeft: number,
+	targetTop: number
+): number | undefined {
 	return resizeIracingWindow(targetWidth, targetHeight, targetLeft, targetTop);
 }
 
-function loadConfig() {
+function loadConfig(): void {
 	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		config = require('../utilities/config');
 	} catch (error) {
 		fs.unlinkSync(path.join(app.getPath('userData'), 'config.json'));
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		config = require('../utilities/config');
 	}
 }
 
-function parseCameraState(iracingCameraState = []) {
+function parseCameraState(iracingCameraState: string[] = []): void {
 	cameraState = parseCameraStateFromArray(iracingCameraState);
 }
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, ms));

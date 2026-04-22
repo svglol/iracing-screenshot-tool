@@ -1,7 +1,17 @@
-const { spawn, spawnSync } = require('child_process');
+import { spawn, spawnSync } from 'child_process';
+
 const IRACING_PROCESS_NAME = 'iRacingSim64DX11';
 
-function getIracingWindowDetails() {
+export interface IRacingWindowDetails {
+	handle: string;
+	title: string;
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+export function getIracingWindowDetails(): IRacingWindowDetails | undefined {
 	const script = `
 $ErrorActionPreference = 'Stop'
 
@@ -87,7 +97,12 @@ $rect = New-Object Win32Rect+RECT
 	}
 }
 
-function resizeIracingWindow(width, height, left, top) {
+export function resizeIracingWindow(
+	width: number,
+	height: number,
+	left: number,
+	top: number
+): number | undefined {
 	const script = `
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
@@ -161,7 +176,12 @@ Write-Output ([int64]$window)
 	return Number.isNaN(handle) ? undefined : handle;
 }
 
-function resizeIracingWindowAsync(width, height, left, top) {
+export function resizeIracingWindowAsync(
+	width: number,
+	height: number,
+	left: number,
+	top: number
+): Promise<number | undefined> {
 	const script = `
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
@@ -208,7 +228,7 @@ $window = [IntPtr]$process.MainWindowHandle
 Write-Output ([int64]$window)
 `;
 
-	return new Promise((resolve) => {
+	return new Promise<number | undefined>((resolve) => {
 		const child = spawn(
 			'powershell.exe',
 			['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
@@ -219,13 +239,13 @@ Write-Output ([int64]$window)
 
 		let stdout = '';
 		let stderr = '';
-		child.stdout.on('data', (data) => {
+		child.stdout.on('data', (data: Buffer | string) => {
 			stdout += data;
 		});
-		child.stderr.on('data', (data) => {
+		child.stderr.on('data', (data: Buffer | string) => {
 			stderr += data;
 		});
-		child.on('close', (code) => {
+		child.on('close', (code: number | null) => {
 			if (code !== 0) {
 				if (stderr.trim()) {
 					console.error(stderr.trim());
@@ -245,9 +265,3 @@ Write-Output ([int64]$window)
 		});
 	});
 }
-
-module.exports = {
-	resizeIracingWindow,
-	resizeIracingWindowAsync,
-	getIracingWindowDetails,
-};

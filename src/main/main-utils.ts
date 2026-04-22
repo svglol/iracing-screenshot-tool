@@ -1,8 +1,73 @@
-'use strict';
+import * as path from 'path';
+import * as os from 'os';
+import { normalizeCaptureBounds } from '../utilities/desktop-capture';
 
-const path = require('path');
-const os = require('os');
-const { normalizeCaptureBounds } = require('../utilities/desktop-capture.ts');
+interface Bounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+interface SerializedDisplay {
+	id: unknown;
+	label: string;
+	bounds: Bounds | null;
+	workArea: Bounds | null;
+	scaleFactor: number;
+	rotation: number;
+	internal: boolean;
+	touchSupport: string;
+}
+
+// Loose shape for desktopCapturer sources. We accept extra fields (test
+// literals supply `extra: 'ignored'`, Electron's DesktopCapturerSource adds
+// `thumbnail`/`appIcon`/etc.). The `any` here is transitional per D-12-08 —
+// TypeScript's excess-property check otherwise rejects both callers.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DesktopSourceLike = any;
+
+interface DesktopSourceSummary {
+	id: string;
+	name: string;
+	display_id: string;
+}
+
+interface ScreenshotErrorPayload {
+	message: string;
+	stack: string;
+	source: string;
+	context: string;
+	meta: Record<string, unknown>;
+	diagnostics: Record<string, unknown>;
+}
+
+interface ScreenshotErrorDefaults {
+	message?: string;
+	stack?: string;
+	source?: string;
+	context?: string;
+	meta?: unknown;
+	diagnostics?: unknown;
+}
+
+interface ReshadeIni {
+	INSTALL?: { BasePath?: string };
+	SCREENSHOT?: { SavePath?: string };
+	GENERAL?: { ScreenshotPath?: string };
+	[section: string]: unknown;
+}
+
+interface ReshadeConfigError extends Error {
+	meta?: Record<string, unknown>;
+}
+
+interface ReshadeScreenshotFolder {
+	folder: string;
+	rawFolder: string;
+	basePath: string;
+	remappedFrom: string;
+}
 
 const knownUserProfileFolders = new Set([
 	'desktop',
@@ -13,19 +78,26 @@ const knownUserProfileFolders = new Set([
 	'videos',
 ]);
 
-function isPlainObject(value) {
-	return value && typeof value === 'object' && !Array.isArray(value);
+export function isPlainObject(
+	value: unknown
+): value is Record<string, unknown> {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function mergePlainObjects(...objects) {
-	return objects.reduce((result, value) => {
+export function mergePlainObjects(
+	...objects: unknown[]
+): Record<string, unknown> {
+	return objects.reduce<Record<string, unknown>>((result, value) => {
 		if (!isPlainObject(value)) {
 			return result;
 		}
 
 		Object.entries(value).forEach(([key, entryValue]) => {
 			if (isPlainObject(entryValue) && isPlainObject(result[key])) {
-				result[key] = mergePlainObjects(result[key], entryValue);
+				result[key] = mergePlainObjects(
+					result[key] as Record<string, unknown>,
+					entryValue
+				);
 				return;
 			}
 
@@ -46,28 +118,31 @@ function mergePlainObjects(...objects) {
 	}, {});
 }
 
-function serializeBounds(bounds) {
+export function serializeBounds(bounds: unknown): Bounds | null {
 	return normalizeCaptureBounds(bounds);
 }
 
-function serializeDisplay(display) {
+export function serializeDisplay(display: unknown): SerializedDisplay | null {
 	if (!display || typeof display !== 'object') {
 		return null;
 	}
 
+	const d = display as Record<string, unknown>;
 	return {
-		id: display.id,
-		label: String(display.label || ''),
-		bounds: serializeBounds(display.bounds),
-		workArea: serializeBounds(display.workArea),
-		scaleFactor: Number(display.scaleFactor || 0),
-		rotation: Number(display.rotation || 0),
-		internal: Boolean(display.internal),
-		touchSupport: String(display.touchSupport || 'unknown'),
+		id: d.id,
+		label: String(d.label || ''),
+		bounds: serializeBounds(d.bounds),
+		workArea: serializeBounds(d.workArea),
+		scaleFactor: Number(d.scaleFactor || 0),
+		rotation: Number(d.rotation || 0),
+		internal: Boolean(d.internal),
+		touchSupport: String(d.touchSupport || 'unknown'),
 	};
 }
 
-function summarizeDesktopSource(source) {
+export function summarizeDesktopSource(
+	source: DesktopSourceLike | null | undefined
+): DesktopSourceSummary {
 	return {
 		id: String(source?.id || ''),
 		name: String(source?.name || ''),
@@ -75,18 +150,24 @@ function summarizeDesktopSource(source) {
 	};
 }
 
-function summarizeDesktopSources(sources = [], limit = 10) {
+export function summarizeDesktopSources(
+	sources: DesktopSourceLike[] = [],
+	limit = 10
+): DesktopSourceSummary[] {
 	return sources.slice(0, limit).map(summarizeDesktopSource);
 }
 
-function createScreenshotErrorPayload(errorLike, defaults = {}) {
+export function createScreenshotErrorPayload(
+	errorLike: unknown,
+	defaults: ScreenshotErrorDefaults = {}
+): ScreenshotErrorPayload {
 	const payload =
 		errorLike &&
 		typeof errorLike === 'object' &&
 		!Array.isArray(errorLike) &&
-		(typeof errorLike.message === 'string' ||
-			typeof errorLike.error === 'string')
-			? errorLike
+		(typeof (errorLike as Record<string, unknown>).message === 'string' ||
+			typeof (errorLike as Record<string, unknown>).error === 'string')
+			? (errorLike as Record<string, unknown>)
 			: null;
 
 	if (payload) {
@@ -123,14 +204,16 @@ function createScreenshotErrorPayload(errorLike, defaults = {}) {
 	};
 }
 
-function trimWrappedQuotes(value = '') {
+export function trimWrappedQuotes(value: unknown = ''): string {
 	return String(value)
 		.trim()
 		.replace(/^"(.*)"$/, '$1');
 }
 
-function expandWindowsEnvironmentVariables(value = '') {
-	return String(value).replace(/%([^%]+)%/g, (match, name) => {
+export function expandWindowsEnvironmentVariables(
+	value: unknown = ''
+): string {
+	return String(value).replace(/%([^%]+)%/g, (match, name: string) => {
 		const envValue = process.env[name];
 		return typeof envValue === 'string' && envValue.length > 0
 			? envValue
@@ -138,19 +221,22 @@ function expandWindowsEnvironmentVariables(value = '') {
 	});
 }
 
-function normalizeComparableWindowsPath(value = '') {
+export function normalizeComparableWindowsPath(value: unknown = ''): string {
 	return path.win32
 		.normalize(String(value || ''))
 		.replace(/[\\\/]+$/, '')
 		.toLowerCase();
 }
 
-function getWindowsUserProfileRoot(value = '') {
+export function getWindowsUserProfileRoot(value: unknown = ''): string {
 	const match = String(value || '').match(/^[a-z]:\\users\\[^\\]+/i);
 	return match ? match[0] : '';
 }
 
-function resolveReshadeBasePath(reshadeIni = {}, reshadeIniPath = '') {
+export function resolveReshadeBasePath(
+	reshadeIni: ReshadeIni = {},
+	reshadeIniPath = ''
+): string {
 	const iniDir = reshadeIniPath ? path.dirname(reshadeIniPath) : process.cwd();
 	const rawBasePath = trimWrappedQuotes(
 		expandWindowsEnvironmentVariables(reshadeIni.INSTALL?.BasePath || '')
@@ -165,7 +251,10 @@ function resolveReshadeBasePath(reshadeIni = {}, reshadeIniPath = '') {
 		: path.win32.resolve(iniDir, rawBasePath);
 }
 
-function remapForeignUserProfileFolder(folder) {
+export function remapForeignUserProfileFolder(folder: string): {
+	folder: string;
+	remappedFrom: string;
+} {
 	const normalizedFolder = path.win32.normalize(folder);
 	const currentProfileRoot = getWindowsUserProfileRoot(
 		path.win32.resolve(os.homedir())
@@ -212,13 +301,19 @@ function remapForeignUserProfileFolder(folder) {
 	};
 }
 
-function createReshadeConfigError(message, meta = {}) {
-	const error = new Error(message);
+export function createReshadeConfigError(
+	message: string,
+	meta: Record<string, unknown> = {}
+): ReshadeConfigError {
+	const error = new Error(message) as ReshadeConfigError;
 	error.meta = meta;
 	return error;
 }
 
-function getReshadeScreenshotFolder(reshadeIni = {}, reshadeIniPath = '') {
+export function getReshadeScreenshotFolder(
+	reshadeIni: ReshadeIni = {},
+	reshadeIniPath = ''
+): ReshadeScreenshotFolder {
 	const rawFolder =
 		reshadeIni.SCREENSHOT?.SavePath || reshadeIni.GENERAL?.ScreenshotPath;
 
@@ -252,11 +347,11 @@ function getReshadeScreenshotFolder(reshadeIni = {}, reshadeIniPath = '') {
 	};
 }
 
-function normalizeFileKey(filePath) {
+export function normalizeFileKey(filePath: string): string {
 	return path.resolve(filePath).toLowerCase();
 }
 
-function parseCameraState(iracingCameraState = []) {
+export function parseCameraState(iracingCameraState: string[] = []): number {
 	let cameraState = 0;
 
 	iracingCameraState.forEach((state) => {
@@ -299,23 +394,3 @@ function parseCameraState(iracingCameraState = []) {
 
 	return cameraState;
 }
-
-module.exports = {
-	isPlainObject,
-	mergePlainObjects,
-	serializeBounds,
-	serializeDisplay,
-	summarizeDesktopSource,
-	summarizeDesktopSources,
-	createScreenshotErrorPayload,
-	trimWrappedQuotes,
-	expandWindowsEnvironmentVariables,
-	normalizeComparableWindowsPath,
-	getWindowsUserProfileRoot,
-	resolveReshadeBasePath,
-	remapForeignUserProfileFolder,
-	createReshadeConfigError,
-	getReshadeScreenshotFolder,
-	normalizeFileKey,
-	parseCameraState,
-};

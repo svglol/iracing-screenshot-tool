@@ -15,8 +15,10 @@ const LOG_ROTATION_LIMIT = 5 * 1024 * 1024; // 5 MB
 const LOG_KEEP_TAIL = 1024 * 1024; // 1 MB kept after rotation
 
 function resolveLogDir(): string {
-	// @ts-expect-error — process.type is Electron-injected at runtime; not in @types/node Process
-	if (process.type === 'renderer') {
+	// process.type is Electron-injected at runtime. Cast through a loose shape so
+	// this compiles under both the src/utilities-only tsc scope (no electron types)
+	// and the src/main expanded scope (electron types declare process.type).
+	if ((process as { type?: string }).type === 'renderer') {
 		const { ipcRenderer } = require('electron');
 		const userData = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 		return path.join(userData, 'logs');
@@ -27,8 +29,10 @@ function resolveLogDir(): string {
 }
 
 function resolveIsDebug(): boolean {
-	// @ts-expect-error — process.type is Electron-injected at runtime; not in @types/node Process
-	if (process.type === 'renderer') {
+	// process.type is Electron-injected at runtime. Cast through a loose shape so
+	// this compiles under both the src/utilities-only tsc scope (no electron types)
+	// and the src/main expanded scope (electron types declare process.type).
+	if ((process as { type?: string }).type === 'renderer') {
 		const { ipcRenderer } = require('electron');
 		return ipcRenderer.sendSync('app:isDevBuild-sync');
 	}

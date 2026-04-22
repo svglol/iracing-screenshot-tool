@@ -16,11 +16,11 @@ vi.mock('irsdk-node', () => ({
 	},
 }));
 
-const {
+import {
 	normalizeTelemetryValue,
 	decodeCameraState,
 	flattenTelemetry,
-} = require('./iracing-sdk-utils');
+} from './iracing-sdk-utils';
 
 // ---------------------------------------------------------------------------
 // normalizeTelemetryValue
