@@ -50,6 +50,11 @@ const config = {
 						loader: 'sass-loader',
 						options: {
 							implementation: require('sass'),
+							sassOptions: {
+								loadPaths: [
+									path.join(__dirname, '../node_modules'),
+								],
+							},
 						},
 					},
 				],

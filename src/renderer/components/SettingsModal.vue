@@ -13,45 +13,45 @@
 				</aside>
 
 				<div class="settings-form">
-					<b-field label="Screenshot Folder" />
+					<o-field label="Screenshot Folder" />
 
-					<b-field class="settings-inline-field">
-						<b-input
+					<o-field class="settings-inline-field">
+						<o-input
 							expanded
 							disabled
 							type="text"
 							:value="screenshotFolder"
 						/>
 						<p class="control">
-							<b-button
+							<o-button
 								class="button is-primary settings-action"
 								@click="openFolderDialog"
 							>
 								Select Folder
-							</b-button>
+							</o-button>
 						</p>
-					</b-field>
+					</o-field>
 					<hr />
-					<b-field label="Screenshot Keybind" />
-					<b-field class="settings-inline-field">
-						<b-input
+					<o-field label="Screenshot Keybind" />
+					<o-field class="settings-inline-field">
+						<o-input
 							expanded
 							disabled
 							type="text"
 							:value="screenshotKeybind"
 						/>
 						<p class="control">
-							<b-button
+							<o-button
 								class="button is-primary settings-action"
 								:loading="bindingKey"
 								@click="bindScreenshotKeybind"
 							>
 								Edit Bind
-							</b-button>
+							</o-button>
 						</p>
-					</b-field>
+					</o-field>
 					<hr />
-					<b-field>
+					<o-field>
 						<div>
 							<span class="label" style="margin-bottom: 0px"
 								>Custom Filename Format</span
@@ -61,45 +61,45 @@
 								({track}-{driver}-{counter})</span
 							>
 						</div>
-						<b-switch
+						<o-switch
 							v-model="customFilenameFormat"
 							style="margin-left: auto"
 						/>
-					</b-field>
+					</o-field>
 					<div v-if="customFilenameFormat">
-						<b-field>
+						<o-field>
 							<span class="description"
 								>Click fields to add them to the format. Type separators
 								(-, _, etc.) directly.</span
 							>
-						</b-field>
+						</o-field>
 
-						<b-field>
-							<b-input
+						<o-field>
+							<o-input
 								v-model="filenameFormat"
 								type="text"
 								placeholder="{track}-{driver}-{counter}"
 								style="width: 100%"
 							/>
 							<p class="control">
-								<b-button
+								<o-button
 									class="button is-light"
 									style="width: 80px"
 									@click="filenameFormat = defaultFormat"
 								>
 									Reset
-								</b-button>
+								</o-button>
 							</p>
-						</b-field>
+						</o-field>
 
-						<b-field>
+						<o-field>
 							<span class="description"
 								>Preview:
 								<strong style="color: #fff">{{
 									filenamePreview
 								}}</strong></span
 							>
-						</b-field>
+						</o-field>
 
 						<div
 							v-for="(fields, category) in fieldsByCategory"
@@ -117,28 +117,28 @@
 									v-for="field in fields"
 									:key="field.token"
 								>
-									<b-tag
-										type="is-primary"
+									<o-tag
+										variant="primary"
 										style="cursor: pointer"
 										@click.native="insertField(field.token)"
 									>
 										{{ field.label }}
-									</b-tag>
+									</o-tag>
 								</div>
 							</div>
 						</div>
 					</div>
 
 					<hr />
-					<b-field label="Output Format">
-						<b-select v-model="outputFormat">
+					<o-field label="Output Format">
+						<o-select v-model="outputFormat">
 							<option value="jpeg">JPEG (quality 95%)</option>
 							<option value="png">PNG (lossless)</option>
 							<option value="webp">WebP (quality 95%)</option>
-						</b-select>
-					</b-field>
+						</o-select>
+					</o-field>
 					<hr />
-					<b-field>
+					<o-field>
 						<div>
 							<span class="label" style="margin-bottom: 0px"
 								>Disable Tooltips</span
@@ -147,13 +147,13 @@
 								>Leave me alone, I know what I'm doing</span
 							>
 						</div>
-						<b-switch
+						<o-switch
 							v-model="disableTooltips"
 							style="margin-left: auto"
 						/>
-					</b-field>
+					</o-field>
 					<hr />
-					<b-field>
+					<o-field>
 						<div>
 							<span class="label" style="margin-bottom: 0px"
 								>Prefer top-left watermark crop</span
@@ -164,10 +164,10 @@
 								equally from all sides for a centered result.</span
 							>
 						</div>
-						<b-switch v-model="cropTopLeft" style="margin-left: auto" />
-					</b-field>
+						<o-switch v-model="cropTopLeft" style="margin-left: auto" />
+					</o-field>
 					<hr />
-					<b-field>
+					<o-field>
 						<div>
 							<span class="label" style="margin-bottom: 0px"
 								>Manual Window Restore</span
@@ -178,48 +178,48 @@
 								or Nvidia Surround</span
 							>
 						</div>
-						<b-switch
+						<o-switch
 							v-model="manualWindowRestore"
 							style="margin-left: auto"
 						/>
-					</b-field>
+					</o-field>
 					<div v-if="manualWindowRestore">
 						<div class="columns settings-grid">
 							<div class="column">
-								<b-field label="Left">
-									<b-input v-model="screenLeft" type="number" />
-								</b-field>
+								<o-field label="Left">
+									<o-input v-model="screenLeft" type="number" />
+								</o-field>
 							</div>
 							<div class="column">
-								<b-field label="Top">
-									<b-input v-model="screenTop" type="number" />
-								</b-field>
+								<o-field label="Top">
+									<o-input v-model="screenTop" type="number" />
+								</o-field>
 							</div>
 						</div>
 						<div class="columns settings-grid">
 							<div class="column">
-								<b-field label="Width">
-									<b-input
+								<o-field label="Width">
+									<o-input
 										v-model="screenWidth"
 										type="number"
 										min="1080"
 										max="10320"
 									/>
-								</b-field>
+								</o-field>
 							</div>
 							<div class="column">
-								<b-field label="Height">
-									<b-input
+								<o-field label="Height">
+									<o-input
 										v-model="screenHeight"
 										type="number"
 										min="720"
 										max="10320"
 									/>
-								</b-field>
+								</o-field>
 							</div>
 						</div>
-						<b-button
-							type="is-info"
+						<o-button
+							variant="info"
 							icon-left="expand-arrows-alt"
 							expanded
 							:disabled="!iracingOpen"
@@ -227,36 +227,36 @@
 							@click="restoreNow"
 						>
 							Restore Now
-						</b-button>
+						</o-button>
 					</div>
 					<hr />
-					<b-field>
+					<o-field>
 						<div>
 							<span class="label" style="margin-bottom: 0px"
 								>Reshade Compatibility Mode</span
 							>
 						</div>
-						<b-switch v-model="reshade" style="margin-left: auto" />
-					</b-field>
+						<o-switch v-model="reshade" style="margin-left: auto" />
+					</o-field>
 					<span class="description">
 						When using reshade you will have to first use your hotkey for
 						the iRacing Screenshot Tool or press the button, then use your
 						reshade screenshot hotkey once the iRacing window has resized
 					</span>
-					<b-field label="Reshade INI" />
+					<o-field label="Reshade INI" />
 
-					<b-field class="settings-inline-field">
-						<b-input expanded disabled type="text" :value="reshadeFile" />
+					<o-field class="settings-inline-field">
+						<o-input expanded disabled type="text" :value="reshadeFile" />
 						<p class="control">
-							<b-button
+							<o-button
 								:disabled="!reshade"
 								class="button is-primary settings-action"
 								@click="openReshadeDialog"
 							>
 								Select File
-							</b-button>
+							</o-button>
 						</p>
-					</b-field>
+					</o-field>
 				</div>
 			</div>
 		</section>

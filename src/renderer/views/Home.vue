@@ -36,7 +36,7 @@
 							"
 						>
 							<span style="font-weight: bold">{{ fileName }}</span>
-							<b-tag type="is-info">{{ resolution }}</b-tag>
+							<o-tag variant="info">{{ resolution }}</o-tag>
 						</div>
 					</div>
 					<div class="column" style="margin-left: 5rem">
@@ -81,7 +81,7 @@
 					</div>
 				</div>
 
-				<b-carousel
+				<o-carousel
 					:animated="'fade'"
 					:arrow="false"
 					:autoplay="false"
@@ -91,7 +91,7 @@
 					v-model="selected"
 					id="carousel"
 				>
-					<b-carousel-item v-for="(item, i) in items" :key="i">
+					<o-carousel-item v-for="(item, i) in items" :key="i">
 						<figure class="al image" :draggable="false">
 							<img
 								:draggable="false"
@@ -106,25 +106,25 @@
 								"
 							/>
 						</figure>
-					</b-carousel-item>
-					<template #indicators="props">
+					</o-carousel-item>
+					<template #indicator="props">
 						<figure class="al image" :draggable="false">
 							<img
 								:draggable="false"
-								v-lazy="getImageUrl(items[props.i])"
-								@click="selectImage(items[props.i].file)"
+								v-lazy="getImageUrl(items[props.index])"
+								@click="selectImage(items[props.index].file)"
 								style="
 									max-height: 70px;
 									object-fit: contain;
 									height: 70px;
 								"
 								@contextmenu.prevent.stop="
-									handleClick($event, items[props.i])
+									handleClick($event, items[props.index])
 								"
 							/>
 						</figure>
 					</template>
-				</b-carousel>
+				</o-carousel>
 
 				<vue-simple-context-menu
 					:elementId="'myUniqueId'"
@@ -320,9 +320,9 @@ export default {
 		},
 		copy() {
 			copyImageToClipboard(toFsPath(this.currentURL));
-			this.$buefy.notification.open({
+			this.$oruga.notification.open({
 				message: `${this.fileName} copied to clipboard`,
-				type: 'is-dark',
+				variant: 'dark',
 			});
 		},
 		openFolder() {

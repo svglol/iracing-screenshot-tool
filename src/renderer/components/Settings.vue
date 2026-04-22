@@ -22,17 +22,17 @@
 			</li>
 		</ul>
 
-		<b-modal
-			:active.sync="showSettings"
+		<o-modal
+			v-model:active="showSettings"
 			has-modal-card
 			full-screen
 			:can-cancel="true"
 		>
 			<SettingsModal @changelog="showChangelog = true" />
-		</b-modal>
+		</o-modal>
 
-		<b-modal
-			:active.sync="showHelp"
+		<o-modal
+			v-model:active="showHelp"
 			has-modal-card
 			trap-focus
 			:destroy-on-hide="false"
@@ -41,10 +41,10 @@
 			aria-modal
 		>
 			<HelpModal @close="showHelp = false" />
-		</b-modal>
+		</o-modal>
 
-		<b-modal
-			:active.sync="showChangelog"
+		<o-modal
+			v-model:active="showChangelog"
 			has-modal-card
 			trap-focus
 			:destroy-on-hide="false"
@@ -53,7 +53,7 @@
 			aria-modal
 		>
 			<ChangelogModal @close="showChangelog = false" />
-		</b-modal>
+		</o-modal>
 	</div>
 </template>
 
