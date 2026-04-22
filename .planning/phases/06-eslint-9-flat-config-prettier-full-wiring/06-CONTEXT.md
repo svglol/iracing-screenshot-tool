@@ -245,4 +245,18 @@ Scope is limited to the root lint stack: `package.json` / `package-lock.json` (t
 
 *Phase: 06-eslint-9-flat-config-prettier-full-wiring*
 *Context gathered: 2026-04-22*
-*Mode: --auto (autonomous mode; gray-area decisions auto-resolved with recommended defaults; D-15 flagged for pre-plan user routing)*
+*Mode: --auto (autonomous mode; gray-area decisions auto-resolved with recommended defaults)*
+
+---
+
+## D-15 Resolution Addendum (2026-04-22)
+
+**User selected Option 1:** Accept `--legacy-peer-deps` persists past v1.4. LINT-03 ("drop `--legacy-peer-deps`") is reworded/deferred at milestone audit time; full removal moves to v2.0 alongside the `eslint-plugin-vue` 6 → 9 and `vue-eslint-parser` 7 → 9 upgrades (scope boundary).
+
+**Implications for Phase 6/7 planning:**
+- Phase 6 keeps `--legacy-peer-deps` throughout — no change (D-15/D-16 unchanged).
+- Phase 7 TS-02 still resolves the `@typescript-eslint@2 vs eslint@9` peer conflict (one of two legacy conflicts). The `eslint-plugin-vue@6 vs eslint@9` conflict remains a standing `--legacy-peer-deps` requirement through v1.4 close.
+- Phase 7 LINT-03 verification changes: instead of "`npm install` succeeds without `--legacy-peer-deps`", the gate becomes "`npm install --legacy-peer-deps` produces zero new peer warnings beyond the pre-existing `eslint-plugin-vue@6 vs eslint@9` + any other Vue-ecosystem pins" + "REQUIREMENTS §LINT-03 is reworded to scope removal to v2.0" (audit-time REQUIREMENTS edit).
+- Milestone audit MUST produce a REQUIREMENTS §LINT-03 re-scope entry noting the Option 1 resolution.
+
+**No Phase 6 plan/execution changes required** — proceeding with the D-01 through D-18 decisions as captured above.
