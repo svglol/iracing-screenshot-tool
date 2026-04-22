@@ -29,8 +29,8 @@
 
 ### TypeScript Conversion (TS)
 
-- [ ] **TS-03**: `.js` → `.ts` conversion in `src/` — all source files in `src/main/`, `src/renderer/`, `src/utilities/` converted to TypeScript; `.vue` files use `<script lang="ts">`; `tsconfig.json` `include` expanded beyond `src/utilities` to cover the full `src/` tree; zero `tsc --noEmit` errors in `src/`
-- [ ] **TS-04**: `@typescript-eslint/parser` adopted as primary lint parser for `.ts/.vue` — replaces `@babel/eslint-parser` for source lints; `@babel/eslint-parser` either removed or retained only for `_scripts/` if those stay `.js`
+- [x] **TS-03**: `.js` → `.ts` conversion in `src/` — all source files in `src/main/`, `src/renderer/`, `src/utilities/` converted to TypeScript; `.vue` files use `<script lang="ts">`; `tsconfig.json` `include` expanded beyond `src/utilities` to cover the full `src/` tree; zero `tsc --noEmit` errors in `src/` — CLOSED 2026-04-22 in Phase 12 Plans 01-05 (18 `.js` → `.ts` renames via `git mv` across src/utilities + src/main + src/renderer; 10 `.vue` SFCs now `<script lang="ts">`; `tsconfig.json` `include: ["src/**/*"]` covers 29 files; `npx tsc --noEmit` + `npm run type-check` via vue-tsc both exit 0; Phase total `@ts-expect-error` = 1 of 15 budget)
+- [x] **TS-04**: `@typescript-eslint/parser` adopted as primary lint parser for `.ts/.vue` — replaces `@babel/eslint-parser` for source lints; `@babel/eslint-parser` either removed or retained only for `_scripts/` if those stay `.js` — CLOSED 2026-04-22 in Phase 12 Plan 05 (commit `86f47b8`; `eslint.config.js` rewritten to 8-entry shape: tseslintParser primary for .ts/.vue via tseslint.config() with tseslint.configs.recommended extends; babelParser scoped to `_scripts/**/*.js` only; espree default handles root *.{js,mjs,cjs}; `npm run lint` = 114 problems within v1.4 band ≤1881)
 
 ### ESLint Ecosystem Cleanup (LINT)
 
@@ -107,8 +107,8 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 | LINT-06 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
 | LINT-07 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
 | LINT-08 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
-| TS-03 | Phase 12 (was 15) | pending |
-| TS-04 | Phase 12 (was 15) | pending |
+| TS-03 | Phase 12 (was 15) | complete (2026-04-22, Plans 01-05) |
+| TS-04 | Phase 12 (was 15) | complete (2026-04-22, Plan 05) |
 | FIX-01 | Phase 13 (was 16) | pending |
 
 **Coverage:** 18/18 requirements mapped — no orphans, no duplicates.
