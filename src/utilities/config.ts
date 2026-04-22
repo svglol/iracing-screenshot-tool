@@ -1,7 +1,6 @@
-'use strict';
 const { ipcRenderer } = require('electron');
 const Store = require('electron-store');
-const homedir = require('os').homedir();
+const homedir: string = require('os').homedir();
 const dir = homedir + '\\Pictures\\Screenshots\\';
 
 const schema = {
@@ -104,17 +103,25 @@ const schema = {
 	},
 };
 
+// @ts-expect-error — process.type is Electron-injected at runtime; not in @types/node Process
 if (process.type === 'renderer') {
 	module.exports = {
-		get(key) {
+		get(key: string): unknown {
 			return ipcRenderer.sendSync('config:get', key);
 		},
-		set(key, value) {
+		set(key: string, value: unknown): void {
 			ipcRenderer.sendSync('config:set', { key, value });
 		},
-		onDidChange(key, callback) {
+		onDidChange(
+			key: string,
+			callback: (newValue: unknown, oldValue: unknown) => void
+		): () => void {
 			const channel = `config:changed:${key}`;
-			const handler = (event, newValue, oldValue) => {
+			const handler = (
+				_event: unknown,
+				newValue: unknown,
+				oldValue: unknown
+			) => {
 				callback(newValue, oldValue);
 			};
 

@@ -15,7 +15,13 @@
 		// Import non-ES modules as default imports.
 		"esModuleInterop": true,
 		// enable json modules import
-		"resolveJsonModule": true
+		"resolveJsonModule": true,
+		// Ambient globals: @types/node for Node built-ins; vitest/globals for
+		// describe/test/expect in .test.ts files (vitest.config.mjs sets globals: true).
+		"types": ["node", "vitest/globals"],
+		// Skip type-checking of declaration files in node_modules; third-party
+		// .d.ts subpath-import quirks (vite, @vitest/utils) are not our concern.
+		"skipLibCheck": true
 	},
 	"include": ["src/utilities"]
 }

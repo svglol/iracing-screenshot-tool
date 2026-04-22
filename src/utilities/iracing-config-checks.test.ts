@@ -1,6 +1,8 @@
-'use strict';
+import { parseIniSection, checkIracingConfig } from './iracing-config-checks';
 
-const { parseIniSection } = require('./iracing-config-checks');
+// CJS require for fs: ESM namespace imports are sealed and `vi.spyOn` requires
+// a mutable object target. Tests below spy on fs methods to simulate ini I/O.
+const fs = require('fs');
 
 describe('parseIniSection', () => {
 	test('parses key=value pairs from a section', () => {
@@ -67,9 +69,6 @@ describe('parseIniSection', () => {
 });
 
 describe('checkIracingConfig', () => {
-	const fs = require('fs');
-	const { checkIracingConfig } = require('./iracing-config-checks');
-
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});

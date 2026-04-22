@@ -1,10 +1,8 @@
-'use strict';
-
-const {
+import {
 	sanitizeFilePart,
 	buildTrackFilePart,
 	buildScreenshotFileKey,
-} = require('./screenshot-name');
+} from './screenshot-name';
 
 // ---------------------------------------------------------------------------
 // sanitizeFilePart

@@ -2,6 +2,7 @@
 
 const path = require('path');
 const os = require('os');
+const { normalizeCaptureBounds } = require('../utilities/desktop-capture.ts');
 
 const knownUserProfileFolders = new Set([
 	'desktop',
@@ -46,7 +47,6 @@ function mergePlainObjects(...objects) {
 }
 
 function serializeBounds(bounds) {
-	const { normalizeCaptureBounds } = require('../utilities/desktop-capture');
 	return normalizeCaptureBounds(bounds);
 }
 

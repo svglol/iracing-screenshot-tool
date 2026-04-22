@@ -1,30 +1,54 @@
-'use strict';
+// Loose Electron-adjacent types: sources coming from desktopCapturer have a
+// shape we read loosely (id, name, display_id); using `any`-friendly local
+// types lets us consume them without importing Electron's full type surface.
+interface CaptureBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+interface DesktopCaptureSourceLike {
+	id?: unknown;
+	name?: unknown;
+	display_id?: unknown;
+	[key: string]: unknown;
+}
+
+interface NormalizedCaptureTarget {
+	id: string;
+	kind: 'window' | 'display';
+	captureBounds: CaptureBounds | null;
+	displayBounds: CaptureBounds | null;
+	diagnostics: Record<string, unknown> | null;
+}
 
 const fallbackIracingTitles = ['iracing.com simulator', 'iracing simulator'];
 
-function isPlainObject(value) {
-	return value && typeof value === 'object' && !Array.isArray(value);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function normalizeWindowHandle(windowHandle) {
+export function normalizeWindowHandle(windowHandle: unknown): string {
 	return String(windowHandle || '').trim();
 }
 
-function normalizeWindowTitle(title) {
+export function normalizeWindowTitle(title: unknown): string {
 	return String(title || '')
 		.trim()
 		.toLowerCase();
 }
 
-function normalizeCaptureBounds(bounds) {
+export function normalizeCaptureBounds(bounds: unknown): CaptureBounds | null {
 	if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)) {
 		return null;
 	}
 
-	const x = Number(bounds.x);
-	const y = Number(bounds.y);
-	const width = Number(bounds.width);
-	const height = Number(bounds.height);
+	const b = bounds as Record<string, unknown>;
+	const x = Number(b.x);
+	const y = Number(b.y);
+	const width = Number(b.width);
+	const height = Number(b.height);
 
 	if (
 		![x, y, width, height].every(Number.isFinite) ||
@@ -37,7 +61,9 @@ function normalizeCaptureBounds(bounds) {
 	return { x, y, width, height };
 }
 
-function normalizeCaptureTarget(captureTarget) {
+export function normalizeCaptureTarget(
+	captureTarget: unknown
+): NormalizedCaptureTarget {
 	if (typeof captureTarget === 'string') {
 		return {
 			id: captureTarget.trim(),
@@ -69,7 +95,9 @@ function normalizeCaptureTarget(captureTarget) {
 	};
 }
 
-function isExternalWindowSource(source = {}) {
+export function isExternalWindowSource(
+	source: DesktopCaptureSourceLike = {}
+): boolean {
 	return (
 		typeof source.id === 'string' &&
 		source.id.startsWith('window:') &&
@@ -77,7 +105,10 @@ function isExternalWindowSource(source = {}) {
 	);
 }
 
-function findSourceByWindowHandles(sources = [], handles = []) {
+export function findSourceByWindowHandles(
+	sources: DesktopCaptureSourceLike[] = [],
+	handles: unknown[] = []
+): DesktopCaptureSourceLike | null {
 	const candidates = [
 		...new Set(handles.map(normalizeWindowHandle).filter(Boolean)),
 	];
@@ -87,12 +118,17 @@ function findSourceByWindowHandles(sources = [], handles = []) {
 
 	return (
 		sources.find((source) =>
-			candidates.some((handle) => source.id.startsWith(`window:${handle}:`))
+			candidates.some((handle) =>
+				String(source.id || '').startsWith(`window:${handle}:`)
+			)
 		) || null
 	);
 }
 
-function findSourceByWindowTitle(sources = [], title = '') {
+export function findSourceByWindowTitle(
+	sources: DesktopCaptureSourceLike[] = [],
+	title: unknown = ''
+): DesktopCaptureSourceLike | null {
 	const normalizedTitle = normalizeWindowTitle(title);
 	if (!normalizedTitle) {
 		return null;
@@ -116,7 +152,9 @@ function findSourceByWindowTitle(sources = [], title = '') {
 	);
 }
 
-function findSourceByKnownIracingTitle(sources = []) {
+export function findSourceByKnownIracingTitle(
+	sources: DesktopCaptureSourceLike[] = []
+): DesktopCaptureSourceLike | null {
 	const externalSources = sources.filter(isExternalWindowSource);
 
 	return (
@@ -129,7 +167,10 @@ function findSourceByKnownIracingTitle(sources = []) {
 	);
 }
 
-function findDisplaySourceByDisplayId(sources = [], displayId) {
+export function findDisplaySourceByDisplayId(
+	sources: DesktopCaptureSourceLike[] = [],
+	displayId: unknown
+): DesktopCaptureSourceLike | null {
 	const normalizedDisplayId = String(displayId || '').trim();
 	if (!normalizedDisplayId) {
 		return sources.length === 1 ? sources[0] : null;
@@ -143,7 +184,11 @@ function findDisplaySourceByDisplayId(sources = [], displayId) {
 	);
 }
 
-function clampCaptureRect(rect, maxWidth, maxHeight) {
+function clampCaptureRect(
+	rect: unknown,
+	maxWidth: number,
+	maxHeight: number
+): CaptureBounds | null {
 	const normalizedRect = normalizeCaptureBounds(rect);
 	if (
 		!normalizedRect ||
@@ -169,8 +214,17 @@ function clampCaptureRect(rect, maxWidth, maxHeight) {
 	return { x, y, width, height };
 }
 
-function resolveDisplayCaptureRect(videoWidth, videoHeight, captureTarget) {
-	const fullRect = { x: 0, y: 0, width: videoWidth, height: videoHeight };
+export function resolveDisplayCaptureRect(
+	videoWidth: number,
+	videoHeight: number,
+	captureTarget: unknown
+): CaptureBounds {
+	const fullRect: CaptureBounds = {
+		x: 0,
+		y: 0,
+		width: videoWidth,
+		height: videoHeight,
+	};
 	const normalizedTarget = normalizeCaptureTarget(captureTarget);
 
 	if (
@@ -205,16 +259,3 @@ function resolveDisplayCaptureRect(videoWidth, videoHeight, captureTarget) {
 		) || fullRect
 	);
 }
-
-module.exports = {
-	normalizeWindowHandle,
-	normalizeWindowTitle,
-	normalizeCaptureBounds,
-	normalizeCaptureTarget,
-	isExternalWindowSource,
-	findSourceByWindowHandles,
-	findSourceByWindowTitle,
-	findSourceByKnownIracingTitle,
-	findDisplaySourceByDisplayId,
-	resolveDisplayCaptureRect,
-};

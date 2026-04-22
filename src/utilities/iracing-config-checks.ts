@@ -1,8 +1,8 @@
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+// Use CJS require for fs so tests can spy on fs methods via `vi.spyOn(fs, ...)`;
+// ESM namespace imports are sealed and vi.spyOn cannot redefine their properties.
+const fs: typeof import('fs') = require('fs');
+import * as path from 'path';
+import * as os from 'os';
 
 const IRACING_INI_PATH = path.join(
 	os.homedir(),
@@ -11,7 +11,10 @@ const IRACING_INI_PATH = path.join(
 	'rendererDX11Monitor.ini'
 );
 
-function parseIniSection(content, section) {
+export function parseIniSection(
+	content: string,
+	section: string
+): Record<string, string> {
 	const sectionPattern = new RegExp(`^\\[${section}\\]\\s*$`, 'm');
 	const match = content.search(sectionPattern);
 	if (match === -1) {
@@ -20,7 +23,7 @@ function parseIniSection(content, section) {
 
 	const afterHeader = content.slice(match);
 	const lines = afterHeader.split(/\r?\n/).slice(1);
-	const result = {};
+	const result: Record<string, string> = {};
 
 	for (const line of lines) {
 		const trimmed = line.trim();
@@ -41,8 +44,8 @@ function parseIniSection(content, section) {
 	return result;
 }
 
-function checkIracingConfig() {
-	const warnings = [];
+export function checkIracingConfig(): string[] {
+	const warnings: string[] = [];
 
 	try {
 		if (!fs.existsSync(IRACING_INI_PATH)) {
@@ -66,8 +69,3 @@ function checkIracingConfig() {
 
 	return warnings;
 }
-
-module.exports = {
-	parseIniSection,
-	checkIracingConfig,
-};

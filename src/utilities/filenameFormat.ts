@@ -1,12 +1,22 @@
-'use strict';
+// Session/telemetry shapes come from irsdk-node which has no @types/*.
+// Use `any` freely here per D-12-08 (pragmatic typing; internal escape hatch).
+type SessionInfo = any;
+type Telemetry = any;
+
+interface FilenameField {
+	token: string;
+	label: string;
+	category: string;
+	resolve: (sessionInfo: SessionInfo, telemetry: Telemetry) => string;
+}
 
 /**
  * Returns the Drivers[] entry matching the CamCarIdx from telemetry.
- * @param {object} sessionInfo
- * @param {object} telemetry
- * @returns {object|undefined}
  */
-function findDriver(sessionInfo, telemetry) {
+function findDriver(
+	sessionInfo: SessionInfo,
+	telemetry: Telemetry
+): any | undefined {
 	const camCarIdx =
 		telemetry && telemetry.values ? telemetry.values.CamCarIdx : undefined;
 	if (camCarIdx === undefined || !sessionInfo || !sessionInfo.data)
@@ -14,7 +24,7 @@ function findDriver(sessionInfo, telemetry) {
 	const drivers =
 		sessionInfo.data.DriverInfo && sessionInfo.data.DriverInfo.Drivers;
 	if (!drivers) return undefined;
-	return drivers.find((d) => d.CarIdx === camCarIdx);
+	return drivers.find((d: any) => d.CarIdx === camCarIdx);
 }
 
 /**
@@ -25,7 +35,7 @@ function findDriver(sessionInfo, telemetry) {
  *   category – grouping name shown in the UI
  *   resolve  – function(sessionInfo, telemetry) => string value (may return '' on missing data)
  */
-const FILENAME_FIELDS = [
+export const FILENAME_FIELDS: FilenameField[] = [
 	// ── Track ─────────────────────────────────────────────────────────────────
 	{
 		token: '{track}',
@@ -117,7 +127,7 @@ const FILENAME_FIELDS = [
 					sessionInfo.data.DriverInfo &&
 					sessionInfo.data.DriverInfo.Drivers;
 				if (!drivers) return '';
-				const found = drivers.find((d) => d.CarIdx === driverCarIdx);
+				const found = drivers.find((d: any) => d.CarIdx === driverCarIdx);
 				return (found && found.TeamName) || '';
 			}
 			const d = findDriver(sessionInfo, telemetry);
@@ -141,7 +151,7 @@ const FILENAME_FIELDS = [
 			const d = findDriver(sessionInfo, telemetry);
 			if (!d || !d.UserName) return '';
 			return d.UserName.split(' ')
-				.map((p) => p.charAt(0).toUpperCase())
+				.map((p: string) => p.charAt(0).toUpperCase())
 				.join('');
 		},
 	},
@@ -295,7 +305,7 @@ const FILENAME_FIELDS = [
 ];
 
 /** Default format matching the original hardcoded behavior. */
-const DEFAULT_FORMAT = '{track}-{driver}-{counter}';
+export const DEFAULT_FORMAT = '{track}-{driver}-{counter}';
 
 /**
  * Resolves a format string against session data, replacing all known tokens
@@ -304,13 +314,12 @@ const DEFAULT_FORMAT = '{track}-{driver}-{counter}';
  *
  * After token replacement, characters that are invalid in Windows filenames
  * (\ / : * ? " < > |) are replaced with underscores.
- *
- * @param {string} formatString  The user-configured format string.
- * @param {object} sessionInfo   The sessionInfo object from iRacing IPC.
- * @param {object} telemetry     The telemetry object from iRacing IPC.
- * @returns {string} Resolved filename base (may still contain '{counter}').
  */
-function resolveFilenameFormat(formatString, sessionInfo, telemetry) {
+export function resolveFilenameFormat(
+	formatString: string,
+	sessionInfo: SessionInfo,
+	telemetry: Telemetry
+): string {
 	let result = formatString;
 
 	for (const field of FILENAME_FIELDS) {
@@ -331,5 +340,3 @@ function resolveFilenameFormat(formatString, sessionInfo, telemetry) {
 
 	return result;
 }
-
-module.exports = { FILENAME_FIELDS, DEFAULT_FORMAT, resolveFilenameFormat };

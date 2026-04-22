@@ -1,6 +1,4 @@
-'use strict';
-
-const {
+import {
 	normalizeWindowHandle,
 	normalizeWindowTitle,
 	normalizeCaptureBounds,
@@ -11,7 +9,7 @@ const {
 	findSourceByKnownIracingTitle,
 	findDisplaySourceByDisplayId,
 	resolveDisplayCaptureRect,
-} = require('./desktop-capture');
+} from './desktop-capture';
 
 // ---------------------------------------------------------------------------
 // normalizeWindowHandle

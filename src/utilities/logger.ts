@@ -1,17 +1,21 @@
-'use strict';
+import * as fs from 'fs';
+import * as path from 'path';
 
-const fs = require('fs');
-const path = require('path');
+export interface Logger {
+	info(msg: string, data?: unknown): void;
+	debug(msg: string, data?: unknown): void;
+}
 
 // Cached module-level state — resolved on first createLogger call
-let _logDir = null;
-let _isDebug = null;
+let _logDir: string | null = null;
+let _isDebug: boolean | null = null;
 let _initialized = false;
 
 const LOG_ROTATION_LIMIT = 5 * 1024 * 1024; // 5 MB
 const LOG_KEEP_TAIL = 1024 * 1024; // 1 MB kept after rotation
 
-function resolveLogDir() {
+function resolveLogDir(): string {
+	// @ts-expect-error — process.type is Electron-injected at runtime; not in @types/node Process
 	if (process.type === 'renderer') {
 		const { ipcRenderer } = require('electron');
 		const userData = ipcRenderer.sendSync('app:getPath-sync', 'userData');
@@ -22,7 +26,8 @@ function resolveLogDir() {
 	return path.join(app.getPath('userData'), 'logs');
 }
 
-function resolveIsDebug() {
+function resolveIsDebug(): boolean {
+	// @ts-expect-error — process.type is Electron-injected at runtime; not in @types/node Process
 	if (process.type === 'renderer') {
 		const { ipcRenderer } = require('electron');
 		return ipcRenderer.sendSync('app:isDevBuild-sync');
@@ -32,7 +37,7 @@ function resolveIsDebug() {
 	return !app.isPackaged || app.getVersion().includes('+');
 }
 
-function rotateLogIfNeeded(logFile) {
+function rotateLogIfNeeded(logFile: string): void {
 	try {
 		const stats = fs.statSync(logFile);
 		if (stats.size <= LOG_ROTATION_LIMIT) {
@@ -48,7 +53,7 @@ function rotateLogIfNeeded(logFile) {
 	}
 }
 
-function init() {
+function init(): void {
 	if (_initialized) {
 		return;
 	}
@@ -69,29 +74,47 @@ function init() {
 	}
 }
 
-function writeLine(proc, level, msg, data) {
+interface LogEntry {
+	ts: string;
+	level: string;
+	proc: string;
+	msg: string;
+	data?: unknown;
+}
+
+function writeLine(
+	proc: string,
+	level: string,
+	msg: string,
+	data?: unknown
+): void {
 	try {
-		fs.mkdirSync(_logDir, { recursive: true });
-		const entry = { ts: new Date().toISOString(), level, proc, msg };
+		fs.mkdirSync(_logDir as string, { recursive: true });
+		const entry: LogEntry = {
+			ts: new Date().toISOString(),
+			level,
+			proc,
+			msg,
+		};
 		if (data !== undefined) {
 			entry.data = data;
 		}
 
-		const logFile = path.join(_logDir, 'app.log');
+		const logFile = path.join(_logDir as string, 'app.log');
 		fs.appendFileSync(logFile, JSON.stringify(entry) + '\n', 'utf8');
 	} catch (error) {
 		// Writing must never crash the app
 	}
 }
 
-function createLogger(label) {
+export function createLogger(label: string): Logger {
 	init();
 
 	return {
-		info(msg, data) {
+		info(msg: string, data?: unknown): void {
 			writeLine(label, 'INFO', msg, data);
 		},
-		debug(msg, data) {
+		debug(msg: string, data?: unknown): void {
 			if (!_isDebug) {
 				return;
 			}
@@ -100,5 +123,3 @@ function createLogger(label) {
 		},
 	};
 }
-
-module.exports = { createLogger };
