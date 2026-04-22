@@ -137,7 +137,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 import SideBar from '../components/SideBar.vue';
 import PromoCard from '../components/PromoCard.vue';
 import Settings from '../components/Settings.vue';

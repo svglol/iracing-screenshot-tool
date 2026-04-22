@@ -2,7 +2,7 @@
 	<h1>This is a Worker Process</h1>
 </template>
 
-<script>
+<script lang="ts">
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');

@@ -57,7 +57,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';

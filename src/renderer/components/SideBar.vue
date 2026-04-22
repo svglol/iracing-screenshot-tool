@@ -115,7 +115,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 const config = require('../../utilities/config');
 const { ipcRenderer } = require('electron');
 const fs = require('fs');

@@ -16,7 +16,7 @@
 	</section>
 </template>
 
-<script>
+<script lang="ts">
 const { shell } = require('electron');
 
 export default {

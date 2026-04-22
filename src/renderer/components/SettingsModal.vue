@@ -263,7 +263,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 const { version } = require('../../../package.json');
 const config = require('../../utilities/config');
 const {

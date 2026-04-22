@@ -9,7 +9,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 import TitleBar from './components/TitleBar.vue';
 
 export default {

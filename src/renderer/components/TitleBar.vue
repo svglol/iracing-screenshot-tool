@@ -31,7 +31,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 const { ipcRenderer } = require('electron');
 
 export default {

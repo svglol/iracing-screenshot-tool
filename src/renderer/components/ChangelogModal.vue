@@ -21,7 +21,7 @@
 	</div>
 </template>
 
-<script>
+<script lang="ts">
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
