@@ -124,7 +124,7 @@
 **Plans**: 6 plans (per-directory batch shape per D-12-06; Plan 06 optional post-Plan-05 UAT)
 - [x] 12-01-PLAN.md — convert src/utilities/ (6 source + 3 test = 9 .js → .ts); +@types/node@^24 install; D-12-02 step 1 of 5 — completed 2026-04-22 (single content commit `29d1782`; 3/3 @ts-expect-error budget used for process.type Electron-global; 4 Rule-3 auto-fixes documented; tsc 0 errors + Vitest 256/256 + pack exit 0; tsconfig gained types:[node,vitest/globals]+skipLibCheck:true)
 - [x] 12-02-PLAN.md — convert src/main/ (5 source + 2 test = 7 .js → .ts); naturalize iracing-sdk-utils.test CRLF carry-forward; D-12-02 step 2 of 5 — completed 2026-04-22 (single content commit `a22879a`; 3/5 @ts-expect-error budget used for index.ts legacy globals; 5 Rule-3 auto-fixes documented; tsc 0 errors both scopes + Vitest 256/256 + pack exit 0; Plan 12-01 hoisted-require workaround retired; dual-scope process.type cast pattern replaces Plan 12-01 @ts-expect-error in utilities)
-- [ ] 12-03-PLAN.md — convert src/renderer/ .js (main.js + router/index.js = 2 files); naturalize src/renderer/main.js PascalCase-rename carry-forward; +shims-vue.d.ts; D-12-02 step 3 of 5
+- [x] 12-03-PLAN.md — convert src/renderer/ .js (main.js + router/index.js = 2 files); naturalize src/renderer/main.js PascalCase-rename carry-forward; +shims-vue.d.ts; D-12-02 step 3 of 5 — completed 2026-04-22 (single content commit `9a9082b`; 0/2 @ts-expect-error used — both predicted slots retired via shared-scope type resolution; 3 Rule-3 auto-fixes documented: 3 untyped-plugin shims + Oruga `(c as any)` cast + unused-directive removals; tsc 0 errors + Vitest 256/256 + pack exit 0; router/index.ts rename-similarity 37% — below 50% threshold, history reachable via explicit old-path; PascalCase carry-forward naturalized)
 - [ ] 12-04-PLAN.md — migrate 10 .vue SFCs to `<script lang="ts">` (mechanical block-tag swap + minimal annotations); D-12-02 step 4 of 5
 - [ ] 12-05-PLAN.md — tsconfig include expansion (D-12-04) + vue-tsc install + eslint.config.js parser swap (D-12-03 — @typescript-eslint/parser primary for .ts/.vue; @babel/eslint-parser scoped to _scripts/); 3-commit bisect chain (tsconfig / vue-tsc / parser swap); D-12-02 step 5 of 5
 - [ ] 12-06-PLAN.md — optional phase-close UAT + docs summary; autonomous: false (checkpoint:human-verify); may skip if Plan 05's automated gates suffice
@@ -157,7 +157,7 @@
 | 9. webpack → Vite bundler | v2.0 | 5/5 | Complete | 2026-04-22 |
 | 10. Jest → Vitest | v2.0 | 1/1 | Complete | 2026-04-22 |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 1/1 | Complete | 2026-04-22 |
-| 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 2/6 | In progress | - |
+| 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 3/6 | In progress | - |
 | 13. Electron main-process fixes + ship prep | v2.0 | 0/? | Not started | - |
 
 ---
