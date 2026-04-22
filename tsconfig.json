@@ -2,6 +2,8 @@
 	"compilerOptions": {
 		// Target latest version of ECMAScript.
 		"target": "esnext",
+		// Explicit module target — vue-tsc prefers explicit over inferred.
+		"module": "esnext",
 		// Search under node_modules for non-relative imports.
 		"moduleResolution": "node",
 		// Process & infer types from .js files.
@@ -21,7 +23,10 @@
 		"types": ["node", "vitest/globals"],
 		// Skip type-checking of declaration files in node_modules; third-party
 		// .d.ts subpath-import quirks (vite, @vitest/utils) are not our concern.
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		// Harmless without JSX; future-proofs vue-tsc integration if any SFC
+		// template introduces JSX-style expressions.
+		"jsx": "preserve"
 	},
-	"include": ["src/utilities"]
+	"include": ["src/**/*"]
 }
