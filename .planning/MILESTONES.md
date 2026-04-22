@@ -49,4 +49,38 @@
 
 ---
 
-*Last milestone: v1.3 (2026-04-21)*
+## Milestone 1.4 — Tooling Modernization
+
+**Shipped:** 2026-04-22
+**App version at milestone close:** v2.1.0 (unchanged — v1.4 is invisible tooling modernization, no app-feature additions)
+**Phases:** 3 | **Plans:** 8 | **Tasks:** 25+ (9 commits on master)
+
+### Key accomplishments
+1. **Babel package rename retired** — `babel-runtime` 6.x dropped entirely (zero import sites → dead-weight removal per D-01 minimum-scope derogation); `babel-eslint` 10.x → `@babel/eslint-parser@^7.28.6` wired via `parserOptions.parser` preserving Vue SFC delegation (Phase 5, 4-commit chain).
+2. **ESLint 7 → 9 flat config migration** — `.eslintrc.js` + `.eslintignore` deleted; new `eslint.config.js` at repo root with 5-entry array (standalone ignores + FlatCompat extends + native languageOptions + `.vue` STRING parser override + `plugin:prettier/recommended` last). `@eslint/compat fixupConfigRules` shim added for legacy plugins (`eslint-config-standard@14`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `@typescript-eslint@2`). Post-migration lint: 735 findings ≤ 1881 baseline ceiling (Phase 6).
+3. **Full `plugin:prettier/recommended` integration** — supersedes v1.3 Phase 4 Pitfall 4 minimum-scope derogation. `eslint-config-prettier` 9 → 10.1.8; `prettier/prettier: error` active; zero format drift (Phase 6 FMT-01/FMT-02).
+4. **TypeScript 3.8 → 5.7.3** — tilde-pinned. `src/` compiled clean under strict mode with zero errors (Path A1 no-op — no `@ts-expect-error` annotations needed). 2567 pre-migration errors (all TS 3.8 `node_modules` parse failures) cleared naturally (Phase 7 TS-01).
+5. **typescript-eslint 2 → 8.59.0** — `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`, and new `typescript-eslint` umbrella package installed. Wired as native flat-config entry via `tseslint.config({files: ['**/*.ts'], extends: [tseslint.configs.recommended]})` helper (research Pitfall 1 — direct spread would globally clobber `@babel/eslint-parser`). Dual-parser coexistence verified (Phase 7 TS-02).
+6. **`--legacy-peer-deps` flag RETIRED** — v1.3 carryover tech-debt closed. `npm install` (no flag) exits 0 with zero ERESOLVE. Both peer conflicts cleared: Phase 6 D-01 Amendment (`eslint-plugin-vue` 6→9 after v6 crashed on ESLint 9's removed `codePath.currentSegments` API) + Phase 7 TS-02. Final commit `3050be7` closes LINT-03 and the milestone (Phase 7).
+
+### Known deferred items at close
+7 pre-existing carry-over items (2 debug sessions + 5 v1.2-era quick-task close markers) — see `.planning/STATE.md` § Deferred Items. **None introduced by v1.4.**
+
+### Architectural deviation (Phase 6 D-01 Amendment, user-approved)
+`eslint-plugin-vue` ^6.2.2 → ^9.33.0 escalated mid-phase because v6 hard-crashed under ESLint 9 (removed `codePath.currentSegments` API — not just a peer-range warning). Research Pitfall 7 was inaccurate for this specific plugin. CONTEXT.md D-01 amended; cascade effect made LINT-03 achievable as originally scoped (Phase 6 D-15 Option 1 "persist --legacy-peer-deps past v1.4" became obsolete).
+
+### Tech debt deferred to v2.0
+- `eslint-plugin-vue` 9 → 10+ (matches Vue 3 major)
+- `vue-eslint-parser` 7 → 9
+- `eslint-config-standard` 14 → 17+/neostandard migration
+- Legacy plugin pins (`eslint-plugin-import@2`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-standard@4`) + `@eslint/compat fixupConfigRules` shim cleanup
+- `@babel/eslint-parser` → `@typescript-eslint/parser` as primary for `.js/.vue`
+- `.js` → `.ts` conversion in `src/`
+- Jest 25 → Vitest (paired with Vite+Electron bundler switch)
+
+### Details
+[v1.4 full roadmap](./milestones/v1.4-ROADMAP.md) · [v1.4 requirements](./milestones/v1.4-REQUIREMENTS.md) · [v1.4 audit](./milestones/v1.4-MILESTONE-AUDIT.md)
+
+---
+
+*Last milestone: v1.4 (2026-04-22)*
