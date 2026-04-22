@@ -74,7 +74,7 @@
   6. Phase lands on master as a D-04 shape chain so bisecting between HEAD and `chore(deps): typescript 5 + typescript-eslint 8` cleanly isolates dep-bump regressions from content changes
 **Plans**: 4 plans
 - [x] 07-01-PLAN.md — chore(deps): typescript 5 + typescript-eslint 8 (bump typescript ^3.8.3 → ~5.7.3 TILDE, @typescript-eslint/parser + @typescript-eslint/eslint-plugin 2.25 → ^8.59.0, NEW typescript-eslint umbrella ^8.59.0; regen lockfile with --legacy-peer-deps; capture 07-01-BASELINE.md with tsc (2567 total / 0 src/) + eslint (735) pre-migration baselines) — completed 2026-04-22 via commit `d873b50`; npm test 256/256; prettier --check exit 0; pack:main + pack:renderer clean
-- [ ] 07-02-PLAN.md — refactor(eslint): wire typescript-eslint 8 as native flat-config entries (drop "prettier" from FlatCompat extends chain per D-07; add tseslint.config({files:["**/*.ts"], extends:[tseslint.configs.recommended]}) entry BEFORE prettierRecommended — helper MANDATORY per research Pitfall 1; @babel/eslint-parser stays primary for .js/.vue, @typescript-eslint/parser for .ts only)
+- [x] 07-02-PLAN.md — refactor(eslint): wire typescript-eslint 8 as native flat-config entries (drop "prettier" from FlatCompat extends chain per D-07; add tseslint.config({files:["**/*.ts"], extends:[tseslint.configs.recommended]}) entry BEFORE prettierRecommended — helper MANDATORY per research Pitfall 1; @babel/eslint-parser stays primary for .js/.vue, @typescript-eslint/parser for .ts only) — completed 2026-04-22 via commit `b8f8e1c`; lint count 735 delta +0; all parse-error canaries 0; npm test 256/256; prettier --check exit 0; pack:main + pack:renderer clean
 - [ ] 07-03-PLAN.md — refactor(types) OR chore(tsconfig) (run tsc under TS 5.7.3 — research predicts 0 src/ errors; Path A documentation-only if clean, Path B update moduleResolution "node" → "node10" if diagnostic emitted, Path C apply D-04 hybrid triage if ≤5 src/ errors surface; HARD LIMIT 5 @ts-expect-error insertions)
 - [ ] 07-04-PLAN.md — chore(deps): drop --legacy-peer-deps (MILESTONE-CLOSING; rm -rf node_modules + package-lock.json, run npm install NO --legacy-peer-deps flag, verify zero ERESOLVE per D-11/D-12 gate, optionally add scripts.type-check per D-03 discretion; commit body cites Phase 6 D-01 Amendment 96fe918 + Phase 7 TS-02 as the two peer-conflict clearances that closed v1.4)
 
@@ -84,7 +84,7 @@
 |-------|----------------|--------|-----------|
 | 5. Babel Package Renames | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
-| 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 1/4 | In progress — plan 07-02 next | - |
+| 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 2/4 | In progress — plan 07-03 next | - |
 
 ---
 

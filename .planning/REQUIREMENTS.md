@@ -11,7 +11,7 @@
 ### TypeScript (TS)
 
 - [ ] **TS-01**: TypeScript compiler upgraded from 3.8 to 5.7 with inference-driven error backlog triaged and resolved (or explicitly deferred with `@ts-expect-error` comments pointing at tracked follow-ups)
-- [ ] **TS-02**: `@typescript-eslint/parser` and `@typescript-eslint/eslint-plugin` upgraded from 2.25 to 8.x with rule renames migrated in config
+- [x] **TS-02**: `@typescript-eslint/parser` and `@typescript-eslint/eslint-plugin` upgraded from 2.25 to 8.x with rule renames migrated in config (Phase 7 plans 07-01 + 07-02, 2026-04-22; commit `d873b50` bumps @typescript-eslint/* 2.25→8.59.0 + new typescript-eslint umbrella; commit `b8f8e1c` wires tseslint.config({ files: ['**/*.ts'], extends: [tseslint.configs.recommended] }) via helper — NOT direct spread per Pitfall 1; 'prettier' dropped from FlatCompat chain per D-07; lint count 735 delta +0; dual-parser preserved)
 
 ### ESLint (LINT)
 
