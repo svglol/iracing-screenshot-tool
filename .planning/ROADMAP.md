@@ -108,7 +108,8 @@
   3. `@eslint/compat` and `fixupConfigRules` wrap removed from `eslint.config.js`; legacy plugins removed
   4. `npm run lint` runs clean under the new stack; count in v1.4 band (≤1881) — attribute deltas to rule set changes
   5. `npm test` 256/256 (Vitest); builds clean
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 11-PLAN-01-eslint-ecosystem-cleanup.md — dep swap (neostandard + eslint-plugin-vue 10 + vue-eslint-parser 10 installed; 5 legacy plugins + 2 compat shims retired) + eslint.config.js rewrite to 7-entry flat-config-native shape per D-11-06; D-11-09 2-content-commit bisect chain
 
 ### Phase 12 (was 15): `.js` → `.ts` conversion + typescript-eslint/parser as primary
 **Goal**: Convert all `src/main/`, `src/renderer/`, and `src/utilities/` source files from `.js` to `.ts`. Vue SFCs adopt `<script lang="ts">`. `tsconfig.json` `include` expanded from `src/utilities` to the full `src/` tree. `@typescript-eslint/parser` becomes the primary parser for `.ts/.vue` (`@babel/eslint-parser` retired or restricted to `_scripts/` if those stay `.js`). Type the public API surface of each utility; `any` allowed as a transitional escape hatch with a TODO comment.
@@ -149,7 +150,7 @@
 | 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 6/6 | Complete | 2026-04-22 |
 | 9. webpack → Vite bundler | v2.0 | 5/5 | Complete | 2026-04-22 |
 | 10. Jest → Vitest | v2.0 | 1/1 | Complete | 2026-04-22 |
-| 11. ESLint/Vue ecosystem cleanup | v2.0 | 0/? | Not started | - |
+| 11. ESLint/Vue ecosystem cleanup | v2.0 | 0/1 | Not started | - |
 | 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 0/? | Not started | - |
 | 13. Electron main-process fixes + ship prep | v2.0 | 0/? | Not started | - |
 
