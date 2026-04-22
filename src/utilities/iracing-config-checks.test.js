@@ -71,25 +71,25 @@ describe('checkIracingConfig', () => {
 	const { checkIracingConfig } = require('./iracing-config-checks');
 
 	afterEach(() => {
-		jest.restoreAllMocks();
+		vi.restoreAllMocks();
 	});
 
 	test('returns empty array when ini file does not exist', () => {
-		jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+		vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
 	test('returns empty array when RenderViewPerMonitor is 0', () => {
-		jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-		jest
+		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+		vi
 			.spyOn(fs, 'readFileSync')
 			.mockReturnValue('[MonitorSetup]\nRenderViewPerMonitor=0\n');
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
 	test('returns warning when RenderViewPerMonitor is 1', () => {
-		jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-		jest
+		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+		vi
 			.spyOn(fs, 'readFileSync')
 			.mockReturnValue('[MonitorSetup]\nRenderViewPerMonitor=1\n');
 		const warnings = checkIracingConfig();
@@ -98,24 +98,24 @@ describe('checkIracingConfig', () => {
 	});
 
 	test('returns empty array when MonitorSetup section is missing', () => {
-		jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-		jest
+		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+		vi
 			.spyOn(fs, 'readFileSync')
 			.mockReturnValue('[OtherSection]\nFoo=bar\n');
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
 	test('returns empty array when RenderViewPerMonitor key is missing', () => {
-		jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-		jest
+		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+		vi
 			.spyOn(fs, 'readFileSync')
 			.mockReturnValue('[MonitorSetup]\nOtherKey=1\n');
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
 	test('returns empty array when file read throws', () => {
-		jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-		jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+		vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
 			throw new Error('EACCES');
 		});
 		expect(checkIracingConfig()).toEqual([]);

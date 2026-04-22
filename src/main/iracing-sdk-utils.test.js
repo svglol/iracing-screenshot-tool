@@ -2,7 +2,7 @@
 
 // Mock irsdk-node before requiring the module under test.
 // The native addon cannot be loaded in Jest, so we provide the CameraState enum.
-jest.mock('irsdk-node', () => ({
+vi.mock('irsdk-node', () => ({
 	CameraState: {
 		IsSessionScreen: 1,
 		IsScenicActive: 2,
