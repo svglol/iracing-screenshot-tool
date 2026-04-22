@@ -66,3 +66,34 @@ Captured via `npx eslint --ext .js,.ts,.vue ./ --no-fix --format json`, post-pro
 - `.vue` SFC `<script>` blocks now go through `@babel/eslint-parser`.
 - `.js` files now go through `@babel/eslint-parser`.
 - No `.ts` files exist in `src/` or `_scripts/` (verified 2026-04-21 per RESEARCH §Architectural Responsibility Map).
+
+---
+
+## Addendum (2026-04-22T07:52:48Z) — Scope narrowed to src + _scripts
+
+**Reason:** The original pre-swap baseline above used `npx eslint --ext .js,.ts,.vue ./ --no-fix` which globs the whole repo including `bot/`. CONTEXT.md line 131 and PROJECT.md §Out-of-Scope explicitly declare `bot/` out-of-scope for v1.4 tooling phases. During plan 05-02 execution, wiring `@babel/eslint-parser` (which defaults to `requireConfigFile: true` per D-05) surfaced parse errors in `bot/**/*.js` because `bot/` has its own `bot/babel.config.cjs` (Jest-only) as a project boundary that blocks the config walk-up to root `.babelrc`. Adding `.eslintignore` with `bot/` preserves the minimum-scope-derogation philosophy (STATE.md §Accumulated Context) and brings the lint scope in line with v1.4's declared ownership.
+
+**Post-ignore pre-swap count (src + _scripts scope, espree parser):** **712** (709 errors, 3 warnings)
+
+- **Command:** `npx eslint --ext .js,.ts,.vue ./ --no-fix` with `.eslintignore` excluding `bot/` present at repo root
+- **Timestamp:** 2026-04-22T07:52:48Z
+- **Pre-swap HEAD:** `6ffe1d6` (plan 05-01 SUMMARY commit; `.eslintrc.js` unmodified from master = espree-via-fallback parser path still in effect)
+- **Top-5 rules (src + _scripts scope):**
+
+  | Rule | Count |
+  |------|-------|
+  | no-undef | 693 |
+  | no-void | 5 |
+  | vue/require-prop-types | 3 |
+  | no-unused-vars | 2 |
+  | no-new-object | 1 |
+
+  (Only 7 distinct rules produce messages in the narrowed scope; `no-new`, `no-control-regex` also produce 1 each. Parsing errors in `_scripts/release.js:51:9`, `dist/main.js:2:110388`, `dist/renderer.js:2:157625`, `src/main/index.js:69:21` — all pre-existing espree fallback quirks on modern syntax the parser swap in commit 3 is expected to address.)
+
+- **Per-file hotspots (≥50 messages):** 4 `.test.js` files — `src/main/main-utils.test.js` (257), `src/utilities/desktop-capture.test.js` (195), `src/main/iracing-sdk-utils.test.js` (97), `src/utilities/screenshot-name.test.js` (96). All driven by Jest-globals `no-undef` (ambient env; not a phase concern).
+
+### Re-baselined D-08 band denominator
+
+- Post-swap lint count (plan 05-02 commit 3) must satisfy: `post_count ≤ 712` — the new src+_scripts-only pre-swap count under `.eslintignore`.
+- The original **1881** count (above) remains the historical `./`-glob record; it is NOT the denominator for plan 05-02's delta assertion once bot/ is excluded from v1.4 lint scope.
+- Parser-attributable delta direction is acceptable per D-08 band semantics (deltas concentrated in `no-unused-vars`/`no-undef` expected per Pitfall 5 — `@babel/eslint-parser` scope-analysis differences vs. espree).
