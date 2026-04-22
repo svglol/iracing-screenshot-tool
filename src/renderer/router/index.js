@@ -1,11 +1,9 @@
-import Vue from 'vue';
-import Router from 'vue-router';
+import { createRouter, createWebHashHistory } from 'vue-router';
 import Home from '../views/Home.vue';
 import Worker from '../views/Worker.vue';
 
-Vue.use(Router);
-
-const router = new Router({
+const router = createRouter({
+	history: createWebHashHistory(),
 	routes: [
 		{
 			path: '/',
@@ -25,7 +23,7 @@ const router = new Router({
 			component: Worker,
 		},
 		{
-			path: '*',
+			path: '/:pathMatch(.*)*',
 			redirect: '/home',
 		},
 	],
