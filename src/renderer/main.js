@@ -1,12 +1,24 @@
-import 'bulma-pro/bulma.sass';
 import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
-import 'buefy/dist/buefy.css';
 import './assets/style/animations.scss';
 import './assets/style/main.scss';
-import Buefy from 'buefy';
 import VueLazyload from 'vue-lazyload';
+import {
+	createOruga,
+	OButton,
+	OModal,
+	OInput,
+	OField,
+	OSelect,
+	OSwitch,
+	OTag,
+	OCarousel,
+	OCarouselItem,
+	ONotification,
+	ODropdown,
+} from '@oruga-ui/oruga-next';
+import { bulmaConfig } from '@oruga-ui/theme-bulma';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import {
 	faGear,
@@ -37,7 +49,25 @@ library.add(
 const app = createApp(App);
 app.use(router);
 app.use(VueLazyload);
-app.use(Buefy);
+const oruga = createOruga();
+[
+	OButton,
+	OModal,
+	OInput,
+	OField,
+	OSelect,
+	OSwitch,
+	OTag,
+	OCarousel,
+	OCarouselItem,
+	ONotification,
+	ODropdown,
+].forEach((c) => oruga.use(c));
+app.use(oruga, {
+	...bulmaConfig,
+	iconComponent: 'vue-fontawesome',
+	iconPack: 'fas',
+});
 app.use(require('vue-shortkey'));
 app.use(vClickOutside);
 app.use(VueMarkdownPlus);
