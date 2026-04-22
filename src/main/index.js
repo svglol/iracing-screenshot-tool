@@ -290,10 +290,10 @@ function createWindow() {
 		workerReady = false;
 	});
 
-	if (isDev) {
-		workerWindow.loadURL('http://localhost:9080/#/worker');
+	if (process.env.ELECTRON_RENDERER_URL) {
+		workerWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/worker`);
 	} else {
-		workerWindow.loadFile(path.join(__dirname, 'index.html'), {
+		workerWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
 			hash: '/worker',
 		});
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
@@ -321,10 +321,10 @@ function createWindow() {
 	remoteMain.enable(mainWindow.webContents);
 	Menu.setApplicationMenu(null);
 
-	if (isDev) {
-		mainWindow.loadURL('http://localhost:9080');
+	if (process.env.ELECTRON_RENDERER_URL) {
+		mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
 	} else {
-		mainWindow.loadFile(`${__dirname}/index.html`);
+		mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 
