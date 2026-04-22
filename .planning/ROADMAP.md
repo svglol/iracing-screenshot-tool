@@ -45,7 +45,7 @@
   5. Phase lands on master as a D-04 shape: one `chore(deps): rename babel packages` commit plus a content commit updating the ESLint parser reference and any import-site updates
 **Plans**: 2 plans
 - [x] 05-01-PLAN.md — chore(deps): rename babel packages (drop babel-runtime, replace babel-eslint with @babel/eslint-parser ^7.28.6, regen lockfile, capture 05-01-BASELINE.md) — completed 2026-04-22 via commit `eef6a7a`; pre-swap baseline 1881; 256/256 tests; 84-line lockfile churn (all Babel-adjacent)
-- [ ] 05-02-PLAN.md — refactor(eslint): wire @babel/eslint-parser via parserOptions.parser (single-line insert in .eslintrc.js; verify lint band ≤1881, Vue SFC delegation intact, 256/256 tests, pack clean)
+- [x] 05-02-PLAN.md — refactor(eslint): wire @babel/eslint-parser via parserOptions.parser (single-line insert in .eslintrc.js; Vue SFC delegation intact, 256/256 tests, pack clean) — completed 2026-04-22 via **four-commit chain**: `e52bbf9` chore(lint) narrow scope to src+_scripts (Option A — user-selected at checkpoint; adds .eslintignore with bot/ excluded per v1.4 out-of-scope declaration) + `656aa8a` chore(lint) exclude dist/ build output (Rule 2 auto-fix for generated webpack bundle lint noise) + `74e112f` refactor(eslint) content commit staging .eslintrc.js only per D-09. Post-swap lint 722 (src+_scripts, @babel/eslint-parser); +10 vs new 712 src+_scripts-only denominator per 05-01-BASELINE.md Addendum — parser-attributable per Pitfall 5, well within legacy 1881 band ceiling.
 
 ### Phase 6: ESLint 9 Flat Config + Prettier Full Wiring
 **Goal**: Migrate from ESLint 7 + `.eslintrc.js` to ESLint 9 + `eslint.config.js` flat config, bump `eslint-config-prettier` 9 → 10, and wire `eslint-plugin-prettier` via `plugin:prettier/recommended` — superseding the v1.3 Phase 4 Pitfall 4 minimum-scope derogation.
@@ -76,7 +76,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 5. Babel Package Renames | 1/2 | In progress | - |
+| 5. Babel Package Renames | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | 0/? | Not started | - |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 0/? | Not started | - |
 
