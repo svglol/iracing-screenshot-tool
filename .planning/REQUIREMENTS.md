@@ -24,7 +24,7 @@
 
 ### Bundler (BUNDLER)
 
-- [ ] **BUNDLER-01**: webpack → Vite bundler migrated for both `pack:main` and `pack:renderer` — `_scripts/webpack.*.config.js` replaced with `vite.config.ts` (or equivalent); `electron-builder` build flow unchanged; `npm run build` produces a working Electron package; dev-mode HMR works via `vite dev`
+- [x] **BUNDLER-01**: webpack → Vite bundler migrated for both `pack:main` and `pack:renderer` — `_scripts/webpack.*.config.js` replaced with `vite.config.ts` (or equivalent); `electron-builder` build flow unchanged; `npm run build` produces a working Electron package; dev-mode HMR works via `vite dev` — CLOSED 2026-04-22 in Phase 9 (5 plans, 5 content commits on master: `13d84e1` dep swap → `d237e4f` HTML+main-URL → `3bc0e45`+`356cd93` config + gitignore → `471204b` webpack retirement + scripts rewire → `fac00f5` electron-builder `out/` retarget; `npm run build` + `npm run build:installer` end-to-end green; installer 115,499,922 B = −2.19% vs v1.4 webpack baseline 118,084,058 B within ±20% band; `npm test` 256/256; `npm run lint` 734 problems ≤1881 band)
 - [ ] **BUNDLER-02**: Jest 25 → Vitest migrated — `jest.config.*` replaced with `vitest.config.ts`; all 256 existing tests pass under Vitest; `testPathIgnorePatterns` equivalent excludes `bot/` per existing convention; `jimp` tests (transitive-migrated by dependabot) still pass
 
 ### TypeScript Conversion (TS)
@@ -100,7 +100,7 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 | UI-03 | Phase 8 (merged) | complete (2026-04-22, Plan 03) |
 | UI-04 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
 | UI-05 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
-| BUNDLER-01 | Phase 9 (was 11) | pending |
+| BUNDLER-01 | Phase 9 (was 11) | complete (2026-04-22, Plan 05 — phase close) |
 | BUNDLER-02 | Phase 10 (was 12) | pending |
 | LINT-04 | Phase 11 (was 14) | pending |
 | LINT-05 | Phase 11 (was 14) | pending |

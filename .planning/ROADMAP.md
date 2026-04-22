@@ -39,7 +39,7 @@
 **Merge note (2026-04-22):** Phases 8 (Vue 3 core), 9 (router/loader/devtools), 10 (Buefy→Oruga+Bulma+FA CDN), and 13 (FA v6→v7 + vue-fontawesome 2→3) merged into a single Phase 8. Reason: Buefy, vue-fontawesome v2, and Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone would break the app (no working UI, broken router, broken icons). The ROADMAP originally listed these as separate sequential phases — the scout revealed the dependency graph is actually parallel, not sequential. One honest landing where the app boots on Vue 3 with working UI. Phases 11→9, 12→10, 14→11, 15→12, 16→13.
 
 - [x] **Phase 8: Vue 3 core + router + UI framework + Font Awesome (MERGED)** — Vue 2.7 → Vue 3 (template syntax, reactivity, component registration, slot syntax) + `vue-router` 3 → 4 + `vue-loader` 15 → 17 + `vue-devtools` → `@vue/devtools` + Buefy → Oruga + Bulma 0.9 → 1.0 + drop legacy FA v5.2.0 CDN `@import` in `main.scss` line 153 + Font Awesome v6 → v7 + `@fortawesome/vue-fontawesome` 2.x → 3.x + 3 Vue-2-only third-party plugins retired (vue-shortkey/v-click-outside/vue-markdown-plus → vue3-shortkey/vue3-markdown-it; vue-lazyload bumped to v3, vue-simple-context-menu bumped to v4) + dead Vuex store deleted. Shipped as one bisectable 10-content-commit landing (2026-04-22). All 8 REQ-IDs close PASS; REQ success criterion #6 HARD GATE (zero Vue 2 → Vue 3 migration warnings) auto-approved under --auto mode.
-- [ ] **Phase 9 (was 11): webpack → Vite bundler** — replaces `_scripts/webpack.*.config.js` with Vite config; `electron-builder` integration preserved
+- [x] **Phase 9 (was 11): webpack → Vite bundler** — replaces `_scripts/webpack.*.config.js` with Vite config; `electron-builder` integration preserved (shipped 2026-04-22; 5 plans, 5 content commits on master; installer −2.19% vs v1.4 baseline within ±20% band)
 - [ ] **Phase 10 (was 12): Jest 25 → Vitest** — pairs with Vite; all 256 tests migrate; `bot/` stays on its own Jest config
 - [ ] **Phase 11 (was 14): ESLint/Vue ecosystem cleanup** — `eslint-plugin-vue` 9→10+, `vue-eslint-parser` 7→9, `eslint-config-standard` → `neostandard` (or 17+), remove `@eslint/compat fixupConfigRules` shim, legacy plugin cleanup (`eslint-plugin-import@2`, `-node@11`, `-promise@4`, `-standard@4`)
 - [ ] **Phase 12 (was 15): `.js` → `.ts` conversion in `src/`** — convert main/renderer/utilities source files; `.vue` SFCs use `<script lang="ts">`; `@typescript-eslint/parser` becomes primary lint parser
@@ -78,7 +78,12 @@
   3. `npm run dev` launches Electron with Vite dev server; HMR works across Vue component edits
   4. `npm run build` produces an installable Electron package via electron-builder; installer size within ±20% of v1.4 baseline
   5. `npm test` 256/256 (still Jest until Phase 10); `npm run lint` in v1.4 band
-**Plans**: TBD
+**Plans**: 5 plans
+- [x] 09-PLAN-01-electron-vite-dep-swap.md — 15 webpack devDeps removed; electron-vite + @vitejs/plugin-vue added; skeleton electron.vite.config.mjs created — completed 2026-04-22 (commit `13d84e1`)
+- [x] 09-PLAN-02-html-template-and-main-url.md — src/index.ejs → src/renderer/index.html; src/main/index.js patched for ELECTRON_RENDERER_URL dev/prod pattern — completed 2026-04-22 (commit `d237e4f`)
+- [x] 09-PLAN-03-electron-vite-config-completion.md — electron.vite.config.mjs fleshed out (externals + aliases + SCSS loadPaths + define + plugin-vue); first working `npm run dev` HMR smoke test + `out/` artifacts gitignored — completed 2026-04-22 (commits `3bc0e45` + `356cd93`)
+- [x] 09-PLAN-04-webpack-retirement-and-scripts.md — `_scripts/webpack.*.config.js` + `_scripts/dev-runner.js` retired (369 LOC); package.json scripts rewired to electron-vite CLI; `build-dev.js` + `release.js` preserved (A7 re-confirmed webpack-free) — completed 2026-04-22 (commit `471204b`)
+- [x] 09-PLAN-05-electron-builder-out-retarget.md — package.json main → ./out/main/index.js; build.files → out/**/*; `--entry` workaround dropped from electron-vite-dev/debug scripts; `npm run build` + `npm run build:installer` end-to-end green; installer 115,499,922 B (−2.19% vs v1.4 baseline) — completed 2026-04-22 (commit `fac00f5` — phase close)
 
 ### Phase 10 (was 12): Jest 25 → Vitest
 **Goal**: Migrate the root test runner from Jest 25 (with babel-jest) to Vitest (native ESM, Vite-integrated). All 256 existing tests port over; `bot/` workspace keeps its own Jest config separately (explicit out-of-scope per REQUIREMENTS.md). `vitest.config.ts` replaces `jest.config.*`; `testPathIgnorePatterns` equivalent still excludes `bot/`.
@@ -141,7 +146,7 @@
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | v1.4 | 2/2 | Complete | 2026-04-22 |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | v1.4 | 4/4 | Complete | 2026-04-22 |
 | 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 6/6 | Complete | 2026-04-22 |
-| 9. webpack → Vite bundler | v2.0 | 0/? | Not started | - |
+| 9. webpack → Vite bundler | v2.0 | 5/5 | Complete | 2026-04-22 |
 | 10. Jest → Vitest | v2.0 | 0/? | Not started | - |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 0/? | Not started | - |
 | 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 0/? | Not started | - |
