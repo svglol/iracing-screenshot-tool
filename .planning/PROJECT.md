@@ -1,13 +1,13 @@
 # iRacing Screenshot Tool
 
-**Description:** Electron + Vue 2 desktop app for taking high-resolution screenshots of iRacing, with a separate Discord bot for community bug reports and feature requests mirrored to GitHub Issues.
-**Stack:** Electron 41 + Vue 2.7 + Buefy (desktop) · Node 24 + discord.js 14 + Fastify 5 + Octokit + better-sqlite3 (bot)
+**Description:** Electron + Vue 3 desktop app for taking high-resolution screenshots of iRacing, with a separate Discord bot for community bug reports and feature requests mirrored to GitHub Issues.
+**Stack:** Electron 41 + Vue 3 + Oruga + Vite + Vitest + TypeScript (desktop) · Node 24 + discord.js 14 + Fastify 5 + Octokit + better-sqlite3 (bot)
 **Repository:** svglol/iracing-screenshot-tool
 
 ## What This Is
 
 A two-part project:
-- **Desktop app (`src/`)** — Electron 41 / Vue 2.7 / Buefy UI for capturing iRacing screenshots with configurable resolution, filename format, output format (JPEG/PNG/WebP), watermark cropping, and session-field tokens resolved from iRacing telemetry via `irsdk-node`.
+- **Desktop app (`src/`)** — Electron 41 / Vue 3 / Oruga UI for capturing iRacing screenshots with configurable resolution, filename format, output format (JPEG/PNG/WebP), watermark cropping, and session-field tokens resolved from iRacing telemetry via `irsdk-node`. Built with Vite; tests under Vitest; source tree is full TypeScript.
 - **Discord bot (`bot/`)** — Separate always-on Node 24 service that relays community bug/feature reports between a public Discord channel and GitHub Issues (source of truth), with reaction-based upvoting, Maintainer-role triage commands, attachment re-hosting to an orphan branch, and reporter pings on status changes via HMAC-verified GitHub webhook over Cloudflare Tunnel.
 
 ## Core Value
@@ -17,32 +17,21 @@ A two-part project:
 ## Current State
 
 - **v1.2 shipped** (2026-04-20) — PR #25 merged upstream. Phase 1 (filename format configurator) and Phase 2 (Discord bug & feature tracker bot) complete.
-- **v1.3 shipped** (2026-04-21) — Phases 3-4. Font Awesome v5 → v6 upgrade + Prettier 3 codebase reformat landed on master as a five-commit chain. Tests 256/256 pass. Bundle +1.82% (FA) and +0.042% (Prettier).
-- **v1.4 shipped** (2026-04-22) — Phases 5-7. Tooling modernization complete: Babel package renames + ESLint 9 flat config + full prettier wiring + TypeScript 5.7 + typescript-eslint 8 + `--legacy-peer-deps` retired. Tests 256/256 pass. Lint count 735 (well under v1.3 baseline 1881). `npm install` clean (zero ERESOLVE).
-- **Dependabot (upstream, since PR #25 merge):** `jimp` 0.10 → 1.6.1, `jest` 25 → 30.3.0 (main + bot), `np` 6 → 11.2.0, `got` bumped. These shipped via PRs #26–#43 consolidations.
+- **v1.3 shipped** (2026-04-21) — Phases 3-4. Font Awesome v5 → v6 upgrade + Prettier 3 codebase reformat landed on master as a five-commit chain. Tests 256/256 pass.
+- **v1.4 shipped** (2026-04-22) — Phases 5-7. Tooling modernization: Babel package renames + ESLint 9 flat config + TypeScript 5.7 + typescript-eslint 8 + `--legacy-peer-deps` retired.
+- **v2.0 shipped** (2026-04-22) — Phases 8-13. Vue 3 migration complete: Vue 2.7 → Vue 3 + Buefy → Oruga + webpack → Vite + Jest → Vitest + ESLint/Vue ecosystem cleanup (neostandard, flat-config-native) + `.js` → `.ts` across full `src/` tree + Electron DevTools cleanup. 6 phases, 19 plans, 29 content commits. Tests 256/256 under Vitest (~220ms, 3× faster). Installer 115.5 MB (−2.19% vs v1.4 baseline).
 
-## Current Milestone: v2.0 Vue 3 Migration
+## Next Milestone
 
-**Started:** 2026-04-22
-**Goal:** Migrate the Electron app from Vue 2.7 + Buefy + webpack to Vue 3 + Oruga + Vite; clear all deferred v1.4 tech debt; complete the `.js` → `.ts` conversion in `src/`.
+_None active — v2.0 shipped 2026-04-22. Run `/gsd-new-milestone` to scope v2.1._
 
-**Key architectural decisions (locked at milestone start):**
-- **A1 Oruga** as Buefy replacement — Bulma-compatible, Vue 3 native, closest to Buefy's spirit. Paired with Bulma 0.9 → 1.0 (Oruga is Bulma-native).
-- **B2 Vue 3 first, then Vite** — phase Vue 3 core before bundler swap. Each phase isolates one major change; D-04 bisect shape per phase.
-- **C1 Font Awesome v7 included** in v2.0 scope (requires Vue 3 + vue-fontawesome 3.x — all Vue 3 dependencies align here).
-
-**Target scope (9 phases):**
-- Phase 8: Vue 2.7 → Vue 3 core (template syntax, composition API where needed, reactivity, component registration)
-- Phase 9: `vue-router` 3→4, `vue-loader` 15→17, `vue-devtools` → `@vue/devtools`
-- Phase 10: Buefy → Oruga UI migration + Bulma 0.9 → 1.0 + `main.scss` FA v5.2.0 CDN `@import` removal (paired — Oruga is Bulma-native)
-- Phase 11: webpack → Vite bundler + Electron
-- Phase 12: Jest 25 → Vitest (pairs with Vite)
-- Phase 13: Font Awesome v6 → v7 + `@fortawesome/vue-fontawesome` 2.x → 3.x
-- Phase 14: ESLint/Vue ecosystem cleanup (`eslint-plugin-vue` 9→10+, `vue-eslint-parser` 7→9, `eslint-config-standard` → neostandard or 17+, remove `@eslint/compat fixupConfigRules` shim, legacy plugin cleanup — `eslint-plugin-import@2`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-standard@4`)
-- Phase 15: `.js` → `.ts` conversion in `src/` + `@typescript-eslint/parser` as primary for `.ts/.vue`
-- Phase 16: Electron main-process `addDevToolsExtension` fix + transitive `prettier@2.8.8` cleanup via `vue-loader` swap + final ship prep
-
-**Explicitly deferred to post-v2.0:** stricter tsconfig flags (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), Jest globals override for test files (if Vitest migration doesn't naturally fix it).
+**v2.1 candidates seeded:**
+- Stricter tsconfig flags (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, re-enable `noImplicitAny` + `strictNullChecks` — 151 latent errors from v2.0 transitional relaxations)
+- Bot workspace Vitest migration (kept separate from v2.0; ~294 tests)
+- Renderer bundle size optimization (markdown-it +85.6% contribution; swap to marked/micromark or lazy-load)
+- TS `any` cleanup (10 targeted casts in SFCs)
+- Dev-mode `<script>` injection for vue-devtools connectivity (QoL restore)
+- Electron 41 → 42+ bump (triggered by CVE or LTS cadence)
 
 ## Requirements
 
@@ -66,10 +55,28 @@ A two-part project:
 - ✓ TypeScript 3.8 → 5.7.3 — v1.4 (TS-01)
 - ✓ `@typescript-eslint/*` 2.25 → 8.59.0 via `tseslint.config()` helper — v1.4 (TS-02)
 - ✓ `--legacy-peer-deps` flag retired — v1.4 (LINT-03)
+- ✓ Vue 2.7 → Vue 3 — v2.0 (VUE3-01)
+- ✓ `vue-router` 3 → 4 — v2.0 (VUE3-02)
+- ✓ `vue-loader` 15 → 17 (then retired with webpack in Phase 9) — v2.0 (VUE3-03)
+- ✓ `vue-devtools` → `@vue/devtools` — v2.0 (VUE3-04)
+- ✓ Buefy → Oruga UI framework — v2.0 (UI-02)
+- ✓ Bulma 0.9 → 1.0 — v2.0 (UI-03)
+- ✓ FA v5.2.0 CDN `@import` removed from `main.scss` — v2.0 (UI-04)
+- ✓ Font Awesome v6 → v7 + `vue-fontawesome` 2.x → 3.x — v2.0 (UI-05)
+- ✓ webpack → Vite bundler (electron-vite wrapper) — v2.0 (BUNDLER-01)
+- ✓ Jest → Vitest — v2.0 (BUNDLER-02)
+- ✓ `.js` → `.ts` conversion across full `src/` tree — v2.0 (TS-03)
+- ✓ `@typescript-eslint/parser` as primary lint parser for `.ts/.vue` — v2.0 (TS-04)
+- ✓ `eslint-plugin-vue` 9 → 10+ — v2.0 (LINT-04)
+- ✓ `vue-eslint-parser` 7 → 10+ — v2.0 (LINT-05)
+- ✓ `eslint-config-standard` → `neostandard` — v2.0 (LINT-06)
+- ✓ `@eslint/compat fixupConfigRules` shim removed — v2.0 (LINT-07)
+- ✓ Legacy ESLint plugins retired (import@2, node@11, promise@4, standard@4) — v2.0 (LINT-08)
+- ✓ Electron DevTools install error fixed + `prettier@2.8.8` transitive cleanup — v2.0 (FIX-01)
 
 ### Active
 
-_No active requirements — v1.4 shipped all 9 requirements as originally scoped. Run `/gsd-new-milestone` to define v2.0 requirements._
+_No active requirements — v2.0 shipped all 18 requirements. Run `/gsd-new-milestone` to define v2.1 requirements._
 
 ### Out of Scope
 - In-app "Report a bug" button from the Electron app itself — privacy + scope implications, defer to future milestone
@@ -94,9 +101,9 @@ _No active requirements — v1.4 shipped all 9 requirements as originally scoped
 ## Context
 
 **Codebase:**
-- Electron app: `src/main/` (Node-side), `src/renderer/` (Vue 2 UI), `src/utilities/` (shared, TS-checked)
-- Bot: `bot/src/` ESM modules, `bot/docs/` deployment guides, own `package.json`
-- `/bot/` excluded from electron-builder packaging (`!bot/**/*` in `build.files`) and from root Jest (`/bot/` in `testPathIgnorePatterns`)
+- Electron app: `src/main/` (Node-side), `src/renderer/` (Vue 3 UI + Oruga + FA v7), `src/utilities/` (shared). Full TypeScript across `src/` tree; `.vue` SFCs use `<script lang="ts">`. Built with Vite via `electron-vite`; tests under Vitest.
+- Bot: `bot/src/` ESM modules, `bot/docs/` deployment guides, own `package.json`. Still on Jest (separate from v2.0 Vitest migration; v2.1 candidate).
+- `/bot/` excluded from electron-builder packaging (`!bot/**/*` in `build.files`) and from root Vitest (`bot/**` in `vitest.config.mjs` exclude).
 
 **Tech decisions recorded in v1.2:** 80+ architectural/implementation decisions from Phase 2 captured in the shipped PR #25.
 
@@ -127,6 +134,14 @@ _No active requirements — v1.4 shipped all 9 requirements as originally scoped
 | `tseslint.config({files: ['**/*.ts'], extends: [...]})` helper (NOT direct spread) | v1.4 Phase 7 | ✓ Critical — direct spread would globally override `@babel/eslint-parser` because base config lacks `files:` scope |
 | TILDE pin `~5.7.3` on TypeScript (NOT caret) | v1.4 Phase 7 | ✓ Good — caret would resolve to 5.9.x; tilde locks to 5.7 patches only per research Pitfall 2 |
 | Path A1 no-op for TS 5 triage | v1.4 Phase 7 | ✓ Good — `src/` compiled clean under strict mode with zero new errors; all 2567 baseline tsc errors were TS-3.8 `node_modules` parse failures |
+| Phase 8 MERGE (original 8+9+10+13 → single Phase 8) | v2.0 Phase 8 | ✓ Good — codebase scout revealed Buefy + vue-fontawesome@2 + Vue Router 3 are all Vue-2-only; shipping Vue 3 core alone would break the app. Single honest landing preserved buildability |
+| `electron-vite` as opinionated Vite wrapper (vs `vite-plugin-electron`) | v2.0 Phase 9 | ✓ Good — subsumed 369 LOC of custom `_scripts/dev-runner.js` orchestration; single `electron.vite.config.mjs` for main+renderer |
+| `.mjs` config language (defer `.ts` to Phase 12) | v2.0 Phase 9 | ✓ Good — avoids bootstrap cycle with tsconfig shape changes; `.mjs` is trivial to convert in Phase 12 sweep |
+| `neostandard` over `eslint-config-standard@17` | v2.0 Phase 11 | ✓ Good — `noStyle: true` defers all formatting to prettier; bundles plugin-import-x + plugin-n + plugin-promise so 4 legacy plugins retire in one swap |
+| Per-directory `.js → .ts` batch commits (6-plan decomposition) | v2.0 Phase 12 | ✓ Good — each plan lands independently bisectable; utilities (low-risk) before main (coupled to Node APIs) before renderer (coupled to Vue); 18 .js + 10 .vue migrated with 1/15 @ts-expect-error budget used |
+| Transitional TS relaxations (`noImplicitAny: false` + `strictNullChecks: false`) | v2.0 Phase 12 | ⚠ Transitional — 151 latent errors deferred to v2.1; avoids blocking v2.0 ship on strict-type-fixes scope creep |
+| D-13-01 option (a): delete `installDevTools()` entirely | v2.0 Phase 13 | ✓ Good — `@vue/devtools` v8 is a standalone Electron app, not an in-process `require`. Deletion is simpler than rewriting to inject `<script>` tags at runtime |
+| Autonomous-mode execution across 5 sequential phases | v2.0 Phases 9-13 | ✓ Good — `/gsd-autonomous` one-phase-at-a-time rhythm (discuss → plan → execute → verify → iterate) shipped entire v2.0 milestone in single session; bot/** scope isolation preserved throughout |
 
 ## Evolution
 
@@ -147,4 +162,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-04-22 — v1.4 Tooling Modernization shipped.*
+*Last updated: 2026-04-22 — v2.0 Vue 3 Migration shipped.*

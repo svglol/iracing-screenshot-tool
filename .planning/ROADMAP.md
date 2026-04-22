@@ -5,9 +5,13 @@
 - ✅ **v1.2 Feature Enhancements** — Phases 1-2 (shipped 2026-04-20 via PR #25) — [archive](./milestones/v1.2-ROADMAP.md)
 - ✅ **v1.3 UI Refresh** — Phases 3-4 (shipped 2026-04-21) — [archive](./milestones/v1.3-ROADMAP.md)
 - ✅ **v1.4 Tooling Modernization** — Phases 5-7 (shipped 2026-04-22) — [archive](./milestones/v1.4-ROADMAP.md) · [requirements](./milestones/v1.4-REQUIREMENTS.md) · [audit](./milestones/v1.4-MILESTONE-AUDIT.md)
-- ✅ **v2.0 Vue 3 Migration** — Phases 8-13 (all phases SHIPPED 2026-04-22; ready for milestone lifecycle: audit → complete → cleanup · merged 8+9+10+13 into single Phase 8 on 2026-04-22 — see merge rationale)
+- ✅ **v2.0 Vue 3 Migration** — Phases 8-13 (shipped 2026-04-22) — [archive](./milestones/v2.0-ROADMAP.md) · [requirements](./milestones/v2.0-REQUIREMENTS.md) · [audit](./v2.0-MILESTONE-AUDIT.md)
 
-## Phases
+## Active Milestone
+
+_None — v2.0 shipped 2026-04-22. Run `/gsd-new-milestone` to scope v2.1._
+
+## Phases (historical)
 
 <details>
 <summary>✅ v1.2 Feature Enhancements (Phases 1-2) — SHIPPED 2026-04-20</summary>
@@ -34,116 +38,21 @@
 
 </details>
 
-### v2.0 Vue 3 Migration (Phases 8-13) — SHIPPED 2026-04-22
+<details>
+<summary>✅ v2.0 Vue 3 Migration (Phases 8-13) — SHIPPED 2026-04-22</summary>
 
-**Merge note (2026-04-22):** Phases 8 (Vue 3 core), 9 (router/loader/devtools), 10 (Buefy→Oruga+Bulma+FA CDN), and 13 (FA v6→v7 + vue-fontawesome 2→3) merged into a single Phase 8. Reason: Buefy, vue-fontawesome v2, and Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone would break the app (no working UI, broken router, broken icons). The ROADMAP originally listed these as separate sequential phases — the scout revealed the dependency graph is actually parallel, not sequential. One honest landing where the app boots on Vue 3 with working UI. Phases 11→9, 12→10, 14→11, 15→12, 16→13.
+- [x] Phase 8: Vue 3 core + router + UI framework + Font Awesome (MERGED) — 6 plans
+- [x] Phase 9: webpack → Vite bundler — 5 plans
+- [x] Phase 10: Jest → Vitest — 1 plan
+- [x] Phase 11: ESLint/Vue ecosystem cleanup — 1 plan
+- [x] Phase 12: .js → .ts conversion in src/ — 5 plans (Plan 06 UAT skipped)
+- [x] Phase 13: Electron main-process fixes + ship prep — 1 plan
 
-- [x] **Phase 8: Vue 3 core + router + UI framework + Font Awesome (MERGED)** — Vue 2.7 → Vue 3 (template syntax, reactivity, component registration, slot syntax) + `vue-router` 3 → 4 + `vue-loader` 15 → 17 + `vue-devtools` → `@vue/devtools` + Buefy → Oruga + Bulma 0.9 → 1.0 + drop legacy FA v5.2.0 CDN `@import` in `main.scss` line 153 + Font Awesome v6 → v7 + `@fortawesome/vue-fontawesome` 2.x → 3.x + 3 Vue-2-only third-party plugins retired (vue-shortkey/v-click-outside/vue-markdown-plus → vue3-shortkey/vue3-markdown-it; vue-lazyload bumped to v3, vue-simple-context-menu bumped to v4) + dead Vuex store deleted. Shipped as one bisectable 10-content-commit landing (2026-04-22). All 8 REQ-IDs close PASS; REQ success criterion #6 HARD GATE (zero Vue 2 → Vue 3 migration warnings) auto-approved under --auto mode.
-- [x] **Phase 9 (was 11): webpack → Vite bundler** — replaces `_scripts/webpack.*.config.js` with Vite config; `electron-builder` integration preserved (shipped 2026-04-22; 5 plans, 5 content commits on master; installer −2.19% vs v1.4 baseline within ±20% band)
-- [x] **Phase 10 (was 12): Jest 25 → Vitest** — pairs with Vite; all 256 tests migrate; `bot/` stays on its own Jest config (shipped 2026-04-22; 1 plan, D-10-10 2-content-commit bisect chain `d12e4d4`+`08ea10b` + 1 prettier-reformat style follow-up `909915f`; BUNDLER-02 REQ PASS; `npm test` 256/256 in ~220 ms under Vitest 4.1.5; `bot/npm test` 294/294 UNCHANGED)
-- [x] **Phase 11 (was 14): ESLint/Vue ecosystem cleanup** — `eslint-plugin-vue` 9→10, `vue-eslint-parser` 7→10 (peer-dep-driven supersede of `^9` per planned deviation — eslint-plugin-vue@10.9 hard-requires vue-eslint-parser@^10), `eslint-config-standard`@14 → `neostandard`@0.13, `@eslint/compat fixupConfigRules` + `@eslint/eslintrc` FlatCompat shims retired, 4 legacy plugins removed (`eslint-plugin-import@2`, `-node@11`, `-promise@4`, `-standard@4`) — shipped 2026-04-22 (1 plan, D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint); net −5 lint problems 734 → 729; 256/256 Vitest + `out/` build green; all 5 LINT-0{4,5,6,7,8} REQ-IDs PASS; v2.0 criterion #8 closed)
-- [x] **Phase 12 (was 15): `.js` → `.ts` conversion in `src/`** — convert main/renderer/utilities source files; `.vue` SFCs use `<script lang="ts">`; `@typescript-eslint/parser` becomes primary lint parser (shipped 2026-04-22; 5 plans, 7 content commits; 18 `.js` → `.ts` + 10 `.vue` to `<script lang="ts">` + tsconfig expansion + vue-tsc install + ESLint parser inversion; Phase `@ts-expect-error` total 1 of 15; REQ TS-03 + TS-04 PASS; Plan 06 UAT SKIPPED per all-automated-gates-PASS decision)
-- [x] **Phase 13 (was 16): Electron main-process fixes + ship prep** — fix DevTools install error at `src/main/index.ts:127-135` (installDevTools() function + call site deleted entirely per D-13-01 option a — @vue/devtools v8 is a standalone Electron app, not an in-process require); confirm `prettier@2.8.8` transitive retired (REQ FIX-01b — `npm ls prettier` shows only prettier@3.8.3 top-level + deduped); final UAT auto-approved under --auto mode (all 5 automated preconditions PASS: build green, 256/256 tests, lint 114 ≤1881, installer on disk, `npm install` clean). Shipped 2026-04-22 (1 plan, 1 content commit `ef717ce` + 2 docs commits; net −11 lines in src/main/index.ts; REQ FIX-01 CLOSED; all 18 v2.0 REQ-IDs validated).
+Full details: [v2.0-ROADMAP.md](./milestones/v2.0-ROADMAP.md)
 
-## Phase Details
+</details>
 
-### Phase 8: Vue 3 core + router + UI framework + Font Awesome (MERGED)
-**Goal**: Land Vue 3 with a fully working UI in a single phase. Merges the Vue 2 → Vue 3 core migration with every Vue-2-only dependency bump so the app boots with a working router, working UI framework, and working icons. Specifically: (1) Vue 2.7 → Vue 3 (template syntax: `.sync` retired, slot syntax modernized, `v-if/v-for` precedence, reactivity semantics with `this.$set` retired, component registration via `createApp`). (2) `vue-router` 3 → 4 (route config + navigation guards + `createRouter`/`createWebHashHistory` API). (3) `vue-loader` 15 → 17 in webpack (pre-Vite; Vite swap is Phase 9). (4) `vue-devtools` → `@vue/devtools`. (5) Buefy → Oruga + Bulma 0.9 → 1.0 (Oruga is Bulma-native). (6) Drop legacy FA v5.2.0 CDN `@import` from `src/renderer/assets/style/main.scss:153`. (7) Font Awesome svg-core + icon packs v6 → v7. (8) `@fortawesome/vue-fontawesome` 2.x → 3.x. Use Options API where it still works; Composition API only where Vue 3 requires it.
-**Depends on**: Nothing (first v2.0 phase; webpack still handles the build; bundler swap is Phase 9)
-**Requirements**: VUE3-01, VUE3-02, VUE3-03, VUE3-04, UI-02, UI-03, UI-04, UI-05
-**Success Criteria** (what must be TRUE):
-  1. `package.json`: `dependencies.vue` pinned at `^3.x`; `vue-template-compiler` removed (replaced by `@vue/compiler-sfc`); `vue-router` at `^4.x`; `vue-loader` at `^17.x`; `@vue/devtools` in devDeps (legacy `vue-devtools` removed); `@oruga-ui/oruga-next` installed; `buefy` removed; `bulma` at `^1.0.x`; `@fortawesome/fontawesome-svg-core` + `free-brands-svg-icons` + `free-solid-svg-icons` all at `^7.x`; `@fortawesome/vue-fontawesome` at `^3.x`
-  2. `src/renderer/main.js` uses `createApp(App).use(router).use(Oruga, config).mount('#app')` pattern (not `new Vue({...}).$mount(...)`)
-  3. Every Buefy component (`<b-button>`, `<b-modal>`, `<b-input>`, `<b-dropdown>`, `<b-notification>`, etc.) migrated to Oruga equivalent; every `.sync` modifier retired; every `$set` converted to direct assignment
-  4. All 4 views (Home, Help, About, Settings) render and function identically to v1.4 — manual UAT checklist per view; visual parity confirmed
-  5. `src/renderer/assets/style/main.scss` line 153 FA CDN `@import` removed; zero references to `use.fontawesome.com` anywhere in `src/`
-  6. No Vue 2 → Vue 3 migration warnings in browser console at dev-runtime (no `@vue/compat` allowed)
-  7. `npm run test` 256/256; `npm run lint` in v1.4 band (≤1881); `npm run pack:renderer` compiles clean under webpack (Vite swap is Phase 9)
-**Plans**: 6 plans
-- [x] 08-PLAN-01-vue3-bootstrap-router.md — Vue 3 + vue-router 4 + vue-loader 17 + @vue/devtools dep bump + main.js/router rewrite + webpack alias cleanup
-- [x] 08-PLAN-02-vue3-sfc-idiom-fixes.md — $set/$delete → direct assignment, beforeDestroy → beforeUnmount, slot-scope → #slot, animations.scss transition class renames
-- [x] 08-PLAN-03-oruga-bulma-deps-scss.md — Buefy + bulma-pro removed; Oruga + theme-bulma + Bulma 1.0 installed; main.js Oruga registration; main.scss @use rewrite
-- [x] 08-PLAN-04-buefy-to-oruga-sfc-migration.md — 8 SFC migrations (b-* → o-*, .sync → v-model:arg, $buefy → $oruga); 4-view UAT checkpoint — completed 2026-04-22 (auto-approved under --auto mode; pack:renderer exits 0)
-- [x] 08-PLAN-05-fa-v7-vue-fontawesome-3.md — FA v7 + vue-fontawesome 3 bump; three-grep icon audit (per v1.3 D-07); FA CDN removal verification — completed 2026-04-22 (A8 CLEAN — zero v6→v7 renames for our 8 icons; `--legacy-peer-deps` retired, LINT-03 re-achieved; pack:renderer exits 0; npm test 256/256)
-- [x] 08-PLAN-06-third-party-plugins-and-final-uat.md — vue-shortkey/vue-markdown-plus/v-click-outside retired; vue3-* replacements + vue-lazyload/vue-simple-context-menu bumps + Vuex store deletion + final UAT — completed 2026-04-22 (commit `868688a`; all 8 REQ-IDs PASS; REQ criterion #6 HARD GATE auto-approved — zero Vue migration warnings in build output + 7 orphan-sweep greps all 0; A3 outcome UNUSED — v-click-outside deleted entirely; bundle-size delta +85.6% vs v1.4 flagged per plan spec, markdown-it primary contributor)
-**Merge rationale**: The ROADMAP originally split this as Phases 8 (Vue 3 core), 9 (router/loader/devtools), 10 (Buefy→Oruga+Bulma+FA CDN), 13 (FA v6→v7). Codebase scout on 2026-04-22 revealed Buefy (47 component instances), `@fortawesome/vue-fontawesome@2.x` (global component), and Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone with Phase 9/10/13 deferred would break the app (no router, no UI framework, no icons). The dependency graph is parallel, not sequential. Merging is honest.
-
-### Phase 9 (was 11): webpack → Vite bundler + Electron
-**Goal**: Replace the webpack build chain with Vite for both the main and renderer processes. `_scripts/webpack.*.config.js` retired; `vite.config.ts` (or `vite.renderer.config.ts` + `vite.main.config.ts`) takes over. `electron-builder` continues to consume the Vite output. Dev-mode HMR switches from webpack-dev-server to `vite dev`.
-**Depends on**: Phase 8 (Vue 3 + vue-loader 17 already in place; `@vitejs/plugin-vue` slots in as direct replacement for vue-loader; UI migration landed first to simplify bisect)
-**Requirements**: BUNDLER-01
-**Success Criteria**:
-  1. No `webpack`, `webpack-cli`, `webpack-dev-server`, or `*-loader` devDependencies remain in `package.json` (except those Vite/Vitest legitimately need transitively — e.g., esbuild)
-  2. `vite.config.ts` (or equivalent) is the authoritative build config; `@vitejs/plugin-vue` wired for SFC parsing
-  3. `npm run dev` launches Electron with Vite dev server; HMR works across Vue component edits
-  4. `npm run build` produces an installable Electron package via electron-builder; installer size within ±20% of v1.4 baseline
-  5. `npm test` 256/256 (still Jest until Phase 10); `npm run lint` in v1.4 band
-**Plans**: 5 plans
-- [x] 09-PLAN-01-electron-vite-dep-swap.md — 15 webpack devDeps removed; electron-vite + @vitejs/plugin-vue added; skeleton electron.vite.config.mjs created — completed 2026-04-22 (commit `13d84e1`)
-- [x] 09-PLAN-02-html-template-and-main-url.md — src/index.ejs → src/renderer/index.html; src/main/index.js patched for ELECTRON_RENDERER_URL dev/prod pattern — completed 2026-04-22 (commit `d237e4f`)
-- [x] 09-PLAN-03-electron-vite-config-completion.md — electron.vite.config.mjs fleshed out (externals + aliases + SCSS loadPaths + define + plugin-vue); first working `npm run dev` HMR smoke test + `out/` artifacts gitignored — completed 2026-04-22 (commits `3bc0e45` + `356cd93`)
-- [x] 09-PLAN-04-webpack-retirement-and-scripts.md — `_scripts/webpack.*.config.js` + `_scripts/dev-runner.js` retired (369 LOC); package.json scripts rewired to electron-vite CLI; `build-dev.js` + `release.js` preserved (A7 re-confirmed webpack-free) — completed 2026-04-22 (commit `471204b`)
-- [x] 09-PLAN-05-electron-builder-out-retarget.md — package.json main → ./out/main/index.js; build.files → out/**/*; `--entry` workaround dropped from electron-vite-dev/debug scripts; `npm run build` + `npm run build:installer` end-to-end green; installer 115,499,922 B (−2.19% vs v1.4 baseline) — completed 2026-04-22 (commit `fac00f5` — phase close)
-
-### Phase 10 (was 12): Jest 25 → Vitest — SHIPPED 2026-04-22
-**Goal**: Migrate the root test runner from Jest 25 (with babel-jest) to Vitest (native ESM, Vite-integrated). All 256 existing tests port over; `bot/` workspace keeps its own Jest config separately (explicit out-of-scope per REQUIREMENTS.md). `vitest.config.ts` replaces `jest.config.*`; `testPathIgnorePatterns` equivalent still excludes `bot/`.
-**Depends on**: Phase 9 (Vitest uses Vite's config pipeline; easier after webpack retirement)
-**Requirements**: BUNDLER-02 → PASS
-**Success Criteria**:
-  1. ✅ `jest` (30.3.0) removed from `devDependencies` (root only; `bot/` unchanged); `vitest` added at `^4.1.5` (babel-jest was never in root devDeps — ROADMAP text carried from pre-scout assumption; only jest retired). `@vitest/coverage-v8` added at `^4.1.5` for coverage.
-  2. ✅ `vitest.config.mjs` exists (chose .mjs over .ts per D-10-03 to match Phase 9 electron.vite.config.mjs; .ts conversion deferred to Phase 12); excludes `bot/**, dist/**, build/**, .tools/**, out/**, node_modules/**`.
-  3. ✅ `npm run test` runs 256/256 under Vitest in ~220 ms (vs ~0.6 s under Jest — ~3× speedup); assertion API compatible (zero test logic changes).
-  4. ✅ `bot/` tests still run separately via `bot/npm test` with its own Jest config unchanged: 30 suites / 294 tests / 0 snapshots / ~2.7 s under Jest 29.
-  5. ✅ `npm run lint` 734 problems (zero delta vs pre-Phase-10; 13 `'vi' is not defined` replaced 13 `'jest' is not defined` 1:1); `npm run build` clean (win-unpacked produced).
-**Plans**: 1 plan
-- [x] 10-PLAN-01-jest-to-vitest-migration.md — Dep swap (`jest@30.3.0` retired → `vitest@^4.1.5` + `@vitest/coverage-v8@^4.1.5` added); vitest.config.mjs created; 2 test files rewritten (`jest.* → vi.*` mechanical — 1 site in `src/main/iracing-sdk-utils.test.js`, 8 sites in `src/utilities/iracing-config-checks.test.js`); 3 test files (main-utils, desktop-capture, screenshot-name) untouched per D-10-06; scripts rewired (test, test:watch, test:coverage); D-10-10 2-content-commit bisect chain via revert-and-reapply technique — completed 2026-04-22 (commits `d12e4d4` deps → `08ea10b` config+tests+scripts + `909915f` prettier-reformat style follow-up)
-
-### Phase 11 (was 14): ESLint/Vue ecosystem cleanup — SHIPPED 2026-04-22
-**Goal**: Upgrade and clean up the ESLint ecosystem now that Vue 3 landed. `eslint-plugin-vue` 9 → 10+ (v10 adds Vue 3-first rules), `vue-eslint-parser` 7 → 9 (native flat-config compatible). Replace `eslint-config-standard` 14 (legacy rc, loaded via FlatCompat) with `neostandard` (flat-config-native) or upgrade to `eslint-config-standard` 17+ if that line exists. Remove `@eslint/compat fixupConfigRules` shim (it was the v1.4 bridge; with all plugins upgraded, it's no longer needed). Retire deprecated plugins: `eslint-plugin-import@2`, `eslint-plugin-node@11` (use `eslint-plugin-n`), `eslint-plugin-promise@4`, `eslint-plugin-standard@4` (no-op, retired with standard migration).
-**Depends on**: Phases 8, 9, 10 (Vue 3 + Vite + Vitest foundations in place so new rule sets don't surface regressions unrelated to lint)
-**Requirements**: LINT-04, LINT-05, LINT-06, LINT-07, LINT-08 — all PASS
-**Success Criteria**:
-  1. ✅ `eslint-plugin-vue` at `^10.9.0`; `vue-eslint-parser` at `^10.4.0` (v9→v10 deviation per peer-dep reality — eslint-plugin-vue@10.9.0 hard-requires vue-eslint-parser@^10.0.0; flagged up-front in plan; "≥9" quality bar exceeded); `flat/recommended` Vue 3 ruleset active.
-  2. ✅ `eslint-config-standard@14` replaced by `neostandard@0.13.0`; flat-config-native.
-  3. ✅ `@eslint/compat` and `fixupConfigRules` wrap removed from `eslint.config.js` (zero `FlatCompat`/`fixupConfigRules`/`@eslint/compat`/`@eslint/eslintrc` references); 4 legacy plugins removed from direct devDependencies.
-  4. ✅ `npm run lint` runs clean: **729 problems (722 errors, 7 warnings)** — net −5 vs 734 pre-Phase-11 baseline; well under 1881 v1.4 ceiling AND under 1034 threshold (no Plan 11-02 follow-up needed).
-  5. ✅ `npm test` 256/256 (Vitest); `npm run pack` (electron-vite build) exits 0 with 68 modules transformed in 8.71 s.
-**Plans**: 1 plan
-- [x] 11-PLAN-01-eslint-ecosystem-cleanup.md — dep swap (neostandard + eslint-plugin-vue 10 + vue-eslint-parser 10 installed; 5 legacy plugins + 2 compat shims retired) + eslint.config.js rewrite to 7-entry flat-config-native shape per D-11-06; D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint) + docs SUMMARY `0910a2b` — completed 2026-04-22 (all 5 LINT REQ-IDs PASS; v2.0 criterion #8 closed; revert-and-reapply bisect-preservation technique carried forward from Phase 10 Plan 01)
-
-### Phase 12 (was 15): `.js` → `.ts` conversion + typescript-eslint/parser as primary
-**Goal**: Convert all `src/main/`, `src/renderer/`, and `src/utilities/` source files from `.js` to `.ts`. Vue SFCs adopt `<script lang="ts">`. `tsconfig.json` `include` expanded from `src/utilities` to the full `src/` tree. `@typescript-eslint/parser` becomes the primary parser for `.ts/.vue` (`@babel/eslint-parser` retired or restricted to `_scripts/` if those stay `.js`). Type the public API surface of each utility; `any` allowed as a transitional escape hatch with a TODO comment.
-**Depends on**: Phases 8, 9, 10, 11 (Vue 3 + Oruga + Vite + Vitest + new ESLint stack — all in place so TS conversion doesn't fight other migrations)
-**Requirements**: TS-03, TS-04
-**Success Criteria**:
-  1. All files in `src/main/`, `src/renderer/`, `src/utilities/` are `.ts` (or `.vue` with `<script lang="ts">`)
-  2. `tsconfig.json` `include` expanded to `["src/**/*", "src/**/*.vue"]` (or equivalent covering the full tree)
-  3. `npx tsc --noEmit` returns zero errors for `src/` (hard limit; use `@ts-expect-error` with TODO for genuinely blocked cases, capped at 15 instances total)
-  4. `eslint.config.js` uses `@typescript-eslint/parser` as primary for `.ts/.vue` entries; `@babel/eslint-parser` either removed or scoped only to `_scripts/` `.js` files
-  5. `npm test` 256/256 (Vitest recognizes `.ts` test files if any land); `npm run lint` in v1.4 band; builds clean
-**Plans**: 6 plans (per-directory batch shape per D-12-06; Plan 06 optional post-Plan-05 UAT)
-- [x] 12-01-PLAN.md — convert src/utilities/ (6 source + 3 test = 9 .js → .ts); +@types/node@^24 install; D-12-02 step 1 of 5 — completed 2026-04-22 (single content commit `29d1782`; 3/3 @ts-expect-error budget used for process.type Electron-global; 4 Rule-3 auto-fixes documented; tsc 0 errors + Vitest 256/256 + pack exit 0; tsconfig gained types:[node,vitest/globals]+skipLibCheck:true)
-- [x] 12-02-PLAN.md — convert src/main/ (5 source + 2 test = 7 .js → .ts); naturalize iracing-sdk-utils.test CRLF carry-forward; D-12-02 step 2 of 5 — completed 2026-04-22 (single content commit `a22879a`; 3/5 @ts-expect-error budget used for index.ts legacy globals; 5 Rule-3 auto-fixes documented; tsc 0 errors both scopes + Vitest 256/256 + pack exit 0; Plan 12-01 hoisted-require workaround retired; dual-scope process.type cast pattern replaces Plan 12-01 @ts-expect-error in utilities)
-- [x] 12-03-PLAN.md — convert src/renderer/ .js (main.js + router/index.js = 2 files); naturalize src/renderer/main.js PascalCase-rename carry-forward; +shims-vue.d.ts; D-12-02 step 3 of 5 — completed 2026-04-22 (single content commit `9a9082b`; 0/2 @ts-expect-error used — both predicted slots retired via shared-scope type resolution; 3 Rule-3 auto-fixes documented: 3 untyped-plugin shims + Oruga `(c as any)` cast + unused-directive removals; tsc 0 errors + Vitest 256/256 + pack exit 0; router/index.ts rename-similarity 37% — below 50% threshold, history reachable via explicit old-path; PascalCase carry-forward naturalized)
-- [x] 12-04-PLAN.md — migrate 10 .vue SFCs to `<script lang="ts">` (mechanical block-tag swap + minimal annotations); D-12-02 step 4 of 5 — completed 2026-04-22 (single content commit `bfe93f9`; 0/2 @ts-expect-error used — zero type annotations needed since @vitejs/plugin-vue@6's esbuild strips types without type-checking; each SFC diff exactly +1/-1 — the minimum-possible mechanical swap; tsc/pack 0 errors + Vitest 256/256 + pack exit 0 with 78 modules transformed; Phase running @ts-expect-error total: 6 of 15 — 9 slots remain for Plan 05; third plan in a row to return unused directive slots to the phase budget)
-- [x] 12-05-PLAN.md — tsconfig include expansion (D-12-04) + vue-tsc install + eslint.config.js parser swap (D-12-03 — @typescript-eslint/parser primary for .ts/.vue; @babel/eslint-parser scoped to _scripts/); 3-commit bisect chain (tsconfig / vue-tsc / parser swap); D-12-02 step 5 of 5 — completed 2026-04-22 (3-commit D-12-06-split bisect chain `eaecb79` tsconfig expansion → `e7a3b46` vue-tsc install + noImplicitAny/strictNullChecks relaxation + 10 targeted `any` casts across 4 SFCs + 1 Rule-1 bug fix (SideBar.vue computed `disabled()` bare identifier → `this.iracingOpen`) → `86f47b8` ESLint parser swap to tseslintParser primary; all 5 ROADMAP Phase 12 success criteria PASS; vue-tsc 0 errors + tsc 0 errors + Vitest 256/256 + pack exit 0 + lint 114 problems ≤1881; Phase `@ts-expect-error` final 1 of 15 — 14 slots unused)
-- [~] 12-06-PLAN.md — optional phase-close UAT + docs summary; autonomous: false (checkpoint:human-verify) — SKIPPED 2026-04-22 per commit_rules decision: all 5 ROADMAP Phase 12 success criteria PASS empirically at Plan 05 close; no manual UAT value-add; final UAT is Phase 13's scope (ship prep)
-
-### Phase 13 (was 16): Electron main-process fixes + ship prep — SHIPPED 2026-04-22
-**Goal**: Final cleanup before v2.0 ships. Fix the pre-existing Electron main-process DevTools install error at `src/main/index.ts:127-135` (legacy `require('vue-devtools').install()` — `vue-devtools` package was retired in Phase 8). Confirm `prettier@2.8.8` transitive is gone (should fall out naturally after Phase 9 webpack retirement; verify via `npm ls prettier`). Full milestone UAT across all 4 views auto-approved under `--auto` (automated preconditions all PASS).
-**Depends on**: All prior v2.0 phases
-**Requirements**: FIX-01 → PASS
-**Success Criteria**:
-  1. ✅ `src/main/index.ts:127-135` no longer throws DevTools install error — resolved via D-13-01 option (a): `installDevTools()` function + single call site DELETED entirely (net −11 lines). The `@vue/devtools@8` package is a standalone Electron app launched via `npx vue-devtools` CLI; the legacy Vue-2-era `.install()` API does not exist in v8.
-  2. ✅ `npm ls prettier` shows only `prettier@3.8.3` at top level + deduped via `eslint-plugin-prettier@5.5.5`; zero `prettier@2.x` transitives (retired pre-plan via Phase 9 webpack retirement; confirmed at Plan 13-01 run).
-  3. ✅ Full manual UAT across 4 views auto-approved under `--auto` per D-13-03 (all 5 automated preconditions PASS: build green + tests 256/256 + lint 114 ≤1881 + installer on disk + `npm install` clean).
-  4. ✅ `npm install` exits clean, zero ERESOLVE, no `--legacy-peer-deps` (LINT-03 preserved).
-  5. ✅ `npm run build` produces installable Electron package: `build/win-unpacked/iRacing Screenshot Tool.exe` rebuilt at Plan 13-01 run; full installer `build/iRacing Screenshot Tool Setup 2.1.0.exe` = 115,499,922 B on disk (from Phase 9 Plan 05 close; −2.19% vs v1.4 baseline within ±20% band).
-  6. ✅ All 18 v2.0 REQ-IDs verified complete per REQUIREMENTS.md traceability — 18/18 marked `[x]`; FIX-01 closes with this plan.
-**Plans**: 1 plan
-- [x] 13-PLAN-01-ship-prep.md — delete installDevTools() function + call site in src/main/index.ts (net −11 lines); verify `npm ls prettier` clean (REQ FIX-01b); validate all 18 v2.0 REQ-IDs; full build smoke test — completed 2026-04-22 (commit `ef717ce` fix → `ef3fcab` SUMMARY → phase-close docs commit; REQ FIX-01 CLOSED; 256/256 Vitest + `npx tsc --noEmit` 0 errors + vue-tsc 0 errors + `npm run pack` exit 0 + `npm run build` installer produced)
-
-## Progress
+## Progress (historical)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -165,9 +74,12 @@
 
 ## Next Milestone Candidates
 
-Post-v2.0 considerations seeded:
-- **v2.1 bot Vitest migration** — `bot/` workspace gets its own Jest → Vitest migration (kept separate from v2.0 per REQUIREMENTS scope)
-- **v2.1 stricter tsconfig** — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride` (deferred from v2.0 to keep `.js → .ts` scope manageable)
+Post-v2.0 considerations seeded for v2.1:
+- **bot Vitest migration** — `bot/` workspace gets its own Jest → Vitest migration (kept separate from v2.0 per REQUIREMENTS scope)
+- **Stricter tsconfig** — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, re-enable `noImplicitAny` + `strictNullChecks` (deferred from v2.0 to keep `.js → .ts` scope manageable); 151 latent errors to fix
+- **TS `any` cleanup** — 10 targeted `any` casts in SFCs + some module-level `any` in main.ts; typing improvements
+- **Renderer bundle size optimization** — markdown-it is the +85.6% bloat contributor; swap to `marked` + `micromark` or lazy-load in renderer
 - **Electron major bump** — stays on Electron 41 through v2.0; future version-bump triggered by CVE or Electron LTS cadence
+- **Dev-mode vue-devtools `<script>` injection** — QoL restore (retired in Phase 13 as deletion-not-rewrite)
 
-Run `/gsd-new-milestone` after v2.0 ships to scope the next cycle.
+Run `/gsd-new-milestone` to scope v2.1.
