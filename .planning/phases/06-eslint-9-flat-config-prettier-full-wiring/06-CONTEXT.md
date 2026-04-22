@@ -260,3 +260,22 @@ Scope is limited to the root lint stack: `package.json` / `package-lock.json` (t
 - Milestone audit MUST produce a REQUIREMENTS §LINT-03 re-scope entry noting the Option 1 resolution.
 
 **No Phase 6 plan/execution changes required** — proceeding with the D-01 through D-18 decisions as captured above.
+
+---
+
+## D-01 Amendment (2026-04-22 — surfaced during Plan 06-02 execution)
+
+**Finding:** `eslint-plugin-vue@6.2.2` has a HARD runtime incompatibility with ESLint 9 — not a peer-range warning. It calls `funcInfo.codePath.currentSegments.some(...)` inside `vue/require-render-return` (and other rules), but ESLint 9 removed `codePath.currentSegments` from the public API. Result: `TypeError: Cannot read properties of undefined (reading 'some')` when linting any `.js`/`.vue` file. This cannot be shimmed — the API is deep in ESLint's code-path-analysis internals.
+
+**Research correction:** `06-RESEARCH.md §Pitfall 7` stated that `eslint-plugin-vue@6` and `@typescript-eslint@2` would "load and function under ESLint 9 with only npm peer warnings" based on entry-point inspection. That was correct at the `require()` boundary but missed the internal ESLint API usage that fails at lint time.
+
+**User decision (Option A, 2026-04-22):** Upgrade `eslint-plugin-vue` from `^6.2.2` to `^9.x` (latest ESLint-9-compatible v9 — `^9.33.0` at time of decision). `eslint-plugin-vue@9` still targets Vue 2 + Vue 3; the Vue-2 `plugin:vue/recommended` rule set is preserved. `vue-eslint-parser` stays at `^7.0.0` (current pin — eslint-plugin-vue@9 peer-range accepts it).
+
+**Implications for CONTEXT.md decisions:**
+- **D-01 amendment:** "No plugin upgrades" in Phase 6 now has one explicit exception: `eslint-plugin-vue` 6 → 9. Rationale: D-01's intent was "don't expand scope into Phase 7/v2.0 plugin upgrades," but D-01 was premised on v6 loading under ESLint 9. With that premise broken, the minimum-surface path to honor LINT-01 (ESLint 9 runs) is the plugin bump. All other legacy plugins (`@typescript-eslint@2`, `eslint-config-standard@14`, `eslint-plugin-standard@4`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-import@2`) stay per D-01 — they don't have the `codePath.currentSegments` crash surface.
+- **D-02 rule parity:** Vue 2 rules from `plugin:vue/recommended` are preserved across v6 → v9 (`eslint-plugin-vue@9` still targets Vue 2). Some Vue 3-only rules may additionally activate — planner instructs executor to verify per-rule delta in the D-11 audit.
+- **D-15 Option 1 resolution still holds:** The `eslint-plugin-vue@6 vs eslint@9` peer conflict cited in D-15 is now moot (upgrade resolves it), but `@typescript-eslint@2 vs eslint@9` still requires `--legacy-peer-deps` — so D-15's "persist past v1.4" conclusion is correct through Phase 6 (Phase 7 resolves typescript-eslint, final state TBD).
+- **Package.json churn for commit 2:** ONE additional dep edit — `eslint-plugin-vue: ^6.2.2 → ^9.x`. Stage `package.json` + `package-lock.json` alongside `eslint.config.js` + `.eslintrc.js` deletion + `.eslintignore` deletion. Commit 2 now stages 5 paths (was 3). Commit message unchanged.
+- **Shim workaround note:** The executor's earlier `Module._load` shim (for `eslint-plugin-vue@6`'s private-path access) and `FileContext.prototype.parserServices` shim are NO LONGER NEEDED with v9 and should be removed from `eslint.config.js` — v9 uses modern ESLint 9-compatible APIs natively.
+
+**No other CONTEXT decisions changed.** All post-execution SC evidence and verification flow unchanged.
