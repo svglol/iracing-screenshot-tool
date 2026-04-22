@@ -60,9 +60,9 @@
   6. No Vue 2 → Vue 3 migration warnings in browser console at dev-runtime (no `@vue/compat` allowed)
   7. `npm run test` 256/256; `npm run lint` in v1.4 band (≤1881); `npm run pack:renderer` compiles clean under webpack (Vite swap is Phase 9)
 **Plans**: 6 plans
-- [ ] 08-PLAN-01-vue3-bootstrap-router.md — Vue 3 + vue-router 4 + vue-loader 17 + @vue/devtools dep bump + main.js/router rewrite + webpack alias cleanup
-- [ ] 08-PLAN-02-vue3-sfc-idiom-fixes.md — $set/$delete → direct assignment, beforeDestroy → beforeUnmount, slot-scope → #slot, animations.scss transition class renames
-- [ ] 08-PLAN-03-oruga-bulma-deps-scss.md — Buefy + bulma-pro removed; Oruga + theme-bulma + Bulma 1.0 installed; main.js Oruga registration; main.scss @use rewrite
+- [x] 08-PLAN-01-vue3-bootstrap-router.md — Vue 3 + vue-router 4 + vue-loader 17 + @vue/devtools dep bump + main.js/router rewrite + webpack alias cleanup
+- [x] 08-PLAN-02-vue3-sfc-idiom-fixes.md — $set/$delete → direct assignment, beforeDestroy → beforeUnmount, slot-scope → #slot, animations.scss transition class renames
+- [x] 08-PLAN-03-oruga-bulma-deps-scss.md — Buefy + bulma-pro removed; Oruga + theme-bulma + Bulma 1.0 installed; main.js Oruga registration; main.scss @use rewrite
 - [ ] 08-PLAN-04-buefy-to-oruga-sfc-migration.md — 8 SFC migrations (b-* → o-*, .sync → v-model:arg, $buefy → $oruga); 4-view UAT checkpoint
 - [ ] 08-PLAN-05-fa-v7-vue-fontawesome-3.md — FA v7 + vue-fontawesome 3 bump; three-grep icon audit (per v1.3 D-07); FA CDN removal verification
 - [ ] 08-PLAN-06-third-party-plugins-and-final-uat.md — vue-shortkey/vue-markdown-plus/v-click-outside retired; vue3-* replacements + vue-lazyload/vue-simple-context-menu bumps + Vuex store deletion + final UAT (REQ success criterion #6 hard gate)
@@ -140,7 +140,7 @@
 | 5. Babel Package Renames | v1.4 | 2/2 | Complete | 2026-04-22 |
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | v1.4 | 2/2 | Complete | 2026-04-22 |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | v1.4 | 4/4 | Complete | 2026-04-22 |
-| 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 0/6 | Planned | - |
+| 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 3/6 | In Progress | - |
 | 9. webpack → Vite bundler | v2.0 | 0/? | Not started | - |
 | 10. Jest → Vitest | v2.0 | 0/? | Not started | - |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 0/? | Not started | - |

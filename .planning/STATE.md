@@ -2,13 +2,13 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** v2.0 Vue 3 Migration
-**Last activity:** 2026-04-22 — v2.0 milestone kicked off. REQUIREMENTS.md defined (18 requirements). ROADMAP.md created with 9 phases (8-16), then **merged to 6 phases (8-13)** on 2026-04-22 after codebase scout revealed Buefy + vue-fontawesome v2 + Vue Router 3 are all Vue-2-only. Shipping Vue 3 core alone would break the app. Merged phases 8+9+10+13 into one Phase 8; renumbered 11→9, 12→10, 14→11, 15→12, 16→13. All 18 REQ-IDs still covered.
+**Last activity:** 2026-04-22 — Phase 8 Plan 03 landed. Two-commit bisect pair (`0f2b981` chore(deps) + `fb6936f` refactor(renderer)) swaps Buefy+bulma-pro+bulma@0.9 for Oruga-0.13 + theme-bulma-0.9 + bulma@1.0.4; main.js registers Oruga per-component; main.scss rewritten to Bulma 1.0 @use pattern with theme-bulma entry + `$theme-bulma-custom-colors` twitter variant + `--bulma-primary` CSS custom-property override. Build intentionally broken at SFC level (b-* tags still present) until Plan 04 migrates SFCs. LINT-03 temporarily regressed (`--legacy-peer-deps` used due to FA v2 vue~2 peer — re-achievable at Plan 05).
 
 ## Current Position
 
 Phase: Phase 8 (MERGED) — Vue 3 core + vue-router 4 + vue-loader 17 + @vue/devtools + Buefy→Oruga + Bulma 1.0 + FA CDN cleanup + FA v7 + vue-fontawesome 3.x
-Plan: — (CONTEXT captured 2026-04-22; plan-phase next)
-Status: CONTEXT.md written at `.planning/phases/08-vue3-core-merged/08-CONTEXT.md`. Ready for `/gsd-plan-phase 8`.
+Plan: 03/06 complete. Next: 08-PLAN-04-buefy-to-oruga-sfc-migration.md (8 SFC migrations + 4-view UAT checkpoint)
+Status: Plans 01, 02, 03 complete with SUMMARYs. Build by design broken until Plan 04 retires b-* SFC tags.
 Branch: master
 
 ## Project Reference
@@ -64,3 +64,6 @@ Load-bearing patterns/decisions from prior milestones:
 - **`.eslintignore` → `ignores:` scope control** — Phase 5/6 established `bot/` + `dist/` exclusion as the v1.4 lint-scope-control mechanism. Carry forward through v2.0 (may expand or contract based on Vue 3 migration needs).
 - **No `Co-Authored-By:` footer, no `--no-verify`, explicit `git add <path>`** — enforced across all v1.3 and v1.4 commits. Continue in v2.0.
 - **`--legacy-peer-deps` RETIRED** (v1.4 Phase 7) — `npm install` (no flag) is the v2.0 baseline.
+- **`--legacy-peer-deps` RE-REGRESSED TEMPORARILY** (v2.0 Phase 8 Plan 03) — removing Buefy exposed `@fortawesome/vue-fontawesome@2.0.10`'s `vue: ~2` peer as the lone vue@~2 constraint in the tree. Plan 01 previously masked this via buefy's matching peer. Flag is in use until Plan 05 retires FA v2 for FA v3.x + vue-fontawesome 3.x. LINT-03 re-achievement gate moved to end of Plan 05.
+- **theme-bulma SCSS entry path quirk** (v2.0 Phase 8 Plan 03) — `@oruga-ui/theme-bulma`'s package.json `exports` map `"./scss/*.scss": "./dist/scss/*.scss"` doesn't resolve under `npx sass --load-path=node_modules` (the CLI doesn't traverse pkg exports without a registered importer). Use explicit `@use '@oruga-ui/theme-bulma/dist/scss/theme-build'` path — works in both sass CLI and webpack sass-loader.
+- **Bulma 1.0 color customization via CSS custom properties** (v2.0 Phase 8 Plan 03) — theme-build.scss consumes Bulma's `with()` slot internally, so `$primary` can't be overridden via our own @use of theme-build. The Bulma 1.0 pattern is `:root { --bulma-primary: ...; --bulma-primary-h/s/l: ...; }` for runtime color theming. `$theme-bulma-custom-colors` (not `$custom-colors`) is the correct `with()`-configurable variable for extension variants like twitter.
