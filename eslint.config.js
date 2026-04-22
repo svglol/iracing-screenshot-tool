@@ -6,6 +6,7 @@ const globals = require('globals');
 const babelParser = require('@babel/eslint-parser');
 const vueParser = require('vue-eslint-parser');
 const prettierRecommended = require('eslint-plugin-prettier/recommended');
+const tseslint = require('typescript-eslint');
 
 const compat = new FlatCompat({ baseDirectory: __dirname });
 
@@ -41,11 +42,14 @@ module.exports = [
 	//    equivalents without upgrading those plugins (D-01 intent preserved for non-vue plugins).
 	//    - plugin:vue/recommended (from eslint-plugin-vue@^9.33.0 — Vue 2 rule set preserved)
 	//    - standard (from eslint-config-standard@14.1.1; pulls in node/promise/import plugins)
-	//    - prettier (from eslint-config-prettier@10.1.8 — new via Phase 6 plan 06-01 FMT-02 bump;
-	//      eslint-config-prettier's disables are superseded by prettierRecommended entry 5 anyway,
-	//      but kept in the chain for belt-and-suspenders parity with legacy .eslintrc.js extends order)
+	//    D-07 (Phase 7): 'prettier' removed from chain; prettierRecommended (entry 6) handles
+	//    prettier-vs-lint disables natively via eslint-config-prettier@10 bundled inside it.
 	...fixupConfigRules(
-		compat.extends('plugin:vue/recommended', 'standard', 'prettier')
+		compat.extends('plugin:vue/recommended', 'standard')
+		// D-07 (Phase 7): 'prettier' dropped from this chain. prettierRecommended
+		// (last entry) handles prettier-vs-lint disables natively via bundled
+		// eslint-config-prettier@10. Dropping the duplicate keeps the config lean
+		// and eliminates one FlatCompat-mediated legacy coupling.
 	),
 
 	// 3. Native languageOptions + 4-rule overrides (D-02 — preserves every legacy .eslintrc.js rule verbatim)
@@ -95,7 +99,23 @@ module.exports = [
 		},
 	},
 
-	// 5. Prettier full integration (FMT-01 — supersedes v1.3 Phase 4 Pitfall 4 minimum-scope derogation)
+	// 5. typescript-eslint 8 native flat-config entry — scoped to .ts files only
+	//    (D-06: use native exports, NOT FlatCompat; D-08: files: ['**/*.ts'] scope;
+	//     D-09: @typescript-eslint/parser for .ts files inside the helper).
+	//    tseslint.config() helper is MANDATORY here — it propagates files: ['**/*.ts']
+	//    into every inner config in the extends array, INCLUDING the recommended set's
+	//    base config which would otherwise set languageOptions.parser globally and
+	//    break @babel/eslint-parser for every .js and .vue file (research Pitfall 1).
+	//    Project has ZERO .ts files at v1.4 close (D-08) so these rules stay dormant
+	//    until a .ts file is added post-v1.4. Using non-type-checked recommended
+	//    (not recommendedTypeChecked) — type-checked variant needs parserOptions.project
+	//    and invokes the TS compiler API per file, which is overkill for dormant rules.
+	...tseslint.config({
+		files: ['**/*.ts'],
+		extends: [tseslint.configs.recommended],
+	}),
+
+	// 6. Prettier full integration (FMT-01 — supersedes v1.3 Phase 4 Pitfall 4 minimum-scope derogation)
 	//    MUST be LAST entry so eslint-config-prettier's disables (bundled in prettierRecommended from v10)
 	//    win any format-vs-lint conflicts from the 'standard' or 'vue/recommended' chains above.
 	//    Adds prettier/prettier: 'error' rule — format drift surfaces as ESLint errors.
