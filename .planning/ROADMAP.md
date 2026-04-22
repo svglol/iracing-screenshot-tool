@@ -44,7 +44,7 @@
   4. `npm run test` passes 256/256 (no runtime regressions from the `@babel/runtime` helper swap)
   5. Phase lands on master as a D-04 shape: one `chore(deps): rename babel packages` commit plus a content commit updating the ESLint parser reference and any import-site updates
 **Plans**: 2 plans
-- [ ] 05-01-PLAN.md — chore(deps): rename babel packages (drop babel-runtime, replace babel-eslint with @babel/eslint-parser ^7.28.6, regen lockfile, capture 05-01-BASELINE.md)
+- [x] 05-01-PLAN.md — chore(deps): rename babel packages (drop babel-runtime, replace babel-eslint with @babel/eslint-parser ^7.28.6, regen lockfile, capture 05-01-BASELINE.md) — completed 2026-04-22 via commit `eef6a7a`; pre-swap baseline 1881; 256/256 tests; 84-line lockfile churn (all Babel-adjacent)
 - [ ] 05-02-PLAN.md — refactor(eslint): wire @babel/eslint-parser via parserOptions.parser (single-line insert in .eslintrc.js; verify lint band ≤1881, Vue SFC delegation intact, 256/256 tests, pack clean)
 
 ### Phase 6: ESLint 9 Flat Config + Prettier Full Wiring
@@ -76,7 +76,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 5. Babel Package Renames | 0/? | Not started | - |
+| 5. Babel Package Renames | 1/2 | In progress | - |
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | 0/? | Not started | - |
 | 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 0/? | Not started | - |
 
