@@ -27,9 +27,9 @@
 
 ### v1.4 Tooling Modernization (Phases 5-7) — COMPLETE (2026-04-22)
 
-- [ ] **Phase 5: Babel Package Renames** — Retire `babel-runtime` 6.x → `@babel/runtime` and `babel-eslint` 10.x → `@babel/eslint-parser` (pre-condition cleanup before ESLint flat-config migration)
-- [ ] **Phase 6: ESLint 9 Flat Config + Prettier Full Wiring** — ESLint 7 → 9 with `eslint.config.js`, `eslint-config-prettier` 9 → 10, `plugin:prettier/recommended` full integration (resolves v1.3 Phase 4 Pitfall 4 derogation)
-- [ ] **Phase 7: TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps** — TypeScript 3.8 → 5.7 with `@typescript-eslint/*` 2.25 → 8.x; final verification gate removes `--legacy-peer-deps` flag
+- [x] **Phase 5: Babel Package Renames** — Retire `babel-runtime` 6.x → `@babel/runtime` and `babel-eslint` 10.x → `@babel/eslint-parser` (pre-condition cleanup before ESLint flat-config migration) — completed 2026-04-22 via four-commit chain (`eef6a7a` + `e52bbf9` + `656aa8a` + `74e112f`)
+- [x] **Phase 6: ESLint 9 Flat Config + Prettier Full Wiring** — ESLint 7 → 9 with `eslint.config.js`, `eslint-config-prettier` 9 → 10, `plugin:prettier/recommended` full integration (resolves v1.3 Phase 4 Pitfall 4 derogation) — completed 2026-04-22 via two-commit chain (`15b7042` + `96fe918`); D-01 Amendment escalated `eslint-plugin-vue` 6→9 due to ESLint 9 runtime incompatibility
+- [x] **Phase 7: TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps** — TypeScript 3.8 → 5.7 with `@typescript-eslint/*` 2.25 → 8.x; final verification gate removes `--legacy-peer-deps` flag — completed 2026-04-22 via three-commit chain (`d873b50` + `b8f8e1c` + `3050be7`; Path A1 no-op for TS 5 triage — `src/` compiled clean with zero new errors)
 
 ## Phase Details
 

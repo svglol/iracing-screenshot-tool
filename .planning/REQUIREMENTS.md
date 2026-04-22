@@ -80,11 +80,11 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 | LINT-02 | Phase 6 | **complete** (2026-04-22, commit `96fe918`) |
 | FMT-01 | Phase 6 | **complete** (2026-04-22, commit `96fe918`) |
 | FMT-02 | Phase 6 | **complete** (2026-04-22, commits `15b7042` + `96fe918`) |
-| TS-01 | Phase 7 | pending |
-| TS-02 | Phase 7 | pending |
-| LINT-03 | Phase 7 | pending |
+| TS-01 | Phase 7 | **complete** (2026-04-22, commit `d873b50` + Path A1 no-op — `src/` compiles clean under TS 5.7.3, zero new errors) |
+| TS-02 | Phase 7 | **complete** (2026-04-22, commits `d873b50` + `b8f8e1c` — `@typescript-eslint/*` at `^8.59.0`; `typescript-eslint` umbrella installed; wired via `tseslint.config({files: ['**/*.ts'], extends: [tseslint.configs.recommended]})` helper per research Pitfall 1) |
+| LINT-03 | Phase 7 | **complete** (2026-04-22, commit `3050be7` — milestone-closing commit; `npm install` without `--legacy-peer-deps` succeeds, zero ERESOLVE; both peer conflicts cleared via Phase 6 D-01 Amendment (`eslint-plugin-vue` 6→9) + Phase 7 TS-02 (`@typescript-eslint` 2→8)) |
 
-**Coverage:** 9/9 requirements mapped — no orphans, no duplicates. **Completed:** 6/9 (BABEL-01, BABEL-02 via Phase 5; LINT-01, LINT-02, FMT-01, FMT-02 via Phase 6).
+**Coverage:** 9/9 requirements mapped — no orphans, no duplicates. **Completed:** 9/9 (all v1.4 requirements satisfied; Phase 5 BABEL-01/02; Phase 6 LINT-01/02 + FMT-01/02; Phase 7 TS-01/02 + LINT-03).
 
 ---
 
