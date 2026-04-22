@@ -109,7 +109,7 @@
   4. ✅ `npm run lint` runs clean: **729 problems (722 errors, 7 warnings)** — net −5 vs 734 pre-Phase-11 baseline; well under 1881 v1.4 ceiling AND under 1034 threshold (no Plan 11-02 follow-up needed).
   5. ✅ `npm test` 256/256 (Vitest); `npm run pack` (electron-vite build) exits 0 with 68 modules transformed in 8.71 s.
 **Plans**: 1 plan
-- [x] 11-PLAN-01-eslint-ecosystem-cleanup.md — dep swap (neostandard + eslint-plugin-vue 10 + vue-eslint-parser 10 installed; 5 legacy plugins + 2 compat shims retired) + eslint.config.js rewrite to 7-entry flat-config-native shape per D-11-06; D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint) + docs SUMMARY `0910a2b` — completed 2026-04-22 (all 5 LINT REQ-IDs PASS; v2.0 criterion #8 closed; revert-and-reapply bisect-preservation technique carried forward from Phase 10)
+- [x] 11-PLAN-01-eslint-ecosystem-cleanup.md — dep swap (neostandard + eslint-plugin-vue 10 + vue-eslint-parser 10 installed; 5 legacy plugins + 2 compat shims retired) + eslint.config.js rewrite to 7-entry flat-config-native shape per D-11-06; D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint) + docs SUMMARY `0910a2b` — completed 2026-04-22 (all 5 LINT REQ-IDs PASS; v2.0 criterion #8 closed; revert-and-reapply bisect-preservation technique carried forward from Phase 10 Plan 01)
 
 ### Phase 12 (was 15): `.js` → `.ts` conversion + typescript-eslint/parser as primary
 **Goal**: Convert all `src/main/`, `src/renderer/`, and `src/utilities/` source files from `.js` to `.ts`. Vue SFCs adopt `<script lang="ts">`. `tsconfig.json` `include` expanded from `src/utilities` to the full `src/` tree. `@typescript-eslint/parser` becomes the primary parser for `.ts/.vue` (`@babel/eslint-parser` retired or restricted to `_scripts/` if those stay `.js`). Type the public API surface of each utility; `any` allowed as a transitional escape hatch with a TODO comment.
@@ -121,7 +121,13 @@
   3. `npx tsc --noEmit` returns zero errors for `src/` (hard limit; use `@ts-expect-error` with TODO for genuinely blocked cases, capped at 15 instances total)
   4. `eslint.config.js` uses `@typescript-eslint/parser` as primary for `.ts/.vue` entries; `@babel/eslint-parser` either removed or scoped only to `_scripts/` `.js` files
   5. `npm test` 256/256 (Vitest recognizes `.ts` test files if any land); `npm run lint` in v1.4 band; builds clean
-**Plans**: TBD
+**Plans**: 6 plans (per-directory batch shape per D-12-06; Plan 06 optional post-Plan-05 UAT)
+- [ ] 12-01-PLAN.md — convert src/utilities/ (6 source + 3 test = 9 .js → .ts); +@types/node@^24 install; D-12-02 step 1 of 5
+- [ ] 12-02-PLAN.md — convert src/main/ (5 source + 2 test = 7 .js → .ts); naturalize iracing-sdk-utils.test CRLF carry-forward; D-12-02 step 2 of 5
+- [ ] 12-03-PLAN.md — convert src/renderer/ .js (main.js + router/index.js = 2 files); naturalize src/renderer/main.js PascalCase-rename carry-forward; +shims-vue.d.ts; D-12-02 step 3 of 5
+- [ ] 12-04-PLAN.md — migrate 10 .vue SFCs to `<script lang="ts">` (mechanical block-tag swap + minimal annotations); D-12-02 step 4 of 5
+- [ ] 12-05-PLAN.md — tsconfig include expansion (D-12-04) + vue-tsc install + eslint.config.js parser swap (D-12-03 — @typescript-eslint/parser primary for .ts/.vue; @babel/eslint-parser scoped to _scripts/); 3-commit bisect chain (tsconfig / vue-tsc / parser swap); D-12-02 step 5 of 5
+- [ ] 12-06-PLAN.md — optional phase-close UAT + docs summary; autonomous: false (checkpoint:human-verify); may skip if Plan 05's automated gates suffice
 
 ### Phase 13 (was 16): Electron main-process fixes + ship prep
 **Goal**: Final cleanup before v2.0 ships. Fix the pre-existing Electron 41 `electron.BrowserWindow.addDevToolsExtension is not a function` error at `src/main/index.js:116` — migrate to `session.defaultSession.loadExtension()` (current Electron API) or guard behind a dev-only flag. Clean up any transitive `prettier@2.8.8` that was load-bearing via old `vue-loader@15` — should fall out naturally once Phase 9 retires webpack + Phase 8 bumped vue-loader already; verify via `npm ls prettier`. Full milestone UAT across all 4 views (Home, Help, About, Settings).
@@ -151,7 +157,7 @@
 | 9. webpack → Vite bundler | v2.0 | 5/5 | Complete | 2026-04-22 |
 | 10. Jest → Vitest | v2.0 | 1/1 | Complete | 2026-04-22 |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 1/1 | Complete | 2026-04-22 |
-| 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 0/? | Not started | - |
+| 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 0/6 | Planned | - |
 | 13. Electron main-process fixes + ship prep | v2.0 | 0/? | Not started | - |
 
 ---
