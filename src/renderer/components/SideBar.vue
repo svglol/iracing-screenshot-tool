@@ -1,22 +1,22 @@
 <template>
 	<div style="padding: 1rem; padding-top: 0.5rem">
-		<b-field label="Resolution">
-			<b-select v-model="resolution" expanded placeholder="Resolution">
+		<o-field label="Resolution">
+			<o-select v-model="resolution" expanded placeholder="Resolution">
 				<option v-for="option in items" :key="option" :value="option">
 					{{ option }}
 				</option>
-			</b-select>
-		</b-field>
+			</o-select>
+		</o-field>
 
-		<b-field v-if="resolution === 'Custom'" label="Width">
-			<b-input v-model="customWidth" type="number" min="0" max="10000" />
-		</b-field>
+		<o-field v-if="resolution === 'Custom'" label="Width">
+			<o-input v-model="customWidth" type="number" min="0" max="10000" />
+		</o-field>
 
-		<b-field v-if="resolution === 'Custom'" label="Height">
-			<b-input v-model="customHeight" type="number" min="0" max="10000" />
-		</b-field>
+		<o-field v-if="resolution === 'Custom'" label="Height">
+			<o-input v-model="customHeight" type="number" min="0" max="10000" />
+		</o-field>
 
-		<b-message
+		<o-notification
 			v-if="
 				(resolution == '4k' ||
 					resolution == '5k' ||
@@ -25,9 +25,9 @@
 					resolution == '8k') &&
 				!disableTooltips
 			"
-			type="is-warning"
+			variant="warning"
 			aria-close-label="Close message"
-			size="is-small"
+			size="small"
 			style="
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
@@ -39,21 +39,21 @@
 				High resolutions may crash iRacing if you run out of VRAM. Certain
 				track/car combinations will require more VRAM</strong
 			>
-		</b-message>
+		</o-notification>
 
-		<b-switch
+		<o-switch
 			v-model="crop"
 			dense
 			style="padding-top: 0.5rem; padding-bottom: 0.5rem"
 		>
 			Crop Watermark
-		</b-switch>
+		</o-switch>
 
-		<b-message
+		<o-notification
 			v-if="crop && !disableTooltips"
-			type="is-info"
+			variant="info"
 			aria-close-label="Close message"
-			size="is-small"
+			size="small"
 			style="
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
@@ -65,9 +65,9 @@
 				>Shrink iRacing UI to as small as possible with Ctrl+PgDwn before
 				taking screenshot</strong
 			>
-		</b-message>
-		<b-button
-			type="is-primary"
+		</o-notification>
+		<o-button
+			variant="primary"
 			icon-left="camera"
 			expanded
 			:loading="takingScreenshot"
@@ -76,14 +76,14 @@
 			@click="takeScreenshot"
 		>
 			Screenshot
-		</b-button>
+		</o-button>
 
-		<b-message
+		<o-notification
 			v-for="(warning, index) in configWarnings"
 			:key="'cw-' + index"
-			type="is-warning"
+			variant="warning"
 			aria-close-label="Close message"
-			size="is-small"
+			size="small"
 			style="
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
@@ -92,13 +92,13 @@
 			"
 		>
 			<strong>{{ warning }}</strong>
-		</b-message>
+		</o-notification>
 
-		<b-message
+		<o-notification
 			v-if="reshade && !disableTooltips"
-			type="is-danger"
+			variant="danger"
 			aria-close-label="Close message"
-			size="is-small"
+			size="small"
 			style="
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
@@ -111,7 +111,7 @@
 				Tool, you will need to press the keybind for taking a screenshot for
 				ReShade</strong
 			>
-		</b-message>
+		</o-notification>
 	</div>
 </template>
 
@@ -272,9 +272,9 @@ export default {
 					.split('.')
 					.slice(0, -1)
 					.join('.');
-				this.$buefy.notification.open({
+				this.$oruga.notification.open({
 					message: file + ' saved successfully',
-					type: 'is-success',
+					variant: 'success',
 				});
 			}
 		});
@@ -288,9 +288,9 @@ export default {
 			const logHint = escapedLogFile
 				? `<br><small>Log: ${escapedLogFile}</small>`
 				: '';
-			this.$buefy.notification.open({
+			this.$oruga.notification.open({
 				message: `Screenshot failed: ${escapedMessage}${logHint}`,
-				type: 'is-danger',
+				variant: 'danger',
 				duration: 10000,
 				queue: false,
 			});
