@@ -71,7 +71,7 @@ app.use(oruga, {
 app.use(require('vue-shortkey'));
 app.use(vClickOutside);
 app.use(VueMarkdownPlus);
-app.component('FontAwesomeIcon', FontAwesomeIcon);
+app.component('font-awesome-icon', FontAwesomeIcon);
 app.component('VueSimpleContextMenu', VueSimpleContextMenu);
 app.component('VueMarkdownPlus', VueMarkdownPlus);
 app.mount('#app');
