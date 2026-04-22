@@ -4,7 +4,7 @@
 
 - ✅ **v1.2 Feature Enhancements** — Phases 1-2 (shipped 2026-04-20 via PR #25) — [archive](./milestones/v1.2-ROADMAP.md)
 - ✅ **v1.3 UI Refresh** — Phases 3-4 (shipped 2026-04-21) — [archive](./milestones/v1.3-ROADMAP.md)
-- 🚧 **v1.4 Tooling Modernization** — Phases 5-7 (active, started 2026-04-21)
+- ✅ **v1.4 Tooling Modernization** — Phases 5-7 (mechanically complete 2026-04-22 — ready for `/gsd-verify-work`)
 - 📋 **v2.0 Vue 3 Migration** — planned (trigger: after v1.4 or on Vue 2 CVE)
 
 ## Phases
@@ -25,7 +25,7 @@
 
 </details>
 
-### v1.4 Tooling Modernization (Phases 5-7) — ACTIVE
+### v1.4 Tooling Modernization (Phases 5-7) — COMPLETE (2026-04-22)
 
 - [ ] **Phase 5: Babel Package Renames** — Retire `babel-runtime` 6.x → `@babel/runtime` and `babel-eslint` 10.x → `@babel/eslint-parser` (pre-condition cleanup before ESLint flat-config migration)
 - [ ] **Phase 6: ESLint 9 Flat Config + Prettier Full Wiring** — ESLint 7 → 9 with `eslint.config.js`, `eslint-config-prettier` 9 → 10, `plugin:prettier/recommended` full integration (resolves v1.3 Phase 4 Pitfall 4 derogation)
@@ -76,7 +76,7 @@
 - [x] 07-01-PLAN.md — chore(deps): typescript 5 + typescript-eslint 8 (bump typescript ^3.8.3 → ~5.7.3 TILDE, @typescript-eslint/parser + @typescript-eslint/eslint-plugin 2.25 → ^8.59.0, NEW typescript-eslint umbrella ^8.59.0; regen lockfile with --legacy-peer-deps; capture 07-01-BASELINE.md with tsc (2567 total / 0 src/) + eslint (735) pre-migration baselines) — completed 2026-04-22 via commit `d873b50`; npm test 256/256; prettier --check exit 0; pack:main + pack:renderer clean
 - [x] 07-02-PLAN.md — refactor(eslint): wire typescript-eslint 8 as native flat-config entries (drop "prettier" from FlatCompat extends chain per D-07; add tseslint.config({files:["**/*.ts"], extends:[tseslint.configs.recommended]}) entry BEFORE prettierRecommended — helper MANDATORY per research Pitfall 1; @babel/eslint-parser stays primary for .js/.vue, @typescript-eslint/parser for .ts only) — completed 2026-04-22 via commit `b8f8e1c`; lint count 735 delta +0; all parse-error canaries 0; npm test 256/256; prettier --check exit 0; pack:main + pack:renderer clean
 - [x] 07-03-PLAN.md — PATH A1 NO-OP: tsc --noEmit under TS 5.7.3 exits 0, empty output (0 src/ errors, 0 node_modules/ errors, 0 moduleResolution diagnostics). tsconfig.json preserved byte-for-byte. No commit 3 (D-14 chain is 3-commit). TS-01 acceptance gate satisfied. — completed 2026-04-22
-- [ ] 07-04-PLAN.md — chore(deps): drop --legacy-peer-deps (MILESTONE-CLOSING; rm -rf node_modules + package-lock.json, run npm install NO --legacy-peer-deps flag, verify zero ERESOLVE per D-11/D-12 gate, optionally add scripts.type-check per D-03 discretion; commit body cites Phase 6 D-01 Amendment 96fe918 + Phase 7 TS-02 as the two peer-conflict clearances that closed v1.4)
+- [x] 07-04-PLAN.md — chore(deps): drop --legacy-peer-deps (MILESTONE-CLOSING) — completed 2026-04-22 via commit `3050be7`. npm install (no --legacy-peer-deps) exits 0, zero ERESOLVE. scripts.type-check added per D-03 discretion. Lockfile regen from clean slate (6048 ins / 7557 del). All 6 milestone SCs PASS: SC1 npm-install ✓, SC2 lint 735 ✓, SC3 test 256/256 ✓, SC4 babel-runtime gone ✓, SC5 tsc src/=0 ✓, SC6 prettier-check ✓. LINT-03 closed. v1.4 mechanically complete.
 
 ## Progress
 
@@ -84,7 +84,7 @@
 |-------|----------------|--------|-----------|
 | 5. Babel Package Renames | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
 | 6. ESLint 9 Flat Config + Prettier Full Wiring | 2/2 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
-| 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 3/4 | In progress — plan 07-04 next | - |
+| 7. TypeScript 5 + typescript-eslint 8 + Drop legacy-peer-deps | 4/4 | Complete — ready for `/gsd-verify-work` | 2026-04-22 |
 
 ---
 
