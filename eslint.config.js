@@ -1,25 +1,17 @@
 'use strict';
 
-const { FlatCompat } = require('@eslint/eslintrc');
-const { fixupConfigRules } = require('@eslint/compat');
 const globals = require('globals');
 const babelParser = require('@babel/eslint-parser');
 const vueParser = require('vue-eslint-parser');
+const vuePlugin = require('eslint-plugin-vue');
+const neostandard = require('neostandard');
 const prettierRecommended = require('eslint-plugin-prettier/recommended');
 const tseslint = require('typescript-eslint');
 
-const compat = new FlatCompat({ baseDirectory: __dirname });
-
 module.exports = [
-	// 1. Global ignores (replaces .eslintignore; must be standalone per research Pitfall 2)
-	//    bot/** — Phase 5 D-01 + D-17 (bot/ owns its own lint tooling; v1.4 root lint stack excludes it)
-	//    dist/** — Phase 5 Rule-2 + D-18 (generated webpack bundle output; lint-excluded for hygiene)
-	//    node_modules/** + build/** — conventional excludes
-	//    .planning/** + .tools/** + .tmp-inspect/** — dotfile dirs auto-ignored by ESLint 7 default
-	//      but NOT by ESLint 9 flat config. Rule-2 auto-add to preserve D-09/D-10 scope parity with
-	//      06-01-BASELINE.md (722-count denominator was captured with ESLint 7's default dotfile
-	//      ignoring — these dirs hold planning docs, electron-builder tool caches, and inspected
-	//      tarball extracts respectively; none are source code).
+	// 1. Global ignores — UNCHANGED from v1.4 Phase 6 / Phase 10 close.
+	//    bot/** owns its own lint tooling (Phase 5 D-01 + D-17); dist/out/build are generated
+	//    bundler output (Phase 9); .planning/.tools/.tmp-inspect hold non-source artifacts.
 	{
 		ignores: [
 			'bot/**',
@@ -33,37 +25,27 @@ module.exports = [
 		],
 	},
 
-	// 2. Legacy extends chain via FlatCompat + @eslint/compat fixupConfigRules.
-	//    D-01 Amendment (2026-04-22) — eslint-plugin-vue bumped 6 → 9 during 06-02 execution because
-	//    v6 crashed under ESLint 9 via removed codePath.currentSegments API. @eslint/compat
-	//    fixupConfigRules wraps the FlatCompat-loaded rules so the other legacy plugins
-	//    (eslint-plugin-node@11, eslint-plugin-promise@4, @typescript-eslint@2 via eslint-config-standard)
-	//    get ESLint-7-API shims (context.getScope, context.getAncestors, context.getDeclaredVariables,
-	//    context.markVariableAsUsed, context.parserServices) delegating to the modern sourceCode.*
-	//    equivalents without upgrading those plugins (D-01 intent preserved for non-vue plugins).
-	//    - plugin:vue/recommended (from eslint-plugin-vue@^9.33.0 — Vue 2 rule set preserved)
-	//    - standard (from eslint-config-standard@14.1.1; pulls in node/promise/import plugins)
-	//    D-07 (Phase 7): 'prettier' removed from chain; prettierRecommended (entry 6) handles
-	//    prettier-vs-lint disables natively via eslint-config-prettier@10 bundled inside it.
-	...fixupConfigRules(
-		compat.extends('plugin:vue/recommended', 'standard')
-		// D-07 (Phase 7): 'prettier' dropped from this chain. prettierRecommended
-		// (last entry) handles prettier-vs-lint disables natively via bundled
-		// eslint-config-prettier@10. Dropping the duplicate keeps the config lean
-		// and eliminates one FlatCompat-mediated legacy coupling.
-	),
+	// 2. Neostandard flat-config (D-11-01 / D-11-07) — replaces the v1.4-era compat bridge
+	//    (retired in Phase 11) plus eslint-config-standard@14 / eslint-plugin-import@2 /
+	//    eslint-plugin-node@11 / eslint-plugin-promise@4 / eslint-plugin-standard@4.
+	//    `noStyle: true` defers ALL stylistic rules to prettier (entry 7) so there are no
+	//    prettier-vs-neostandard format conflicts.
+	...neostandard({ noStyle: true }),
 
-	// 3. Native languageOptions + 4-rule overrides (D-02 — preserves every legacy .eslintrc.js rule verbatim)
+	// 3. eslint-plugin-vue@10 flat/recommended (D-11-02 / D-11-08) — Vue 3 recommended ruleset.
+	//    In v10, `flat/recommended` IS the Vue 3 variant; Vue-2 variants are explicitly
+	//    prefixed `flat/vue2-*`. Returns an ARRAY — spread with `...`.
+	...vuePlugin.configs['flat/recommended'],
+
+	// 4. Native languageOptions + 3-rule overrides for .js/.ts/.vue (preserves v1.4 Phase 6 D-02).
 	//    languageOptions.globals replaces legacy env: { browser: true, es6: true } + globals: {...}
-	//    languageOptions.parser replaces legacy parserOptions.parser string
-	//    languageOptions.parserOptions merges legacy ecmaVersion/sourceType + explicit requireConfigFile
+	//    parser: babelParser — primary parser for .js/.vue until Phase 12 TS migration.
 	{
 		files: ['**/*.{js,ts,vue}'],
 		languageOptions: {
 			globals: {
-				...globals.browser, // replaces env: { browser: true }
-				...globals.es2015, // replaces env: { es6: true } — es6 maps to es2015 in globals pkg
-				//   (NOT globals.es2017 which would duplicate Atomics/SharedArrayBuffer)
+				...globals.browser,
+				...globals.es2015,
 				Atomics: 'readonly',
 				SharedArrayBuffer: 'readonly',
 			},
@@ -71,7 +53,7 @@ module.exports = [
 			parserOptions: {
 				ecmaVersion: 2018,
 				sourceType: 'module',
-				requireConfigFile: true, // inherit .babelrc per Phase 5 D-05 carryover
+				requireConfigFile: true,
 			},
 		},
 		rules: {
@@ -83,16 +65,15 @@ module.exports = [
 		},
 	},
 
-	// 4. Vue SFC parser override — vue-eslint-parser@7 delegates <script> to parserOptions.parser as STRING
-	//    (research Pitfall 6 HIGH RISK: v7's parseScript checks `typeof parserOptions.parser === 'string'`
-	//    and falls back to espree if not a string. MUST use the string '@babel/eslint-parser' here,
-	//    NOT the imported babelParser symbol from above.)
+	// 5. Vue SFC parser override (D-11-03) — vue-eslint-parser@10 takes parserOptions.parser
+	//    as an OBJECT reference. The pre-Phase-11 v7 required the STRING '@babel/eslint-parser'
+	//    (Pitfall 6 in old config). v10 retires the string-hack.
 	{
 		files: ['**/*.vue'],
 		languageOptions: {
 			parser: vueParser,
 			parserOptions: {
-				parser: '@babel/eslint-parser', // STRING — required by vue-eslint-parser@7 (Pitfall 6)
+				parser: babelParser,
 				ecmaVersion: 2018,
 				sourceType: 'module',
 				requireConfigFile: true,
@@ -100,25 +81,18 @@ module.exports = [
 		},
 	},
 
-	// 5. typescript-eslint 8 native flat-config entry — scoped to .ts files only
-	//    (D-06: use native exports, NOT FlatCompat; D-08: files: ['**/*.ts'] scope;
-	//     D-09: @typescript-eslint/parser for .ts files inside the helper).
-	//    tseslint.config() helper is MANDATORY here — it propagates files: ['**/*.ts']
-	//    into every inner config in the extends array, INCLUDING the recommended set's
-	//    base config which would otherwise set languageOptions.parser globally and
-	//    break @babel/eslint-parser for every .js and .vue file (research Pitfall 1).
-	//    Project has ZERO .ts files at v1.4 close (D-08) so these rules stay dormant
-	//    until a .ts file is added post-v1.4. Using non-type-checked recommended
-	//    (not recommendedTypeChecked) — type-checked variant needs parserOptions.project
-	//    and invokes the TS compiler API per file, which is overkill for dormant rules.
+	// 6. typescript-eslint 8 scoped to .ts (UNCHANGED from v1.4 Phase 7).
+	//    tseslint.config() helper is MANDATORY — without it, tseslint.configs.recommended
+	//    sets languageOptions.parser globally and would override @babel/eslint-parser for
+	//    all .js/.vue files (v1.4 Phase 6 Pitfall 1). Zero .ts files at Phase 11 open;
+	//    rules stay dormant until Phase 12.
 	...tseslint.config({
 		files: ['**/*.ts'],
 		extends: [tseslint.configs.recommended],
 	}),
 
-	// 6. Prettier full integration (FMT-01 — supersedes v1.3 Phase 4 Pitfall 4 minimum-scope derogation)
-	//    MUST be LAST entry so eslint-config-prettier's disables (bundled in prettierRecommended from v10)
-	//    win any format-vs-lint conflicts from the 'standard' or 'vue/recommended' chains above.
-	//    Adds prettier/prettier: 'error' rule — format drift surfaces as ESLint errors.
+	// 7. Prettier integration (FMT-01) — MUST be LAST so eslint-config-prettier's disables
+	//    (bundled in prettierRecommended) win any format-vs-lint conflict. `noStyle: true`
+	//    in entry 2 already reduces the contention surface.
 	prettierRecommended,
 ];
