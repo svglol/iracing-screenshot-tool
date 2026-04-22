@@ -628,27 +628,27 @@ Refs: D-03, D-04, D-05, D-08, 05-01-BASELINE.md
 
 **Risk summary:** Of 8 assumptions, A3/A4/A5/A6/A7/A8 are VERIFIED (filesystem inspection or registry query). A1/A2 are ASSUMED — both with empirical verification points (lint count + lockfile diff observable at install time, before commits land). No assumption is both ASSUMED AND has no recovery path.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `eslint-config-standard@14.1.1` have any rules that interact differently under `@babel/eslint-parser` vs. espree?**
    - What we know: `eslint-config-standard@14.1.1` is the actual installed version. Its rule set is largely AST-shape-independent (style rules: indentation, quotes, semicolons, etc.). The few scope-analysis rules it inherits (`no-unused-vars`, `no-undef`) are precisely the rules where `@babel/eslint-parser` is documented to differ.
    - What's unclear: Whether any vendor-specific `eslint-plugin-standard@4.0.1` rules surface unexpectedly under the new parser.
-   - Recommendation: Treat any non-standard-rule delta as a Pitfall 5 misattribution — the per-rule breakdown in `05-01-BASELINE.md` is the diagnostic.
+   - RESOLVED: Treat any non-standard-rule delta as a Pitfall 5 misattribution — the per-rule breakdown in `05-01-BASELINE.md` is the diagnostic. Plans honor this via the commit-2 body delta-citation step (plan 02 task 2 step 4 + task 3 step 1).
 
 2. **Will `eslint-plugin-prettier@5.2.1` behave identically under `@babel/eslint-parser`?**
    - What we know: `eslint-plugin-prettier@5.2.1` is a wrapper around Prettier itself. Prettier has its own parser and does NOT use ESLint's parser AST. So `eslint-plugin-prettier`'s output should be parser-independent.
    - What's unclear: Whether `eslint-plugin-prettier`'s violation reporting (line/column metadata) shifts when wrapped in a different ESLint parser's location output.
-   - Recommendation: This is in the lint-delta noise floor (likely zero impact). If post-swap lint count includes new `prettier/prettier` violations, investigate but don't pre-block.
+   - RESOLVED: In the lint-delta noise floor (likely zero impact). Plan 02 task 2 step 4 treats any new `prettier/prettier` violations as investigable-but-non-blocking (consistent with D-08 band semantics).
 
 3. **Should the plan capture the PRE-`npm install` package-lock.json shape as a sanity diff target?**
    - What we know: Phase 4's plan didn't do this. The lockfile diff was observed live at install time.
    - What's unclear: Whether a "before" snapshot of `package-lock.json` (perhaps in `05-01-BASELINE.md` as `wc -l package-lock.json` + first-10-line hash) would help adjudicate Pitfall 8 churn.
-   - Recommendation: NOT needed. `git diff package-lock.json` after `npm install` already shows the churn shape; pre-snapshot would be redundant.
+   - RESOLVED: NOT needed. `git diff package-lock.json` after `npm install` already shows the churn shape; pre-snapshot would be redundant. Plan 01 task 2 step 6 routes unexpected churn to user pre-commit (Pitfall 8 gate).
 
 4. **Is there a risk that running `npm install --legacy-peer-deps` regenerates `package-lock.json` with a NEWER `vue-eslint-parser` (e.g., 7.11.0 instead of currently-installed 7.0.0) that has subtly different `parserOptions.parser` delegation behavior?**
    - What we know: Currently installed is `7.0.0`; `^7.0.0` caret would resolve to latest 7.x (7.11.0 today). The delegation logic (verified A3) is in 7.0.0; whether it changed in 7.x patches is unverified.
    - What's unclear: Whether vue-eslint-parser 7.11.0 has any breaking change relative to 7.0.0 in `parserOptions.parser` handling.
-   - Recommendation: vue-eslint-parser is in maintenance mode (latest is 10.x for Vue 3). 7.x patches are bugfixes only. Treat as low risk; if `<script>` parse errors appear post-swap, pin `vue-eslint-parser` to the previously-installed exact version (7.0.0) as a recovery move.
+   - RESOLVED: vue-eslint-parser is in maintenance mode (latest is 10.x for Vue 3). 7.x patches are bugfixes only. Treat as low risk; if `<script>` parse errors appear post-swap, pin `vue-eslint-parser` to the previously-installed exact version (7.0.0) as a recovery move. Plan 02 task 2 step 2 (lint all 4 Vue views as Pitfall 1 canary) surfaces any regression before commit 2 lands.
 
 ## Environment Availability
 

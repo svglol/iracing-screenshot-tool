@@ -1,8 +1,8 @@
 ---
 phase: 5
 slug: babel-package-renames
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-22
 ---
@@ -42,7 +42,12 @@ created: 2026-04-22
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _Populated by gsd-planner from research §Validation Architecture per-requirement test map. Each plan task MUST claim ≥1 row from research's Validation Architecture table and reference REQ-IDs BABEL-01 / BABEL-02._ | | | | | | | | | |
+| 05-01-01 | 01 | 1 | BABEL-01, BABEL-02 | — | N/A (pre-swap baseline capture; no runtime effect) | static | `test -f .planning/phases/05-babel-package-renames/05-01-BASELINE.md && grep -cE "Pre-swap lint count" .planning/phases/05-babel-package-renames/05-01-BASELINE.md` | ✅ | ⬜ pending |
+| 05-01-02 | 01 | 1 | BABEL-01, BABEL-02 | T-05-01-01 / T-05-01-02 | Registry-scoped package install (typosquatting mitigated by `@babel/*` scope reservation); lockfile SHA-512 integrity written by `npm install` | smoke | `! grep -q '"babel-runtime"' package.json && ! grep -q '"babel-eslint"' package.json && grep -cE '"@babel/eslint-parser":\s*"\^7\.28\.6"' package.json` | ✅ | ⬜ pending |
+| 05-01-03 | 01 | 1 | BABEL-01, BABEL-02 | T-05-01-04 | Clean commit staging (explicit paths, `git add -f` for gitignored baseline; no Co-Authored-By footer) | static | `git log -1 --format="%s" HEAD \| grep -cE "^chore\(deps\): rename babel packages$"` returns 1; `git log -1 --format="%B" HEAD \| grep -ci "Co-Authored-By"` returns 0; `git show --name-only HEAD \| grep -c "bot/docs/community-guide.md"` returns 0 | ✅ | ⬜ pending |
+| 05-02-01 | 02 | 1 | BABEL-02 | — | N/A (config-only edit; dev-time lint layer) | static | `grep -cE "parser:\s*'@babel/eslint-parser'" .eslintrc.js` returns 1; `! grep -E "^\s*parser:" .eslintrc.js \| grep -v "parserOptions\|^\s*//"` returns no matches (no top-level parser) | ✅ | ⬜ pending |
+| 05-02-02 | 02 | 1 | BABEL-02 | T-05-02-01 | Delegation chain intact: vue-eslint-parser → parserOptions.parser → @babel/eslint-parser → .babelrc inheritance; no `.vue` `<template>` parse errors | smoke + unit | `npx eslint --ext .js,.ts,.vue ./ --no-fix 2>&1 \| grep -cE "(Parsing error\|Cannot find module)"` returns 0; `count=$(npx eslint --ext .js,.ts,.vue ./ --no-fix 2>&1 \| grep -cE '^\s+[0-9]+:[0-9]+\s+(warning\|error)'); [ "$count" -le 1881 ]`; `npm test 2>&1 \| grep -E "Tests:.*256 passed"` returns 1 line; `npm run pack 2>&1 \| grep -cE "(ERROR\|Module not found)"` returns 0 | ✅ | ⬜ pending |
+| 05-02-03 | 02 | 1 | BABEL-02 | T-05-02-02 | Commit body cites post-swap delta + baseline artifact; no `--no-verify`, no Co-Authored-By | static | `git log -1 --format="%s" HEAD \| grep -cE "^refactor\(eslint\):"` returns 1; `git log -1 --format="%B" HEAD \| grep -ci "Co-Authored-By"` returns 0; `git log -1 --format="%B" HEAD \| grep -cE "05-01-BASELINE\.md"` returns ≥1; `git log -2 --format="%s" \| tr '\n' ' ' \| grep -cE "refactor\(eslint\).*chore\(deps\)"` returns 1 (two-commit D-09 shape) | ✅ | ⬜ pending |
 
 ---
 
