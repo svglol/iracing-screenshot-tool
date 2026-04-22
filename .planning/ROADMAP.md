@@ -41,7 +41,7 @@
 - [x] **Phase 8: Vue 3 core + router + UI framework + Font Awesome (MERGED)** — Vue 2.7 → Vue 3 (template syntax, reactivity, component registration, slot syntax) + `vue-router` 3 → 4 + `vue-loader` 15 → 17 + `vue-devtools` → `@vue/devtools` + Buefy → Oruga + Bulma 0.9 → 1.0 + drop legacy FA v5.2.0 CDN `@import` in `main.scss` line 153 + Font Awesome v6 → v7 + `@fortawesome/vue-fontawesome` 2.x → 3.x + 3 Vue-2-only third-party plugins retired (vue-shortkey/v-click-outside/vue-markdown-plus → vue3-shortkey/vue3-markdown-it; vue-lazyload bumped to v3, vue-simple-context-menu bumped to v4) + dead Vuex store deleted. Shipped as one bisectable 10-content-commit landing (2026-04-22). All 8 REQ-IDs close PASS; REQ success criterion #6 HARD GATE (zero Vue 2 → Vue 3 migration warnings) auto-approved under --auto mode.
 - [x] **Phase 9 (was 11): webpack → Vite bundler** — replaces `_scripts/webpack.*.config.js` with Vite config; `electron-builder` integration preserved (shipped 2026-04-22; 5 plans, 5 content commits on master; installer −2.19% vs v1.4 baseline within ±20% band)
 - [x] **Phase 10 (was 12): Jest 25 → Vitest** — pairs with Vite; all 256 tests migrate; `bot/` stays on its own Jest config (shipped 2026-04-22; 1 plan, D-10-10 2-content-commit bisect chain `d12e4d4`+`08ea10b` + 1 prettier-reformat style follow-up `909915f`; BUNDLER-02 REQ PASS; `npm test` 256/256 in ~220 ms under Vitest 4.1.5; `bot/npm test` 294/294 UNCHANGED)
-- [ ] **Phase 11 (was 14): ESLint/Vue ecosystem cleanup** — `eslint-plugin-vue` 9→10+, `vue-eslint-parser` 7→9, `eslint-config-standard` → `neostandard` (or 17+), remove `@eslint/compat fixupConfigRules` shim, legacy plugin cleanup (`eslint-plugin-import@2`, `-node@11`, `-promise@4`, `-standard@4`)
+- [x] **Phase 11 (was 14): ESLint/Vue ecosystem cleanup** — `eslint-plugin-vue` 9→10, `vue-eslint-parser` 7→10 (peer-dep-driven supersede of `^9` per planned deviation — eslint-plugin-vue@10.9 hard-requires vue-eslint-parser@^10), `eslint-config-standard`@14 → `neostandard`@0.13, `@eslint/compat fixupConfigRules` + `@eslint/eslintrc` FlatCompat shims retired, 4 legacy plugins removed (`eslint-plugin-import@2`, `-node@11`, `-promise@4`, `-standard@4`) — shipped 2026-04-22 (1 plan, D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint); net −5 lint problems 734 → 729; 256/256 Vitest + `out/` build green; all 5 LINT-0{4,5,6,7,8} REQ-IDs PASS; v2.0 criterion #8 closed)
 - [ ] **Phase 12 (was 15): `.js` → `.ts` conversion in `src/`** — convert main/renderer/utilities source files; `.vue` SFCs use `<script lang="ts">`; `@typescript-eslint/parser` becomes primary lint parser
 - [ ] **Phase 13 (was 16): Electron main-process fixes + ship prep** — fix `addDevToolsExtension` error at `src/main/index.js:116`; clean up transitive `prettier@2.8.8` from old vue-loader dep graph; final UAT
 
@@ -98,18 +98,18 @@
 **Plans**: 1 plan
 - [x] 10-PLAN-01-jest-to-vitest-migration.md — Dep swap (`jest@30.3.0` retired → `vitest@^4.1.5` + `@vitest/coverage-v8@^4.1.5` added); vitest.config.mjs created; 2 test files rewritten (`jest.* → vi.*` mechanical — 1 site in `src/main/iracing-sdk-utils.test.js`, 8 sites in `src/utilities/iracing-config-checks.test.js`); 3 test files (main-utils, desktop-capture, screenshot-name) untouched per D-10-06; scripts rewired (test, test:watch, test:coverage); D-10-10 2-content-commit bisect chain via revert-and-reapply technique — completed 2026-04-22 (commits `d12e4d4` deps → `08ea10b` config+tests+scripts + `909915f` prettier-reformat style follow-up)
 
-### Phase 11 (was 14): ESLint/Vue ecosystem cleanup
+### Phase 11 (was 14): ESLint/Vue ecosystem cleanup — SHIPPED 2026-04-22
 **Goal**: Upgrade and clean up the ESLint ecosystem now that Vue 3 landed. `eslint-plugin-vue` 9 → 10+ (v10 adds Vue 3-first rules), `vue-eslint-parser` 7 → 9 (native flat-config compatible). Replace `eslint-config-standard` 14 (legacy rc, loaded via FlatCompat) with `neostandard` (flat-config-native) or upgrade to `eslint-config-standard` 17+ if that line exists. Remove `@eslint/compat fixupConfigRules` shim (it was the v1.4 bridge; with all plugins upgraded, it's no longer needed). Retire deprecated plugins: `eslint-plugin-import@2`, `eslint-plugin-node@11` (use `eslint-plugin-n`), `eslint-plugin-promise@4`, `eslint-plugin-standard@4` (no-op, retired with standard migration).
 **Depends on**: Phases 8, 9, 10 (Vue 3 + Vite + Vitest foundations in place so new rule sets don't surface regressions unrelated to lint)
-**Requirements**: LINT-04, LINT-05, LINT-06, LINT-07, LINT-08
+**Requirements**: LINT-04, LINT-05, LINT-06, LINT-07, LINT-08 — all PASS
 **Success Criteria**:
-  1. `eslint-plugin-vue` at `^10.x`+; `vue-eslint-parser` at `^9.x`; `plugin:vue/vue3-recommended` (or successor) active
-  2. `eslint-config-standard` replaced by `neostandard` (or upgraded to 17+); flat-config-native
-  3. `@eslint/compat` and `fixupConfigRules` wrap removed from `eslint.config.js`; legacy plugins removed
-  4. `npm run lint` runs clean under the new stack; count in v1.4 band (≤1881) — attribute deltas to rule set changes
-  5. `npm test` 256/256 (Vitest); builds clean
+  1. ✅ `eslint-plugin-vue` at `^10.9.0`; `vue-eslint-parser` at `^10.4.0` (v9→v10 deviation per peer-dep reality — eslint-plugin-vue@10.9.0 hard-requires vue-eslint-parser@^10.0.0; flagged up-front in plan; "≥9" quality bar exceeded); `flat/recommended` Vue 3 ruleset active.
+  2. ✅ `eslint-config-standard@14` replaced by `neostandard@0.13.0`; flat-config-native.
+  3. ✅ `@eslint/compat` and `fixupConfigRules` wrap removed from `eslint.config.js` (zero `FlatCompat`/`fixupConfigRules`/`@eslint/compat`/`@eslint/eslintrc` references); 4 legacy plugins removed from direct devDependencies.
+  4. ✅ `npm run lint` runs clean: **729 problems (722 errors, 7 warnings)** — net −5 vs 734 pre-Phase-11 baseline; well under 1881 v1.4 ceiling AND under 1034 threshold (no Plan 11-02 follow-up needed).
+  5. ✅ `npm test` 256/256 (Vitest); `npm run pack` (electron-vite build) exits 0 with 68 modules transformed in 8.71 s.
 **Plans**: 1 plan
-- [ ] 11-PLAN-01-eslint-ecosystem-cleanup.md — dep swap (neostandard + eslint-plugin-vue 10 + vue-eslint-parser 10 installed; 5 legacy plugins + 2 compat shims retired) + eslint.config.js rewrite to 7-entry flat-config-native shape per D-11-06; D-11-09 2-content-commit bisect chain
+- [x] 11-PLAN-01-eslint-ecosystem-cleanup.md — dep swap (neostandard + eslint-plugin-vue 10 + vue-eslint-parser 10 installed; 5 legacy plugins + 2 compat shims retired) + eslint.config.js rewrite to 7-entry flat-config-native shape per D-11-06; D-11-09 2-content-commit bisect chain `580118f` chore(deps) → `3921592` refactor(lint) + docs SUMMARY `0910a2b` — completed 2026-04-22 (all 5 LINT REQ-IDs PASS; v2.0 criterion #8 closed; revert-and-reapply bisect-preservation technique carried forward from Phase 10)
 
 ### Phase 12 (was 15): `.js` → `.ts` conversion + typescript-eslint/parser as primary
 **Goal**: Convert all `src/main/`, `src/renderer/`, and `src/utilities/` source files from `.js` to `.ts`. Vue SFCs adopt `<script lang="ts">`. `tsconfig.json` `include` expanded from `src/utilities` to the full `src/` tree. `@typescript-eslint/parser` becomes the primary parser for `.ts/.vue` (`@babel/eslint-parser` retired or restricted to `_scripts/` if those stay `.js`). Type the public API surface of each utility; `any` allowed as a transitional escape hatch with a TODO comment.
@@ -150,7 +150,7 @@
 | 8. Vue 3 core + router + UI + Font Awesome (MERGED) | v2.0 | 6/6 | Complete | 2026-04-22 |
 | 9. webpack → Vite bundler | v2.0 | 5/5 | Complete | 2026-04-22 |
 | 10. Jest → Vitest | v2.0 | 1/1 | Complete | 2026-04-22 |
-| 11. ESLint/Vue ecosystem cleanup | v2.0 | 0/1 | Not started | - |
+| 11. ESLint/Vue ecosystem cleanup | v2.0 | 1/1 | Complete | 2026-04-22 |
 | 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 0/? | Not started | - |
 | 13. Electron main-process fixes + ship prep | v2.0 | 0/? | Not started | - |
 

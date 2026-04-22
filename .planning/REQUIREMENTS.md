@@ -34,11 +34,11 @@
 
 ### ESLint Ecosystem Cleanup (LINT)
 
-- [ ] **LINT-04**: `eslint-plugin-vue` 9 → 10+ (Vue-3-matched major) — rule renames migrated; `plugin:vue/vue3-recommended` (or successor) replaces `plugin:vue/recommended`
-- [ ] **LINT-05**: `vue-eslint-parser` 7 → 9 — native flat-config parser for Vue 3 SFCs
-- [ ] **LINT-06**: `eslint-config-standard` 14 → 17+ or replaced with `neostandard` — one of the two migrations complete; flat-config native
-- [ ] **LINT-07**: `@eslint/compat fixupConfigRules` shim removed — all legacy plugins upgraded or replaced; flat-config native loading throughout `eslint.config.js`
-- [ ] **LINT-08**: Legacy plugin cleanup — `eslint-plugin-import@2`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-standard@4` either upgraded to flat-config-native majors or removed if obsoleted by `neostandard` / typescript-eslint 8 coverage
+- [x] **LINT-04**: `eslint-plugin-vue` 9 → 10+ (Vue-3-matched major) — rule renames migrated; `plugin:vue/vue3-recommended` (or successor) replaces `plugin:vue/recommended` — CLOSED 2026-04-22 in Phase 11 Plan 01 (pinned at `^10.9.0`; `flat/recommended` is the Vue 3 alias in v10 per D-11-08)
+- [x] **LINT-05**: `vue-eslint-parser` 7 → 9 — native flat-config parser for Vue 3 SFCs — CLOSED 2026-04-22 in Phase 11 Plan 01 (effected as `^10.4.0` per peer-dep reality: eslint-plugin-vue@10.9 hard-requires vue-eslint-parser@^10.0.0; deviation flagged up-front in plan; "≥9" quality bar exceeded; Pitfall 6 string-hack retired — now uses `parser: babelParser` object reference)
+- [x] **LINT-06**: `eslint-config-standard` 14 → 17+ or replaced with `neostandard` — one of the two migrations complete; flat-config native — CLOSED 2026-04-22 in Phase 11 Plan 01 (`neostandard@^0.13.0` replaces `eslint-config-standard@14`; `noStyle: true` defers all formatting to prettier per D-11-07)
+- [x] **LINT-07**: `@eslint/compat fixupConfigRules` shim removed — all legacy plugins upgraded or replaced; flat-config native loading throughout `eslint.config.js` — CLOSED 2026-04-22 in Phase 11 Plan 01 (`grep -cE 'FlatCompat|fixupConfigRules|@eslint/compat|@eslint/eslintrc' eslint.config.js` = 0; `@eslint/compat` + `@eslint/eslintrc` both removed from direct devDependencies)
+- [x] **LINT-08**: Legacy plugin cleanup — `eslint-plugin-import@2`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-standard@4` either upgraded to flat-config-native majors or removed if obsoleted by `neostandard` / typescript-eslint 8 coverage — CLOSED 2026-04-22 in Phase 11 Plan 01 (all 4 removed from devDependencies; subsumed by neostandard's bundled ecosystem: eslint-plugin-n + eslint-plugin-promise@^7 + eslint-plugin-import-x + @stylistic/eslint-plugin)
 
 ### Pre-existing Fixes (FIX)
 
@@ -102,11 +102,11 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 | UI-05 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
 | BUNDLER-01 | Phase 9 (was 11) | complete (2026-04-22, Plan 05 — phase close) |
 | BUNDLER-02 | Phase 10 (was 12) | complete (2026-04-22, Plan 01 — phase close) |
-| LINT-04 | Phase 11 (was 14) | pending |
-| LINT-05 | Phase 11 (was 14) | pending |
-| LINT-06 | Phase 11 (was 14) | pending |
-| LINT-07 | Phase 11 (was 14) | pending |
-| LINT-08 | Phase 11 (was 14) | pending |
+| LINT-04 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
+| LINT-05 | Phase 11 (was 14) | complete (2026-04-22, Plan 01 — v9→v10 per peer-dep reality) |
+| LINT-06 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
+| LINT-07 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
+| LINT-08 | Phase 11 (was 14) | complete (2026-04-22, Plan 01) |
 | TS-03 | Phase 12 (was 15) | pending |
 | TS-04 | Phase 12 (was 15) | pending |
 | FIX-01 | Phase 13 (was 16) | pending |
