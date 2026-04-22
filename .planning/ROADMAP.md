@@ -122,7 +122,7 @@
   4. `eslint.config.js` uses `@typescript-eslint/parser` as primary for `.ts/.vue` entries; `@babel/eslint-parser` either removed or scoped only to `_scripts/` `.js` files
   5. `npm test` 256/256 (Vitest recognizes `.ts` test files if any land); `npm run lint` in v1.4 band; builds clean
 **Plans**: 6 plans (per-directory batch shape per D-12-06; Plan 06 optional post-Plan-05 UAT)
-- [ ] 12-01-PLAN.md — convert src/utilities/ (6 source + 3 test = 9 .js → .ts); +@types/node@^24 install; D-12-02 step 1 of 5
+- [x] 12-01-PLAN.md — convert src/utilities/ (6 source + 3 test = 9 .js → .ts); +@types/node@^24 install; D-12-02 step 1 of 5 — completed 2026-04-22 (single content commit `29d1782`; 3/3 @ts-expect-error budget used for process.type Electron-global; 4 Rule-3 auto-fixes documented; tsc 0 errors + Vitest 256/256 + pack exit 0; tsconfig gained types:[node,vitest/globals]+skipLibCheck:true)
 - [ ] 12-02-PLAN.md — convert src/main/ (5 source + 2 test = 7 .js → .ts); naturalize iracing-sdk-utils.test CRLF carry-forward; D-12-02 step 2 of 5
 - [ ] 12-03-PLAN.md — convert src/renderer/ .js (main.js + router/index.js = 2 files); naturalize src/renderer/main.js PascalCase-rename carry-forward; +shims-vue.d.ts; D-12-02 step 3 of 5
 - [ ] 12-04-PLAN.md — migrate 10 .vue SFCs to `<script lang="ts">` (mechanical block-tag swap + minimal annotations); D-12-02 step 4 of 5
@@ -157,7 +157,7 @@
 | 9. webpack → Vite bundler | v2.0 | 5/5 | Complete | 2026-04-22 |
 | 10. Jest → Vitest | v2.0 | 1/1 | Complete | 2026-04-22 |
 | 11. ESLint/Vue ecosystem cleanup | v2.0 | 1/1 | Complete | 2026-04-22 |
-| 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 0/6 | Planned | - |
+| 12. .js → .ts conversion + typescript-eslint/parser primary | v2.0 | 1/6 | In progress | - |
 | 13. Electron main-process fixes + ship prep | v2.0 | 0/? | Not started | - |
 
 ---
