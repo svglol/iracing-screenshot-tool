@@ -327,7 +327,8 @@ function createWindow(): void {
 		workerWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
 			hash: '/worker',
 		});
-		// @ts-expect-error — global.__static is a legacy Vue-CLI static-assets bridge; Phase 13 removes
+		// global.__static is a legacy Vue-CLI static-assets bridge; Phase 13 removes.
+		// Untyped global assignment — accepted under noImplicitAny: false (Phase 12 transitional).
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 
@@ -357,7 +358,8 @@ function createWindow(): void {
 		mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
 	} else {
 		mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-		// @ts-expect-error — global.__static is a legacy Vue-CLI static-assets bridge; Phase 13 removes
+		// global.__static is a legacy Vue-CLI static-assets bridge; Phase 13 removes.
+		// Untyped global assignment — accepted under noImplicitAny: false (Phase 12 transitional).
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 

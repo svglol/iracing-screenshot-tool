@@ -392,7 +392,8 @@ export default {
 		},
 		copy() {
 			copyImageToClipboard(toFsPath(this.currentURL));
-			this.$oruga.notification.open({
+			// $oruga not in ComponentCustomProperties augmentation (D-12-08).
+			(this as any).$oruga.notification.open({
 				message: `${this.fileName} copied to clipboard`,
 				variant: 'dark',
 			});
@@ -404,7 +405,8 @@ export default {
 			await this.removeItem(this.currentURL);
 		},
 		handleClick(event, item) {
-			this.$refs.vueSimpleContextMenu.showMenu(event, item);
+			// vue-simple-context-menu exposes showMenu at runtime but lacks TS typing.
+			(this.$refs.vueSimpleContextMenu as any).showMenu(event, item);
 		},
 		async optionClicked(event) {
 			switch (event.option.slug) {

@@ -77,8 +77,10 @@ function compareVer(a, b) {
 	const count = Math.max(left.length, right.length);
 
 	for (let i = 0; i < count; i += 1) {
-		left[i] = ~~left[i];
-		right[i] = ~~right[i];
+		// Cast to any: in-place coercion of string-parts into numeric-compare slots
+		// (legacy JS pattern; D-12-08 pragmatic).
+		(left as any)[i] = ~~left[i];
+		(right as any)[i] = ~~right[i];
 		if (left[i] > right[i]) {
 			return 1;
 		}

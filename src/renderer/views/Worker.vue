@@ -184,7 +184,8 @@ async function removeFileWithRetries(filePath, attempts = 8, intervalMs = 250) {
 			await fs.promises.unlink(filePath);
 			return;
 		} catch (error) {
-			if (error.code === 'ENOENT') {
+			// catch-clause variable is `unknown` under TS 4.4+; narrow via any-cast.
+			if ((error as any).code === 'ENOENT') {
 				return;
 			}
 
@@ -456,7 +457,9 @@ async function fullscreenScreenshot(callback) {
 				console.time('To Blob');
 				const blobStart = performance.now();
 				const fmt = getOutputFormat();
-				const blobOpts = { type: fmt.mime };
+				// blobOpts inferred as { type: any } on first line; `quality` set
+				// conditionally — cast to any for the optional-property assignment.
+				const blobOpts: any = { type: fmt.mime };
 				if (fmt.quality !== undefined) blobOpts.quality = fmt.quality;
 				const blob = await offscreen.convertToBlob(blobOpts);
 				log.debug('Blob conversion', {
@@ -538,6 +541,8 @@ async function fullscreenScreenshot(callback) {
 		}
 
 		const t0 = performance.now();
+		// Electron's getUserMedia accepts a `mandatory` Chrome-internal property
+		// that isn't in the standard MediaTrackConstraints TS type. Cast to any.
 		const stream = await navigator.mediaDevices.getUserMedia({
 			audio: false,
 			video: {
@@ -550,12 +555,13 @@ async function fullscreenScreenshot(callback) {
 					maxHeight: 10000,
 				},
 			},
-		});
+		} as any);
 		log.debug('getUserMedia complete', {
 			elapsed: Math.round(performance.now() - t0),
 		});
 
-		stream.__captureTarget = captureTarget;
+		// Attach custom marker to MediaStream instance (not in lib.dom.d.ts).
+		(stream as any).__captureTarget = captureTarget;
 		handleStream(stream);
 	} catch (error) {
 		handleError(error);

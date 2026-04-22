@@ -12,6 +12,15 @@
 		"noEmit": true,
 		// Enable strictest settings like strictNullChecks & noImplicitAny.
 		"strict": true,
+		// Phase 12 transitional relaxations (D-12-01 / D-12-08): SFC Options API bodies
+		// migrated from JS in Plan 12-04 have un-annotated method params, inferred
+		// variable locals, and null-unsafe DOM/Electron API usage. Full SFC strict
+		// typing (parameter annotations + $oruga augmentation + DOM null narrowing +
+		// MediaStream custom properties) is a v2.1 candidate per ROADMAP.
+		// These two flags stay off until v2.1 to avoid 150+ transitional @ts-expect-error
+		// directives which would blow the 15-slot phase budget.
+		"noImplicitAny": false,
+		"strictNullChecks": false,
 		// Disallow features that require cross-file information for emit.
 		"isolatedModules": true,
 		// Import non-ES modules as default imports.

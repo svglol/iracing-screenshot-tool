@@ -139,7 +139,7 @@ export default {
 	},
 	computed: {
 		disabled() {
-			return iracingOpen;
+			return this.iracingOpen;
 		},
 	},
 	created() {
@@ -173,7 +173,9 @@ export default {
 					.split('.')
 					.slice(0, -1)
 					.join('.');
-				this.$oruga.notification.open({
+				// $oruga is not in Vue's ComponentCustomProperties augmentation
+				// (Oruga 0.13 ships partial TS support — D-12-08). v2.1 candidate.
+				(this as any).$oruga.notification.open({
 					message: file + ' saved successfully',
 					variant: 'success',
 				});
@@ -189,7 +191,8 @@ export default {
 			const logHint = escapedLogFile
 				? `<br><small>Log: ${escapedLogFile}</small>`
 				: '';
-			this.$oruga.notification.open({
+			// $oruga not typed — see note above.
+			(this as any).$oruga.notification.open({
 				message: `Screenshot failed: ${escapedMessage}${logHint}`,
 				variant: 'danger',
 				duration: 10000,
