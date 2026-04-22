@@ -62,7 +62,7 @@ const oruga = createOruga();
 	OCarouselItem,
 	ONotification,
 	ODropdown,
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ].forEach((c) => oruga.use(c as any));
 app.use(oruga, {
 	...bulmaConfig,

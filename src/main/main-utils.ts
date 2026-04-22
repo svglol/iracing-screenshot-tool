@@ -210,9 +210,7 @@ export function trimWrappedQuotes(value: unknown = ''): string {
 		.replace(/^"(.*)"$/, '$1');
 }
 
-export function expandWindowsEnvironmentVariables(
-	value: unknown = ''
-): string {
+export function expandWindowsEnvironmentVariables(value: unknown = ''): string {
 	return String(value).replace(/%([^%]+)%/g, (match, name: string) => {
 		const envValue = process.env[name];
 		return typeof envValue === 'string' && envValue.length > 0

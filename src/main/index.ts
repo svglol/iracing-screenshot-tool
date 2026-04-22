@@ -397,161 +397,188 @@ ipcMain.on('config:get', (event, key: string) => {
 	event.returnValue = config.get(key);
 });
 
-ipcMain.on(
-	'config:set',
-	(event, payload: { key: string; value: unknown }) => {
-		const oldValue = config.get(payload.key);
-		config.set(payload.key, payload.value);
-		event.returnValue = true;
+ipcMain.on('config:set', (event, payload: { key: string; value: unknown }) => {
+	const oldValue = config.get(payload.key);
+	config.set(payload.key, payload.value);
+	event.returnValue = true;
 
-		if (oldValue !== payload.value) {
-			log.debug('Config changed', { key: payload.key });
-			broadcastToWindows(
-				`config:changed:${payload.key}`,
-				payload.value,
-				oldValue
-			);
-		}
+	if (oldValue !== payload.value) {
+		log.debug('Config changed', { key: payload.key });
+		broadcastToWindows(
+			`config:changed:${payload.key}`,
+			payload.value,
+			oldValue
+		);
+	}
+});
+
+ipcMain.on(
+	'app:getPath-sync',
+	(event, name: Parameters<typeof app.getPath>[0]) => {
+		event.returnValue = app.getPath(name);
 	}
 );
-
-ipcMain.on('app:getPath-sync', (event, name: Parameters<typeof app.getPath>[0]) => {
-	event.returnValue = app.getPath(name);
-});
 
 ipcMain.on('app:isDevBuild-sync', (event) => {
 	event.returnValue = !app.isPackaged || app.getVersion().includes('+');
 });
 
-ipcMain.handle('dialog:showOpen', (event, options: Electron.OpenDialogOptions) => {
-	const browserWindow = BrowserWindow.fromWebContents(event.sender);
-	return dialog.showOpenDialog(browserWindow || (undefined as unknown as BrowserWindow), options);
-});
-ipcMain.handle('desktop-capturer:get-source-id', async (event, request: unknown) => {
-	const captureRequest =
-		request && typeof request === 'object' && !Array.isArray(request)
-			? (request as Record<string, unknown>)
-			: { windowID: request };
-	const requestedHandle = normalizeWindowHandle(captureRequest.windowID);
-	const requestedBounds = normalizeCaptureBounds(captureRequest.captureBounds);
-	const currentWindow = getIracingWindowDetails();
-	const currentHandle = normalizeWindowHandle(currentWindow?.handle);
-	const windowSources = await desktopCapturer.getSources({
-		types: ['window'],
-		thumbnailSize: { width: 0, height: 0 },
-		fetchWindowIcons: false,
-	});
-	const captureDiagnostics = {
-		requestedHandle,
-		requestedBounds,
-		currentWindow: currentWindow || null,
-		availableWindowSourceCount: windowSources.length,
-		iracingLikeWindowSources: summarizeDesktopSources(
-			windowSources.filter((source) =>
-				normalizeWindowTitle(source.name).includes('iracing')
-			)
-		),
-	};
+ipcMain.handle(
+	'dialog:showOpen',
+	(event, options: Electron.OpenDialogOptions) => {
+		const browserWindow = BrowserWindow.fromWebContents(event.sender);
+		return dialog.showOpenDialog(
+			browserWindow || (undefined as unknown as BrowserWindow),
+			options
+		);
+	}
+);
+ipcMain.handle(
+	'desktop-capturer:get-source-id',
+	async (event, request: unknown) => {
+		const captureRequest =
+			request && typeof request === 'object' && !Array.isArray(request)
+				? (request as Record<string, unknown>)
+				: { windowID: request };
+		const requestedHandle = normalizeWindowHandle(captureRequest.windowID);
+		const requestedBounds = normalizeCaptureBounds(
+			captureRequest.captureBounds
+		);
+		const currentWindow = getIracingWindowDetails();
+		const currentHandle = normalizeWindowHandle(currentWindow?.handle);
+		const windowSources = await desktopCapturer.getSources({
+			types: ['window'],
+			thumbnailSize: { width: 0, height: 0 },
+			fetchWindowIcons: false,
+		});
+		const captureDiagnostics = {
+			requestedHandle,
+			requestedBounds,
+			currentWindow: currentWindow || null,
+			availableWindowSourceCount: windowSources.length,
+			iracingLikeWindowSources: summarizeDesktopSources(
+				windowSources.filter((source) =>
+					normalizeWindowTitle(source.name).includes('iracing')
+				)
+			),
+		};
 
-	const handleMatch = findSourceByWindowHandles(windowSources, [
-		requestedHandle,
-		currentHandle,
-	]);
-	if (handleMatch) {
-		if (
-			requestedHandle &&
-			currentHandle &&
-			requestedHandle !== currentHandle
-		) {
-			console.log(
-				`Desktop capture source matched refreshed handle ${currentHandle} instead of ${requestedHandle}`
-			);
+		const handleMatch = findSourceByWindowHandles(windowSources, [
+			requestedHandle,
+			currentHandle,
+		]);
+		if (handleMatch) {
+			if (
+				requestedHandle &&
+				currentHandle &&
+				requestedHandle !== currentHandle
+			) {
+				console.log(
+					`Desktop capture source matched refreshed handle ${currentHandle} instead of ${requestedHandle}`
+				);
+			}
+
+			log.debug('Capture source matched', {
+				strategy: 'window-handle',
+				sourceId: handleMatch.id,
+			});
+			return {
+				id: handleMatch.id,
+				kind: 'window',
+				diagnostics: mergePlainObjects(captureDiagnostics, {
+					matchedSource: summarizeDesktopSource(handleMatch),
+					matchStrategy: 'window-handle',
+				}),
+			};
 		}
 
-		log.debug('Capture source matched', {
-			strategy: 'window-handle',
-			sourceId: handleMatch.id,
-		});
-		return {
-			id: handleMatch.id,
-			kind: 'window',
-			diagnostics: mergePlainObjects(captureDiagnostics, {
-				matchedSource: summarizeDesktopSource(handleMatch),
-				matchStrategy: 'window-handle',
-			}),
-		};
-	}
-
-	const titleMatch = findSourceByWindowTitle(
-		windowSources,
-		currentWindow?.title
-	);
-	if (titleMatch) {
-		console.log(
-			`Desktop capture source matched fallback title "${currentWindow?.title}"`
+		const titleMatch = findSourceByWindowTitle(
+			windowSources,
+			currentWindow?.title
 		);
-		return {
-			id: titleMatch.id,
-			kind: 'window',
-			diagnostics: mergePlainObjects(captureDiagnostics, {
-				matchedSource: summarizeDesktopSource(titleMatch),
-				matchStrategy: 'window-title',
-			}),
-		};
-	}
-
-	const processFallbackMatch = findSourceByKnownIracingTitle(windowSources);
-	if (processFallbackMatch) {
-		console.log(
-			`Desktop capture source matched known iRacing title "${processFallbackMatch.name}"`
-		);
-		return {
-			id: processFallbackMatch.id,
-			kind: 'window',
-			diagnostics: mergePlainObjects(captureDiagnostics, {
-				matchedSource: summarizeDesktopSource(processFallbackMatch),
-				matchStrategy: 'known-iracing-title',
-			}),
-		};
-	}
-
-	if (requestedBounds) {
-		const matchedDisplay = screen.getDisplayMatching(requestedBounds);
-		const screenSources = await desktopCapturer.getSources({
-			types: ['screen'],
-			thumbnailSize: { width: 0, height: 0 },
-		});
-		const displayMatch = findDisplaySourceByDisplayId(
-			screenSources,
-			matchedDisplay?.id
-		);
-		const displayDiagnostics = {
-			matchedDisplay: serializeDisplay(matchedDisplay),
-			availableScreenSourceCount: screenSources.length,
-			screenSources: summarizeDesktopSources(screenSources),
-		};
-
-		if (displayMatch && matchedDisplay) {
+		if (titleMatch) {
 			console.log(
-				`Desktop capture source matched display ${matchedDisplay.id} for window ${requestedHandle || currentHandle || 'unknown'}`
+				`Desktop capture source matched fallback title "${currentWindow?.title}"`
 			);
-
 			return {
-				id: displayMatch.id,
-				kind: 'display',
-				captureBounds: requestedBounds,
-				displayBounds: {
-					x: matchedDisplay.bounds.x,
-					y: matchedDisplay.bounds.y,
-					width: matchedDisplay.bounds.width,
-					height: matchedDisplay.bounds.height,
-				},
+				id: titleMatch.id,
+				kind: 'window',
+				diagnostics: mergePlainObjects(captureDiagnostics, {
+					matchedSource: summarizeDesktopSource(titleMatch),
+					matchStrategy: 'window-title',
+				}),
+			};
+		}
+
+		const processFallbackMatch = findSourceByKnownIracingTitle(windowSources);
+		if (processFallbackMatch) {
+			console.log(
+				`Desktop capture source matched known iRacing title "${processFallbackMatch.name}"`
+			);
+			return {
+				id: processFallbackMatch.id,
+				kind: 'window',
+				diagnostics: mergePlainObjects(captureDiagnostics, {
+					matchedSource: summarizeDesktopSource(processFallbackMatch),
+					matchStrategy: 'known-iracing-title',
+				}),
+			};
+		}
+
+		if (requestedBounds) {
+			const matchedDisplay = screen.getDisplayMatching(requestedBounds);
+			const screenSources = await desktopCapturer.getSources({
+				types: ['screen'],
+				thumbnailSize: { width: 0, height: 0 },
+			});
+			const displayMatch = findDisplaySourceByDisplayId(
+				screenSources,
+				matchedDisplay?.id
+			);
+			const displayDiagnostics = {
+				matchedDisplay: serializeDisplay(matchedDisplay),
+				availableScreenSourceCount: screenSources.length,
+				screenSources: summarizeDesktopSources(screenSources),
+			};
+
+			if (displayMatch && matchedDisplay) {
+				console.log(
+					`Desktop capture source matched display ${matchedDisplay.id} for window ${requestedHandle || currentHandle || 'unknown'}`
+				);
+
+				return {
+					id: displayMatch.id,
+					kind: 'display',
+					captureBounds: requestedBounds,
+					displayBounds: {
+						x: matchedDisplay.bounds.x,
+						y: matchedDisplay.bounds.y,
+						width: matchedDisplay.bounds.width,
+						height: matchedDisplay.bounds.height,
+					},
+					diagnostics: mergePlainObjects(
+						captureDiagnostics,
+						displayDiagnostics,
+						{
+							matchedSource: summarizeDesktopSource(displayMatch),
+							matchStrategy: 'display-fallback',
+						}
+					),
+				};
+			}
+
+			log.debug('Capture source not found', {
+				requestedHandle,
+				availableSources: windowSources.length,
+			});
+			return {
+				id: '',
+				kind: 'window',
 				diagnostics: mergePlainObjects(
 					captureDiagnostics,
 					displayDiagnostics,
 					{
-						matchedSource: summarizeDesktopSource(displayMatch),
-						matchStrategy: 'display-fallback',
+						matchStrategy: 'not-found',
 					}
 				),
 			};
@@ -564,28 +591,12 @@ ipcMain.handle('desktop-capturer:get-source-id', async (event, request: unknown)
 		return {
 			id: '',
 			kind: 'window',
-			diagnostics: mergePlainObjects(
-				captureDiagnostics,
-				displayDiagnostics,
-				{
-					matchStrategy: 'not-found',
-				}
-			),
+			diagnostics: mergePlainObjects(captureDiagnostics, {
+				matchStrategy: 'not-found',
+			}),
 		};
 	}
-
-	log.debug('Capture source not found', {
-		requestedHandle,
-		availableSources: windowSources.length,
-	});
-	return {
-		id: '',
-		kind: 'window',
-		diagnostics: mergePlainObjects(captureDiagnostics, {
-			matchStrategy: 'not-found',
-		}),
-	};
-});
+);
 
 ipcMain.on('window-control', (event, action: string) => {
 	const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -714,7 +725,10 @@ app.on('ready', async () => {
 
 		takingScreenshot = true;
 		originalWindowBounds = getIracingWindowDetails() || null;
-		parseCameraState((iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState);
+		parseCameraState(
+			(iracing.telemetry?.values as { CamCameraState?: string[] })
+				?.CamCameraState
+		);
 		iracing.camControls.setState(
 			cameraState | iracing.Consts.CameraState.UIHidden
 		);
@@ -726,7 +740,9 @@ app.on('ready', async () => {
 		while (waited < uiHideTimeout) {
 			await delay(uiHidePoll);
 			waited += uiHidePoll;
-			const cam = (iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState;
+			const cam = (
+				iracing.telemetry?.values as { CamCameraState?: string[] }
+			)?.CamCameraState;
 			if (cam && cam.includes('UIHidden')) {
 				break;
 			}
@@ -734,10 +750,9 @@ app.on('ready', async () => {
 		log.debug('UI hide wait', {
 			waited,
 			confirmed:
-				((iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState?.includes(
-					'UIHidden'
-				)) ||
-				false,
+				(
+					iracing.telemetry?.values as { CamCameraState?: string[] }
+				)?.CamCameraState?.includes('UIHidden') || false,
 		});
 
 		if (!config.get('reshade')) {
@@ -872,8 +887,8 @@ app.on('ready', async () => {
 	iracing.on('update', () => {
 		if (takingScreenshot && iracing.telemetry) {
 			const currentState =
-				((iracing.telemetry.values as { CamCameraState?: string[] })
-					.CamCameraState) || [];
+				(iracing.telemetry.values as { CamCameraState?: string[] })
+					.CamCameraState || [];
 			if (!currentState.includes('UseTemporaryEdits')) {
 				iracing.camControls.setState(
 					cameraState | iracing.Consts.CameraState.UIHidden
@@ -1128,10 +1143,7 @@ async function waitForReshadeScreenshot(
 		let poller: NodeJS.Timeout | undefined;
 		let timeoutId: NodeJS.Timeout | undefined;
 
-		const finish = <T,>(
-			callback: (value: T) => void,
-			value: T
-		): void => {
+		const finish = <T>(callback: (value: T) => void, value: T): void => {
 			if (settled) {
 				return;
 			}
