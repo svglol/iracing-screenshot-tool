@@ -124,16 +124,6 @@ if (!isDev) {
 	});
 }
 
-async function installDevTools() {
-	try {
-		// vue-devtools is a legacy dev-only module without types; Phase 13 removes entirely.
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		require('vue-devtools').install();
-	} catch (err) {
-		console.log(err);
-	}
-}
-
 function broadcastToWindows(channel: string, ...args: unknown[]): void {
 	[mainWindow, workerWindow].forEach((window) => {
 		if (window && !window.isDestroyed()) {
@@ -655,7 +645,6 @@ app.on('ready', async () => {
 	});
 
 	if (isDev) {
-		installDevTools();
 		mainWindow?.webContents.openDevTools();
 		workerWindow?.webContents.openDevTools();
 	}
