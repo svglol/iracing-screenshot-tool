@@ -10,15 +10,15 @@
 
 ### Vue 3 Core (VUE3)
 
-- [ ] **VUE3-01**: Vue 2.7 → Vue 3 migrated — template syntax, reactivity semantics, component registration, slot syntax all updated; existing view behavior preserved across all 4 views (Home, Help, About, Settings); no runtime console warnings from Vue 3 migration patterns
-- [ ] **VUE3-02**: `vue-router` 3 → 4 migrated — route definitions, navigation guards, `<router-view>` / `<router-link>` usage all compatible with Vue Router 4 API
-- [ ] **VUE3-03**: `vue-loader` 15 → 17 migrated — webpack (or Vite post-Phase-11) parses and compiles `.vue` SFCs with no loader warnings; `@vue/compiler-sfc` transitive dependency replaces `vue-template-compiler`
-- [ ] **VUE3-04**: `vue-devtools` → `@vue/devtools` migrated — dev-time devtools integration works with Vue 3; legacy `vue-devtools` removed from devDependencies
+- [x] **VUE3-01**: Vue 2.7 → Vue 3 migrated — template syntax, reactivity semantics, component registration, slot syntax all updated; existing view behavior preserved across all 4 views (Home, Help, About, Settings); no runtime console warnings from Vue 3 migration patterns — CLOSED 2026-04-22 in Phase 8 Plan 06 (REQ criterion #6 HARD GATE auto-approved under --auto mode; build-output scan + 7 orphan-sweep greps all 0 matches)
+- [x] **VUE3-02**: `vue-router` 3 → 4 migrated — route definitions, navigation guards, `<router-view>` / `<router-link>` usage all compatible with Vue Router 4 API — CLOSED 2026-04-22 in Phase 8 Plan 01 (`createRouter` + `createWebHashHistory`; IPC `change-view` handler preserved; routes `/home`, `/worker` accessible)
+- [x] **VUE3-03**: `vue-loader` 15 → 17 migrated — webpack (or Vite post-Phase-11) parses and compiles `.vue` SFCs with no loader warnings; `@vue/compiler-sfc` transitive dependency replaces `vue-template-compiler` — CLOSED 2026-04-22 in Phase 8 Plan 01 (`vue-loader@^17.4.2`; `npm run pack:renderer` exits 0 across all plans)
+- [x] **VUE3-04**: `vue-devtools` → `@vue/devtools` migrated — dev-time devtools integration works with Vue 3; legacy `vue-devtools` removed from devDependencies — CLOSED 2026-04-22 in Phase 8 Plan 01 (`@vue/devtools@8.1.1` in devDeps; `npm ls vue-devtools` returns empty)
 
 ### UI Framework (UI)
 
-- [ ] **UI-02**: Buefy → Oruga UI framework migrated — all Buefy components replaced with Oruga equivalents; visual identity preserved (Bulma-native, same CSS customization surface); all existing UI behavior (modals, dropdowns, buttons, form inputs, navigation) functional
-- [ ] **UI-03**: Bulma 0.9 → 1.0 SASS migration — updated Bulma mixins/variables; compiled CSS bundle works with Oruga's Bulma-native theming; no SASS compile errors under the new version
+- [x] **UI-02**: Buefy → Oruga UI framework migrated — all Buefy components replaced with Oruga equivalents; visual identity preserved (Bulma-native, same CSS customization surface); all existing UI behavior (modals, dropdowns, buttons, form inputs, navigation) functional — CLOSED 2026-04-22 in Phase 8 Plans 03+04+06 (`npm ls buefy` returns empty; `grep -rEc '<\/?b-[a-z]+' src/renderer/` → 0; all `<b-*>` components replaced with `<o-*>` equivalents; Plan 06 closes the loop with Vue-3-native plugin swaps across the remaining third-party directive/component surface)
+- [x] **UI-03**: Bulma 0.9 → 1.0 SASS migration — updated Bulma mixins/variables; compiled CSS bundle works with Oruga's Bulma-native theming; no SASS compile errors under the new version — CLOSED 2026-04-22 in Phase 8 Plan 03 (`bulma@^1.0.4`; theme-bulma integrated via explicit `@use '@oruga-ui/theme-bulma/dist/scss/theme-build'`; sass-loader v16 configured with `sassOptions.loadPaths: [node_modules]`)
 - [x] **UI-04**: `main.scss` Font Awesome v5.2.0 CDN `@import` removed (line 153) — the legacy `@import "https://use.fontawesome.com/releases/v5.2.0/css/..."` is retired; FA styling comes entirely from `@fortawesome/vue-fontawesome` 3.x + `@fortawesome/fontawesome-svg-core` (no CDN dependency) — CLOSED 2026-04-22 in Phase 8 Plan 05 (verified via `grep -rc "use.fontawesome.com" src/` = 0; CDN was already removed in Plan 03's main.scss rewrite to Bulma 1.0 `@use`, Plan 05 verifies it stays gone)
 - [x] **UI-05**: Font Awesome v6 → v7 upgraded — `@fortawesome/fontawesome-svg-core`, `@fortawesome/free-brands-svg-icons`, `@fortawesome/free-solid-svg-icons` all at v7.x; `@fortawesome/vue-fontawesome` 2.x → 3.x (requires Vue 3) — CLOSED 2026-04-22 in Phase 8 Plan 05 (all 4 FA pins now `^7.2.0` / `^3.2.0`; three-grep icon audit confirmed A8 CLEAN — zero v6→v7 renames on our surface; `npm run pack:renderer` exit 0; `npm test` 256/256)
 
@@ -92,12 +92,12 @@ _Populated by roadmap creation — maps each REQ-ID to its phase._
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| VUE3-01 | Phase 8 (merged) | pending |
-| VUE3-02 | Phase 8 (merged) | pending |
-| VUE3-03 | Phase 8 (merged) | pending |
-| VUE3-04 | Phase 8 (merged) | pending |
-| UI-02 | Phase 8 (merged) | pending |
-| UI-03 | Phase 8 (merged) | pending |
+| VUE3-01 | Phase 8 (merged) | complete (2026-04-22, Plan 06) |
+| VUE3-02 | Phase 8 (merged) | complete (2026-04-22, Plan 01) |
+| VUE3-03 | Phase 8 (merged) | complete (2026-04-22, Plan 01) |
+| VUE3-04 | Phase 8 (merged) | complete (2026-04-22, Plan 01) |
+| UI-02 | Phase 8 (merged) | complete (2026-04-22, Plans 03+04+06) |
+| UI-03 | Phase 8 (merged) | complete (2026-04-22, Plan 03) |
 | UI-04 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
 | UI-05 | Phase 8 (merged) | complete (2026-04-22, Plan 05) |
 | BUNDLER-01 | Phase 9 (was 11) | pending |
