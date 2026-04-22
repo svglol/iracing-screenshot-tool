@@ -16,7 +16,7 @@
 			<button type="button" class="delete" @click="$emit('close')" />
 		</header>
 		<section class="modal-card-body" style="background-color: transparent">
-			<vue-markdown-plus :source="changelog" />
+			<vue3-markdown-it :source="changelog" />
 		</section>
 	</div>
 </template>

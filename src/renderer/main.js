@@ -32,8 +32,8 @@ import {
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import VueSimpleContextMenu from 'vue-simple-context-menu';
-import vClickOutside from 'v-click-outside';
-import VueMarkdownPlus from 'vue-markdown-plus';
+import VueShortkey from 'vue3-shortkey';
+import Vue3MarkdownIt from 'vue3-markdown-it';
 
 library.add(
 	faGear,
@@ -68,12 +68,10 @@ app.use(oruga, {
 	iconComponent: 'vue-fontawesome',
 	iconPack: 'fas',
 });
-app.use(require('vue-shortkey'));
-app.use(vClickOutside);
-app.use(VueMarkdownPlus);
+app.use(VueShortkey);
 app.component('font-awesome-icon', FontAwesomeIcon);
 app.component('VueSimpleContextMenu', VueSimpleContextMenu);
-app.component('VueMarkdownPlus', VueMarkdownPlus);
+app.component('vue3-markdown-it', Vue3MarkdownIt);
 app.mount('#app');
 
 if (window && window.process && window.process.type === 'renderer') {
