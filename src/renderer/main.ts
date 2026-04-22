@@ -62,22 +62,23 @@ const oruga = createOruga();
 	OCarouselItem,
 	ONotification,
 	ODropdown,
-].forEach((c) => oruga.use(c));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+].forEach((c) => oruga.use(c as any));
 app.use(oruga, {
 	...bulmaConfig,
 	iconComponent: 'vue-fontawesome',
 	iconPack: 'fas',
 });
 app.use(VueShortkey);
-app.component('font-awesome-icon', FontAwesomeIcon);
+app.component('FontAwesomeIcon', FontAwesomeIcon);
 app.component('VueSimpleContextMenu', VueSimpleContextMenu);
-app.component('vue3-markdown-it', Vue3MarkdownIt);
+app.component('Vue3MarkdownIt', Vue3MarkdownIt);
 app.mount('#app');
 
 if (window && window.process && window.process.type === 'renderer') {
 	const { ipcRenderer } = require('electron');
 
-	ipcRenderer.on('change-view', (event, data) => {
+	ipcRenderer.on('change-view', (event: unknown, data: { route?: string }) => {
 		if (data.route) {
 			router.push(data.route).catch(() => {});
 		}
