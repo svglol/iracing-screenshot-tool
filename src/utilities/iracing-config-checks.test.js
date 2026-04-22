@@ -81,17 +81,17 @@ describe('checkIracingConfig', () => {
 
 	test('returns empty array when RenderViewPerMonitor is 0', () => {
 		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-		vi
-			.spyOn(fs, 'readFileSync')
-			.mockReturnValue('[MonitorSetup]\nRenderViewPerMonitor=0\n');
+		vi.spyOn(fs, 'readFileSync').mockReturnValue(
+			'[MonitorSetup]\nRenderViewPerMonitor=0\n'
+		);
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
 	test('returns warning when RenderViewPerMonitor is 1', () => {
 		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-		vi
-			.spyOn(fs, 'readFileSync')
-			.mockReturnValue('[MonitorSetup]\nRenderViewPerMonitor=1\n');
+		vi.spyOn(fs, 'readFileSync').mockReturnValue(
+			'[MonitorSetup]\nRenderViewPerMonitor=1\n'
+		);
 		const warnings = checkIracingConfig();
 		expect(warnings).toHaveLength(1);
 		expect(warnings[0]).toContain('Render Scene Using 3 Projections');
@@ -99,17 +99,15 @@ describe('checkIracingConfig', () => {
 
 	test('returns empty array when MonitorSetup section is missing', () => {
 		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-		vi
-			.spyOn(fs, 'readFileSync')
-			.mockReturnValue('[OtherSection]\nFoo=bar\n');
+		vi.spyOn(fs, 'readFileSync').mockReturnValue('[OtherSection]\nFoo=bar\n');
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
 	test('returns empty array when RenderViewPerMonitor key is missing', () => {
 		vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-		vi
-			.spyOn(fs, 'readFileSync')
-			.mockReturnValue('[MonitorSetup]\nOtherKey=1\n');
+		vi.spyOn(fs, 'readFileSync').mockReturnValue(
+			'[MonitorSetup]\nOtherKey=1\n'
+		);
 		expect(checkIracingConfig()).toEqual([]);
 	});
 
