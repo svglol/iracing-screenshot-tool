@@ -1,22 +1,22 @@
 # Project State
 
 **Project:** iRacing Screenshot Tool
-**Current Milestone:** — (v1.4 shipped 2026-04-22; next milestone pending — run `/gsd-new-milestone`)
-**Last activity:** 2026-04-22 — v1.4 Tooling Modernization shipped. All 9 requirements satisfied, all 6 milestone-level SCs PASS, tagged v1.4.
+**Current Milestone:** v2.0 Vue 3 Migration
+**Last activity:** 2026-04-22 — v2.0 milestone kicked off. REQUIREMENTS.md defined (18 requirements across VUE3/UI/BUNDLER/TS/LINT/FIX). ROADMAP.md created with 9 phases (8-16). Architectural decisions locked: A1 Oruga (Bulma-compat), B2 Vue 3-first, C1 FA v7 in scope.
 
 ## Current Position
 
-Phase: — (between milestones)
+Phase: Phase 8 — Vue 2 → Vue 3 core (NOT STARTED)
 Plan: —
-Status: Ready for next milestone (run `/gsd-new-milestone`)
+Status: Defining first phase — run `/gsd-discuss-phase 8` next
 Branch: master
 
 ## Project Reference
 
-See [.planning/PROJECT.md](./PROJECT.md) (updated 2026-04-22 — v1.4 Tooling Modernization shipped).
+See [.planning/PROJECT.md](./PROJECT.md) (updated 2026-04-22 — v2.0 Vue 3 Migration started).
 
 **Core value:** Make great-looking race screenshots effortless for sim racers, and gather community signal without friction.
-**Current focus:** Planning next milestone (v2.0 Vue 3 Migration candidate seeded).
+**Current focus:** v2.0 Vue 3 Migration — Vue 3 + Oruga UI framework + Vite bundler + Vitest + `.js` → `.ts` conversion + legacy ESLint plugin cleanup.
 
 ## Previous Milestones
 

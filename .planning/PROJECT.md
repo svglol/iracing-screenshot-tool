@@ -21,32 +21,28 @@ A two-part project:
 - **v1.4 shipped** (2026-04-22) — Phases 5-7. Tooling modernization complete: Babel package renames + ESLint 9 flat config + full prettier wiring + TypeScript 5.7 + typescript-eslint 8 + `--legacy-peer-deps` retired. Tests 256/256 pass. Lint count 735 (well under v1.3 baseline 1881). `npm install` clean (zero ERESOLVE).
 - **Dependabot (upstream, since PR #25 merge):** `jimp` 0.10 → 1.6.1, `jest` 25 → 30.3.0 (main + bot), `np` 6 → 11.2.0, `got` bumped. These shipped via PRs #26–#43 consolidations.
 
-## Next Milestone: v2.0 Vue 3 Migration (planned)
+## Current Milestone: v2.0 Vue 3 Migration
 
-**Trigger:** after v1.4 lands on master (now) or on Vue 2 CVE — whichever comes first.
+**Started:** 2026-04-22
+**Goal:** Migrate the Electron app from Vue 2.7 + Buefy + webpack to Vue 3 + Oruga + Vite; clear all deferred v1.4 tech debt; complete the `.js` → `.ts` conversion in `src/`.
 
-**Target scope:**
-- Vue 2.7 → Vue 3 (template syntax, composition API, reactivity changes)
-- Buefy → replacement UI framework (candidates: Oruga, PrimeVue, Vuetify)
-- Bulma 0.9 → 1.0 (paired with Buefy replacement — Buefy 0.9.29 is tied to Bulma 0.9 SASS)
-- Webpack → Vite bundler + Electron
-- Font Awesome v6 → v7 (requires vue-fontawesome 3.x + Vue 3)
-- `@fortawesome/vue-fontawesome` 2.x → 3.x
-- `vue-router` 3 → 4
-- `vue-loader` 15 → 17
-- `vue-devtools` → `@vue/devtools`
-- `eslint-plugin-vue` 9 → 10+ (matches Vue 3 major)
-- `vue-eslint-parser` 7 → 9
-- Jest 25 → Vitest (pairs naturally with Vite+Electron bundler switch)
-- `eslint-config-standard` 14 → 17+ or `neostandard` migration
-- Legacy plugin cleanup (`eslint-plugin-import@2`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-standard@4`) + remove `@eslint/compat fixupConfigRules` shim
-- `@babel/eslint-parser` → `@typescript-eslint/parser` as primary for `.js/.vue`
-- `.js` → `.ts` file conversion in `src/` (allowed by TS 5.7 + typescript-eslint 8 landing in v1.4)
-- Remaining FA v5.2.0 CDN `@import` in `src/renderer/assets/style/main.scss:153`
-- Electron main-process `addDevToolsExtension` error fix
-- Transitive `prettier@2.8.8` via `vue-loader`/`@vue/compiler-sfc` (resolves naturally with Vue 3)
+**Key architectural decisions (locked at milestone start):**
+- **A1 Oruga** as Buefy replacement — Bulma-compatible, Vue 3 native, closest to Buefy's spirit. Paired with Bulma 0.9 → 1.0 (Oruga is Bulma-native).
+- **B2 Vue 3 first, then Vite** — phase Vue 3 core before bundler swap. Each phase isolates one major change; D-04 bisect shape per phase.
+- **C1 Font Awesome v7 included** in v2.0 scope (requires Vue 3 + vue-fontawesome 3.x — all Vue 3 dependencies align here).
 
-**Explicitly deferred to v2.0+:** stricter tsconfig flags (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), Jest globals override for test files.
+**Target scope (9 phases):**
+- Phase 8: Vue 2.7 → Vue 3 core (template syntax, composition API where needed, reactivity, component registration)
+- Phase 9: `vue-router` 3→4, `vue-loader` 15→17, `vue-devtools` → `@vue/devtools`
+- Phase 10: Buefy → Oruga UI migration + Bulma 0.9 → 1.0 + `main.scss` FA v5.2.0 CDN `@import` removal (paired — Oruga is Bulma-native)
+- Phase 11: webpack → Vite bundler + Electron
+- Phase 12: Jest 25 → Vitest (pairs with Vite)
+- Phase 13: Font Awesome v6 → v7 + `@fortawesome/vue-fontawesome` 2.x → 3.x
+- Phase 14: ESLint/Vue ecosystem cleanup (`eslint-plugin-vue` 9→10+, `vue-eslint-parser` 7→9, `eslint-config-standard` → neostandard or 17+, remove `@eslint/compat fixupConfigRules` shim, legacy plugin cleanup — `eslint-plugin-import@2`, `eslint-plugin-node@11`, `eslint-plugin-promise@4`, `eslint-plugin-standard@4`)
+- Phase 15: `.js` → `.ts` conversion in `src/` + `@typescript-eslint/parser` as primary for `.ts/.vue`
+- Phase 16: Electron main-process `addDevToolsExtension` fix + transitive `prettier@2.8.8` cleanup via `vue-loader` swap + final ship prep
+
+**Explicitly deferred to post-v2.0:** stricter tsconfig flags (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), Jest globals override for test files (if Vitest migration doesn't naturally fix it).
 
 ## Requirements
 
