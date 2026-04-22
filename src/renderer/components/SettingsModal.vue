@@ -392,7 +392,7 @@ export default {
 			}
 		},
 	},
-	beforeDestroy() {
+	beforeUnmount() {
 		if (
 			config.get('defaultScreenHeight') !== parseInt(this.screenHeight, 10)
 		) {

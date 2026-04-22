@@ -132,7 +132,7 @@
 	transition: all 0.25s ease;
 }
 
-.list-in-enter,
+.list-in-enter-from,
 .list-in-leave-to {
 	opacity: 0;
 	transform: scale(0.25);
@@ -144,7 +144,7 @@
 	transition: all 0.25s ease;
 }
 
-.list-out-enter,
+.list-out-enter-from,
 .list-out-leave-to {
 	opacity: 0;
 	transform: scale(1.5);
@@ -156,7 +156,7 @@
 	transition: all 0.25s ease 0.1s;
 }
 
-.list-out-delayed-enter,
+.list-out-delayed-enter-from,
 .list-out-delayed-leave-to {
 	opacity: 0;
 	transform: scale(1.5);
@@ -168,7 +168,7 @@
 	transition: all 0.25s ease-out;
 }
 
-.slide-up-enter,
+.slide-up-enter-from,
 .slide-up-leave-to {
 	opacity: 0;
 	transform: translateY(-10px);
@@ -180,7 +180,7 @@
 	transition: all 0.25s ease-out;
 }
 
-.slide-down-enter,
+.slide-down-enter-from,
 .slide-down-leave-to {
 	opacity: 0;
 	transform: translateY(10px);
@@ -192,7 +192,7 @@
 	transition: all 0.25s ease-out;
 }
 
-.slide-right-enter,
+.slide-right-enter-from,
 .slide-right-leave-to {
 	opacity: 0;
 	transform: translateX(-10px);
@@ -204,7 +204,7 @@
 	transition: all 0.25s ease-out;
 }
 
-.slide-left-enter,
+.slide-left-enter-from,
 .slide-left-leave-to {
 	opacity: 0;
 	transform: translateX(10px);
@@ -215,7 +215,7 @@
 	transition: all 0.25s;
 }
 
-.list-complete-enter,
+.list-complete-enter-from,
 .list-complete-leave-to {
 	opacity: 0;
 	transform: translateY(30px);

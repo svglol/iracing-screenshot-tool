@@ -107,7 +107,7 @@
 							/>
 						</figure>
 					</b-carousel-item>
-					<template slot="indicators" slot-scope="props">
+					<template #indicators="props">
 						<figure class="al image" :draggable="false">
 							<img
 								:draggable="false"
@@ -141,7 +141,6 @@
 import SideBar from '../components/SideBar.vue';
 import PromoCard from '../components/PromoCard.vue';
 import Settings from '../components/Settings.vue';
-import Vue from 'vue';
 
 const { ipcRenderer, clipboard, shell, nativeImage } = require('electron');
 const sizeOf = require('image-size');
@@ -267,7 +266,7 @@ async function cleanupThumbnailCache(entries) {
 	}
 }
 
-export default Vue.extend({
+export default {
 	name: 'Home',
 	components: { SideBar, PromoCard, Settings },
 	data() {
@@ -363,7 +362,7 @@ export default Vue.extend({
 
 			const index = this.items.findIndex((item) => item.file === filePath);
 			if (index !== -1) {
-				this.$delete(this.items, index);
+				this.items.splice(index, 1);
 			}
 
 			if (this.items.length === 0) {
@@ -421,7 +420,7 @@ export default Vue.extend({
 						return;
 					}
 
-					this.$set(item, 'thumb', item.thumbDisplayPath);
+					item.thumb = item.thumbDisplayPath;
 				}
 			});
 
@@ -510,7 +509,7 @@ export default Vue.extend({
 			if (item.thumb === EMPTY_IMAGE) {
 				void ensureThumbnail(filePath, thumbPath)
 					.then(() => {
-						this.$set(item, 'thumb', item.thumbDisplayPath);
+						item.thumb = item.thumbDisplayPath;
 					})
 					.catch((error) => {
 						console.log(error);
@@ -556,7 +555,7 @@ export default Vue.extend({
 			}
 		},
 	},
-});
+};
 </script>
 
 <style>
