@@ -116,7 +116,7 @@
 </template>
 
 <script lang="ts">
-const config = require('../../utilities/config');
+import config from '../../utilities/config';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const { checkIracingConfig } = require('../../utilities/iracing-config-checks');

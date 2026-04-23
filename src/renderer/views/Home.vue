@@ -141,6 +141,7 @@
 import SideBar from '../components/SideBar.vue';
 import PromoCard from '../components/PromoCard.vue';
 import Settings from '../components/Settings.vue';
+import config from '../../utilities/config';
 
 const { ipcRenderer, clipboard, shell, nativeImage } = require('electron');
 const sizeOf = require('image-size');
@@ -149,7 +150,6 @@ const path = require('path');
 const sharp = require('sharp');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
-const config = require('../../utilities/config');
 const EMPTY_IMAGE =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const THUMBNAIL_CONCURRENCY = 4;

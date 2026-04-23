@@ -21,6 +21,7 @@ import * as path from 'path';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const loadIniFile = require('read-ini-file');
 
+import configModule from '../utilities/config';
 import * as irsdk from './iracing-sdk';
 import {
 	resizeIracingWindow,
@@ -1219,14 +1220,7 @@ function resize(
 }
 
 function loadConfig(): void {
-	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		config = require('../utilities/config');
-	} catch (error) {
-		fs.unlinkSync(path.join(app.getPath('userData'), 'config.json'));
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		config = require('../utilities/config');
-	}
+	config = configModule;
 }
 
 function parseCameraState(iracingCameraState: string[] = []): void {

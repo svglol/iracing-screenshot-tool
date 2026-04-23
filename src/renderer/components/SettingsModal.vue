@@ -264,8 +264,8 @@
 </template>
 
 <script lang="ts">
+import config from '../../utilities/config';
 const { version } = require('../../../package.json');
-const config = require('../../utilities/config');
 const {
 	FILENAME_FIELDS,
 	DEFAULT_FORMAT,

@@ -1,5 +1,7 @@
 const { ipcRenderer } = require('electron');
 const Store = require('electron-store');
+const fs = require('fs');
+const path = require('path');
 const homedir: string = require('os').homedir();
 const dir = homedir + '\\Pictures\\Screenshots\\';
 
@@ -103,12 +105,24 @@ const schema = {
 	},
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface ConfigShape {
+	get(key: string): any;
+	set(key: string, value: unknown): void;
+	onDidChange?(
+		key: string,
+		callback: (newValue: unknown, oldValue: unknown) => void
+	): () => void;
+}
+
 // process.type is Electron-injected at runtime. When electron types are loaded
 // (src/main/ scope) it is declared; when not (src/utilities/ scope alone), plain
 // @types/node does not declare it. Cast through a loose shape to work in both.
+let configInstance: ConfigShape;
 if ((process as { type?: string }).type === 'renderer') {
-	module.exports = {
-		get(key: string): unknown {
+	configInstance = {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		get(key: string): any {
 			return ipcRenderer.sendSync('config:get', key);
 		},
 		set(key: string, value: unknown): void {
@@ -135,5 +149,23 @@ if ((process as { type?: string }).type === 'renderer') {
 		},
 	};
 } else {
-	module.exports = new Store({ schema });
+	// Main-process Store construction. If an existing config.json is corrupt
+	// (bad JSON), electron-store throws during parse — delete the file and retry
+	// so first-run/fresh-install scenarios don't fail. ENOENT on unlink is
+	// expected when the file simply doesn't exist yet, so swallow it.
+	try {
+		configInstance = new Store({ schema });
+	} catch {
+		try {
+			const { app } = require('electron');
+			fs.unlinkSync(path.join(app.getPath('userData'), 'config.json'));
+		} catch (unlinkErr: unknown) {
+			if ((unlinkErr as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+				throw unlinkErr;
+			}
+		}
+		configInstance = new Store({ schema });
+	}
 }
+
+export default configInstance;

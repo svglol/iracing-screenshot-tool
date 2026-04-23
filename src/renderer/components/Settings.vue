@@ -61,6 +61,7 @@
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
+import config from '../../utilities/config';
 const { version, repository } = require('../../../package.json');
 
 const { shell, ipcRenderer } = require('electron');
@@ -68,8 +69,6 @@ const fs = require('fs');
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const changelogFile = userDataPath + '\\releases.json';
 const changelogApiUrl = `https://api.github.com/repos/${getRepositorySlug(repository)}/releases`;
-
-const config = require('../../utilities/config');
 
 function getRepositorySlug(repo) {
 	const fallback = 'svglol/iracing-screenshot-tool';

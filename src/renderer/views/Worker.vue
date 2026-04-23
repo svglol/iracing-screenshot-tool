@@ -3,6 +3,7 @@
 </template>
 
 <script lang="ts">
+import config from '../../utilities/config';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -18,7 +19,6 @@ const {
 } = require('../../utilities/screenshot-name');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
-const config = require('../../utilities/config');
 const { resolveFilenameFormat } = require('../../utilities/filenameFormat');
 const { createLogger } = require('../../utilities/logger');
 const log = createLogger('worker');
