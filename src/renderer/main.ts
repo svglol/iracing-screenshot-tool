@@ -6,17 +6,16 @@ import './assets/style/main.scss';
 import VueLazyload from 'vue-lazyload';
 import {
 	createOruga,
-	OButton,
-	OModal,
-	OInput,
-	OField,
-	OSelect,
-	OSwitch,
-	OTag,
-	OCarousel,
-	OCarouselItem,
-	ONotification,
-	ODropdown,
+	Button,
+	Modal,
+	Input,
+	Field,
+	Select,
+	Switch,
+	Tag,
+	Carousel,
+	Notification,
+	Dropdown,
 } from '@oruga-ui/oruga-next';
 import { bulmaConfig } from '@oruga-ui/theme-bulma';
 import { library } from '@fortawesome/fontawesome-svg-core';
@@ -50,20 +49,14 @@ const app = createApp(App);
 app.use(router);
 app.use(VueLazyload);
 const oruga = createOruga();
-[
-	OButton,
-	OModal,
-	OInput,
-	OField,
-	OSelect,
-	OSwitch,
-	OTag,
-	OCarousel,
-	OCarouselItem,
-	ONotification,
-	ODropdown,
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-].forEach((c) => oruga.use(c as any));
+// Register Oruga component plugins (not raw components). Each plugin's
+// install() calls app.component('OButton', OButton) etc. — passing raw
+// OButton/OModal/etc. to oruga.use() silently no-ops because raw components
+// have no install method. Carousel plugin registers both OCarousel and
+// OCarouselItem, so CarouselItem is not imported separately.
+[Button, Modal, Input, Field, Select, Switch, Tag, Carousel, Notification, Dropdown].forEach(
+	(p) => oruga.use(p)
+);
 app.use(oruga, {
 	...bulmaConfig,
 	iconComponent: 'vue-fontawesome',
