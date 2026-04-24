@@ -364,7 +364,9 @@ export default {
 			}
 
 			this.$nextTick(() => {
-				const indicator = document.querySelector('.carousel-indicator');
+				const indicator = document.querySelector(
+					'#carousel .o-carousel__indicators'
+				) as HTMLElement | null;
 				if (indicator) {
 					indicator.scrollLeft = 0;
 				}
@@ -549,8 +551,8 @@ export default {
 				return;
 			}
 
-			const indicator = document.querySelector('.carousel-indicator');
 			const carousel = document.getElementById('carousel');
+			const indicator = carousel?.querySelector('.o-carousel__indicators');
 			if (!indicator || !carousel) {
 				return;
 			}
@@ -559,7 +561,7 @@ export default {
 				'wheel',
 				(event) => {
 					const delta = Math.max(-1, Math.min(1, -(event.deltaY || 0)));
-					indicator.scrollLeft += delta * 400;
+					(indicator as HTMLElement).scrollLeft += delta * 400;
 				},
 				{ passive: true }
 			);
@@ -595,11 +597,6 @@ body {
 .label {
 	color: white !important;
 }
-.indicator-item {
-	flex: 0 0 calc(100vh / 6) !important;
-	margin-left: 0.25rem;
-	margin-right: 0.25rem;
-}
 
 .toolbar {
 	list-style-type: none;
@@ -628,23 +625,47 @@ body {
 	opacity: 0.5;
 }
 
-.carousel .carousel-indicator.has-custom {
-	overflow-x: scroll !important;
-	margin-top: auto;
-	background-color: rgba(0, 0, 0, 0.2);
+/* SBM-02: Vertically (and horizontally) center the preview image inside its carousel item. */
+#carousel .o-carousel__item {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* SBM-03: Gallery strip container — always-visible horizontal scrollbar inherits
+   the global styled scrollbar rules from main.scss (thumb = $primary,
+   track = rgba(0,0,0,0.5)). Darker background + top border visually
+   separates it from the preview area above. */
+#carousel .o-carousel__indicators {
+	overflow-x: auto;
+	overflow-y: hidden;
+	background-color: rgba(0, 0, 0, 0.45);
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.4);
 	scroll-behavior: smooth;
+	flex-wrap: nowrap;
+	margin-top: auto;
 }
 
-.indicator-item {
+/* SBM-03: Individual indicator thumbnails — fixed-width tiles, no wrap, small gap. */
+#carousel .o-carousel__indicator-item {
+	flex: 0 0 calc(100vh / 6);
+	margin-left: 0.25rem;
+	margin-right: 0.25rem;
 	padding-right: 0.5rem;
+	background: transparent;
+	border: none;
+	cursor: pointer;
 }
 
-.is-active img {
+/* SBM-03: Active indicator — red drop-shadow selection highlight (port of Buefy-era .is-active img). */
+#carousel .o-carousel__indicator-item--active img {
 	filter: drop-shadow(0 -2px 0 #ec202a) drop-shadow(0 2px 0 #ec202a)
 		drop-shadow(-2px 0 0 #ec202a) drop-shadow(2px 0 0 #ec202a);
 }
 
-.indicator-item img:hover {
+/* SBM-03: Hover affordance on inactive thumbnails (port of Buefy-era .indicator-item img:hover). */
+#carousel .o-carousel__indicator-item img:hover {
 	opacity: 0.8;
 }
 
