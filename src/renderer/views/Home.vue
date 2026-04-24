@@ -10,7 +10,7 @@
 				max-width: 240px;
 			"
 		>
-			<SideBar @click="screenshot" />
+			<SideBar @screenshot="screenshot" />
 			<div class="sidebar-footer">
 				<PromoCard class="sidebar-promo" />
 				<Settings />

@@ -124,6 +124,13 @@ const fs = require('fs');
 
 export default {
 	props: ['screenshot'],
+	// Declare 'screenshot' as a custom emit. Previously used 'click', which in
+	// Vue 3 is treated as a NATIVE DOM event unless explicitly declared —
+	// native clicks from child elements (e.g. <o-select> dropdown) bubbled
+	// through SideBar's root and fired the parent's @click with a MouseEvent
+	// instead of the width/height payload, producing `undefined` in the main-
+	// process PowerShell SetWindowPos call.
+	emits: ['screenshot'],
 	data() {
 		return {
 			items: ['1080p', '2k', '4k', '5k', '6k', '7k', '8k', 'Custom'],
@@ -316,7 +323,7 @@ export default {
 				h += Math.ceil(h * 0.06);
 			}
 			this.takingScreenshot = true;
-			this.$emit('click', {
+			this.$emit('screenshot', {
 				width: w,
 				height: h,
 				targetWidth,
