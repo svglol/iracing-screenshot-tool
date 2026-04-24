@@ -2,7 +2,7 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** _None active — v2.0 shipped 2026-04-22_
-**Last activity:** 2026-04-24 — Runtime Vue-warn fix in 19ee9df: Oruga component plugins now registered correctly (Button/Modal/… instead of raw OButton/OModal/… passed to oruga.use — plain components have no .install method, so app.use silently no-op'd them). Caught by user at runtime, not by the 260424-krx build-gate audit. See quick task SUMMARY Post-Audit Addendum for the audit-gap lesson. Prior: quick task 260424-krx closed (audit-only, zero regressions per build gate). v2.0 SHIPPED 2026-04-22.
+**Last activity:** 2026-04-24 — Completed quick task 260424-sbm (Home.vue gallery UX polish). Commit 0b57b20: Buefy .carousel-indicator → Oruga 0.13 .o-carousel__indicators class migration (bindCarouselScroll wheel listener had been silently dead since v2.0), wired wheel-to-horizontal scroll, vertically centered the carousel item, added dark-strip visual separation for the gallery. Prior: 260424-krx audit closed (0095043 carousel props + color-scheme lock, 8fe9443 SideBar emit rename, 132f84e $oruga._programmatic, 19ee9df Oruga plugin registration, 34c899e Vite imports). v2.0 SHIPPED 2026-04-22.
 
 ## Current Position
 
@@ -102,6 +102,7 @@ Pre-existing concerns carrying into v2.1+ (v2.0 all concerns resolved):
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260424-krx | Fix the latest UI regressions (build-gate audit: zero regressions post-`34c899e`. **Post-audit runtime fix in `19ee9df`:** Oruga component plugins registered via non-prefixed exports — raw `OButton`/`OModal`/… have no `.install`, so `app.use()` silently no-op'd them. See SUMMARY Post-Audit Addendum.) | 2026-04-24 | `34c899e` + `19ee9df` | [260424-krx-fix-the-latest-ui-regressions](./quick/260424-krx-fix-the-latest-ui-regressions/) |
+| 260424-sbm | Home.vue gallery UX polish: migrated 5 dead Buefy class selectors to Oruga 0.13 equivalents (`bindCarouselScroll` wheel-to-horizontal listener had been silently dead since v2.0 — queried `.carousel-indicator` not emitted by Oruga); added vertical centering on `.o-carousel__item`; added dark-strip visual separation on `.o-carousel__indicators` (rgba(0,0,0,0.45) + top border + inner shadow + `overflow-x:auto`). `npm run pack` exit 0. | 2026-04-24 | `0b57b20` | [260424-sbm-gallery-ux-polish-fast-scroll-vertically](./quick/260424-sbm-gallery-ux-polish-fast-scroll-vertically/) |
 
 ## Accumulated Context
 
