@@ -84,11 +84,9 @@
 				<o-carousel
 					id="carousel"
 					v-model="selected"
-					:animated="'fade'"
-					:arrow="false"
+					:arrows="false"
 					:autoplay="false"
-					:has-drag="false"
-					indicator-custom
+					:dragable="false"
 					:indicator-inside="false"
 				>
 					<o-carousel-item v-for="(item, i) in items" :key="i">
@@ -319,6 +317,16 @@ export default {
 			} catch (error) {
 				console.log(error);
 				this.resolution = '';
+			}
+		},
+		// Keep the filename-bar / preview name in sync when the carousel's
+		// active index changes from sources other than our explicit setters:
+		// Oruga's indicator-wrapper clicks, keyboard navigation, and future
+		// programmatic switchTo calls all flow through here.
+		selected(newIndex: number) {
+			const item = this.items[newIndex];
+			if (item && item.file && this.currentURL !== item.file) {
+				this.currentURL = item.file;
 			}
 		},
 	},

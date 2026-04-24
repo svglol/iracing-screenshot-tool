@@ -20,6 +20,14 @@ $twitter: #4099ff;
 // Bulma 1.0 computes h/s/l triplets at runtime; overriding the hex alone via --bulma-primary
 // also works for most components, but setting the triplet is most precise.
 :root {
+	// Lock to dark scheme. Bulma 1.0 (unlike Buefy/Bulma 0.9) honors
+	// prefers-color-scheme for text and component backgrounds — without this
+	// lock, users on light-mode systems get near-black text rendered on the
+	// app's explicit dark panel backgrounds, producing black-on-black text
+	// throughout. The app was visually a dark app in v1.4 and we want to keep
+	// that look.
+	color-scheme: dark;
+
 	--bulma-primary: #{$primary};
 	--bulma-primary-h: 357deg;
 	--bulma-primary-s: 83%;
@@ -83,10 +91,16 @@ input::-webkit-inner-spin-button {
 	margin: 0;
 }
 
+// Previously forced `color: black !important` — a Buefy-era assumption that
+// inputs had white backgrounds. Bulma 1.0 drives input bg/color from its
+// scheme CSS variables (dark-mode defaults to a dark input with light text),
+// and the forced black made text invisible on dark backgrounds. Let Bulma's
+// own --bulma-input-color apply; the :root `color-scheme: dark` lock above
+// makes this consistent across the app.
 input,
 select,
 textarea {
-	color: black !important;
+	color: var(--bulma-input-color, inherit);
 }
 
 ::-webkit-scrollbar {
