@@ -117,9 +117,9 @@
 
 <script lang="ts">
 import config from '../../utilities/config';
+import { checkIracingConfig } from '../../utilities/iracing-config-checks';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
-const { checkIracingConfig } = require('../../utilities/iracing-config-checks');
 
 export default {
 	props: ['screenshot'],

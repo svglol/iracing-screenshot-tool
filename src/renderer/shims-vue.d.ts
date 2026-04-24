@@ -6,6 +6,7 @@ declare module '*.vue' {
 }
 declare module '*.scss';
 declare module '*.css';
+declare module '*.png';
 
 // Third-party Vue plugins without bundled or @types/* type declarations.
 // Installed via npm; plugins are consumed through Vue's `app.use(plugin)` which

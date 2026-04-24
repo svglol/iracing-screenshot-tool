@@ -1,8 +1,10 @@
 // Use CJS require for fs so tests can spy on fs methods via `vi.spyOn(fs, ...)`;
 // ESM namespace imports are sealed and vi.spyOn cannot redefine their properties.
+// path/os use CJS require because Vite rewrites `import ... from 'path'` to a
+// browser shim that lacks `join`/`homedir` (same convention as utilities/config.ts).
 const fs: typeof import('fs') = require('fs');
-import * as path from 'path';
-import * as os from 'os';
+const path: typeof import('path') = require('path');
+const os: typeof import('os') = require('os');
 
 const IRACING_INI_PATH = path.join(
 	os.homedir(),

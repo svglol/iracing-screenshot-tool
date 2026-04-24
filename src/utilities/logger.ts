@@ -1,5 +1,10 @@
-import * as fs from 'fs';
-import * as path from 'path';
+// Use typed `require(...)` for Node built-ins so Vite's renderer target does
+// NOT rewrite them to the __vite-browser-external shim (which lacks join /
+// statSync / etc.). Electron's Node integration resolves bare-name requires
+// at runtime. Matches the convention used in utilities/config.ts (0411a5b)
+// and utilities/iracing-config-checks.ts.
+const fs: typeof import('fs') = require('fs');
+const path: typeof import('path') = require('path');
 
 export interface Logger {
 	info(msg: string, data?: unknown): void;

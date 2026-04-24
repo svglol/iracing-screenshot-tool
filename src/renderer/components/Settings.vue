@@ -62,7 +62,7 @@ import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
 import config from '../../utilities/config';
-const { version, repository } = require('../../../package.json');
+import { version, repository } from '../../../package.json';
 
 const { shell, ipcRenderer } = require('electron');
 const fs = require('fs');

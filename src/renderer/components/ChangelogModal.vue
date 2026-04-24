@@ -22,11 +22,11 @@
 </template>
 
 <script lang="ts">
+import { version } from '../../../package.json';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const changelogFile = userDataPath + '\\releases.json';
-const { version } = require('../../../package.json');
 
 export default {
 	data() {

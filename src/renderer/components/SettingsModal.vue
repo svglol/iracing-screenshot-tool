@@ -265,11 +265,8 @@
 
 <script lang="ts">
 import config from '../../utilities/config';
-const { version } = require('../../../package.json');
-const {
-	FILENAME_FIELDS,
-	DEFAULT_FORMAT,
-} = require('../../utilities/filenameFormat');
+import { version } from '../../../package.json';
+import { FILENAME_FIELDS, DEFAULT_FORMAT } from '../../utilities/filenameFormat';
 const { ipcRenderer } = require('electron');
 
 export default {

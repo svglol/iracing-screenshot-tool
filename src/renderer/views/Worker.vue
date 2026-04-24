@@ -4,23 +4,23 @@
 
 <script lang="ts">
 import config from '../../utilities/config';
+import {
+	normalizeCaptureBounds,
+	normalizeCaptureTarget,
+	resolveDisplayCaptureRect,
+} from '../../utilities/desktop-capture';
+import {
+	sanitizeFilePart,
+	buildScreenshotFileKey,
+} from '../../utilities/screenshot-name';
+import { resolveFilenameFormat } from '../../utilities/filenameFormat';
+import { createLogger } from '../../utilities/logger';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const {
-	normalizeCaptureBounds,
-	normalizeCaptureTarget,
-	resolveDisplayCaptureRect,
-} = require('../../utilities/desktop-capture');
-const {
-	sanitizeFilePart,
-	buildScreenshotFileKey,
-} = require('../../utilities/screenshot-name');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
-const { resolveFilenameFormat } = require('../../utilities/filenameFormat');
-const { createLogger } = require('../../utilities/logger');
 const log = createLogger('worker');
 
 const FORMAT_MAP = {
@@ -238,10 +238,10 @@ function getFileNameString() {
 	// Handle {counter} - find unique filename
 	if (resolved.includes('{counter}')) {
 		let count = 0;
-		let fileName = resolved.replace('{counter}', count);
+		let fileName = resolved.replace('{counter}', String(count));
 		while (fs.existsSync(getScreenshotPath(fileName))) {
 			count += 1;
-			fileName = resolved.replace('{counter}', count);
+			fileName = resolved.replace('{counter}', String(count));
 		}
 		return fileName;
 	}

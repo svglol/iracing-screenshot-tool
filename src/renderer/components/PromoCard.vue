@@ -17,12 +17,13 @@
 </template>
 
 <script lang="ts">
+import logoSrc from '../../../static/arms_logo.png';
 const { shell } = require('electron');
 
 export default {
 	data() {
 		return {
-			logoSrc: require('../../../static/arms_logo.png'),
+			logoSrc,
 		};
 	},
 	methods: {
