@@ -2,7 +2,7 @@
 
 **Project:** iRacing Screenshot Tool
 **Current Milestone:** _None active — v2.0 shipped 2026-04-22_
-**Last activity:** 2026-04-24 — Completed quick task 260424-krx: Fix the latest UI regressions (audit-only — see Quick Tasks Completed table). Prior: v2.0 SHIPPED 2026-04-22.
+**Last activity:** 2026-04-24 — Runtime Vue-warn fix in 19ee9df: Oruga component plugins now registered correctly (Button/Modal/… instead of raw OButton/OModal/… passed to oruga.use — plain components have no .install method, so app.use silently no-op'd them). Caught by user at runtime, not by the 260424-krx build-gate audit. See quick task SUMMARY Post-Audit Addendum for the audit-gap lesson. Prior: quick task 260424-krx closed (audit-only, zero regressions per build gate). v2.0 SHIPPED 2026-04-22.
 
 ## Current Position
 
@@ -101,7 +101,7 @@ Pre-existing concerns carrying into v2.1+ (v2.0 all concerns resolved):
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260424-krx | Fix the latest UI regressions (audit-only — zero regressions found post-`34c899e`; `npm run pack` exit 0) | 2026-04-24 | `34c899e` | [260424-krx-fix-the-latest-ui-regressions](./quick/260424-krx-fix-the-latest-ui-regressions/) |
+| 260424-krx | Fix the latest UI regressions (build-gate audit: zero regressions post-`34c899e`. **Post-audit runtime fix in `19ee9df`:** Oruga component plugins registered via non-prefixed exports — raw `OButton`/`OModal`/… have no `.install`, so `app.use()` silently no-op'd them. See SUMMARY Post-Audit Addendum.) | 2026-04-24 | `34c899e` + `19ee9df` | [260424-krx-fix-the-latest-ui-regressions](./quick/260424-krx-fix-the-latest-ui-regressions/) |
 
 ## Accumulated Context
 

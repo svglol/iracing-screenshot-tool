@@ -200,3 +200,41 @@ Both anti-pattern greps were run independently (not relying on the planner's pre
 - 0 regressions found
 - 0 source files modified
 - `npm run pack` exit status: **0**
+
+---
+
+## Post-Audit Addendum (2026-04-24, commit `19ee9df`)
+
+**Audit gap caught at runtime (not by `npm run pack`):** Immediately after this
+audit closed, the user reported a cascade of Vue `[Vue warn]: Failed to resolve
+component: o-tag / o-carousel / o-modal / o-button / o-select / o-field /
+o-input / o-notification / o-switch / o-carousel-item` warnings on app boot.
+
+Root cause in `src/renderer/main.ts:52-66`: the file imported raw Oruga
+components (`OButton`, `OModal`, …) and passed them to `oruga.use()`. Oruga's
+`install()` loops the array and calls `app.use(c, {oruga})` on each, but **raw
+Vue 3 components have no `.install` method** — `app.use(plainComponent)` is a
+silent no-op. So `OButton`, `OModal`, etc. were never registered as globals,
+even though Vite bundled them fine. The pre-existing `as any` cast in the
+`.forEach` was silently masking the type mismatch.
+
+Fix: import the **non-prefixed plugin exports** (`Button`, `Modal`, `Input`,
+`Field`, `Select`, `Switch`, `Tag`, `Carousel`, `Notification`, `Dropdown`)
+instead. Each plugin has a proper `install(app)` that calls
+`app.component('OName', OName)`. Also dropped `OCarouselItem` — `Carousel`'s
+install registers both `OCarousel` and `OCarouselItem`.
+
+**Lesson for future audits:** `npm run pack` (Vite build) proves the module
+graph resolves and the bundler doesn't choke. It does **NOT** prove that
+registered globals actually reach `app.components` at runtime. The next time a
+Vue-3-era plugin-registration audit is run, add one of:
+
+- Runtime smoke test: launch Electron, grep stderr for `[Vue warn]`
+- Static check: confirm every `<o-*>` / `<font-awesome-icon>` / other global
+  component used in any `.vue` template has either an `app.component('Name', …)`
+  call OR an `app.use(plugin)` where that plugin's `.install` is verified to
+  register the component (not just a raw component import passed to `app.use`).
+
+Commit `19ee9df` (`fix(vue3): register Oruga component plugins so <o-*>
+globals resolve`) lands the fix. v2.0 is now fully clean at both build-time
+AND runtime for this pattern.
