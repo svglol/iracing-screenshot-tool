@@ -142,6 +142,7 @@ import SideBar from '../components/SideBar.vue';
 import PromoCard from '../components/PromoCard.vue';
 import Settings from '../components/Settings.vue';
 import config from '../../utilities/config';
+import { useOruga } from '@oruga-ui/oruga-next';
 
 const { ipcRenderer, clipboard, shell, nativeImage } = require('electron');
 const sizeOf = require('image-size');
@@ -392,8 +393,9 @@ export default {
 		},
 		copy() {
 			copyImageToClipboard(toFsPath(this.currentURL));
-			// $oruga not in ComponentCustomProperties augmentation (D-12-08).
-			(this as any).$oruga.notification.open({
+			// Oruga 0.13: programmatic interfaces live on `_programmatic`,
+			// not the Oruga instance directly. useOruga() returns _programmatic.
+			useOruga().notification.open({
 				message: `${this.fileName} copied to clipboard`,
 				variant: 'dark',
 			});

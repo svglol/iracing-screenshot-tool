@@ -118,6 +118,7 @@
 <script lang="ts">
 import config from '../../utilities/config';
 import { checkIracingConfig } from '../../utilities/iracing-config-checks';
+import { useOruga } from '@oruga-ui/oruga-next';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 
@@ -173,9 +174,10 @@ export default {
 					.split('.')
 					.slice(0, -1)
 					.join('.');
-				// $oruga is not in Vue's ComponentCustomProperties augmentation
-				// (Oruga 0.13 ships partial TS support — D-12-08). v2.1 candidate.
-				(this as any).$oruga.notification.open({
+				// Oruga 0.13: programmatic interfaces live on `_programmatic`,
+				// not directly on the Oruga instance. useOruga() returns the
+				// _programmatic map, so useOruga().notification === $oruga._programmatic.notification.
+				useOruga().notification.open({
 					message: file + ' saved successfully',
 					variant: 'success',
 				});
@@ -191,8 +193,7 @@ export default {
 			const logHint = escapedLogFile
 				? `<br><small>Log: ${escapedLogFile}</small>`
 				: '';
-			// $oruga not typed — see note above.
-			(this as any).$oruga.notification.open({
+			useOruga().notification.open({
 				message: `Screenshot failed: ${escapedMessage}${logHint}`,
 				variant: 'danger',
 				duration: 10000,
