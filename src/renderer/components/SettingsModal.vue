@@ -15,7 +15,7 @@
 				<div class="settings-form">
 					<o-field label="Screenshot Folder" />
 
-					<o-field class="settings-inline-field">
+					<o-field addons class="settings-inline-field">
 						<o-input
 							expanded
 							disabled
@@ -33,7 +33,7 @@
 					</o-field>
 					<hr />
 					<o-field label="Screenshot Keybind" />
-					<o-field class="settings-inline-field">
+					<o-field addons class="settings-inline-field">
 						<o-input
 							expanded
 							disabled
@@ -245,7 +245,7 @@
 					</span>
 					<o-field label="Reshade INI" />
 
-					<o-field class="settings-inline-field">
+					<o-field addons class="settings-inline-field">
 						<o-input expanded disabled type="text" :value="reshadeFile" />
 						<p class="control">
 							<o-button
@@ -577,10 +577,6 @@ hr {
 
 .settings-inline-field {
 	margin-bottom: 0;
-}
-
-.settings-action {
-	width: 130px;
 }
 
 .settings-grid {

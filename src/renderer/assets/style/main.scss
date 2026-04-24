@@ -37,6 +37,16 @@ $twitter: #4099ff;
 	--bulma-link-h: 357deg;
 	--bulma-link-s: 83%;
 	--bulma-link-l: 53%;
+
+	// Bulma 1.0 disabled-input text/bg resolve to text-weak on background, which
+	// in dark scheme is mid-grey on ~9%-lightness gray — ~1.8:1 contrast, effectively
+	// invisible. SettingsModal uses `disabled` as a read-only display for filepaths /
+	// captured keybinds, so we need disabled inputs to be READABLE, not themed as
+	// "user-can't-edit-this" at the cost of legibility. Override just the two disabled
+	// variables so the filepath values render as light-grey on the same dark bg.
+	--bulma-input-disabled-color: hsl(0, 0%, 85%);
+	--bulma-input-disabled-background-color: hsl(0, 0%, 18%);
+	--bulma-input-disabled-border-color: hsl(0, 0%, 28%);
 }
 
 html {
@@ -92,17 +102,6 @@ input::-webkit-inner-spin-button {
 	margin: 0;
 }
 
-// Previously forced `color: black !important` — a Buefy-era assumption that
-// inputs had white backgrounds. Bulma 1.0 drives input bg/color from its
-// scheme CSS variables (dark-mode defaults to a dark input with light text),
-// and the forced black made text invisible on dark backgrounds. Let Bulma's
-// own --bulma-input-color apply; the :root `color-scheme: dark` lock above
-// makes this consistent across the app.
-input,
-select,
-textarea {
-	color: var(--bulma-input-color, inherit);
-}
 
 ::-webkit-scrollbar {
 	width: 8px !important;
