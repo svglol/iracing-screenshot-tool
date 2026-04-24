@@ -54,6 +54,23 @@ export default defineConfig({
 			preprocessorOptions: {
 				scss: {
 					loadPaths: [resolve(__dirname, 'node_modules')],
+					// Silence deprecations emitted by upstream Bulma 1.0 +
+					// @oruga-ui/theme-bulma SCSS — we don't control that code.
+					// Our own main.scss uses color.adjust() (no darken), so any
+					// warning in these categories after silencing points at a
+					// regression in our code, not noise.
+					//   if-function, global-builtin, color-functions, import,
+					//   legacy-js-api
+					// (mixed-decls omitted: that deprecation is already obsolete
+					// in Dart Sass 1.79+ — silencing it triggers a secondary
+					// "obsolete deprecation" warning.)
+					silenceDeprecations: [
+						'if-function',
+						'global-builtin',
+						'color-functions',
+						'import',
+						'legacy-js-api',
+					],
 					// Custom importer bypasses sass-embedded's package-exports check
 					// for @oruga-ui/theme-bulma's `dist/scss/*` subpath — the exports
 					// map key `./dist/scss/*.scss` requires a trailing `.scss` that

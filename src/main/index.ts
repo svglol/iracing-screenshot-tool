@@ -119,9 +119,13 @@ if (!isDev) {
 		process.exit(0);
 	}
 } else {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	require('electron-debug')({
-		showDevTools: false,
+	// electron-debug@4 is pure ESM and dropped the dev-tools extension
+	// installation path that used to call the deprecated
+	// session.getAllExtensions API. Load it via dynamic import so the call
+	// works from main's CJS bundle; keyboard shortcuts attach async but
+	// that's fine — they bind before the user can press anything.
+	void import('electron-debug').then(({ default: electronDebug }) => {
+		electronDebug({ showDevTools: false });
 	});
 }
 

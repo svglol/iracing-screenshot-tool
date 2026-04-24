@@ -6,6 +6,7 @@
 // configurable entry point for custom variants. Bulma 1.0's $primary is NOT
 // forwarded through theme-build's `with()` — override via CSS custom properties
 // on :root below (Bulma 1.0 design — colors live as CSS vars, not SCSS vars).
+@use 'sass:color';
 @use '@oruga-ui/theme-bulma/dist/scss/theme-build' with (
 	$theme-bulma-custom-colors: (
 		'twitter': #4099ff,
@@ -123,7 +124,7 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb:horizontal:hover {
-	background-color: darken($primary, 10%);
+	background-color: color.adjust($primary, $lightness: -10%);
 }
 
 .shadow {
@@ -149,7 +150,7 @@ textarea {
 }
 
 $white: #fff;
-$grey: darken($white, 15%);
+$grey: color.adjust($white, $lightness: -15%);
 $black: #333;
 
 .vue-simple-context-menu {
@@ -193,7 +194,7 @@ $black: #333;
 }
 
 a:hover {
-	color: darken($primary, 20%);
+	color: color.adjust($primary, $lightness: -20%);
 }
 
 h2 {
