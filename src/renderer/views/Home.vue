@@ -160,13 +160,14 @@ const EMPTY_IMAGE =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const THUMBNAIL_CONCURRENCY = 4;
 const THUMB_GEN_RADIUS = 50;
-// Oruga's <o-carousel> renders one carousel-item AND one indicator-item per
-// `items` entry — no built-in virtualization. Above ~300-400 items the renderer
-// chokes mounting that many child components and the layout breaks (gallery
-// renders >1200 elements but the visible viewport never paints). Cap to the
-// most recent N; cached thumbs for older items stay on disk (cleanup uses the
-// full source dir, not the capped gallery items).
-const MAX_GALLERY_ITEMS = 200;
+// Cap to the most recent N. Sized to match the visible thumbnail strip
+// (5 thumbs each side of an active center → 11 total) so the rendered set
+// equals the visible set: the active item sits dead center when there are
+// 11+ items, with symmetric flanks. Cached thumbs for items beyond the cap
+// stay on disk (cleanup uses the full source dir, not the capped items).
+// Bump this constant if you want a wider browse-back window in the gallery —
+// each unit costs one carousel-item + one indicator-item Vue child component.
+const MAX_GALLERY_ITEMS = 11;
 
 let dir = normalizeFolder(config.get('screenshotFolder'));
 
