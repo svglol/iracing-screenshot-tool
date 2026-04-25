@@ -25,6 +25,7 @@
 					resolution == '8k') &&
 				!disableTooltips
 			"
+			class="sidebar-tooltip"
 			variant="warning"
 			aria-close-label="Close message"
 			size="small"
@@ -32,13 +33,10 @@
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
 				margin-bottom: 0.5rem;
-				color: yellow;
 			"
 		>
-			<strong>
-				High resolutions may crash iRacing if you run out of VRAM. Certain
-				track/car combinations will require more VRAM</strong
-			>
+			High resolutions may crash iRacing if you run out of VRAM. Certain
+			track/car combinations will require more VRAM
 		</o-notification>
 
 		<o-switch
@@ -51,6 +49,7 @@
 
 		<o-notification
 			v-if="crop && !disableTooltips"
+			class="sidebar-tooltip"
 			variant="info"
 			aria-close-label="Close message"
 			size="small"
@@ -58,13 +57,10 @@
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
 				margin-bottom: 0.5rem;
-				color: yellow;
 			"
 		>
-			<strong
-				>Shrink iRacing UI to as small as possible with Ctrl+PgDwn before
-				taking screenshot</strong
-			>
+			Shrink iRacing UI to as small as possible with Ctrl+PgDwn before
+			taking screenshot
 		</o-notification>
 		<o-button
 			variant="primary"
@@ -81,6 +77,7 @@
 		<o-notification
 			v-for="(warning, index) in configWarnings"
 			:key="'cw-' + index"
+			class="sidebar-tooltip"
 			variant="warning"
 			aria-close-label="Close message"
 			size="small"
@@ -88,14 +85,14 @@
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
 				margin-bottom: 0.5rem;
-				color: yellow;
 			"
 		>
-			<strong>{{ warning }}</strong>
+			{{ warning }}
 		</o-notification>
 
 		<o-notification
 			v-if="reshade && !disableTooltips"
+			class="sidebar-tooltip"
 			variant="danger"
 			aria-close-label="Close message"
 			size="small"
@@ -103,14 +100,11 @@
 				background-color: rgba(0, 0, 0, 0.3) !important;
 				margin-top: 0.5rem;
 				margin-bottom: 0.5rem;
-				color: yellow;
 			"
 		>
-			<strong
-				>After pressing the screenshot button in the iRacing Screenshot
-				Tool, you will need to press the keybind for taking a screenshot for
-				ReShade</strong
-			>
+			After pressing the screenshot button in the iRacing Screenshot
+			Tool, you will need to press the keybind for taking a screenshot for
+			ReShade
 		</o-notification>
 	</div>
 </template>
@@ -338,15 +332,41 @@ export default {
 </script>
 
 <style>
-.message.is-warning .message-body {
-	color: #ffdd57 !important;
-}
-
 .control-label {
 	font-weight: 700;
 }
 
-.message.is-info .message-body {
-	color: rgb(50, 152, 220) !important;
+/* Sidebar tooltip notifications. Namespaced via .sidebar-tooltip so global
+   Oruga toasts fired from useOruga().notification.open() (screenshot saved /
+   error) keep their default Bulma 1.0 look. The legacy .message.is-warning
+   selectors are gone — Oruga 0.13 + Bulma 1.0 renders .notification > .media
+   > .media-content, not .message > .message-body. */
+
+.sidebar-tooltip.notification {
+	padding: 0.6rem 0.85rem;
+	font-size: 0.78rem;
+	line-height: 1.25;
+	font-weight: 400;
+}
+
+.sidebar-tooltip.notification .media {
+	align-items: flex-start;
+}
+
+.sidebar-tooltip.notification .media-content {
+	font-weight: 400;
+	line-height: 1.25;
+}
+
+.sidebar-tooltip.notification.is-warning .media-content {
+	color: #ffdd57;
+}
+
+.sidebar-tooltip.notification.is-info .media-content {
+	color: rgb(50, 152, 220);
+}
+
+.sidebar-tooltip.notification.is-danger .media-content {
+	color: #ff6b6b;
 }
 </style>
