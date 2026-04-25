@@ -152,6 +152,7 @@ const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const EMPTY_IMAGE =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const THUMBNAIL_CONCURRENCY = 4;
+const THUMB_GEN_RADIUS = 50;
 
 let dir = normalizeFolder(config.get('screenshotFolder'));
 
@@ -277,6 +278,7 @@ export default {
 			selected: 0,
 			carouselScrollBound: false,
 			galleryLoadId: 0,
+			generatingThumbs: new Set<string>(),
 			options: [
 				{
 					name: 'Open Externally',
@@ -329,6 +331,7 @@ export default {
 				this.currentURL = item.file;
 			}
 			this.centerActiveThumb();
+			void this.ensureWindowThumbnails(newIndex, this.galleryLoadId);
 		},
 	},
 	mounted() {
@@ -354,15 +357,7 @@ export default {
 			this.selected = 0;
 			this.currentURL = toDisplayPath(filePath);
 
-			if (item.thumb === EMPTY_IMAGE) {
-				void ensureThumbnail(filePath, thumbPath)
-					.then(() => {
-						item.thumb = item.thumbDisplayPath;
-					})
-					.catch((error) => {
-						console.log(error);
-					});
-			}
+			void this.ensureWindowThumbnails(0, this.galleryLoadId);
 
 			this.$nextTick(() => {
 				this.bindCarouselScroll();
@@ -479,30 +474,45 @@ export default {
 			);
 			this.currentURL = this.items[this.selected].file;
 		},
-		async createMissingThumbnails(items, loadId) {
-			const queue = items.filter((item) => item.thumb === EMPTY_IMAGE);
-			const workerCount = Math.min(THUMBNAIL_CONCURRENCY, queue.length);
+		async ensureWindowThumbnails(centerIndex: number, loadId: number) {
+			if (this.items.length === 0) {
+				return;
+			}
+			const radius = THUMB_GEN_RADIUS;
+			const start = Math.max(0, centerIndex - radius);
+			const end = Math.min(this.items.length, centerIndex + radius + 1);
 
+			const queue: any[] = [];
+			for (let i = start; i < end; i++) {
+				const item = this.items[i];
+				if (!item || item.thumb !== EMPTY_IMAGE) continue;
+				if (this.generatingThumbs.has(item.thumbFsPath)) continue;
+				this.generatingThumbs.add(item.thumbFsPath);
+				queue.push(item);
+			}
+
+			if (queue.length === 0) {
+				return;
+			}
+
+			const workerCount = Math.min(THUMBNAIL_CONCURRENCY, queue.length);
 			const workers = Array.from({ length: workerCount }, async () => {
 				while (queue.length > 0) {
 					const item = queue.shift();
-
 					if (!item) {
 						return;
 					}
-
 					try {
 						await ensureThumbnail(item.sourcePath, item.thumbFsPath);
+						if (loadId !== this.galleryLoadId) {
+							return;
+						}
+						item.thumb = item.thumbDisplayPath;
 					} catch (error) {
 						console.log(error);
-						continue;
+					} finally {
+						this.generatingThumbs.delete(item.thumbFsPath);
 					}
-
-					if (loadId !== this.galleryLoadId) {
-						return;
-					}
-
-					item.thumb = item.thumbDisplayPath;
 				}
 			});
 
@@ -512,17 +522,20 @@ export default {
 			const loadId = this.galleryLoadId + 1;
 			this.galleryLoadId = loadId;
 			this.items = [];
+			this.generatingThumbs.clear();
 			this.setSelectionFromItems();
 
 			const entries = (await listGalleryEntries()).map((entry) => {
 				const thumbFsPath = getThumbnailPath(entry.fullPath);
-				const thumbDisplayPath = toDisplayPath(thumbFsPath);
-				const hasThumbnail = fs.existsSync(thumbFsPath);
-
 				return {
 					file: toDisplayPath(entry.fullPath),
-					thumb: hasThumbnail ? thumbDisplayPath : EMPTY_IMAGE,
-					thumbDisplayPath,
+					// Always start blank; ensureWindowThumbnails fills in cached
+					// or freshly-resized thumbs for items in the active window.
+					// For already-cached items, ensureThumbnail returns early
+					// without doing sharp work, so cached thumbs surface
+					// near-instantly once the window includes them.
+					thumb: EMPTY_IMAGE,
+					thumbDisplayPath: toDisplayPath(thumbFsPath),
 					thumbFsPath,
 					sourcePath: entry.fullPath,
 				};
@@ -538,10 +551,16 @@ export default {
 			if (this.items.length !== 0) {
 				this.$nextTick(() => this.bindCarouselScroll());
 				this.centerActiveThumb();
+				void this.ensureWindowThumbnails(this.selected, loadId);
 			}
 
-			void cleanupThumbnailCache(entries);
-			void this.createMissingThumbnails(entries, loadId);
+			// Defer cleanup off the initial-paint critical path. Guard against
+			// stale folder switches via loadId.
+			setTimeout(() => {
+				if (loadId === this.galleryLoadId) {
+					void cleanupThumbnailCache(entries);
+				}
+			}, 1500);
 		},
 		centerActiveThumb() {
 			// Defer until the carousel has updated its --active class (which
