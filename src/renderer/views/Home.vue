@@ -37,13 +37,6 @@
 						>
 							<span style="font-weight: bold">{{ fileName }}</span>
 							<o-tag variant="info">{{ resolution }}</o-tag>
-							<o-tag
-								v-if="totalSourceCount > items.length"
-								variant="warning"
-								style="margin-left: 0.5rem"
-							>
-								Showing {{ items.length }} of {{ totalSourceCount }}
-							</o-tag>
 						</div>
 					</div>
 					<div class="column" style="margin-left: 5rem">
@@ -88,48 +81,41 @@
 					</div>
 				</div>
 
-				<o-carousel
-					id="carousel"
-					v-model="selected"
-					:arrows="false"
-					:autoplay="false"
-					:dragable="false"
-					:indicator-inside="false"
-				>
-					<o-carousel-item v-for="(item, i) in items" :key="i">
-						<figure class="al image" :draggable="false">
-							<img
-								v-lazy="getViewerImageUrl(items[i], i)"
-								:draggable="false"
-								style="
-									max-height: calc(100vh - 41px - 24px - 95px);
-									object-fit: contain;
-									padding: 1rem;
-								"
-								@contextmenu.prevent.stop="
-									handleClick($event, items[i])
-								"
-							/>
+				<div id="carousel" class="gallery-virtual">
+					<figure
+						class="gallery-virtual__preview"
+						:draggable="false"
+						@contextmenu.prevent.stop="
+							activeItem && handleClick($event, activeItem)
+						"
+					>
+						<img
+							v-if="activeItem"
+							:src="activeItem.file"
+							:draggable="false"
+						/>
+					</figure>
+
+					<div
+						class="gallery-virtual__strip"
+						@wheel.prevent="onStripWheel"
+					>
+						<figure
+							v-for="(item, i) in visibleItems"
+							:key="item.file"
+							class="gallery-virtual__thumb"
+							:class="{
+								'gallery-virtual__thumb--active':
+									windowStart + i === selected,
+							}"
+							:draggable="false"
+							@click="selectIndex(windowStart + i)"
+							@contextmenu.prevent.stop="handleClick($event, item)"
+						>
+							<img v-lazy="getImageUrl(item)" :draggable="false" />
 						</figure>
-					</o-carousel-item>
-					<template #indicator="props">
-						<figure class="al image" :draggable="false">
-							<img
-								v-lazy="getImageUrl(items[props.index])"
-								:draggable="false"
-								style="
-									max-height: 70px;
-									object-fit: contain;
-									height: 70px;
-								"
-								@click="selectImage(items[props.index].file)"
-								@contextmenu.prevent.stop="
-									handleClick($event, items[props.index])
-								"
-							/>
-						</figure>
-					</template>
-				</o-carousel>
+					</div>
+				</div>
 
 				<vue-simple-context-menu
 					:ref="'vueSimpleContextMenu'"
@@ -160,14 +146,12 @@ const EMPTY_IMAGE =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const THUMBNAIL_CONCURRENCY = 4;
 const THUMB_GEN_RADIUS = 50;
-// Cap to the most recent N. Sized to match the visible thumbnail strip
-// (5 thumbs each side of an active center → 11 total) so the rendered set
-// equals the visible set: the active item sits dead center when there are
-// 11+ items, with symmetric flanks. Cached thumbs for items beyond the cap
-// stay on disk (cleanup uses the full source dir, not the capped items).
-// Bump this constant if you want a wider browse-back window in the gallery —
-// each unit costs one carousel-item + one indicator-item Vue child component.
-const MAX_GALLERY_ITEMS = 11;
+// Window of items rendered in the bottom thumbnail strip. The full items
+// array is unbounded — virtualization slices a window of this size around
+// the active selection so the DOM stays small while all items remain
+// reachable via wheel/click navigation. 5 thumbs each side of the active
+// center, symmetric for any selected position not near the start/end edges.
+const VISIBLE_WINDOW_SIZE = 11;
 
 let dir = normalizeFolder(config.get('screenshotFolder'));
 
@@ -231,7 +215,7 @@ async function listGalleryEntries() {
 		files = await fs.promises.readdir(dir);
 	} catch (error) {
 		console.log(error);
-		return { entries: [], totalCount: 0 };
+		return [];
 	}
 
 	const entries = await Promise.all(
@@ -251,23 +235,17 @@ async function listGalleryEntries() {
 		})
 	);
 
-	const sorted = entries
+	return entries
 		.filter(Boolean)
 		.filter((entry) => entry.extension === '.png')
 		.sort((a, b) => b.modified - a.modified);
-
-	return {
-		entries: sorted.slice(0, MAX_GALLERY_ITEMS),
-		totalCount: sorted.length,
-	};
 }
 
 async function cleanupThumbnailCache() {
-	// Build the keep set from ALL source PNGs in the screenshot folder, not
-	// from the (capped) gallery items array. With MAX_GALLERY_ITEMS in effect,
-	// the gallery only renders the most recent N — but cached thumbs for older
-	// items must be preserved on disk so that raising the cap or rotating the
-	// most-recent set doesn't force re-resizing 8K PNGs again.
+	// Build the keep set from ALL source PNGs in the screenshot folder. The
+	// cache is decoupled from the visible window — thumbs for items currently
+	// outside the strip's window are still valid and useful as the user
+	// navigates further into the gallery.
 	try {
 		const dirFiles = await fs.promises.readdir(dir);
 		const keep = new Set(
@@ -309,10 +287,8 @@ export default {
 			fileName: '',
 			resolution: '',
 			selected: 0,
-			carouselScrollBound: false,
 			galleryLoadId: 0,
 			generatingThumbs: new Set<string>(),
-			totalSourceCount: 0,
 			options: [
 				{
 					name: 'Open Externally',
@@ -332,6 +308,23 @@ export default {
 				},
 			],
 		};
+	},
+	computed: {
+		activeItem(): any | null {
+			return this.items[this.selected] || null;
+		},
+		windowStart(): number {
+			if (this.items.length === 0) return 0;
+			const ws = Math.min(VISIBLE_WINDOW_SIZE, this.items.length);
+			const half = Math.floor(ws / 2);
+			const ideal = this.selected - half;
+			return Math.max(0, Math.min(ideal, this.items.length - ws));
+		},
+		visibleItems(): any[] {
+			if (this.items.length === 0) return [];
+			const ws = Math.min(VISIBLE_WINDOW_SIZE, this.items.length);
+			return this.items.slice(this.windowStart, this.windowStart + ws);
+		},
 	},
 	watch: {
 		currentURL() {
@@ -355,16 +348,14 @@ export default {
 				this.resolution = '';
 			}
 		},
-		// Keep the filename-bar / preview name in sync when the carousel's
-		// active index changes from sources other than our explicit setters:
-		// Oruga's indicator-wrapper clicks, keyboard navigation, and future
-		// programmatic switchTo calls all flow through here.
+		// Keep the filename-bar / preview name in sync when the active index
+		// changes via thumbnail click, wheel-step on the strip, or programmatic
+		// updates (e.g. screenshot-response setting selected = 0).
 		selected(newIndex: number) {
 			const item = this.items[newIndex];
 			if (item && item.file && this.currentURL !== item.file) {
 				this.currentURL = item.file;
 			}
-			this.centerActiveThumb();
 			void this.ensureWindowThumbnails(newIndex, this.galleryLoadId);
 		},
 	},
@@ -387,24 +378,11 @@ export default {
 			};
 
 			this.items.unshift(item);
-			// Maintain the gallery cap — if a new screenshot pushed us past
-			// MAX_GALLERY_ITEMS, drop the oldest from the visible list.
-			// Cached thumb on disk for the dropped item stays untouched
-			// (cleanupThumbnailCache uses the source dir, not items array).
-			if (this.items.length > MAX_GALLERY_ITEMS) {
-				this.items.pop();
-			}
-			this.totalSourceCount += 1;
 			copyImageToClipboard(filePath);
 			this.selected = 0;
 			this.currentURL = toDisplayPath(filePath);
 
 			void this.ensureWindowThumbnails(0, this.galleryLoadId);
-
-			this.$nextTick(() => {
-				this.bindCarouselScroll();
-			});
-			this.centerActiveThumb();
 		});
 
 		void this.loadGallery();
@@ -418,18 +396,22 @@ export default {
 		getImageUrl(item) {
 			return item ? item.thumb : EMPTY_IMAGE;
 		},
-		getViewerImageUrl(item, index) {
-			if (!item) {
-				return EMPTY_IMAGE;
-			}
-
-			return index === this.selected ? item.file : item.thumb;
-		},
 		screenshot(data) {
 			ipcRenderer.send('resize-screenshot', data);
 		},
-		selectImage(item) {
-			this.currentURL = item;
+		selectIndex(absIdx: number) {
+			if (absIdx < 0 || absIdx >= this.items.length) return;
+			this.selected = absIdx;
+		},
+		onStripWheel(event: WheelEvent) {
+			const delta = (event.deltaY || 0) > 0 ? 1 : -1;
+			const next = Math.max(
+				0,
+				Math.min(this.items.length - 1, this.selected + delta)
+			);
+			if (next !== this.selected) {
+				this.selected = next;
+			}
 		},
 		openExternally() {
 			shell.openPath(toFsPath(this.currentURL));
@@ -482,7 +464,6 @@ export default {
 			const index = this.items.findIndex((item) => item.file === filePath);
 			if (index !== -1) {
 				this.items.splice(index, 1);
-				this.totalSourceCount = Math.max(0, this.totalSourceCount - 1);
 			}
 
 			if (this.items.length === 0) {
@@ -568,8 +549,7 @@ export default {
 			this.generatingThumbs.clear();
 			this.setSelectionFromItems();
 
-			const { entries: rawEntries, totalCount } = await listGalleryEntries();
-			const entries = rawEntries.map((entry) => {
+			const entries = (await listGalleryEntries()).map((entry) => {
 				const thumbFsPath = getThumbnailPath(entry.fullPath);
 				return {
 					file: toDisplayPath(entry.fullPath),
@@ -590,12 +570,9 @@ export default {
 			}
 
 			this.items = entries;
-			this.totalSourceCount = totalCount;
 			this.setSelectionFromItems();
 
 			if (this.items.length !== 0) {
-				this.$nextTick(() => this.bindCarouselScroll());
-				this.centerActiveThumb();
 				void this.ensureWindowThumbnails(this.selected, loadId);
 			}
 
@@ -606,49 +583,6 @@ export default {
 					void cleanupThumbnailCache();
 				}
 			}, 1500);
-		},
-		centerActiveThumb() {
-			// Defer until the carousel has updated its --active class (which
-			// Oruga applies during the same tick that v-model updates).
-			// $nextTick ensures we query AFTER the new active item has the marker.
-			this.$nextTick(() => {
-				const active = document.querySelector(
-					'#carousel .o-carousel__indicator-item--active'
-				) as HTMLElement | null;
-				if (!active) {
-					return;
-				}
-				// inline: 'center' centers the element in the scroll container
-				// and CLAMPS at start/end automatically — exactly the
-				// "centered sliding window with clamped edges" semantics.
-				active.scrollIntoView({
-					behavior: 'smooth',
-					inline: 'center',
-					block: 'nearest',
-				});
-			});
-		},
-		bindCarouselScroll() {
-			if (this.carouselScrollBound) {
-				return;
-			}
-
-			const carousel = document.getElementById('carousel');
-			const indicator = carousel?.querySelector('.o-carousel__indicators');
-			if (!indicator || !carousel) {
-				return;
-			}
-
-			carousel.addEventListener(
-				'wheel',
-				(event) => {
-					const delta = Math.max(-1, Math.min(1, -(event.deltaY || 0)));
-					(indicator as HTMLElement).scrollLeft += delta * 400;
-				},
-				{ passive: true }
-			);
-
-			this.carouselScrollBound = true;
 		},
 	},
 };
@@ -707,69 +641,82 @@ body {
 	opacity: 0.5;
 }
 
-/* SBM-02: Vertically (and horizontally) center the preview image inside its carousel item. */
-#carousel .o-carousel__item {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-/* SBM-03: Gallery strip container — always-visible horizontal scrollbar inherits
-   the global styled scrollbar rules from main.scss (thumb = $primary,
-   track = rgba(0,0,0,0.5)). Darker background + top border visually
-   separates it from the preview area above. */
-#carousel .o-carousel__indicators {
-	overflow-x: auto;
-	overflow-y: hidden;
-	background-color: rgba(0, 0, 0, 0.45);
-	border-top: 1px solid rgba(255, 255, 255, 0.08);
-	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.4);
-	scroll-behavior: smooth;
-	flex-wrap: nowrap;
-	margin-top: auto;
-}
-
-/* GW3-UI-01/02: Sized so exactly 11 thumbs fit the visible strip width
-   (viewport minus 240px sidebar minus the per-thumb 0.5rem horizontal margin).
-   The strip itself overflows horizontally for any thumbs beyond 11; the
-   selected-index watcher centers the active thumb via scrollIntoView. */
-#carousel .o-carousel__indicator-item {
-	flex: 0 0 calc((100vw - 240px) / 11 - 0.5rem);
-	min-width: 90px;
-	margin-left: 0.25rem;
-	margin-right: 0.25rem;
-	background: transparent;
-	border: none;
-	cursor: pointer;
-}
-
-#carousel .o-carousel__indicator-item img {
-	width: 100%;
-	height: auto;
-	max-height: none !important;
-	aspect-ratio: 16 / 9;
-	object-fit: cover;
-	transition: transform 0.2s ease, filter 0.2s ease;
-}
-
-/* GW3-UI-04: Active indicator — red drop-shadow border + subtle scale-up,
-   transition smoothed via the base img rule above. */
-#carousel .o-carousel__indicator-item--active img {
-	filter: drop-shadow(0 -2px 0 #ec202a) drop-shadow(0 2px 0 #ec202a)
-		drop-shadow(-2px 0 0 #ec202a) drop-shadow(2px 0 0 #ec202a);
-	transform: scale(1.05);
-}
-
-/* SBM-03: Hover affordance on inactive thumbnails (port of Buefy-era .indicator-item img:hover). */
-#carousel .o-carousel__indicator-item img:hover {
-	opacity: 0.8;
-}
-
-.carousel {
+/* VRT: custom virtualized gallery — replaces <o-carousel>. Only the active
+   preview img + the visible window of thumbs (≤ VISIBLE_WINDOW_SIZE = 11)
+   are mounted, regardless of source folder size. */
+.gallery-virtual {
 	height: calc(100vh - 41px - 27px);
 	display: flex;
 	flex-direction: column;
 	max-width: calc(100vw - 240px);
+	overflow: hidden;
+}
+
+.gallery-virtual__preview {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	overflow: hidden;
+	margin: 0;
+}
+
+.gallery-virtual__preview img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.gallery-virtual__strip {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: row;
+	gap: 0.25rem;
+	padding: 0.4rem;
+	background-color: rgba(0, 0, 0, 0.45);
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.4);
+	margin-top: auto;
+}
+
+.gallery-virtual__thumb {
+	flex: 1 1 0;
+	min-width: 0;
+	margin: 0;
+	background: transparent;
+	border: 2px solid transparent;
+	border-radius: 4px;
+	cursor: pointer;
+	overflow: hidden;
+	transition: transform 0.18s ease, border-color 0.18s ease,
+		box-shadow 0.18s ease;
+}
+
+.gallery-virtual__thumb img {
+	display: block;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 16 / 9;
+	object-fit: cover;
+	transition: filter 0.18s ease;
+}
+
+.gallery-virtual__thumb:hover img {
+	opacity: 0.85;
+}
+
+/* VRT-UI-03: active highlight via explicit class binding — no Oruga --active
+   class, no :deep() needed. CSS targets our class on our element directly. */
+.gallery-virtual__thumb--active {
+	border-color: #ec202a;
+	box-shadow: 0 0 0 2px #ec202a, 0 4px 12px rgba(236, 32, 42, 0.45);
+	transform: scale(1.05);
+	z-index: 1;
+}
+
+.gallery-virtual__thumb--active img {
+	filter: brightness(1.08);
 }
 
 .sidebar-footer {
