@@ -136,12 +136,14 @@ input::-webkit-inner-spin-button {
 
 .modal.is-full-screen > .animation-content,
 .modal.is-full-screen > .animation-content > .modal-card {
-	background: rgb(37, 37, 37);
+	background: rgba(37, 37, 37, 0.82);
 	background: linear-gradient(
 		0deg,
-		rgba(37, 37, 37, 1) 0%,
-		rgba(61, 61, 61, 1) 100%
+		rgba(37, 37, 37, 0.82) 0%,
+		rgba(61, 61, 61, 0.82) 100%
 	);
+	backdrop-filter: blur(28px) saturate(120%);
+	-webkit-backdrop-filter: blur(28px) saturate(120%);
 }
 
 :focus {
