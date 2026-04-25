@@ -328,6 +328,7 @@ export default {
 			if (item && item.file && this.currentURL !== item.file) {
 				this.currentURL = item.file;
 			}
+			this.centerActiveThumb();
 		},
 	},
 	mounted() {
@@ -364,14 +365,9 @@ export default {
 			}
 
 			this.$nextTick(() => {
-				const indicator = document.querySelector(
-					'#carousel .o-carousel__indicators'
-				) as HTMLElement | null;
-				if (indicator) {
-					indicator.scrollLeft = 0;
-				}
 				this.bindCarouselScroll();
 			});
+			this.centerActiveThumb();
 		});
 
 		void this.loadGallery();
@@ -541,10 +537,32 @@ export default {
 
 			if (this.items.length !== 0) {
 				this.$nextTick(() => this.bindCarouselScroll());
+				this.centerActiveThumb();
 			}
 
 			void cleanupThumbnailCache(entries);
 			void this.createMissingThumbnails(entries, loadId);
+		},
+		centerActiveThumb() {
+			// Defer until the carousel has updated its --active class (which
+			// Oruga applies during the same tick that v-model updates).
+			// $nextTick ensures we query AFTER the new active item has the marker.
+			this.$nextTick(() => {
+				const active = document.querySelector(
+					'#carousel .o-carousel__indicator-item--active'
+				) as HTMLElement | null;
+				if (!active) {
+					return;
+				}
+				// inline: 'center' centers the element in the scroll container
+				// and CLAMPS at start/end automatically — exactly the
+				// "centered sliding window with clamped edges" semantics.
+				active.scrollIntoView({
+					behavior: 'smooth',
+					inline: 'center',
+					block: 'nearest',
+				});
+			});
 		},
 		bindCarouselScroll() {
 			if (this.carouselScrollBound) {
@@ -647,21 +665,35 @@ body {
 	margin-top: auto;
 }
 
-/* SBM-03: Individual indicator thumbnails — fixed-width tiles, no wrap, small gap. */
+/* GW3-UI-01/02: Sized so exactly 11 thumbs fit the visible strip width
+   (viewport minus 240px sidebar minus the per-thumb 0.5rem horizontal margin).
+   The strip itself overflows horizontally for any thumbs beyond 11; the
+   selected-index watcher centers the active thumb via scrollIntoView. */
 #carousel .o-carousel__indicator-item {
-	flex: 0 0 calc(100vh / 6);
+	flex: 0 0 calc((100vw - 240px) / 11 - 0.5rem);
+	min-width: 90px;
 	margin-left: 0.25rem;
 	margin-right: 0.25rem;
-	padding-right: 0.5rem;
 	background: transparent;
 	border: none;
 	cursor: pointer;
 }
 
-/* SBM-03: Active indicator — red drop-shadow selection highlight (port of Buefy-era .is-active img). */
+#carousel .o-carousel__indicator-item img {
+	width: 100%;
+	height: auto;
+	max-height: none !important;
+	aspect-ratio: 16 / 9;
+	object-fit: cover;
+	transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+/* GW3-UI-04: Active indicator — red drop-shadow border + subtle scale-up,
+   transition smoothed via the base img rule above. */
 #carousel .o-carousel__indicator-item--active img {
 	filter: drop-shadow(0 -2px 0 #ec202a) drop-shadow(0 2px 0 #ec202a)
 		drop-shadow(-2px 0 0 #ec202a) drop-shadow(2px 0 0 #ec202a);
+	transform: scale(1.05);
 }
 
 /* SBM-03: Hover affordance on inactive thumbnails (port of Buefy-era .indicator-item img:hover). */
