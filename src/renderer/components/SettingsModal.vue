@@ -20,7 +20,7 @@
 							expanded
 							disabled
 							type="text"
-							:value="screenshotFolder"
+							:model-value="screenshotFolder"
 						/>
 						<p class="control">
 							<o-button
@@ -38,7 +38,7 @@
 							expanded
 							disabled
 							type="text"
-							:value="screenshotKeybind"
+							:model-value="screenshotKeybind"
 						/>
 						<p class="control">
 							<o-button
@@ -51,8 +51,13 @@
 						</p>
 					</o-field>
 					<hr />
-					<o-field>
-						<div>
+					<o-field class="settings-toggle-row">
+						<o-switch
+							v-model="customFilenameFormat"
+							:rounded="false"
+							class="settings-light-switch"
+						/>
+						<div class="settings-toggle-row__text">
 							<span class="label" style="margin-bottom: 0px"
 								>Custom Filename Format</span
 							>
@@ -61,10 +66,6 @@
 								({track}-{driver}-{counter})</span
 							>
 						</div>
-						<o-switch
-							v-model="customFilenameFormat"
-							style="margin-left: auto"
-						/>
 					</o-field>
 					<div v-if="customFilenameFormat">
 						<o-field>
@@ -138,8 +139,13 @@
 						</o-select>
 					</o-field>
 					<hr />
-					<o-field>
-						<div>
+					<o-field class="settings-toggle-row">
+						<o-switch
+							v-model="disableTooltips"
+							:rounded="false"
+							class="settings-light-switch"
+						/>
+						<div class="settings-toggle-row__text">
 							<span class="label" style="margin-bottom: 0px"
 								>Disable Tooltips</span
 							>
@@ -147,14 +153,15 @@
 								>Leave me alone, I know what I'm doing</span
 							>
 						</div>
-						<o-switch
-							v-model="disableTooltips"
-							style="margin-left: auto"
-						/>
 					</o-field>
 					<hr />
-					<o-field>
-						<div>
+					<o-field class="settings-toggle-row">
+						<o-switch
+							v-model="cropTopLeft"
+							:rounded="false"
+							class="settings-light-switch"
+						/>
+						<div class="settings-toggle-row__text">
 							<span class="label" style="margin-bottom: 0px"
 								>Prefer top-left watermark crop</span
 							>
@@ -164,11 +171,15 @@
 								equally from all sides for a centered result.</span
 							>
 						</div>
-						<o-switch v-model="cropTopLeft" style="margin-left: auto" />
 					</o-field>
 					<hr />
-					<o-field>
-						<div>
+					<o-field class="settings-toggle-row">
+						<o-switch
+							v-model="manualWindowRestore"
+							:rounded="false"
+							class="settings-light-switch"
+						/>
+						<div class="settings-toggle-row__text">
 							<span class="label" style="margin-bottom: 0px"
 								>Manual Window Restore</span
 							>
@@ -178,10 +189,6 @@
 								or Nvidia Surround</span
 							>
 						</div>
-						<o-switch
-							v-model="manualWindowRestore"
-							style="margin-left: auto"
-						/>
 					</o-field>
 					<div v-if="manualWindowRestore">
 						<div class="columns settings-grid">
@@ -230,13 +237,17 @@
 						</o-button>
 					</div>
 					<hr />
-					<o-field>
-						<div>
+					<o-field class="settings-toggle-row">
+						<o-switch
+							v-model="reshade"
+							:rounded="false"
+							class="settings-light-switch"
+						/>
+						<div class="settings-toggle-row__text">
 							<span class="label" style="margin-bottom: 0px"
 								>Reshade Compatibility Mode</span
 							>
 						</div>
-						<o-switch v-model="reshade" style="margin-left: auto" />
 					</o-field>
 					<span class="description">
 						When using reshade you will have to first use your hotkey for
@@ -246,7 +257,7 @@
 					<o-field label="Reshade INI" />
 
 					<o-field addons class="settings-inline-field">
-						<o-input expanded disabled type="text" :value="reshadeFile" />
+						<o-input expanded disabled type="text" :model-value="reshadeFile" />
 						<p class="control">
 							<o-button
 								:disabled="!reshade"
@@ -582,6 +593,84 @@ hr {
 .settings-grid {
 	margin-top: 0.25rem;
 	margin-bottom: 0;
+}
+
+.settings-toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 0.85rem;
+}
+
+.settings-toggle-row__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+/* Light-switch styling for the in-row toggles only.
+   Targets Oruga theme-bulma's rendered DOM (.switch wrapper, input.check track,
+   input.check::before thumb). :deep() because <o-switch> is a child component. */
+:deep(.settings-light-switch.switch) {
+	position: relative;
+	flex-shrink: 0;
+}
+
+:deep(.settings-light-switch .check) {
+	width: 58px;
+	height: 26px;
+	padding: 3px;
+	border-radius: 4px;
+	background: hsl(0, 0%, 28%);
+}
+
+:deep(.settings-light-switch .check:before) {
+	width: 24px;
+	height: 20px;
+	border-radius: 3px;
+	background: hsl(0, 0%, 88%);
+}
+
+/* OFF / ON labels overlaid on the track. The thumb covers the inactive label,
+   so the user reads the CURRENT state at a glance. */
+:deep(.settings-light-switch.switch::before),
+:deep(.settings-light-switch.switch::after) {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.6rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	pointer-events: none;
+	transition: opacity 0.18s ease;
+	z-index: 1;
+}
+
+/* OFF: visible by default — sits on the right half where the thumb isn't. */
+:deep(.settings-light-switch.switch::after) {
+	content: 'OFF';
+	right: 8px;
+	color: hsl(0, 0%, 75%);
+	opacity: 1;
+}
+
+/* ON: hidden by default; revealed when checked (thumb has slid right). */
+:deep(.settings-light-switch.switch::before) {
+	content: 'ON';
+	left: 8px;
+	color: hsl(0, 0%, 98%);
+	opacity: 0;
+}
+
+:deep(.settings-light-switch.switch:has(input.check:checked)) .check {
+	background: var(--bulma-primary, #ec202a);
+}
+
+:deep(.settings-light-switch.switch:has(input.check:checked))::before {
+	opacity: 1;
+}
+
+:deep(.settings-light-switch.switch:has(input.check:checked))::after {
+	opacity: 0;
 }
 
 @media (max-width: 900px) {
