@@ -37,6 +37,13 @@
 						>
 							<span style="font-weight: bold">{{ fileName }}</span>
 							<o-tag variant="info">{{ resolution }}</o-tag>
+							<o-tag
+								v-if="totalSourceCount > items.length"
+								variant="warning"
+								style="margin-left: 0.5rem"
+							>
+								Showing {{ items.length }} of {{ totalSourceCount }}
+							</o-tag>
 						</div>
 					</div>
 					<div class="column" style="margin-left: 5rem">
@@ -153,6 +160,13 @@ const EMPTY_IMAGE =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const THUMBNAIL_CONCURRENCY = 4;
 const THUMB_GEN_RADIUS = 50;
+// Oruga's <o-carousel> renders one carousel-item AND one indicator-item per
+// `items` entry — no built-in virtualization. Above ~300-400 items the renderer
+// chokes mounting that many child components and the layout breaks (gallery
+// renders >1200 elements but the visible viewport never paints). Cap to the
+// most recent N; cached thumbs for older items stay on disk (cleanup uses the
+// full source dir, not the capped gallery items).
+const MAX_GALLERY_ITEMS = 200;
 
 let dir = normalizeFolder(config.get('screenshotFolder'));
 
@@ -216,7 +230,7 @@ async function listGalleryEntries() {
 		files = await fs.promises.readdir(dir);
 	} catch (error) {
 		console.log(error);
-		return [];
+		return { entries: [], totalCount: 0 };
 	}
 
 	const entries = await Promise.all(
@@ -236,17 +250,35 @@ async function listGalleryEntries() {
 		})
 	);
 
-	return entries
+	const sorted = entries
 		.filter(Boolean)
 		.filter((entry) => entry.extension === '.png')
 		.sort((a, b) => b.modified - a.modified);
+
+	return {
+		entries: sorted.slice(0, MAX_GALLERY_ITEMS),
+		totalCount: sorted.length,
+	};
 }
 
-async function cleanupThumbnailCache(entries) {
+async function cleanupThumbnailCache() {
+	// Build the keep set from ALL source PNGs in the screenshot folder, not
+	// from the (capped) gallery items array. With MAX_GALLERY_ITEMS in effect,
+	// the gallery only renders the most recent N — but cached thumbs for older
+	// items must be preserved on disk so that raising the cap or rotating the
+	// most-recent set doesn't force re-resizing 8K PNGs again.
 	try {
+		const dirFiles = await fs.promises.readdir(dir);
 		const keep = new Set(
-			entries.map((entry) => normalizeComparePath(entry.thumbFsPath))
+			dirFiles
+				.filter(
+					(fileName) => path.extname(fileName).toLowerCase() === '.png'
+				)
+				.map((fileName) =>
+					normalizeComparePath(getThumbnailPath(path.join(dir, fileName)))
+				)
 		);
+
 		const cacheFiles = await fs.promises.readdir(getCacheDir());
 
 		await Promise.all(
@@ -279,6 +311,7 @@ export default {
 			carouselScrollBound: false,
 			galleryLoadId: 0,
 			generatingThumbs: new Set<string>(),
+			totalSourceCount: 0,
 			options: [
 				{
 					name: 'Open Externally',
@@ -353,6 +386,14 @@ export default {
 			};
 
 			this.items.unshift(item);
+			// Maintain the gallery cap — if a new screenshot pushed us past
+			// MAX_GALLERY_ITEMS, drop the oldest from the visible list.
+			// Cached thumb on disk for the dropped item stays untouched
+			// (cleanupThumbnailCache uses the source dir, not items array).
+			if (this.items.length > MAX_GALLERY_ITEMS) {
+				this.items.pop();
+			}
+			this.totalSourceCount += 1;
 			copyImageToClipboard(filePath);
 			this.selected = 0;
 			this.currentURL = toDisplayPath(filePath);
@@ -440,6 +481,7 @@ export default {
 			const index = this.items.findIndex((item) => item.file === filePath);
 			if (index !== -1) {
 				this.items.splice(index, 1);
+				this.totalSourceCount = Math.max(0, this.totalSourceCount - 1);
 			}
 
 			if (this.items.length === 0) {
@@ -525,7 +567,8 @@ export default {
 			this.generatingThumbs.clear();
 			this.setSelectionFromItems();
 
-			const entries = (await listGalleryEntries()).map((entry) => {
+			const { entries: rawEntries, totalCount } = await listGalleryEntries();
+			const entries = rawEntries.map((entry) => {
 				const thumbFsPath = getThumbnailPath(entry.fullPath);
 				return {
 					file: toDisplayPath(entry.fullPath),
@@ -546,6 +589,7 @@ export default {
 			}
 
 			this.items = entries;
+			this.totalSourceCount = totalCount;
 			this.setSelectionFromItems();
 
 			if (this.items.length !== 0) {
@@ -558,7 +602,7 @@ export default {
 			// stale folder switches via loadId.
 			setTimeout(() => {
 				if (loadId === this.galleryLoadId) {
-					void cleanupThumbnailCache(entries);
+					void cleanupThumbnailCache();
 				}
 			}, 1500);
 		},
