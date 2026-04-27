@@ -62,7 +62,7 @@
 				margin-bottom: 0.5rem;
 			"
 		>
-			With this option, the final picture is slightly zoomed in — regions
+			With this option, the final picture is slightly zoomed in. Regions
 			near the borders of the screen will be cut off.
 		</o-notification>
 		<o-button
