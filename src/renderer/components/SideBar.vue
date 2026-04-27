@@ -62,8 +62,8 @@
 				margin-bottom: 0.5rem;
 			"
 		>
-			Shrink iRacing UI to as small as possible with Ctrl+PgDwn before
-			taking screenshot
+			With this option, the final picture is slightly zoomed in — regions
+			near the borders of the screen will be cut off.
 		</o-notification>
 		<o-button
 			variant="primary"
