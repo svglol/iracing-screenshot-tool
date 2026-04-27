@@ -44,6 +44,13 @@ let captureTargetDiagnostics = null;
 let preResolvedSourceId = null;
 let targetWidth = null;
 let targetHeight = null;
+// Expanded window dimensions (= what SetWindowPos actually resized iRacing to).
+// Used by fullscreenScreenshot to verify the captured stream came back at the
+// new size and not the prior native dimensions. NOT to be confused with
+// targetWidth/targetHeight, which are the un-expanded user-facing values used
+// for crop output sizing.
+let windowWidth = null;
+let windowHeight = null;
 function isPlainObject(value) {
 	return value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -500,13 +507,14 @@ async function fullscreenScreenshot(callback) {
 	console.time('Get Media');
 
 	try {
-		// Brief settling delay for iRacing to re-render at the new resolution.
+		// Brief initial settling delay for iRacing to re-render at the new
+		// resolution before the first capture attempt.
 		log.debug('Settling delay start', { ms: 200 });
 		await delay(200);
 		log.debug('Settling delay end');
 
 		let sourceId = preResolvedSourceId;
-		let captureTarget = null;
+		let captureTarget: any = null;
 
 		if (sourceId) {
 			// Fast path: source ID was pre-resolved by the main process during
@@ -540,25 +548,111 @@ async function fullscreenScreenshot(callback) {
 			);
 		}
 
-		const t0 = performance.now();
-		// Electron's getUserMedia accepts a `mandatory` Chrome-internal property
-		// that isn't in the standard MediaTrackConstraints TS type. Cast to any.
-		const stream = await navigator.mediaDevices.getUserMedia({
-			audio: false,
-			video: {
-				mandatory: {
-					chromeMediaSource: 'desktop',
-					chromeMediaSourceId: sourceId,
-					minWidth: 1280,
-					maxWidth: 10000,
-					minHeight: 720,
-					maxHeight: 10000,
+		// Acquire the capture stream, then verify (for window-mode captures only)
+		// that the stream came back at the post-resize window dimensions and not
+		// the prior native dimensions. SetWindowPos completes synchronously at
+		// the OS level but the OS-level capture pipeline may still be holding the
+		// previous frame; on slow / loaded user machines this race causes the
+		// captured PNG to come out at native resolution instead of the selected
+		// target. Display-mode captures intentionally capture the full display
+		// and extract the sub-region downstream — skip the dim-check for them.
+		//
+		// History: an earlier version of this guard (commit 3f5ff3c) compared
+		// against `targetWidth/targetHeight` (the un-expanded crop output dims),
+		// which never matched the actual stream dims; it was removed in af9dd43,
+		// which restored the original race. Compare against the *window* dims
+		// (= what SetWindowPos actually resized to) so the check matches cleanly.
+		const RETRY_DELAY_MS = 300;
+		const MAX_WAIT_MS = 8000;
+		const retryStart = performance.now();
+
+		const acquireStream = async () => {
+			const t0 = performance.now();
+			// Electron's getUserMedia accepts a `mandatory` Chrome-internal property
+			// that isn't in the standard MediaTrackConstraints TS type. Cast to any.
+			const s = await navigator.mediaDevices.getUserMedia({
+				audio: false,
+				video: {
+					mandatory: {
+						chromeMediaSource: 'desktop',
+						chromeMediaSourceId: sourceId,
+						minWidth: 1280,
+						maxWidth: 10000,
+						minHeight: 720,
+						maxHeight: 10000,
+					},
 				},
-			},
-		} as any);
-		log.debug('getUserMedia complete', {
-			elapsed: Math.round(performance.now() - t0),
-		});
+			} as any);
+			log.debug('getUserMedia complete', {
+				elapsed: Math.round(performance.now() - t0),
+			});
+			return s;
+		};
+
+		let stream = await acquireStream();
+
+		const captureKind =
+			captureTarget && captureTarget.kind === 'display'
+				? 'display'
+				: 'window';
+		if (captureKind === 'window' && windowWidth && windowHeight) {
+			let track = stream.getVideoTracks()[0];
+			let settings: any = track ? track.getSettings() : {};
+			let streamW = settings.width || 0;
+			let streamH = settings.height || 0;
+
+			while (
+				(streamW !== windowWidth || streamH !== windowHeight) &&
+				performance.now() - retryStart < MAX_WAIT_MS
+			) {
+				log.debug('Stream dim mismatch — retrying', {
+					streamW,
+					streamH,
+					windowWidth,
+					windowHeight,
+					waitMs: RETRY_DELAY_MS,
+				});
+				console.log(
+					`Stream dimensions ${streamW}x${streamH} do not match window ${windowWidth}x${windowHeight} — retrying in ${RETRY_DELAY_MS}ms`
+				);
+				try {
+					stream.getTracks().forEach((t) => t.stop());
+				} catch {
+					// best-effort cleanup
+				}
+				await delay(RETRY_DELAY_MS);
+				stream = await acquireStream();
+				track = stream.getVideoTracks()[0];
+				settings = track ? track.getSettings() : {};
+				streamW = settings.width || 0;
+				streamH = settings.height || 0;
+			}
+
+			if (streamW !== windowWidth || streamH !== windowHeight) {
+				// Don't fail the capture — proceed with whatever the stream
+				// delivered. The user will see a wrong-resolution PNG instead of
+				// no PNG at all, which is a strictly better failure mode and
+				// leaves the warning in the log for diagnosis.
+				// Logger has no 'warn' level — use info; the console.warn below preserves the
+				// dev-tools severity badge.
+				log.info('Stream dim retry timeout — proceeding', {
+					streamW,
+					streamH,
+					windowWidth,
+					windowHeight,
+					elapsedMs: Math.round(performance.now() - retryStart),
+				});
+				console.warn(
+					`Timed out waiting for window dimensions ${windowWidth}x${windowHeight}; proceeding with ${streamW}x${streamH}`
+				);
+			} else {
+				log.debug('Stream dim confirmed', {
+					streamW,
+					streamH,
+					elapsedMs: Math.round(performance.now() - retryStart),
+				});
+			}
+		}
 
 		// Attach custom marker to MediaStream instance (not in lib.dom.d.ts).
 		(stream as any).__captureTarget = captureTarget;
@@ -585,6 +679,8 @@ export default {
 			preResolvedSourceId = input.sourceId || null;
 			targetWidth = input.targetWidth || null;
 			targetHeight = input.targetHeight || null;
+			windowWidth = input.width || null;
+			windowHeight = input.height || null;
 			log.info('Screenshot capture started', {
 				width: input.width,
 				height: input.height,
