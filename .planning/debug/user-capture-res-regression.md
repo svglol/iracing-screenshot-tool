@@ -111,6 +111,16 @@ Key facts the investigator should anchor on:
   found: `npm run type-check` 0 errors; `npm test` 256/256 passing; `npm run pack` (electron-vite build) succeeds with no Vue warnings.
   implication: Field telemetry should now show either (a) the very first probe matches (loop exits immediately after the 200ms initial settle, expected on most machines) or (b) one or two retries on slow machines, with `streamW`/`streamH` reflecting actual frame dims rather than the 10000×10000 constraint cap. If `streamW/streamH` are still 10000 at HEAD after this patch, that would be a probe-implementation bug rather than a constraint-bounds artifact.
 
+- timestamp: 2026-04-27T16:47Z
+  checked: Field telemetry from packaged build `2.1.0+3854f9b` (fix v2). Capture of 1920×1080 with crop=true → window resized to 2036×1145.
+  found: Probe IS reading actual frame dimensions correctly: every retry iteration logs `streamW: 2036, streamH: 1144, windowWidth: 2036, windowHeight: 1145`. Width matches exactly. Height is **off by exactly 1 pixel** — the captured frame's height is one less than the requested window height. After 8.013s timeout, capture proceeds and produces a correct 1920×1080 output (post-crop).
+  implication: Strict equality fails because Windows / Chromium's screen-capture pipeline rounds odd dimensions DOWN to the nearest even (h.264 / DWM video-frame requirement). Math: `1080 + ceil(1080 * 0.06) = 1080 + 65 = 1145` (odd) → captured as 1144. Width 2036 is already even → unchanged. Affects every odd-resolution capture. The probe primitive is right — the comparison just needs a small tolerance.
+
+- timestamp: 2026-04-27T16:55Z
+  checked: Fix v3 — added `DIM_TOLERANCE = 2` and `dimsMatch(sw, sh)` predicate that returns true when both `|sw - windowWidth| <= 2` and `|sh - windowHeight| <= 2`. Replaced both the `while` condition and the post-loop `if` with `!dimsMatch(...)`. Kept everything else (probe primitive, retry budget, display-mode skip, fail-soft).
+  found: `npm run type-check` 0 errors; `npm test` 256/256 passing.
+  implication: With ±2 pixel tolerance, the off-by-1 from even-rounding will pass cleanly. Tolerance also covers ±1 from DWM/border artifacts and ±2 from encoders that align to multiples of 4. Expected next-build signature: first probe matches in the typical case (post-200ms settle); slow-machine case becomes 1-2 retries before match instead of 24-retry timeout.
+
 ## Eliminated Hypotheses
 
 <!-- APPEND only - hypotheses ruled out with evidence -->

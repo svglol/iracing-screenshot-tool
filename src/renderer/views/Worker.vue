@@ -643,6 +643,14 @@ async function fullscreenScreenshot(callback) {
 				? 'display'
 				: 'window';
 		if (captureKind === 'window' && windowWidth && windowHeight) {
+			// Tolerance to absorb capture-pipeline rounding to even dimensions
+			// (h.264 / DWM require even width/height; an odd target like 1145 is
+			// captured as 1144). 2px also covers minor DPI/border artifacts.
+			const DIM_TOLERANCE = 2;
+			const dimsMatch = (sw: number, sh: number) =>
+				Math.abs(sw - windowWidth) <= DIM_TOLERANCE &&
+				Math.abs(sh - windowHeight) <= DIM_TOLERANCE;
+
 			let dims = await probeStreamDimensions(stream).catch(() => ({
 				w: 0,
 				h: 0,
@@ -651,7 +659,7 @@ async function fullscreenScreenshot(callback) {
 			let streamH = dims.h;
 
 			while (
-				(streamW !== windowWidth || streamH !== windowHeight) &&
+				!dimsMatch(streamW, streamH) &&
 				performance.now() - retryStart < MAX_WAIT_MS
 			) {
 				log.debug('Stream dim mismatch — retrying', {
@@ -679,7 +687,7 @@ async function fullscreenScreenshot(callback) {
 				streamH = dims.h;
 			}
 
-			if (streamW !== windowWidth || streamH !== windowHeight) {
+			if (!dimsMatch(streamW, streamH)) {
 				// Don't fail the capture — proceed with whatever the stream
 				// delivered. The user will see a wrong-resolution PNG instead of
 				// no PNG at all, which is a strictly better failure mode and
