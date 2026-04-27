@@ -672,8 +672,8 @@ body {
 	flex: 0 0 auto;
 	display: flex;
 	flex-direction: row;
-	gap: 0.25rem;
-	padding: 0.4rem;
+	gap: 0.5rem;
+	padding: 0.6rem;
 	background-color: rgba(0, 0, 0, 0.45);
 	border-top: 1px solid rgba(255, 255, 255, 0.08);
 	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.4);
@@ -684,6 +684,8 @@ body {
 	flex: 1 1 0;
 	min-width: 0;
 	margin: 0;
+	padding: 3px;
+	box-sizing: border-box;
 	background: transparent;
 	border: 2px solid transparent;
 	border-radius: 4px;
