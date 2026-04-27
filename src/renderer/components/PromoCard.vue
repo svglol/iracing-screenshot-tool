@@ -7,7 +7,7 @@
 			Built and maintained by AR Media Solutions.
 		</p>
 		<a class="maintainer-note__link" href="#" @click.prevent="openSite">
-			<span>armediasolutions.net/tools/irst</span>
+			<span>armediasolutions.net</span>
 			<font-awesome-icon :icon="['fas', 'up-right-from-square']" />
 		</a>
 	</section>
