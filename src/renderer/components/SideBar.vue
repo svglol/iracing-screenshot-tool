@@ -39,13 +39,16 @@
 			track/car combinations will require more VRAM
 		</o-notification>
 
-		<o-switch
-			v-model="crop"
-			dense
-			style="padding-top: 0.5rem; padding-bottom: 0.5rem"
-		>
-			Crop Watermark
-		</o-switch>
+		<o-field class="settings-toggle-row sidebar-toggle-row">
+			<o-switch
+				v-model="crop"
+				:rounded="false"
+				class="settings-light-switch"
+			/>
+			<div class="settings-toggle-row__text">
+				<span class="label" style="margin-bottom: 0px">Crop Watermark</span>
+			</div>
+		</o-field>
 
 		<o-notification
 			v-if="crop && !disableTooltips"
@@ -368,5 +371,84 @@ export default {
 
 .sidebar-tooltip.notification.is-danger .media-content {
 	color: #ff6b6b;
+}
+
+/* Crop Watermark toggle — same light-switch + inline-left layout as the toggles
+   in SettingsModal.vue. SettingsModal's rules are scoped + :deep() so they
+   don't reach here; rules are duplicated globally below. Candidate for future
+   consolidation into a shared partial. */
+.settings-toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 0.85rem;
+}
+
+.sidebar-toggle-row {
+	padding: 0.5rem 0;
+}
+
+.settings-toggle-row__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.settings-light-switch.switch {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.settings-light-switch .check {
+	width: 58px;
+	height: 26px;
+	padding: 3px;
+	border-radius: 4px;
+	background: hsl(0, 0%, 28%);
+}
+
+.settings-light-switch .check:before {
+	width: 24px;
+	height: 20px;
+	border-radius: 3px;
+	background: hsl(0, 0%, 88%);
+}
+
+.settings-light-switch.switch::before,
+.settings-light-switch.switch::after {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.6rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	pointer-events: none;
+	transition: opacity 0.18s ease;
+	z-index: 1;
+}
+
+.settings-light-switch.switch::after {
+	content: 'OFF';
+	right: 8px;
+	color: hsl(0, 0%, 75%);
+	opacity: 1;
+}
+
+.settings-light-switch.switch::before {
+	content: 'ON';
+	left: 8px;
+	color: hsl(0, 0%, 98%);
+	opacity: 0;
+}
+
+.settings-light-switch.switch:has(input.check:checked) .check {
+	background: var(--bulma-primary, #ec202a);
+}
+
+.settings-light-switch.switch:has(input.check:checked)::before {
+	opacity: 1;
+}
+
+.settings-light-switch.switch:has(input.check:checked)::after {
+	opacity: 0;
 }
 </style>
