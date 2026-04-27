@@ -4,8 +4,7 @@
 			Thanks for using iRacing Screenshot Tool!
 		</p>
 		<p class="maintainer-note__signature">
-			Built and maintained by Alessandro Romanelli — part of AR Media
-			Solutions.
+			Built and maintained by AR Media Solutions.
 		</p>
 		<a class="maintainer-note__link" href="#" @click.prevent="openSite">
 			<span>armediasolutions.net</span>
