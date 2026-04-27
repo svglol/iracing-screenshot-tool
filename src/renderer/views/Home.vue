@@ -683,7 +683,7 @@ body {
 .gallery-virtual__thumb {
 	flex: 1 1 0;
 	min-width: 0;
-	margin: 0;
+	margin: 0 4px;
 	padding: 3px;
 	box-sizing: border-box;
 	background: transparent;
