@@ -726,6 +726,6 @@ body {
 }
 
 .sidebar-promo {
-	margin: 0 0.75rem 0.75rem;
+	margin: 0 1.25rem 1rem;
 }
 </style>
