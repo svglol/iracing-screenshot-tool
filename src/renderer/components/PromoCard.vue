@@ -3,14 +3,13 @@
 		<span class="promo-card__badge">Maintainer's Note</span>
 		<img class="promo-card__logo" :src="logoSrc" alt="AR Media Solutions" />
 		<p class="promo-card__title">
-			We are looking for an enthusiastic iRacing media maker.
+			Built and maintained by Alessandro Romanelli.
 		</p>
 		<p class="promo-card__copy">
-			If you want to learn, grow your skills, and start earning in this niche
-			with AR Media Solutions, take a look at the post below.
+			Part of AR Media Solutions.
 		</p>
-		<button type="button" class="promo-card__link" @click="openPost">
-			<span>See the Instagram post</span>
+		<button type="button" class="promo-card__link" @click="openSite">
+			<span>Visit armediasolutions.net</span>
 			<font-awesome-icon :icon="['fas', 'up-right-from-square']" />
 		</button>
 	</section>
@@ -27,8 +26,8 @@ export default {
 		};
 	},
 	methods: {
-		openPost() {
-			shell.openExternal('https://www.instagram.com/p/DU09QsWiO-C/');
+		openSite() {
+			shell.openExternal('https://armediasolutions.net');
 		},
 	},
 };
