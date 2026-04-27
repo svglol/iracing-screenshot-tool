@@ -7,7 +7,7 @@
 			Built and maintained by AR Media Solutions.
 		</p>
 		<a class="maintainer-note__link" href="#" @click.prevent="openSite">
-			<span>armediasolutions.net</span>
+			<span>armediasolutions.net/tools/irst</span>
 			<font-awesome-icon :icon="['fas', 'up-right-from-square']" />
 		</a>
 	</section>
@@ -19,7 +19,7 @@ const { shell } = require('electron');
 export default {
 	methods: {
 		openSite() {
-			shell.openExternal('https://armediasolutions.net');
+			shell.openExternal('https://armediasolutions.net/tools/irst');
 		},
 	},
 };
