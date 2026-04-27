@@ -158,7 +158,18 @@ for (const remote of remotes) {
 // ---------------------------------------------------------------------------
 console.log('\n— Creating GitHub releases…');
 
-const releaseNotes = `## What's Changed\n\n${changelog || 'No changes.'}\n`;
+// Prefer curated release notes at RELEASE-NOTES-v${newVersion}.md if present;
+// fall back to auto-generated changelog from `git log previousTag..HEAD`.
+const curatedNotesPath = path.join(ROOT, `RELEASE-NOTES-v${newVersion}.md`);
+let releaseNotes;
+if (fs.existsSync(curatedNotesPath)) {
+	console.log(
+		`  Using curated notes: ${path.relative(ROOT, curatedNotesPath)}`
+	);
+	releaseNotes = fs.readFileSync(curatedNotesPath, 'utf8');
+} else {
+	releaseNotes = `## What's Changed\n\n${changelog || 'No changes.'}\n`;
+}
 const notesFile = path.join(BUILD_DIR, 'release-notes.md');
 fs.writeFileSync(notesFile, releaseNotes, 'utf8');
 
