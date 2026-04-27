@@ -589,6 +589,53 @@ async function fullscreenScreenshot(callback) {
 			return s;
 		};
 
+		// In Electron's desktopCapturer flow, `track.getSettings().{width,height}`
+		// returns the constraint bounds (here 10000×10000), not actual frame
+		// dimensions. Probe the real dimensions via a temporary <video> element's
+		// videoWidth/videoHeight after loadedmetadata.
+		const probeStreamDimensions = async (
+			s: MediaStream
+		): Promise<{ w: number; h: number }> => {
+			const probe = document.createElement('video');
+			probe.muted = true;
+			(probe as any).playsInline = true;
+			probe.srcObject = s;
+			const ready = new Promise<void>((resolve, reject) => {
+				if (probe.readyState >= 1) {
+					resolve();
+					return;
+				}
+				probe.addEventListener('loadedmetadata', () => resolve(), {
+					once: true,
+				});
+				probe.addEventListener(
+					'error',
+					() => reject(new Error('probe error')),
+					{ once: true }
+				);
+			});
+			try {
+				probe.play().catch(() => {
+					/* best-effort: metadata fires regardless on some browsers */
+				});
+				await Promise.race([
+					ready,
+					new Promise<void>((_, reject) =>
+						setTimeout(() => reject(new Error('probe timeout')), 1500)
+					),
+				]);
+				return { w: probe.videoWidth || 0, h: probe.videoHeight || 0 };
+			} finally {
+				try {
+					probe.pause();
+				} catch {
+					/* noop */
+				}
+				probe.srcObject = null;
+				probe.remove();
+			}
+		};
+
 		let stream = await acquireStream();
 
 		const captureKind =
@@ -596,10 +643,12 @@ async function fullscreenScreenshot(callback) {
 				? 'display'
 				: 'window';
 		if (captureKind === 'window' && windowWidth && windowHeight) {
-			let track = stream.getVideoTracks()[0];
-			let settings: any = track ? track.getSettings() : {};
-			let streamW = settings.width || 0;
-			let streamH = settings.height || 0;
+			let dims = await probeStreamDimensions(stream).catch(() => ({
+				w: 0,
+				h: 0,
+			}));
+			let streamW = dims.w;
+			let streamH = dims.h;
 
 			while (
 				(streamW !== windowWidth || streamH !== windowHeight) &&
@@ -622,10 +671,12 @@ async function fullscreenScreenshot(callback) {
 				}
 				await delay(RETRY_DELAY_MS);
 				stream = await acquireStream();
-				track = stream.getVideoTracks()[0];
-				settings = track ? track.getSettings() : {};
-				streamW = settings.width || 0;
-				streamH = settings.height || 0;
+				dims = await probeStreamDimensions(stream).catch(() => ({
+					w: 0,
+					h: 0,
+				}));
+				streamW = dims.w;
+				streamH = dims.h;
 			}
 
 			if (streamW !== windowWidth || streamH !== windowHeight) {
