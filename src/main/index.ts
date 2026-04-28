@@ -89,11 +89,20 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
 remoteMain.initialize();
 
 function createWindowIcon() {
-	const iconPath = process.resourcesPath
+	// `process.resourcesPath` is set by Electron in BOTH dev and packaged modes
+	// (it points at the framework's resources dir in dev, e.g.
+	// `node_modules/electron/dist/resources/`, which doesn't contain `icon.png`).
+	// Use `app.isPackaged` to discriminate, and `app.getAppPath()` to anchor at
+	// the project root in dev (electron-vite doesn't emit `out/static/`).
+	const iconPath = app.isPackaged
 		? path.join(process.resourcesPath, 'icon.png')
-		: path.join(__dirname, '..', 'static', 'icon.png');
+		: path.join(app.getAppPath(), 'static', 'icon.png');
 	const icon = nativeImage.createFromPath(iconPath);
-	return icon.isEmpty() ? undefined : icon;
+	if (icon.isEmpty()) {
+		log.info('Window icon not loaded', { iconPath });
+		return undefined;
+	}
+	return icon;
 }
 
 const windowIcon = createWindowIcon();
