@@ -870,7 +870,17 @@ app.on('ready', async () => {
 			restoreScreenshotState();
 			workerWindow?.webContents.send('session-info', iracing.sessionInfo);
 			workerWindow?.webContents.send('telemetry', iracing.telemetry);
-			workerWindow?.webContents.send('screenshot-reshade', reshadeFile);
+			// Forward targetWidth/targetHeight so saveReshadeImage in the worker
+			// can crop to the user-chosen resolution. Without these, the crop
+			// branches in Worker.vue fall through and the saved image keeps the
+			// 6%-expanded dimensions used to generate the watermark margin
+			// (regression introduced in 2cf3ccf — non-ReShade path was wired,
+			// ReShade path was missed).
+			workerWindow?.webContents.send('screenshot-reshade', {
+				file: reshadeFile,
+				targetWidth: data.targetWidth,
+				targetHeight: data.targetHeight,
+			});
 		} catch (error) {
 			restoreScreenshotState();
 			reportScreenshotError(error, {

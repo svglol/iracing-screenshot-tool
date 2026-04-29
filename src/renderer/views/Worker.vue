@@ -772,7 +772,14 @@ export default {
 		});
 
 		ipcRenderer.on('screenshot-reshade', (event, arg) => {
-			saveReshadeImage(arg);
+			// Payload is `{ file, targetWidth, targetHeight }` — main forwards
+			// the user-chosen resolution so saveReshadeImage can crop to it.
+			// Module-level targetWidth/targetHeight are otherwise only set by
+			// the non-ReShade `screenshot-request` handler, which leaves them
+			// null for ReShade flows and silently disables the crop branches.
+			targetWidth = arg.targetWidth || null;
+			targetHeight = arg.targetHeight || null;
+			saveReshadeImage(arg.file);
 		});
 	},
 	methods: {},
