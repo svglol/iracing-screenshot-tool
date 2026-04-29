@@ -10,6 +10,9 @@
 					<span class="heading"
 						><a @click="$emit('changelog')">Changelog</a></span
 					>
+					<span class="heading"
+						><a @click="openLogsFolder">Open Logs Folder</a></span
+					>
 				</aside>
 
 				<div class="settings-form">
@@ -278,7 +281,8 @@
 import config from '../../utilities/config';
 import { version } from '../../../package.json';
 import { FILENAME_FIELDS, DEFAULT_FORMAT } from '../../utilities/filenameFormat';
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, shell } = require('electron');
+const path = require('path');
 
 export default {
 	data() {
@@ -463,6 +467,10 @@ export default {
 				.catch((err) => {
 					console.log(err);
 				});
+		},
+		openLogsFolder() {
+			const userData = ipcRenderer.sendSync('app:getPath-sync', 'userData');
+			shell.openPath(path.join(userData, 'logs'));
 		},
 		openReshadeDialog() {
 			ipcRenderer
