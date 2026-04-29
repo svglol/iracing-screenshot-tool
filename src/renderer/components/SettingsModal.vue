@@ -56,11 +56,15 @@
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
+							id="settings-custom-filename-format-switch"
 							v-model="customFilenameFormat"
 							:rounded="false"
 							class="settings-light-switch"
 						/>
-						<div class="settings-toggle-row__text">
+						<label
+							for="settings-custom-filename-format-switch"
+							class="settings-toggle-row__text"
+						>
 							<span class="label" style="margin-bottom: 0px"
 								>Custom Filename Format</span
 							>
@@ -68,7 +72,7 @@
 								>Use a custom pattern instead of the default
 								({track}-{driver}-{counter})</span
 							>
-						</div>
+						</label>
 					</o-field>
 					<div v-if="customFilenameFormat">
 						<o-field>
@@ -144,27 +148,35 @@
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
+							id="settings-disable-tooltips-switch"
 							v-model="disableTooltips"
 							:rounded="false"
 							class="settings-light-switch"
 						/>
-						<div class="settings-toggle-row__text">
+						<label
+							for="settings-disable-tooltips-switch"
+							class="settings-toggle-row__text"
+						>
 							<span class="label" style="margin-bottom: 0px"
 								>Disable Tooltips</span
 							>
 							<span class="description"
 								>Leave me alone, I know what I'm doing</span
 							>
-						</div>
+						</label>
 					</o-field>
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
+							id="settings-crop-top-left-switch"
 							v-model="cropTopLeft"
 							:rounded="false"
 							class="settings-light-switch"
 						/>
-						<div class="settings-toggle-row__text">
+						<label
+							for="settings-crop-top-left-switch"
+							class="settings-toggle-row__text"
+						>
 							<span class="label" style="margin-bottom: 0px"
 								>Prefer top-left watermark crop</span
 							>
@@ -173,16 +185,20 @@
 								off, the screenshot is expanded by 6% and cropped
 								equally from all sides for a centered result.</span
 							>
-						</div>
+						</label>
 					</o-field>
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
+							id="settings-manual-window-restore-switch"
 							v-model="manualWindowRestore"
 							:rounded="false"
 							class="settings-light-switch"
 						/>
-						<div class="settings-toggle-row__text">
+						<label
+							for="settings-manual-window-restore-switch"
+							class="settings-toggle-row__text"
+						>
 							<span class="label" style="margin-bottom: 0px"
 								>Manual Window Restore</span
 							>
@@ -191,7 +207,7 @@
 								position and size. Useful for people using an Ultrawide
 								or Nvidia Surround</span
 							>
-						</div>
+						</label>
 					</o-field>
 					<div v-if="manualWindowRestore">
 						<div class="columns settings-grid">
@@ -242,15 +258,19 @@
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
+							id="settings-reshade-switch"
 							v-model="reshade"
 							:rounded="false"
 							class="settings-light-switch"
 						/>
-						<div class="settings-toggle-row__text">
+						<label
+							for="settings-reshade-switch"
+							class="settings-toggle-row__text"
+						>
 							<span class="label" style="margin-bottom: 0px"
 								>Reshade Compatibility Mode</span
 							>
-						</div>
+						</label>
 					</o-field>
 					<span class="description">
 						When using reshade you will have to first use your hotkey for
@@ -613,6 +633,7 @@ hr {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	cursor: pointer;
 }
 
 /* Light-switch styling for the in-row toggles only.

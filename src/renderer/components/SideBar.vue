@@ -41,13 +41,23 @@
 
 		<o-field class="settings-toggle-row sidebar-toggle-row">
 			<o-switch
+				id="sidebar-crop-watermark-switch"
 				v-model="crop"
 				:rounded="false"
 				class="settings-light-switch"
 			/>
-			<div class="settings-toggle-row__text">
+			<!-- Label is a real <label for="…"> bound to the switch's input id so
+			     clicking anywhere on the text toggles the switch (matches the
+			     pre-3.0.0 Buefy slot-based affordance). Without this, only the
+			     58×26 switch graphic was clickable and users hitting the label
+			     got no response — the silent regression that shipped with v3.0.0
+			     (commit 5419d2c restructured slot text to a sibling div). -->
+			<label
+				for="sidebar-crop-watermark-switch"
+				class="settings-toggle-row__text"
+			>
 				<span class="label" style="margin-bottom: 0px">Crop Watermark</span>
-			</div>
+			</label>
 		</o-field>
 
 		<o-notification
@@ -391,6 +401,11 @@ export default {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	/* The text block is a <label for="…"> wrapping the switch's input id so
+	   clicks anywhere on it toggle the switch. cursor: pointer signals that
+	   affordance to users (matches the affordance Buefy's slot-based switch
+	   provided pre-3.0.0). */
+	cursor: pointer;
 }
 
 .settings-light-switch.switch {
