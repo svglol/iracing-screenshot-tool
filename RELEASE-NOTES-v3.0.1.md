@@ -1,26 +1,50 @@
 # v3.0.1
 
-A quick follow-up to v3.0.0 fixing two regressions around the **Crop Watermark** toggle.
+A big update — packed with fixes, polish, and a brand-new way to send in bug reports and feature requests.
 
-## What's fixed
+## What's new
 
-### Toggles now respond to clicking the label
+### Screenshots come out at the right resolution, every time
 
-In v3.0.0 the toggles in the sidebar and Settings looked clickable everywhere, but only the small switch graphic actually flipped them — clicking the text "Crop Watermark", "Disable Tooltips", "Reshade Compatibility Mode", etc. did nothing. That's fixed. Click anywhere on the row — switch or text — and it toggles.
+There was a sneaky bug where, on some machines, a saved screenshot would come out at your monitor's native resolution instead of the one you picked in the app. It's fixed across the board — regular capture and ReShade-mode capture both. Whatever resolution you choose, the file you get will match it exactly, with the watermark cleanly cropped out.
 
-If you turned **Crop Watermark** on in v3.0.0 and your screenshots still had the watermark, this is why. The setting was never actually being saved.
+### A faster, smoother gallery
 
-### ReShade screenshots now crop the watermark again
+The thumbnail strip at the bottom of the app has been redesigned:
 
-Even with the toggle working, ReShade-mode screenshots were saving at a slightly larger size with the watermark still visible. The crop step was being silently skipped on the ReShade path. Now ReShade screenshots come out at the resolution you picked, watermark removed — same as the non-ReShade flow.
+- It stays smooth no matter how many screenshots you have
+- The selected screenshot is shown larger and centered so you can see it clearly
+- Thumbnails are now generated as you browse, not all at once — so the app feels snappier, especially on long sessions
+
+### Send bug reports and feature requests from Discord
+
+You can now file bugs and feature requests **straight from our Discord server** — no GitHub account needed, no leaving the chat. There are commands to browse what others have already reported, and you can vote with reactions on the features you want to see most.
+
+👉 **Check the `#readme` channel in the Discord for the full walkthrough.**
+
+### Polish you'll notice
+
+- Pop-up windows (Settings, Help, etc.) now have a nicely blurred background
+- The Settings switches got a friendlier "light-switch" look — and the whole row is clickable, switch or label
+- Sidebar info bubbles are calmer and less in-your-face
+- The "Crop Watermark" hint now actually explains what the option does
+- Various small wording fixes and layout tweaks throughout
+
+## Behind the scenes
+
+A lot of the app's plumbing has been rebuilt under the hood. Nothing for you to do — it just means future updates can land more quickly and more reliably.
 
 ## How to get it
 
 - **Installer (recommended)** — `iRacing Screenshot Tool Setup 3.0.1.exe`
 - **Portable (no install)** — `iRacing Screenshot Tool 3.0.1.exe`
 
-Settings carry over from v3.0.0 — nothing to do beyond installing.
+Your existing settings and screenshots from v2 carry over automatically. The first time you open the new gallery, it may take a moment to refresh thumbnails as you scroll through them — that's expected.
+
+## Need help or found a bug?
+
+Hop into our Discord and check the `#readme` channel — it has a quick guide to filing bugs and feature requests right from chat.
 
 ## 🙏 Thank you
 
-To the user who flagged the toggle and the un-cropped ReShade output the same evening v3.0.0 shipped — those reports turned a silent regression into a one-day fix.
+To everyone who reported the wrong-resolution screenshots and the keen-eyed users who flagged follow-up issues with the watermark crop and Settings toggles — the logs and feedback you sent back made these fixes possible.
