@@ -112,4 +112,33 @@ button {
 	max-width: 30px;
 	width: 30px;
 }
+
+/* Wrap long markdown content (URLs, code, table rows) inside the changelog
+   body instead of letting it push a horizontal scrollbar. vue3-markdown-it
+   renders into a child component, so :deep() is required to reach the
+   generated <p>/<a>/<pre>/<code>/<table> nodes from the scoped block. */
+.modal-card-body :deep(p),
+.modal-card-body :deep(li),
+.modal-card-body :deep(a) {
+	overflow-wrap: break-word;
+	word-break: break-word;
+}
+
+.modal-card-body :deep(pre),
+.modal-card-body :deep(code) {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.modal-card-body :deep(table) {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.modal-card-body :deep(img) {
+	max-width: 100%;
+	height: auto;
+}
 </style>
