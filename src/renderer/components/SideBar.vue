@@ -16,6 +16,14 @@
 			<o-input v-model="customHeight" type="number" min="0" max="10000" />
 		</o-field>
 
+		<p v-if="targetDimensions" class="sidebar-target-hint">
+			Target:
+			<span class="sidebar-target-hint__value"
+				>{{ targetDimensions.width }} ×
+				{{ targetDimensions.height }}</span
+			>
+		</p>
+
 		<o-notification
 			v-if="
 				(resolution == '4k' ||
@@ -75,6 +83,41 @@
 			With this option, the final picture is slightly zoomed in. Regions
 			near the borders of the screen will be cut off.
 		</o-notification>
+
+		<o-field class="settings-toggle-row sidebar-toggle-row">
+			<o-switch
+				id="sidebar-keep-aspect-ratio-switch"
+				v-model="keepAspectRatio"
+				:rounded="false"
+				class="settings-light-switch"
+			/>
+			<label
+				for="sidebar-keep-aspect-ratio-switch"
+				class="settings-toggle-row__text"
+			>
+				<span class="label" style="margin-bottom: 0px"
+					>Keep Aspect Ratio</span
+				>
+			</label>
+		</o-field>
+
+		<o-notification
+			v-if="keepAspectRatio && !disableTooltips"
+			class="sidebar-tooltip"
+			variant="info"
+			aria-close-label="Close message"
+			size="small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
+			"
+		>
+			The screenshot height is adjusted so the final image matches your
+			monitor's aspect ratio (e.g. 21:9 ultrawide), instead of the default
+			16:9. The selected resolution sets the width.
+		</o-notification>
+
 		<o-button
 			variant="primary"
 			icon-left="camera"
@@ -129,6 +172,19 @@ import { useOruga } from '@oruga-ui/oruga-next';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 
+function getResolutionDimensions(label: string): { width: number; height: number } {
+	switch (label) {
+		case '1080p': return { width: 1920, height: 1080 };
+		case '2k': return { width: 2560, height: 1440 };
+		case '4k': return { width: 3840, height: 2160 };
+		case '5k': return { width: 5120, height: 2880 };
+		case '6k': return { width: 6400, height: 3600 };
+		case '7k': return { width: 7168, height: 4032 };
+		case '8k': return { width: 7680, height: 4320 };
+		default: return { width: 1920, height: 1080 };
+	}
+}
+
 export default {
 	props: ['screenshot'],
 	// Declare 'screenshot' as a custom emit. Previously used 'click', which in
@@ -143,6 +199,7 @@ export default {
 			items: ['1080p', '2k', '4k', '5k', '6k', '7k', '8k', 'Custom'],
 			resolution: '1080p',
 			crop: true,
+			keepAspectRatio: false,
 			customWidth: '0',
 			customHeight: '0',
 			iracingOpen: false,
@@ -155,6 +212,37 @@ export default {
 	computed: {
 		disabled() {
 			return this.iracingOpen;
+		},
+		// {width, height} for the active resolution preset, or null when
+		// Custom is selected with empty/invalid inputs (so we suppress the
+		// hint instead of rendering "NaN x NaN").
+		baseTargetDimensions() {
+			if (this.resolution === 'Custom') {
+				const w = parseInt(this.customWidth, 10);
+				const h = parseInt(this.customHeight, 10);
+				if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+					return null;
+				}
+				return { width: w, height: h };
+			}
+			return getResolutionDimensions(this.resolution);
+		},
+		// Final user-facing target. When Keep Aspect Ratio is on and the
+		// stored screen dimensions look valid, scale height to match the
+		// native aspect ratio while preserving the chosen width. Falls back
+		// to the base preset if the screen is unknown or already matches.
+		targetDimensions() {
+			const base = this.baseTargetDimensions;
+			if (!base) return null;
+			if (!this.keepAspectRatio) return base;
+			const sw = parseInt(config.get('defaultScreenWidth'), 10);
+			const sh = parseInt(config.get('defaultScreenHeight'), 10);
+			if (!sw || !sh) return base;
+			const adjustedHeight = Math.round((base.width * sh) / sw);
+			if (!Number.isFinite(adjustedHeight) || adjustedHeight <= 0) {
+				return base;
+			}
+			return { width: base.width, height: adjustedHeight };
 		},
 	},
 	created() {
@@ -226,6 +314,7 @@ export default {
 	},
 	mounted() {
 		this.crop = config.get('crop');
+		this.keepAspectRatio = config.get('keepAspectRatio');
 		this.customWidth = config.get('customWidth');
 		this.customHeight = config.get('customHeight');
 		this.resolution = config.get('resolution');
@@ -233,6 +322,7 @@ export default {
 	},
 	updated() {
 		config.set('crop', this.crop);
+		config.set('keepAspectRatio', this.keepAspectRatio);
 		config.set('reshade', this.reshade);
 		if (!isNaN(parseInt(this.customWidth))) {
 			config.set('customWidth', parseInt(this.customWidth));
@@ -275,46 +365,13 @@ export default {
 			document.body.style.cursor = 'auto';
 		},
 		takeScreenshot() {
-			let w = 0;
-			let h = 0;
-
-			switch (this.resolution) {
-				case '1080p':
-					w = 1920;
-					h = 1080;
-					break;
-				case '2k':
-					w = 2560;
-					h = 1440;
-					break;
-				case '4k':
-					w = 3840;
-					h = 2160;
-					break;
-				case '5k':
-					w = 5120;
-					h = 2880;
-					break;
-				case '6k':
-					w = 6400;
-					h = 3600;
-					break;
-				case '7k':
-					w = 7168;
-					h = 4032;
-					break;
-				case '8k':
-					w = 7680;
-					h = 4320;
-					break;
-				case 'Custom':
-					w = parseInt(this.customWidth, 10);
-					h = parseInt(this.customHeight, 10);
-					break;
-				default:
-					w = 1920;
-					h = 1080;
-			}
+			// targetDimensions already accounts for Keep Aspect Ratio when on,
+			// or returns the preset/custom values as-is. Fall back to 1080p if
+			// Custom is selected with empty inputs (matches the legacy default
+			// branch in the previous switch-based implementation).
+			const target = this.targetDimensions || { width: 1920, height: 1080 };
+			let w = target.width;
+			let h = target.height;
 
 			const targetWidth = w;
 			const targetHeight = h;
@@ -347,6 +404,20 @@ export default {
 <style>
 .control-label {
 	font-weight: 700;
+}
+
+.sidebar-target-hint {
+	margin-top: 0.25rem;
+	margin-bottom: 0.25rem;
+	font-size: 0.78rem;
+	line-height: 1.25;
+	color: rgba(255, 255, 255, 0.65);
+}
+
+.sidebar-target-hint__value {
+	color: rgba(255, 255, 255, 0.9);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
 }
 
 /* Sidebar tooltip notifications. Namespaced via .sidebar-tooltip so global

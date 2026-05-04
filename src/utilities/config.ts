@@ -22,6 +22,10 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	keepAspectRatio: {
+		type: 'boolean',
+		default: false,
+	},
 	cropTopLeft: {
 		type: 'boolean',
 		default: false,
