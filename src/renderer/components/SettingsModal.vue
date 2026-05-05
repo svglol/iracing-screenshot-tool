@@ -610,6 +610,12 @@ hr {
 	padding-top: 0.5rem;
 }
 
+.settings-meta .heading a {
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	letter-spacing: 0.05em;
+}
+
 .settings-form {
 	min-width: 0;
 }
