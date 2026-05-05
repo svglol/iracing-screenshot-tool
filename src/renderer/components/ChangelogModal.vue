@@ -1,7 +1,7 @@
 <template>
 	<div
 		class="modal-card"
-		style="width: 60vw; height: 80vh; background: rgb(37, 37, 37) !important"
+		style="width: 100%; height: 80vh; background: rgb(37, 37, 37) !important"
 	>
 		<header
 			class="modal-card-head"
