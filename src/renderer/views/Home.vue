@@ -152,6 +152,18 @@ const THUMB_GEN_RADIUS = 50;
 // reachable via wheel/click navigation. 5 thumbs each side of the active
 // center, symmetric for any selected position not near the start/end edges.
 const VISIBLE_WINDOW_SIZE = 11;
+// Image extensions the gallery treats as screenshots. Must stay in sync with
+// FORMAT_MAP in Worker.vue (the formats this app writes: .jpg/.png/.webp) and
+// listReshadeScreenshotFiles in main/index.ts (ReShade can drop .bmp/.jpeg
+// alongside our own output). Restricting to .png alone caused users on the
+// default outputFormat ('jpeg' → .jpg) to see an empty/under-populated gallery.
+const SUPPORTED_GALLERY_EXTENSIONS = new Set([
+	'.bmp',
+	'.jpeg',
+	'.jpg',
+	'.png',
+	'.webp',
+]);
 
 let dir = normalizeFolder(config.get('screenshotFolder'));
 
@@ -237,21 +249,25 @@ async function listGalleryEntries() {
 
 	return entries
 		.filter(Boolean)
-		.filter((entry) => entry.extension === '.png')
+		.filter((entry) => SUPPORTED_GALLERY_EXTENSIONS.has(entry.extension))
 		.sort((a, b) => b.modified - a.modified);
 }
 
 async function cleanupThumbnailCache() {
-	// Build the keep set from ALL source PNGs in the screenshot folder. The
-	// cache is decoupled from the visible window — thumbs for items currently
-	// outside the strip's window are still valid and useful as the user
-	// navigates further into the gallery.
+	// Build the keep set from ALL source images in the screenshot folder (every
+	// extension the gallery surfaces — not just .png — so thumbs for .jpg/.webp
+	// screenshots aren't garbage-collected on every load). The cache is
+	// decoupled from the visible window: thumbs for items currently outside the
+	// strip's window are still valid and useful as the user navigates further
+	// into the gallery.
 	try {
 		const dirFiles = await fs.promises.readdir(dir);
 		const keep = new Set(
 			dirFiles
-				.filter(
-					(fileName) => path.extname(fileName).toLowerCase() === '.png'
+				.filter((fileName) =>
+					SUPPORTED_GALLERY_EXTENSIONS.has(
+						path.extname(fileName).toLowerCase()
+					)
 				)
 				.map((fileName) =>
 					normalizeComparePath(getThumbnailPath(path.join(dir, fileName)))
