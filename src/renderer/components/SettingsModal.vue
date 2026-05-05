@@ -608,6 +608,7 @@ hr {
 	flex-direction: column;
 	gap: 0.5rem;
 	padding-top: 0.5rem;
+	text-align: right;
 }
 
 .settings-meta .heading a {
