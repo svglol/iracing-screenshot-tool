@@ -16,7 +16,7 @@
 			<button type="button" class="delete" @click="$emit('close')" />
 		</header>
 		<section class="modal-card-body" style="background-color: transparent">
-			<div style="max-width: 600px; margin: auto">
+			<div>
 				<span class="heading">iRacing Settings</span>
 				<ul>
 					<li>iRacing must be running in Windowed Borderless</li>
@@ -110,11 +110,21 @@ ul {
 
 li {
 	color: #aaaaaa;
+	overflow-wrap: break-word;
+	word-break: break-word;
 }
 
 p {
 	margin-bottom: 1rem;
 	color: #aaaaaa;
+	overflow-wrap: break-word;
+	word-break: break-word;
+}
+
+a {
+	overflow-wrap: break-word;
+	word-break: break-word;
+	cursor: pointer;
 }
 
 button {
