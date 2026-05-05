@@ -98,6 +98,11 @@ export default {
 </script>
 
 <style scoped>
+.modal-card-body {
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
 .heading {
 	font-size: 0.75rem;
 	font-weight: 700;
