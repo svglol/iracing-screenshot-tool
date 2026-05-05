@@ -1,7 +1,7 @@
 <template>
 	<div
 		class="modal-card"
-		style="width: 60vw; height: 80vh; background: rgb(37, 37, 37) !important"
+		style="width: 100%; height: 80vh; background: rgb(37, 37, 37) !important"
 	>
 		<header
 			class="modal-card-head"
@@ -98,11 +98,6 @@ export default {
 </script>
 
 <style scoped>
-.modal-card-body {
-	overflow-x: hidden;
-	overflow-y: auto;
-}
-
 .heading {
 	font-size: 0.75rem;
 	font-weight: 700;
@@ -115,20 +110,17 @@ ul {
 
 li {
 	color: #aaaaaa;
-	overflow-wrap: break-word;
-	word-break: break-word;
+	overflow-wrap: anywhere;
 }
 
 p {
 	margin-bottom: 1rem;
 	color: #aaaaaa;
-	overflow-wrap: break-word;
-	word-break: break-word;
+	overflow-wrap: anywhere;
 }
 
 a {
-	overflow-wrap: break-word;
-	word-break: break-word;
+	overflow-wrap: anywhere;
 	cursor: pointer;
 }
 
