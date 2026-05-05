@@ -1,29 +1,14 @@
 # v3.0.3
 
-A polish bump on top of v3.0.2. Carries everything from the v3.0.x line plus a handful of important fixes — most notably, the gallery now actually shows your screenshots if you save them as JPG (the default). The Help and Changelog windows have also been straightened out: no more sideways scrolling, no more weirdly narrow text columns inside huge dialogs.
+The v3.0.x line is now stable. This release rolls in everything that landed across v3.0.0, v3.0.1, v3.0.2, and v3.0.3 — a faster gallery that actually shows all your screenshots, the right resolution every time, an ultrawide / 4:3 aspect-ratio mode, an in-Discord way to send bug reports and feature requests, and a long list of polish.
 
-## What's new in v3.0.3
+## What's new
 
-### The gallery now shows all your screenshots — not just PNGs
+### Your screenshots — at the right resolution, in a gallery that finds them all
 
-If your output format was set to JPEG (the default) or WEBP, the gallery was silently filtering them out and only listing PNGs — so a folder full of screenshots looked half-empty or completely empty. The thumbnail strip now picks up `.jpg`, `.jpeg`, `.png`, `.webp`, and `.bmp` files alike, matching everything the app and ReShade can actually write.
-
-If you've been wondering where your shots went, open the gallery again — they were always there.
-
-### Help and Changelog windows look right again
-
-The Help dialog had an old layout bug where the text was pinned to a narrow 600 px column inside an otherwise wide window — and long file paths and hotkeys (`C:\Users\…\Pictures\Screenshots`, `Control + PrintScreen`, …) pushed a horizontal scrollbar across the whole dialog. Both of those are gone:
-
-- The text now uses the full width of the window and wraps cleanly at the edge — long Windows paths break instead of running off the side.
-- The window itself no longer blows past its container on wide monitors, so the horizontal scrollbar that some users saw doesn't appear at all.
-
-The Changelog window had the same window-sizing bug and got the same fix — opening Help → What's new on a wide monitor now shows release notes filling the dialog properly instead of being clipped or overflowing.
-
-### Settings sidebar — small polish
-
-The "Changelog" and "Open Logs Folder" links in the Settings sidebar now read as small, right-aligned uppercase actions, visually distinct from the static `Version - X.Y.Z` label sitting above them. Same buttons, same behavior — just easier to recognize as clickable.
-
-## Everything from v3.0.2, still in v3.0.3
+- **Right resolution, every time.** A sneaky bug where saved screenshots came out at your monitor's native resolution instead of the one you picked is fixed across regular capture and ReShade-mode capture both. The file you get matches what you chose, with the watermark cleanly cropped out.
+- **Gallery shows all your screenshots — not just PNGs.** If your output format was set to JPEG (the default) or WEBP, the gallery used to silently filter your shots out. The thumbnail strip now picks up `.jpg`, `.jpeg`, `.png`, `.webp`, and `.bmp` files alike. If you've been wondering where your shots went, open the gallery again — they were always there.
+- **A faster, smoother gallery.** The thumbnail strip stays smooth no matter how many screenshots you have, the selected shot is shown larger and centered, and thumbnails are now generated as you browse instead of all at once — so the app feels snappier on long sessions.
 
 ### Keep Aspect Ratio — match your monitor, not the preset
 
@@ -33,37 +18,26 @@ Worked example: with the toggle on and a 21:9 monitor selected, picking **8k** g
 
 The toggle defaults to **off**, so 16:9 users see no change.
 
-### Changelog content wraps long lines
-
-The in-app changelog (Help → What's new) used to push a horizontal scrollbar when a release entry contained long URLs, fenced code blocks, or wide tables. It now wraps cleanly inside the window, with code blocks reflowing and any wide tables getting their own contained scroll. (The dialog *itself* is also now correctly sized — see "Help and Changelog windows look right again" above.)
-
-## Everything from v3.0.1, still in v3.0.3
-
-### Screenshots come out at the right resolution, every time
-
-There was a sneaky bug where, on some machines, a saved screenshot would come out at your monitor's native resolution instead of the one you picked in the app. It's fixed across the board — regular capture and ReShade-mode capture both. Whatever resolution you choose, the file you get will match it exactly, with the watermark cleanly cropped out.
-
-### A faster, smoother gallery
-
-The thumbnail strip at the bottom of the app has been redesigned:
-
-- It stays smooth no matter how many screenshots you have
-- The selected screenshot is shown larger and centered so you can see it clearly
-- Thumbnails are now generated as you browse, not all at once — so the app feels snappier, especially on long sessions
-
 ### Send bug reports and feature requests from Discord
 
 You can file bugs and feature requests **straight from our Discord server** — no GitHub account needed, no leaving the chat. There are commands to browse what others have already reported, and you can vote with reactions on the features you want to see most.
 
 👉 **Check the `#readme` channel in the Discord for the full walkthrough.**
 
+### Help, Changelog, and Settings windows look right
+
+- The Help dialog used to pin its text to a narrow 600 px column inside an otherwise wide window, and long file paths and hotkeys (`C:\Users\…\Pictures\Screenshots`, `Control + PrintScreen`, …) pushed a horizontal scrollbar across the whole dialog. Both gone — text fills the dialog and wraps cleanly at the edge.
+- The Help and Changelog windows themselves no longer blow past their container on wide monitors, so the horizontal scrollbar that some users saw doesn't appear at all.
+- Inside the Changelog, long URLs, fenced code blocks, and wide tables also wrap inside the window now (code blocks reflow; wide tables get their own contained scroll).
+- In Settings, the "Changelog" and "Open Logs Folder" links now read as small, right-aligned uppercase actions, visually distinct from the static `Version - X.Y.Z` label sitting above them.
+
 ### Polish you'll notice
 
-- Pop-up windows (Settings, Help, etc.) have a nicely blurred background
-- The Settings switches have a friendlier "light-switch" look — and the whole row is clickable, switch or label
-- Sidebar info bubbles are calmer and less in-your-face
-- The "Crop Watermark" hint actually explains what the option does
-- Various small wording fixes and layout tweaks throughout
+- Pop-up windows (Settings, Help, etc.) have a nicely blurred background.
+- The Settings switches have a friendlier "light-switch" look — and the whole row is clickable, switch or label.
+- Sidebar info bubbles are calmer and less in-your-face.
+- The "Crop Watermark" hint actually explains what the option does.
+- Various small wording fixes and layout tweaks throughout.
 
 ## Behind the scenes
 
