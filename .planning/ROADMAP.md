@@ -5,7 +5,7 @@
 - ✅ **v1.2 Feature Enhancements** — Phases 1-2 (shipped 2026-04-20 via PR #25) — [archive](./milestones/v1.2-ROADMAP.md)
 - ✅ **v1.3 UI Refresh** — Phases 3-4 (shipped 2026-04-21) — [archive](./milestones/v1.3-ROADMAP.md)
 - ✅ **v1.4 Tooling Modernization** — Phases 5-7 (shipped 2026-04-22) — [archive](./milestones/v1.4-ROADMAP.md) · [requirements](./milestones/v1.4-REQUIREMENTS.md) · [audit](./milestones/v1.4-MILESTONE-AUDIT.md)
-- ✅ **v2.0 Vue 3 Migration** — Phases 8-13 (shipped 2026-04-22) — [archive](./milestones/v2.0-ROADMAP.md) · [requirements](./milestones/v2.0-REQUIREMENTS.md) · [audit](./v2.0-MILESTONE-AUDIT.md)
+- ✅ **v2.0 Vue 3 Migration** — Phases 8-13 (shipped 2026-04-22) — [archive](./milestones/v2.0-ROADMAP.md) · [requirements](./milestones/v2.0-REQUIREMENTS.md) · [audit](./milestones/v2.0-MILESTONE-AUDIT.md)
 
 ## Active Milestone
 
