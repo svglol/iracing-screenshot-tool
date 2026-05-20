@@ -166,11 +166,37 @@
 </template>
 
 <script lang="ts">
+import { defineComponent, h } from 'vue';
 import config from '../../utilities/config';
 import { checkIracingConfig } from '../../utilities/iracing-config-checks';
 import { useOruga } from '@oruga-ui/oruga-next';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
+
+// Oruga 0.13's notification `message` prop is plain string only — HTML is
+// rendered as text. Use the `component` prop to inject rich content instead.
+const ScreenshotErrorContent = defineComponent({
+	name: 'ScreenshotErrorContent',
+	props: {
+		message: { type: String, required: true },
+		logFile: { type: String, default: '' },
+	},
+	setup(props) {
+		return () =>
+			h('div', null, [
+				h('div', null, props.message),
+				props.logFile
+					? h(
+							'div',
+							{
+								class: 'screenshot-error-log',
+							},
+							['Log: ', h('code', null, props.logFile)]
+					  )
+					: null,
+			]);
+	},
+});
 
 function getResolutionDimensions(label: string): { width: number; height: number } {
 	switch (label) {
@@ -290,13 +316,12 @@ export default {
 			this.restoreCursorAfterCapture();
 			this.takingScreenshot = false;
 			const error = this.normalizeScreenshotError(arg);
-			const escapedMessage = this.escapeHtml(error.message);
-			const escapedLogFile = this.escapeHtml(error.logFile);
-			const logHint = escapedLogFile
-				? `<br><small>Log: ${escapedLogFile}</small>`
-				: '';
 			useOruga().notification.open({
-				message: `Screenshot failed: ${escapedMessage}${logHint}`,
+				component: ScreenshotErrorContent,
+				props: {
+					message: `Screenshot failed: ${error.message}`,
+					logFile: error.logFile,
+				},
 				variant: 'danger',
 				duration: 10000,
 				queue: false,
@@ -333,14 +358,6 @@ export default {
 		config.set('resolution', this.resolution);
 	},
 	methods: {
-		escapeHtml(value) {
-			return String(value || '')
-				.replace(/&/g, '&amp;')
-				.replace(/</g, '&lt;')
-				.replace(/>/g, '&gt;')
-				.replace(/"/g, '&quot;')
-				.replace(/'/g, '&#39;');
-		},
 		normalizeScreenshotError(payload) {
 			if (
 				payload &&
@@ -452,6 +469,20 @@ export default {
 
 .sidebar-tooltip.notification.is-danger .media-content {
 	color: #ff6b6b;
+}
+
+.screenshot-error-log {
+	margin-top: 0.35rem;
+	font-size: 0.85em;
+	opacity: 0.85;
+	word-break: break-all;
+}
+
+.screenshot-error-log code {
+	background: rgba(0, 0, 0, 0.18);
+	padding: 0 0.25em;
+	border-radius: 3px;
+	font-size: 0.95em;
 }
 
 /* Crop Watermark toggle — same light-switch + inline-left layout as the toggles
