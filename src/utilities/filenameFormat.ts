@@ -315,11 +315,17 @@ export const DEFAULT_FORMAT = '{track}-{driver}-{counter}';
  * After token replacement, characters that are invalid in Windows filenames
  * (\ / : * ? " < > |) are replaced with underscores.
  */
+/** Fallback name used when no session info is available — every session-derived
+ *  token would resolve to '', producing degenerate filenames like '--0'. */
+export const FALLBACK_FORMAT = 'iRacingScreenshotTool-{counter}';
+
 export function resolveFilenameFormat(
 	formatString: string,
 	sessionInfo: SessionInfo,
 	telemetry: Telemetry
 ): string {
+	if (!sessionInfo) return FALLBACK_FORMAT;
+
 	let result = formatString;
 
 	for (const field of FILENAME_FIELDS) {

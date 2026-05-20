@@ -708,13 +708,20 @@ app.on('ready', async () => {
 			return;
 		}
 
-		if (!iracing.telemetry || !iracing.sessionInfo) {
+		if (!iracing.telemetry) {
 			log.info('Screenshot rejected', { reason: 'no-telemetry' });
 			reportScreenshotError('iRacing telemetry is not available', {
 				context: 'resize-screenshot:telemetry',
 				meta: { request: data },
 			});
 			return;
+		}
+
+		if (!iracing.sessionInfo) {
+			log.info('Screenshot proceeding without session info', {
+				reason: 'no-session-info',
+				fallback: 'iRacingScreenshotTool-{counter}',
+			});
 		}
 
 		if (!workerReady) {
