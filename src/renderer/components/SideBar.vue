@@ -387,21 +387,32 @@ export default {
 			// Custom is selected with empty inputs (matches the legacy default
 			// branch in the previous switch-based implementation).
 			const target = this.targetDimensions || { width: 1920, height: 1080 };
-			let w = target.width;
-			let h = target.height;
 
-			const targetWidth = w;
-			const targetHeight = h;
+			// iRacing's window is resized to EXACTLY the selected resolution —
+			// never larger — so its DX11 framebuffer/VRAM cost is bounded by the
+			// chosen resolution. The watermark is removed by cropping INWARD from
+			// the captured frame (targetWidth/targetHeight below), so the saved
+			// image ends up slightly smaller than the nominal resolution. The old
+			// approach expanded the window 6%/3% and cropped back to the full
+			// nominal size, forcing iRacing to render ~12% more pixels at exactly
+			// the high resolutions where it OOM-crashes.
+			const w = target.width;
+			const h = target.height;
+
+			// Crop output = render size minus the watermark margin. Worker.vue
+			// extracts a (targetWidth x targetHeight) region from the w x h frame.
+			let targetWidth = w;
+			let targetHeight = h;
 
 			const cropTopLeft = config.get('cropTopLeft');
 			if (this.crop && cropTopLeft) {
-				// Legacy: expand 3% so cropping bottom-right removes watermark
-				w += Math.ceil(w * 0.03);
-				h += Math.ceil(h * 0.03);
+				// Legacy: crop 3% off the bottom-right corner to remove the watermark
+				targetWidth = w - Math.ceil(w * 0.03);
+				targetHeight = h - Math.ceil(h * 0.03);
 			} else if (this.crop) {
-				// Default: expand 6% so cropping 3% from each side removes watermark
-				w += Math.ceil(w * 0.06);
-				h += Math.ceil(h * 0.06);
+				// Default: crop 3% from each side (6% total) to remove the watermark
+				targetWidth = w - Math.ceil(w * 0.06);
+				targetHeight = h - Math.ceil(h * 0.06);
 			}
 			this.takingScreenshot = true;
 			this.$emit('screenshot', {

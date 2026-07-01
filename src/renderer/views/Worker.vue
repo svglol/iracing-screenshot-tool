@@ -44,11 +44,12 @@ let captureTargetDiagnostics = null;
 let preResolvedSourceId = null;
 let targetWidth = null;
 let targetHeight = null;
-// Expanded window dimensions (= what SetWindowPos actually resized iRacing to).
-// Used by fullscreenScreenshot to verify the captured stream came back at the
-// new size and not the prior native dimensions. NOT to be confused with
-// targetWidth/targetHeight, which are the un-expanded user-facing values used
-// for crop output sizing.
+// Window dimensions = what SetWindowPos actually resized iRacing to, which is
+// now the selected resolution itself (no expansion). Used by fullscreenScreenshot
+// to verify the captured stream came back at the new size and not the prior
+// native dimensions. NOT to be confused with targetWidth/targetHeight, which are
+// the smaller post-crop output dimensions (window size minus the watermark
+// margin) used for crop output sizing.
 let windowWidth = null;
 let windowHeight = null;
 function isPlainObject(value) {
@@ -294,7 +295,8 @@ async function saveReshadeImage(sourceFile) {
 
 		const reshadeProcessStart = performance.now();
 		if (crop && cropTopLeftFlag && targetWidth && targetHeight) {
-			// Legacy: crop bottom-right — output is the original target resolution
+			// Legacy: crop the bottom-right corner off — output is the render size
+			// minus the watermark margin
 			await image
 				.extract({
 					left: 0,
@@ -304,7 +306,8 @@ async function saveReshadeImage(sourceFile) {
 				})
 				.toFile(fileName);
 		} else if (crop && targetWidth && targetHeight) {
-			// Default: crop from each side — center-extract the original target resolution
+			// Default: center-crop each side off — output is the render size minus
+			// the watermark margin
 			const cropX = Math.round((metadata.width - targetWidth) / 2);
 			const cropY = Math.round((metadata.height - targetHeight) / 2);
 			await image
@@ -410,13 +413,15 @@ async function fullscreenScreenshot(callback) {
 
 				let outputWidth, outputHeight, srcX, srcY;
 				if (crop && cropTopLeft && targetWidth && targetHeight) {
-					// Legacy: crop bottom-right — output is the original target resolution
+					// Legacy: crop the bottom-right corner off — output is the render
+					// size minus the watermark margin
 					outputWidth = targetWidth;
 					outputHeight = targetHeight;
 					srcX = captureRect.x;
 					srcY = captureRect.y;
 				} else if (crop && targetWidth && targetHeight) {
-					// Default: crop from each side — center-extract the original target resolution
+					// Default: center-crop each side off — output is the render size
+					// minus the watermark margin
 					outputWidth = targetWidth;
 					outputHeight = targetHeight;
 					const cropX = Math.round((captureRect.width - outputWidth) / 2);
