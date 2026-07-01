@@ -23,6 +23,10 @@ const sharp = require('sharp');
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const log = createLogger('worker');
 
+// Max time to wait for the capture stream's <video> to report loadedmetadata
+// before tearing it down, so a stalled stream can't wedge the capture.
+const HANDLE_STREAM_TIMEOUT_MS = 5000;
+
 const FORMAT_MAP = {
 	jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 0.95 },
 	png: { mime: 'image/png', ext: '.png', quality: undefined },
@@ -42,6 +46,10 @@ let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
 let preResolvedSourceId = null;
+// Set true when main sends 'abort-capture' (iRacing disconnected mid-capture, or
+// the main-side watchdog fired). The in-flight capture checks this at each await
+// boundary and bails silently — main owns the recovery.
+let captureAborted = false;
 let targetWidth = null;
 let targetHeight = null;
 // Window dimensions = what SetWindowPos actually resized iRacing to, which is
@@ -393,8 +401,46 @@ async function fullscreenScreenshot(callback) {
 	const handleStream = (stream) => {
 		console.timeEnd('Get Media');
 		let video = document.createElement('video');
+		let settled = false;
+
+		const teardownStream = () => {
+			try {
+				if (video) {
+					video.srcObject = null;
+					video.remove();
+				}
+			} catch {
+				/* noop */
+			}
+			try {
+				stream.getTracks().forEach((track) => track.stop());
+			} catch (error) {
+				console.log(error);
+			}
+			video = null;
+		};
+
+		// If loadedmetadata never fires, the stream + decoded frame leak and the
+		// capture wedges (the main-side watchdog would eventually recover, but
+		// this fails fast and releases the GPU frame). Mirrors the race guard in
+		// probeStreamDimensions.
+		const metadataTimeout = setTimeout(() => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			teardownStream();
+			handleError(
+				new Error('Timed out waiting for capture video metadata')
+			);
+		}, HANDLE_STREAM_TIMEOUT_MS);
 
 		video.addEventListener('loadedmetadata', async function () {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			clearTimeout(metadataTimeout);
 			try {
 				video.style.height = this.videoHeight + 'px';
 				video.style.width = this.videoWidth + 'px';
@@ -484,15 +530,7 @@ async function fullscreenScreenshot(callback) {
 			} catch (error) {
 				handleError(error);
 			} finally {
-				video.srcObject = null;
-				video.remove();
-
-				try {
-					stream.getTracks().forEach((track) => track.stop());
-					video = null;
-				} catch (error) {
-					console.log(error);
-				}
+				teardownStream();
 			}
 		});
 
@@ -500,6 +538,10 @@ async function fullscreenScreenshot(callback) {
 	};
 
 	const handleError = (error) => {
+		if (captureAborted) {
+			// Main already restored the window and reported the error on abort.
+			return;
+		}
 		ipcRenderer.send('screenshot-finished', '');
 		sendScreenshotError(error, 'fullscreen-capture', {
 			windowID,
@@ -664,6 +706,7 @@ async function fullscreenScreenshot(callback) {
 			let streamH = dims.h;
 
 			while (
+				!captureAborted &&
 				!dimsMatch(streamW, streamH) &&
 				performance.now() - retryStart < MAX_WAIT_MS
 			) {
@@ -718,6 +761,18 @@ async function fullscreenScreenshot(callback) {
 			}
 		}
 
+		if (captureAborted) {
+			// Aborted mid-acquisition (iRacing disconnected or watchdog fired).
+			// Main owns recovery — stop the stream and bail without reporting.
+			try {
+				stream.getTracks().forEach((t) => t.stop());
+			} catch {
+				/* noop */
+			}
+			log.info('Capture aborted before handoff — skipping');
+			return;
+		}
+
 		// Attach custom marker to MediaStream instance (not in lib.dom.d.ts).
 		(stream as any).__captureTarget = captureTarget;
 		handleStream(stream);
@@ -763,9 +818,18 @@ export default {
 				return;
 			}
 
+			captureAborted = false;
 			fullscreenScreenshot((base64data) => {
 				saveImage(base64data);
 			});
+		});
+
+		ipcRenderer.on('abort-capture', (event, reason) => {
+			// Main tells us to abandon the in-flight capture (iRacing disconnected
+			// mid-capture, or the watchdog fired). The capture loop and handoff
+			// check this flag and bail silently — main owns the recovery path.
+			captureAborted = true;
+			log.info('Capture aborted', { reason });
 		});
 
 		ipcRenderer.on('session-info', (event, arg) => {

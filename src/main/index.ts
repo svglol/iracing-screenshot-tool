@@ -79,6 +79,11 @@ let mainWindow: BrowserWindow | null;
 let workerWindow: BrowserWindow | null;
 let workerReady = false;
 let cancelReshadeWait: ((reason: string) => void) | null = null;
+// Backstop timer for the non-ReShade capture path: if the worker never posts
+// back (screenshot-finished/response/error), force-restore so the app can't
+// wedge with iRacing stuck resized + UI hidden.
+let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
+const CAPTURE_WATCHDOG_MS = 30000;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 
 app.name = productName;
@@ -830,6 +835,7 @@ app.on('ready', async () => {
 					height: data.height,
 				},
 			});
+			armCaptureWatchdog();
 			return;
 		}
 
@@ -1005,7 +1011,38 @@ function clearPendingReshadeWait(reason = 'Screenshot cancelled'): void {
 	cancel(reason);
 }
 
+function clearCaptureWatchdog(): void {
+	if (captureWatchdog) {
+		clearTimeout(captureWatchdog);
+		captureWatchdog = null;
+	}
+}
+
+function armCaptureWatchdog(): void {
+	clearCaptureWatchdog();
+	captureWatchdog = setTimeout(() => {
+		captureWatchdog = null;
+		if (!takingScreenshot) {
+			return;
+		}
+		log.info('Capture watchdog fired — recovering', {
+			timeoutMs: CAPTURE_WATCHDOG_MS,
+		});
+		// Tell the worker to abandon any in-flight capture so it stops holding
+		// the stream, then restore the window and surface an error.
+		if (workerWindow && !workerWindow.isDestroyed()) {
+			workerWindow.webContents.send('abort-capture', 'watchdog-timeout');
+		}
+		restoreScreenshotState();
+		reportScreenshotError(
+			'Screenshot timed out — the capture worker did not respond',
+			{ context: 'resize-screenshot:watchdog' }
+		);
+	}, CAPTURE_WATCHDOG_MS);
+}
+
 function restoreScreenshotState(): void {
+	clearCaptureWatchdog();
 	if (!takingScreenshot) {
 		return;
 	}
