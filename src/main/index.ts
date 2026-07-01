@@ -83,7 +83,9 @@ let cancelReshadeWait: ((reason: string) => void) | null = null;
 // back (screenshot-finished/response/error), force-restore so the app can't
 // wedge with iRacing stuck resized + UI hidden.
 let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
+let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
 const CAPTURE_WATCHDOG_MS = 30000;
+const CAPTURE_ABORT_DEBOUNCE_MS = 400;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 
 app.name = productName;
@@ -687,6 +689,7 @@ app.on('ready', async () => {
 	});
 
 	iracing.on('Connected', () => {
+		cancelPendingCaptureAbort();
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-connected', '');
 		}
@@ -695,6 +698,12 @@ app.on('ready', async () => {
 	iracing.on('Disconnected', () => {
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-disconnected', '');
+		}
+		// If iRacing vanishes mid-capture (e.g. a VRAM-exhaustion crash at high
+		// resolution), don't let the worker spin its full retry budget — schedule
+		// a debounced abort that recovers and reports a clear cause.
+		if (takingScreenshot) {
+			scheduleCaptureAbortOnDisconnect();
 		}
 	});
 
@@ -1041,8 +1050,40 @@ function armCaptureWatchdog(): void {
 	}, CAPTURE_WATCHDOG_MS);
 }
 
+function cancelPendingCaptureAbort(): void {
+	if (pendingCaptureAbort) {
+		clearTimeout(pendingCaptureAbort);
+		pendingCaptureAbort = null;
+	}
+}
+
+function scheduleCaptureAbortOnDisconnect(): void {
+	if (pendingCaptureAbort) {
+		return;
+	}
+	// Debounce: a brief telemetry drop between sessions can emit 'Disconnected'
+	// without iRacing actually exiting. Wait a moment and only abort if we're
+	// still mid-capture and iRacing is genuinely gone (telemetry stays null).
+	pendingCaptureAbort = setTimeout(() => {
+		pendingCaptureAbort = null;
+		if (!takingScreenshot || iracing.telemetry) {
+			return;
+		}
+		log.info('iRacing disconnected during capture — aborting');
+		if (workerWindow && !workerWindow.isDestroyed()) {
+			workerWindow.webContents.send('abort-capture', 'iracing-disconnected');
+		}
+		restoreScreenshotState();
+		reportScreenshotError(
+			'iRacing exited during capture. At very high resolutions this can happen if it runs out of video memory (VRAM).',
+			{ context: 'resize-screenshot:iracing-disconnected' }
+		);
+	}, CAPTURE_ABORT_DEBOUNCE_MS);
+}
+
 function restoreScreenshotState(): void {
 	clearCaptureWatchdog();
+	cancelPendingCaptureAbort();
 	if (!takingScreenshot) {
 		return;
 	}
@@ -1067,7 +1108,15 @@ function restoreScreenshotState(): void {
 	originalWindowBounds = null;
 
 	if (iracing.camControls) {
-		iracing.camControls.setState(cameraState);
+		try {
+			iracing.camControls.setState(cameraState);
+		} catch (error) {
+			// broadcastUnsafe throws if the SDK was torn down (e.g. iRacing exited
+			// mid-capture and stopSDK() ran). Nothing to restore in that case.
+			log.debug('camControls.setState failed during restore', {
+				error: (error as Error).message || String(error),
+			});
+		}
 	}
 
 	takingScreenshot = false;
