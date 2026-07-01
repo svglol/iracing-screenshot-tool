@@ -64,11 +64,11 @@ const schema = {
 	},
 	outputFormat: {
 		type: 'string',
-		// PNG (lossless) is the default: the desktop-capture pipeline already
-		// delivers chroma-subsampled (I420 4:2:0) frames, so a lossy JPEG/WebP
-		// encode would stack a second loss stage on top. Users who prefer smaller
-		// files can switch to JPEG/WebP in Settings.
-		default: 'png',
+		// The desktop-capture pipeline delivers chroma-subsampled (I420 4:2:0)
+		// frames, so no encode format is truly pixel-accurate. JPEG at max quality
+		// is the default (small files); PNG (lossless container) and WebP are
+		// options in Settings.
+		default: 'jpeg',
 		enum: ['jpeg', 'png', 'webp'],
 	},
 	disableTooltips: {

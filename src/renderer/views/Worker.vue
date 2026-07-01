@@ -28,19 +28,19 @@ const log = createLogger('worker');
 const HANDLE_STREAM_TIMEOUT_MS = 5000;
 
 // The getUserMedia desktop-capture path delivers I420 (YUV 4:2:0) frames, so the
-// source is already chroma-subsampled before we encode — a lossy JPEG/WebP pass
-// would stack a second loss stage. PNG (the default) is lossless; JPEG/WebP stay
-// available for smaller files. (True pixel-accuracy would require a native
-// RGBA capture backend, not a different encode format.)
+// source is already chroma-subsampled before we encode. JPEG at max quality is
+// the default (small files, one light extra loss stage); PNG is a lossless
+// container and WebP a smaller lossy option. True pixel-accuracy would require a
+// native RGBA capture backend, not a different encode format.
 const FORMAT_MAP = {
-	jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 0.95 },
+	jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 1 },
 	png: { mime: 'image/png', ext: '.png', quality: undefined },
 	webp: { mime: 'image/webp', ext: '.webp', quality: 0.95 },
 };
 
 function getOutputFormat() {
-	const key = config.get('outputFormat') || 'png';
-	return FORMAT_MAP[key] || FORMAT_MAP.png;
+	const key = config.get('outputFormat') || 'jpeg';
+	return FORMAT_MAP[key] || FORMAT_MAP.jpeg;
 }
 
 // A genuinely failed desktop capture (e.g. a GDI fallback on GPU-accelerated

@@ -140,7 +140,7 @@
 					<hr />
 					<o-field label="Output Format">
 						<o-select v-model="outputFormat">
-							<option value="jpeg">JPEG (quality 95%)</option>
+							<option value="jpeg">JPEG (max quality)</option>
 							<option value="png">PNG (lossless)</option>
 							<option value="webp">WebP (quality 95%)</option>
 						</o-select>
