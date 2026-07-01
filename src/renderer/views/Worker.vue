@@ -270,6 +270,36 @@ async function createThumbnail(fileName, fileKey) {
 	log.info('Thumbnail created', { file: thumbPath });
 }
 
+// In-memory gallery thumbnail: downscale the captured frame (fit:contain,
+// transparent letterbox) without re-decoding the saved full-resolution file.
+// Uses an alpha:true canvas so the letterbox padding stays transparent, matching
+// the previous sharp output.
+const THUMB_WIDTH = 1280;
+const THUMB_HEIGHT = 720;
+
+async function renderThumbnailBlob(sourceCanvas, srcWidth, srcHeight) {
+	const scale = Math.min(THUMB_WIDTH / srcWidth, THUMB_HEIGHT / srcHeight);
+	const drawW = Math.max(1, Math.round(srcWidth * scale));
+	const drawH = Math.max(1, Math.round(srcHeight * scale));
+	const thumb = new OffscreenCanvas(THUMB_WIDTH, THUMB_HEIGHT);
+	const tctx = thumb.getContext('2d', { alpha: true });
+	if (!tctx) {
+		return null;
+	}
+	tctx.drawImage(
+		sourceCanvas,
+		0,
+		0,
+		srcWidth,
+		srcHeight,
+		Math.round((THUMB_WIDTH - drawW) / 2),
+		Math.round((THUMB_HEIGHT - drawH) / 2),
+		drawW,
+		drawH
+	);
+	return thumb.convertToBlob({ type: 'image/webp', quality: 0.8 });
+}
+
 function getFileNameString() {
 	const useCustom = config.get('customFilenameFormat');
 	const formatString = useCustom
@@ -384,7 +414,7 @@ async function saveReshadeImage(sourceFile) {
 	}
 }
 
-async function saveImage(blob) {
+async function saveImage(blob, thumbBlob) {
 	try {
 		console.time('Save Image');
 		ensureDirectory(getScreenshotDir());
@@ -410,7 +440,22 @@ async function saveImage(blob) {
 		ipcRenderer.send('screenshot-response', fileName);
 
 		console.time('Save Thumbnail');
-		await createThumbnail(fileName, fileKey);
+		if (thumbBlob) {
+			const thumbPath = getThumbnailPath(fileKey);
+			const thumbStart = performance.now();
+			await fs.promises.writeFile(
+				thumbPath,
+				Buffer.from(await thumbBlob.arrayBuffer())
+			);
+			log.debug('Thumbnail write (in-memory)', {
+				elapsed: Math.round(performance.now() - thumbStart),
+				file: thumbPath,
+			});
+			log.info('Thumbnail created', { file: thumbPath });
+		} else {
+			// Fallback: no in-memory thumbnail was produced — re-decode the file.
+			await createThumbnail(fileName, fileKey);
+		}
 		console.timeEnd('Save Thumbnail');
 		if (global.gc) {
 			global.gc();
@@ -510,7 +555,16 @@ async function fullscreenScreenshot(callback) {
 		});
 		console.timeEnd('To Blob');
 		console.timeEnd('Draw Image');
-		callback(blob);
+
+		// Build the gallery thumbnail from the same in-memory frame instead of
+		// re-decoding the just-written full-resolution file with sharp.
+		const thumbBlob = await renderThumbnailBlob(
+			offscreen,
+			outputWidth,
+			outputHeight
+		);
+
+		callback(blob, thumbBlob);
 	};
 
 	const handleError = (error) => {
@@ -838,8 +892,8 @@ export default {
 			}
 
 			captureAborted = false;
-			fullscreenScreenshot((base64data) => {
-				saveImage(base64data);
+			fullscreenScreenshot((blob, thumbBlob) => {
+				saveImage(blob, thumbBlob);
 			});
 		});
 
