@@ -27,6 +27,11 @@ const log = createLogger('worker');
 // before tearing it down, so a stalled stream can't wedge the capture.
 const HANDLE_STREAM_TIMEOUT_MS = 5000;
 
+// The getUserMedia desktop-capture path delivers I420 (YUV 4:2:0) frames, so the
+// source is already chroma-subsampled before we encode — a lossy JPEG/WebP pass
+// would stack a second loss stage. PNG (the default) is lossless; JPEG/WebP stay
+// available for smaller files. (True pixel-accuracy would require a native
+// RGBA capture backend, not a different encode format.)
 const FORMAT_MAP = {
 	jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 0.95 },
 	png: { mime: 'image/png', ext: '.png', quality: undefined },
@@ -34,8 +39,33 @@ const FORMAT_MAP = {
 };
 
 function getOutputFormat() {
-	const key = config.get('outputFormat') || 'jpeg';
-	return FORMAT_MAP[key] || FORMAT_MAP.jpeg;
+	const key = config.get('outputFormat') || 'png';
+	return FORMAT_MAP[key] || FORMAT_MAP.png;
+}
+
+// A genuinely failed desktop capture (e.g. a GDI fallback on GPU-accelerated
+// content) returns an all-black frame that still passes the dimension check.
+// Sample a tiny downscale and treat it as failed only if the brightest pixel is
+// still essentially black — real night scenes always have some brighter pixels
+// (headlights, dash, sky), so this won't false-positive on dark-but-valid shots.
+const BLACK_FRAME_MAX_BRIGHTNESS = 24; // sum of R+G+B, ~8 per channel
+
+function isFrameBlack(sourceCanvas) {
+	const sampleW = 32;
+	const sampleH = 18;
+	const sample = new OffscreenCanvas(sampleW, sampleH);
+	const sctx = sample.getContext('2d', { willReadFrequently: true });
+	if (!sctx) {
+		return false;
+	}
+	sctx.drawImage(sourceCanvas, 0, 0, sampleW, sampleH);
+	const { data } = sctx.getImageData(0, 0, sampleW, sampleH);
+	for (let i = 0; i < data.length; i += 4) {
+		if (data[i] + data[i + 1] + data[i + 2] > BLACK_FRAME_MAX_BRIGHTNESS) {
+			return false;
+		}
+	}
+	return true;
 }
 
 let sessionInfo = null;
@@ -512,6 +542,13 @@ async function fullscreenScreenshot(callback) {
 				});
 
 				console.timeEnd('Create OffscreenCanvas');
+
+				if (isFrameBlack(offscreen)) {
+					throw new Error(
+						'Captured frame is black — the capture source may have failed (GPU-accelerated content can fail to capture on some Windows setups)'
+					);
+				}
+
 				console.time('To Blob');
 				const blobStart = performance.now();
 				const fmt = getOutputFormat();
