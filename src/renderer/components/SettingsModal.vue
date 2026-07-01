@@ -181,8 +181,8 @@
 								>Prefer top-left watermark crop</span
 							>
 							<span class="description"
-								>Crops only the bottom-right corner (3% expansion). When
-								off, the screenshot is expanded by 6% and cropped
+								>Crops only the bottom-right corner (3%). When
+								off, the screenshot is cropped (6% total)
 								equally from all sides for a centered result.</span
 							>
 						</label>

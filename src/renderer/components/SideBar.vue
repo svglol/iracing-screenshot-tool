@@ -16,10 +16,14 @@
 			<o-input v-model="customHeight" type="number" min="0" max="10000" />
 		</o-field>
 
-		<p v-if="targetDimensions" class="sidebar-target-hint">
-			Target:
+		<p v-if="outputDimensions" class="sidebar-target-hint">
+			Output:
 			<span class="sidebar-target-hint__value"
-				>{{ targetDimensions.width }} ×
+				>{{ outputDimensions.width }} ×
+				{{ outputDimensions.height }}</span
+			>
+			<span v-if="crop" class="sidebar-target-hint__render"
+				>· renders at {{ targetDimensions.width }} ×
 				{{ targetDimensions.height }}</span
 			>
 		</p>
@@ -232,6 +236,7 @@ export default {
 			takingScreenshot: false,
 			disableTooltips: config.get('disableTooltips'),
 			reshade: config.get('reshade'),
+			cropTopLeft: config.get('cropTopLeft'),
 			configWarnings: checkIracingConfig(),
 		};
 	},
@@ -269,6 +274,20 @@ export default {
 				return base;
 			}
 			return { width: base.width, height: adjustedHeight };
+		},
+		// Dimensions of the SAVED image. iRacing renders at targetDimensions
+		// (the selected resolution); when Crop Watermark is on, the watermark is
+		// cropped off so the file ends up slightly smaller. Mirrors the crop math
+		// in takeScreenshot so the hint matches what is actually written to disk.
+		outputDimensions() {
+			const base = this.targetDimensions;
+			if (!base) return null;
+			if (!this.crop) return base;
+			const factor = this.cropTopLeft ? 0.03 : 0.06;
+			return {
+				width: base.width - Math.ceil(base.width * factor),
+				height: base.height - Math.ceil(base.height * factor),
+			};
 		},
 	},
 	created() {
@@ -336,6 +355,10 @@ export default {
 		config.onDidChange('reshade', (newValue, oldValue) => {
 			this.reshade = newValue;
 		});
+
+		config.onDidChange('cropTopLeft', (newValue) => {
+			this.cropTopLeft = newValue;
+		});
 	},
 	mounted() {
 		this.crop = config.get('crop');
@@ -387,21 +410,32 @@ export default {
 			// Custom is selected with empty inputs (matches the legacy default
 			// branch in the previous switch-based implementation).
 			const target = this.targetDimensions || { width: 1920, height: 1080 };
-			let w = target.width;
-			let h = target.height;
 
-			const targetWidth = w;
-			const targetHeight = h;
+			// iRacing's window is resized to EXACTLY the selected resolution —
+			// never larger — so its DX11 framebuffer/VRAM cost is bounded by the
+			// chosen resolution. The watermark is removed by cropping INWARD from
+			// the captured frame (targetWidth/targetHeight below), so the saved
+			// image ends up slightly smaller than the nominal resolution. The old
+			// approach expanded the window 6%/3% and cropped back to the full
+			// nominal size, forcing iRacing to render ~12% more pixels at exactly
+			// the high resolutions where it OOM-crashes.
+			const w = target.width;
+			const h = target.height;
+
+			// Crop output = render size minus the watermark margin. Worker.vue
+			// extracts a (targetWidth x targetHeight) region from the w x h frame.
+			let targetWidth = w;
+			let targetHeight = h;
 
 			const cropTopLeft = config.get('cropTopLeft');
 			if (this.crop && cropTopLeft) {
-				// Legacy: expand 3% so cropping bottom-right removes watermark
-				w += Math.ceil(w * 0.03);
-				h += Math.ceil(h * 0.03);
+				// Legacy: crop 3% off the bottom-right corner to remove the watermark
+				targetWidth = w - Math.ceil(w * 0.03);
+				targetHeight = h - Math.ceil(h * 0.03);
 			} else if (this.crop) {
-				// Default: expand 6% so cropping 3% from each side removes watermark
-				w += Math.ceil(w * 0.06);
-				h += Math.ceil(h * 0.06);
+				// Default: crop 3% from each side (6% total) to remove the watermark
+				targetWidth = w - Math.ceil(w * 0.06);
+				targetHeight = h - Math.ceil(h * 0.06);
 			}
 			this.takingScreenshot = true;
 			this.$emit('screenshot', {
@@ -434,6 +468,11 @@ export default {
 .sidebar-target-hint__value {
 	color: rgba(255, 255, 255, 0.9);
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.sidebar-target-hint__render {
+	color: rgba(255, 255, 255, 0.45);
 	font-variant-numeric: tabular-nums;
 }
 
