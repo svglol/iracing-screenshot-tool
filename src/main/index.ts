@@ -86,6 +86,9 @@ let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
 let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
 const CAPTURE_WATCHDOG_MS = 30000;
 const CAPTURE_ABORT_DEBOUNCE_MS = 400;
+// getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
+// requesting larger can never converge on the dim-match — bound requests here.
+const MAX_CAPTURE_DIMENSION = 10000;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 
 app.name = productName;
@@ -747,6 +750,33 @@ app.on('ready', async () => {
 			return;
 		}
 
+		// Defensive clamp: the sidebar's o-input max is only a hint and the
+		// global-hotkey path bypasses the UI entirely, so main must not trust
+		// data.width/height blindly. Bound them to the capture ceiling and keep
+		// each crop target within its render size.
+		const reqWidth = clampCaptureDimension(data.width, width);
+		const reqHeight = clampCaptureDimension(data.height, height);
+		if (reqWidth !== data.width || reqHeight !== data.height) {
+			log.info('Clamped screenshot dimensions', {
+				requested: { width: data.width, height: data.height },
+				clamped: { width: reqWidth, height: reqHeight },
+			});
+		}
+		data.width = reqWidth;
+		data.height = reqHeight;
+		if (data.targetWidth != null) {
+			data.targetWidth = Math.min(
+				clampCaptureDimension(data.targetWidth, reqWidth),
+				reqWidth
+			);
+		}
+		if (data.targetHeight != null) {
+			data.targetHeight = Math.min(
+				clampCaptureDimension(data.targetHeight, reqHeight),
+				reqHeight
+			);
+		}
+
 		takingScreenshot = true;
 		originalWindowBounds = getIracingWindowDetails() || null;
 		parseCameraState(
@@ -1018,6 +1048,14 @@ function clearPendingReshadeWait(reason = 'Screenshot cancelled'): void {
 	const cancel = cancelReshadeWait;
 	cancelReshadeWait = null;
 	cancel(reason);
+}
+
+function clampCaptureDimension(value: unknown, fallback: number): number {
+	const n = Math.round(Number(value));
+	if (!Number.isFinite(n) || n < 1) {
+		return fallback;
+	}
+	return Math.min(n, MAX_CAPTURE_DIMENSION);
 }
 
 function clearCaptureWatchdog(): void {
