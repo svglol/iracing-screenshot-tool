@@ -810,9 +810,10 @@ app.on('ready', async () => {
 		});
 
 		if (!config.get('reshade')) {
-			// Run resize and source enumeration concurrently. spawnSync blocks the
-			// event loop so desktopCapturer.getSources can't overlap with it — using
-			// the async resize variant lets both run in parallel.
+			// Run resize and source enumeration together. On the koffi path the
+			// resize is fast synchronous FFI (it completes before getSources begins,
+			// which is fine); the Promise.all overlap still matters for the
+			// PowerShell fallback, whose spawn would otherwise block getSources.
 			const [id, windowSources] = await Promise.all([
 				resizeIracingWindowAsync(data.width, data.height, left, top),
 				desktopCapturer.getSources({
@@ -878,8 +879,16 @@ app.on('ready', async () => {
 			return;
 		}
 
-		// ReShade path: sync resize is fine since we don't need source enumeration
-		const id = resize(data.width, data.height, left, top);
+		// ReShade path: use the raising pre-capture resize (un-minimize + size +
+		// foreground) just like the non-ReShade path — a quiet reposition would
+		// leave a minimized/background iRacing un-composited so ReShade's grab
+		// gets no frame. No desktopCapturer.getSources here, so just await it.
+		const id = await resizeIracingWindowAsync(
+			data.width,
+			data.height,
+			left,
+			top
+		);
 
 		if (id === undefined) {
 			log.info('iRacing window not found');
