@@ -16,10 +16,14 @@
 			<o-input v-model="customHeight" type="number" min="0" max="10000" />
 		</o-field>
 
-		<p v-if="targetDimensions" class="sidebar-target-hint">
-			Target:
+		<p v-if="outputDimensions" class="sidebar-target-hint">
+			Output:
 			<span class="sidebar-target-hint__value"
-				>{{ targetDimensions.width }} ×
+				>{{ outputDimensions.width }} ×
+				{{ outputDimensions.height }}</span
+			>
+			<span v-if="crop" class="sidebar-target-hint__render"
+				>· renders at {{ targetDimensions.width }} ×
 				{{ targetDimensions.height }}</span
 			>
 		</p>
@@ -232,6 +236,7 @@ export default {
 			takingScreenshot: false,
 			disableTooltips: config.get('disableTooltips'),
 			reshade: config.get('reshade'),
+			cropTopLeft: config.get('cropTopLeft'),
 			configWarnings: checkIracingConfig(),
 		};
 	},
@@ -269,6 +274,20 @@ export default {
 				return base;
 			}
 			return { width: base.width, height: adjustedHeight };
+		},
+		// Dimensions of the SAVED image. iRacing renders at targetDimensions
+		// (the selected resolution); when Crop Watermark is on, the watermark is
+		// cropped off so the file ends up slightly smaller. Mirrors the crop math
+		// in takeScreenshot so the hint matches what is actually written to disk.
+		outputDimensions() {
+			const base = this.targetDimensions;
+			if (!base) return null;
+			if (!this.crop) return base;
+			const factor = this.cropTopLeft ? 0.03 : 0.06;
+			return {
+				width: base.width - Math.ceil(base.width * factor),
+				height: base.height - Math.ceil(base.height * factor),
+			};
 		},
 	},
 	created() {
@@ -335,6 +354,10 @@ export default {
 
 		config.onDidChange('reshade', (newValue, oldValue) => {
 			this.reshade = newValue;
+		});
+
+		config.onDidChange('cropTopLeft', (newValue) => {
+			this.cropTopLeft = newValue;
 		});
 	},
 	mounted() {
@@ -445,6 +468,11 @@ export default {
 .sidebar-target-hint__value {
 	color: rgba(255, 255, 255, 0.9);
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.sidebar-target-hint__render {
+	color: rgba(255, 255, 255, 0.45);
 	font-variant-numeric: tabular-nums;
 }
 
