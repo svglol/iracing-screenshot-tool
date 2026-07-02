@@ -113,11 +113,13 @@ const schema = {
 	},
 	// Windows.Graphics.Capture path (#11): grabs true un-subsampled 8-bit RGBA
 	// via the native addon instead of the desktopCapturer/getUserMedia pipeline
-	// (which chroma-subsamples to I420 4:2:0). Off by default — falls back to
-	// getUserMedia when unavailable or on any capture fault.
+	// (which chroma-subsamples to I420 4:2:0). On by default (hardware-validated)
+	// — transparently falls back to getUserMedia when WGC is unavailable (missing
+	// addon / pre-1903 Windows) or on any capture fault, so enabling it by default
+	// never regresses a machine that can't use it.
 	nativeCapture: {
 		type: 'boolean',
-		default: false,
+		default: true,
 	},
 };
 
