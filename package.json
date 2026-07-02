@@ -20,11 +20,13 @@
             "out/**/*",
             "node_modules/**/*",
             "static/icon.*",
+            "native/wgc-capture.node",
             "!bot/**/*"
         ],
         "asarUnpack": [
             "**/node_modules/@koromix/koffi-*/**",
-            "**/node_modules/koffi/**/*.node"
+            "**/node_modules/koffi/**/*.node",
+            "native/*.node"
         ],
         "extraResources": [
             {

@@ -1,0 +1,23 @@
+[package]
+name = "wgc-capture"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi8"] }
+napi-derive = "2"
+windows-capture = "2.0.0"
+windows = { version = "0.62.2", features = [
+    "Win32_UI_HiDpi",
+    "Win32_Foundation",
+    "Graphics_Capture",
+] }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+opt-level = 2
