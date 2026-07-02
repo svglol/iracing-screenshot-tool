@@ -111,6 +111,14 @@ const schema = {
 		type: 'string',
 		default: 'C:\\Program Files (x86)\\iRacing\\ReShade.ini',
 	},
+	// Windows.Graphics.Capture path (#11): grabs true un-subsampled 8-bit RGBA
+	// via the native addon instead of the desktopCapturer/getUserMedia pipeline
+	// (which chroma-subsamples to I420 4:2:0). Off by default — falls back to
+	// getUserMedia when unavailable or on any capture fault.
+	nativeCapture: {
+		type: 'boolean',
+		default: false,
+	},
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

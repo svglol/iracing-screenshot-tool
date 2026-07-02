@@ -32,6 +32,7 @@ import {
 	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
+import { isWgcAvailable } from './wgc-capture';
 import { createLogger } from '../utilities/logger';
 const log = createLogger('main');
 import {
@@ -512,6 +513,12 @@ ipcMain.handle('get-vram-info', () => {
 ipcMain.handle('get-iracing-fullscreen-state', () =>
 	getIracingExclusiveFullscreenState()
 );
+// #11: whether the WGC native-capture path loaded on this machine (addon present
+// + Win10 1903+). Settings uses this (sendSync) to disable the toggle on an
+// unsupported system. Fails open in the loader, so a false here is definitive.
+ipcMain.on('native-capture-available', (event) => {
+	event.returnValue = isWgcAvailable();
+});
 ipcMain.handle(
 	'desktop-capturer:get-source-id',
 	async (event, request: unknown) => {
