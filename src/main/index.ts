@@ -981,6 +981,13 @@ app.on('ready', async () => {
 			});
 
 			if (useNativeCapture) {
+				// Arm the same recovery watchdog the worker path uses: if the WGC
+				// settle/grab/save ever hangs (e.g. a stalled disk or network
+				// screenshot folder), this force-restores instead of leaving iRacing
+				// stuck at capture size with its UI hidden. A 'saved'/'aborted'
+				// outcome clears it via restoreScreenshotState; 'fallback' re-arms it
+				// in dispatchWorkerCapture.
+				armCaptureWatchdog();
 				const outcome = await captureAndSaveViaWgc(id, data);
 				if (outcome === 'saved' || outcome === 'aborted') {
 					return;
@@ -1206,6 +1213,17 @@ function dispatchWorkerCapture(
 	data: CaptureRequestData,
 	windowSources: Electron.DesktopCapturerSource[]
 ): void {
+	// The awaits upstream (resize/getSources, and the WGC settle+grab which can
+	// block for up to WGC_TIMEOUT_MS) give the disconnect/watchdog abort a window
+	// to fire: it runs restoreScreenshotState() (takingScreenshot=false) and
+	// reports the error. If that already happened, dispatching a fresh worker
+	// capture here would arm a stray watchdog and produce a spurious second
+	// (wrong-size) screenshot that contradicts the error just shown — so bail.
+	if (!takingScreenshot) {
+		log.info('Capture already aborted — skipping worker dispatch');
+		return;
+	}
+
 	let sourceId: string | null = null;
 	const match = findSourceByWindowHandles(windowSources, [String(id)]);
 	if (match) {
@@ -1326,6 +1344,12 @@ async function captureAndSaveViaWgc(
 		return 'fallback';
 	}
 
+	// Tracks whether the primary file reached disk. Once it has, a later failure
+	// (thumbnail, notify, restore) must NOT return 'fallback' — the getUserMedia
+	// path would then write a SECOND file for one keypress (buildUniqueScreenshotName
+	// sees the first and picks a new name). Past this point we finalize as 'saved'.
+	let committed = false;
+	let savedPath = '';
 	try {
 		const screenshotDir = path.resolve(config.get('screenshotFolder'));
 		const cacheDir = path.join(app.getPath('userData'), 'Cache');
@@ -1346,7 +1370,7 @@ async function captureAndSaveViaWgc(
 			exists: (name) =>
 				fs.existsSync(path.join(screenshotDir, `${name}${ext}`)),
 		});
-		const savedPath = path.join(screenshotDir, `${fileKey}${ext}`);
+		savedPath = path.join(screenshotDir, `${fileKey}${ext}`);
 		const thumbPath = path.join(cacheDir, `${fileKey}.webp`);
 
 		const rawOptions = {
@@ -1380,15 +1404,22 @@ async function captureAndSaveViaWgc(
 				cropRect,
 			});
 		}
-		// A fresh pipeline per output (sharp instances are single-use).
+		// A fresh pipeline per output (sharp instances are single-use). removeAlpha
+		// drops WGC's alpha channel so PNG/WebP always save as opaque RGB — the
+		// compositor can hand back a non-opaque alpha (e.g. Win11 rounded corners,
+		// flip-model backbuffers), which would otherwise bleed transparency into the
+		// saved image. JPEG has no alpha, so this is a no-op there.
 		const buildPipeline = () => {
-			const image = sharp(frame.data, rawOptions);
+			const image = sharp(frame.data, rawOptions).removeAlpha();
 			return cropInBounds && cropRect ? image.extract(cropRect) : image;
 		};
 
+		// Primary write. A failure here means no file exists yet, so falling back
+		// to a fresh getUserMedia capture is safe (no duplicate).
 		await encodeForFormat(buildPipeline(), config.get('outputFormat')).toFile(
 			savedPath
 		);
+		committed = true;
 		log.info('WGC screenshot saved', {
 			file: savedPath,
 			frame: { width: frame.width, height: frame.height },
@@ -1396,14 +1427,21 @@ async function captureAndSaveViaWgc(
 		});
 
 		// Gallery thumbnail from the same in-memory frame (transparent letterbox,
-		// matching the renderer's createThumbnail output).
-		await buildPipeline()
-			.resize(1280, 720, {
-				fit: 'contain',
-				background: { r: 0, g: 0, b: 0, alpha: 0 },
-			})
-			.webp()
-			.toFile(thumbPath);
+		// matching the renderer's createThumbnail output). Best-effort: a thumbnail
+		// failure must not discard the already-saved shot.
+		try {
+			await buildPipeline()
+				.resize(1280, 720, {
+					fit: 'contain',
+					background: { r: 0, g: 0, b: 0, alpha: 0 },
+				})
+				.webp()
+				.toFile(thumbPath);
+		} catch (thumbError) {
+			log.info('WGC thumbnail failed — screenshot still saved', {
+				error: (thumbError as Error).message || String(thumbError),
+			});
+		}
 
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('screenshot-response', savedPath);
@@ -1411,11 +1449,24 @@ async function captureAndSaveViaWgc(
 		restoreScreenshotState();
 		return 'saved';
 	} catch (error) {
-		// A save failure after a good grab shouldn't silently drop the shot — fall
-		// back to the getUserMedia path, which re-captures and saves independently.
-		log.info('WGC save failed — falling back to getUserMedia', {
-			error: (error as Error).message || String(error),
-		});
+		if (committed) {
+			// The primary file is already on disk — a post-write failure must not
+			// trigger a second capture. Finalize as saved and restore.
+			log.info('WGC post-save step failed — screenshot already saved', {
+				file: savedPath,
+				error: (error as Error).message || String(error),
+			});
+			restoreScreenshotState();
+			return 'saved';
+		}
+		// Grab / crop / primary write failed with nothing written — safe to
+		// re-capture via the getUserMedia path.
+		log.info(
+			'WGC capture failed before save — falling back to getUserMedia',
+			{
+				error: (error as Error).message || String(error),
+			}
+		);
 		return 'fallback';
 	}
 }
