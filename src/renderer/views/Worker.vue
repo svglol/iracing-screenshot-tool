@@ -13,7 +13,12 @@ import {
 	sanitizeFilePart,
 	buildScreenshotFileKey,
 } from '../../utilities/screenshot-name';
-import { resolveFilenameFormat } from '../../utilities/filenameFormat';
+import { DEFAULT_FORMAT } from '../../utilities/filenameFormat';
+import {
+	buildUniqueScreenshotName,
+	resolveCropRect,
+	OUTPUT_EXTENSIONS,
+} from '../../utilities/screenshot-output';
 import { createLogger } from '../../utilities/logger';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -33,9 +38,9 @@ const HANDLE_STREAM_TIMEOUT_MS = 5000;
 // container and WebP a smaller lossy option. True pixel-accuracy would require a
 // native RGBA capture backend, not a different encode format.
 const FORMAT_MAP = {
-	jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 1 },
-	png: { mime: 'image/png', ext: '.png', quality: undefined },
-	webp: { mime: 'image/webp', ext: '.webp', quality: 0.95 },
+	jpeg: { mime: 'image/jpeg', ext: OUTPUT_EXTENSIONS.jpeg, quality: 1 },
+	png: { mime: 'image/png', ext: OUTPUT_EXTENSIONS.png, quality: undefined },
+	webp: { mime: 'image/webp', ext: OUTPUT_EXTENSIONS.webp, quality: 0.95 },
 };
 
 function getOutputFormat() {
@@ -303,34 +308,20 @@ async function renderThumbnailBlob(sourceCanvas, srcWidth, srcHeight) {
 function getFileNameString() {
 	const useCustom = config.get('customFilenameFormat');
 	const formatString = useCustom
-		? config.get('filenameFormat') || '{track}-{driver}-{counter}'
-		: '{track}-{driver}-{counter}';
-
-	// Resolve all tokens except {counter}
-	const resolved = resolveFilenameFormat(formatString, sessionInfo, telemetry);
+		? config.get('filenameFormat') || DEFAULT_FORMAT
+		: DEFAULT_FORMAT;
 
 	ensureDirectory(getScreenshotDir());
 
-	// Handle {counter} - find unique filename
-	if (resolved.includes('{counter}')) {
-		let count = 0;
-		let fileName = resolved.replace('{counter}', String(count));
-		while (fs.existsSync(getScreenshotPath(fileName))) {
-			count += 1;
-			fileName = resolved.replace('{counter}', String(count));
-		}
-		return fileName;
-	}
-
-	// No counter - still need uniqueness, append counter if file exists
-	if (fs.existsSync(getScreenshotPath(resolved))) {
-		let count = 1;
-		while (fs.existsSync(getScreenshotPath(resolved + '-' + count))) {
-			count += 1;
-		}
-		return resolved + '-' + count;
-	}
-	return resolved;
+	// Shared with the main-side WGC save path so both backends name files
+	// identically. exists() appends the current output extension via
+	// getScreenshotPath, matching the historical uniqueness check.
+	return buildUniqueScreenshotName({
+		formatString,
+		sessionInfo,
+		telemetry,
+		exists: (name) => fs.existsSync(getScreenshotPath(name)),
+	});
 }
 
 async function saveReshadeImage(sourceFile) {
@@ -362,30 +353,19 @@ async function saveReshadeImage(sourceFile) {
 		}
 
 		const reshadeProcessStart = performance.now();
-		if (crop && cropTopLeftFlag && targetWidth && targetHeight) {
-			// Legacy: crop the bottom-right corner off — output is the render size
-			// minus the watermark margin
-			await image
-				.extract({
-					left: 0,
-					top: 0,
-					width: targetWidth,
-					height: targetHeight,
-				})
-				.toFile(fileName);
-		} else if (crop && targetWidth && targetHeight) {
-			// Default: center-crop each side off — output is the render size minus
-			// the watermark margin
-			const cropX = Math.round((metadata.width - targetWidth) / 2);
-			const cropY = Math.round((metadata.height - targetHeight) / 2);
-			await image
-				.extract({
-					left: cropX,
-					top: cropY,
-					width: targetWidth,
-					height: targetHeight,
-				})
-				.toFile(fileName);
+		// Shared crop geometry (see screenshot-output.resolveCropRect): top-left
+		// mode drops the bottom-right watermark corner; centered mode trims the
+		// margin from all sides; null → no crop.
+		const cropRect = resolveCropRect({
+			sourceWidth: metadata.width,
+			sourceHeight: metadata.height,
+			targetWidth,
+			targetHeight,
+			crop,
+			cropTopLeft: cropTopLeftFlag,
+		});
+		if (cropRect) {
+			await image.extract(cropRect).toFile(fileName);
 		} else {
 			await image.toFile(fileName);
 		}
