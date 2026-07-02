@@ -2,11 +2,24 @@
 	<div style="padding: 1rem; padding-top: 0.5rem">
 		<o-field label="Resolution">
 			<o-select v-model="resolution" expanded placeholder="Resolution">
-				<option v-for="option in items" :key="option" :value="option">
+				<option
+					v-for="option in items"
+					:key="option"
+					:value="option"
+					:style="optionStyle(option)"
+				>
 					{{ option }}
 				</option>
 			</o-select>
 		</o-field>
+
+		<p v-if="vramStatusText" class="sidebar-vram-status">
+			<span
+				class="sidebar-vram-status__dot"
+				:class="'is-' + vramAssessment.tier"
+			></span>
+			{{ vramStatusText }}
+		</p>
 
 		<o-field v-if="resolution === 'Custom'" label="Width">
 			<o-input v-model="customWidth" type="number" min="0" max="10000" />
@@ -19,8 +32,7 @@
 		<p v-if="outputDimensions" class="sidebar-target-hint">
 			Output:
 			<span class="sidebar-target-hint__value"
-				>{{ outputDimensions.width }} ×
-				{{ outputDimensions.height }}</span
+				>{{ outputDimensions.width }} × {{ outputDimensions.height }}</span
 			>
 			<span v-if="crop" class="sidebar-target-hint__render"
 				>· renders at {{ targetDimensions.width }} ×
@@ -28,15 +40,47 @@
 			>
 		</p>
 
+		<!-- Live, measurement-driven VRAM warning. Shown regardless of
+		     disableTooltips: unlike the informational tips this is a safety
+		     signal that a capture may OOM-crash iRacing, and it also fires on the
+		     hotkey path where the user never opens the sidebar. -->
 		<o-notification
-			v-if="
-				(resolution == '4k' ||
-					resolution == '5k' ||
-					resolution == '6k' ||
-					resolution == '7k' ||
-					resolution == '8k') &&
-				!disableTooltips
+			v-if="showDynamicVramWarning"
+			class="sidebar-tooltip"
+			:variant="vramAssessment.tier === 'risk' ? 'danger' : 'warning'"
+			aria-close-label="Close message"
+			size="small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
 			"
+		>
+			<template v-if="vramAssessment.tier === 'risk'">
+				{{ resolution }} needs about
+				{{ formatVram(vramAssessment.deltaBytes) }} more VRAM but only
+				{{ formatVram(vramAssessment.freeBytes) }} is free — iRacing will
+				likely run out of memory and crash.
+			</template>
+			<template v-else>
+				{{ resolution }} leaves little VRAM headroom ({{
+					formatVram(vramAssessment.freeBytes)
+				}}
+				free) and may crash on heavy track/car combinations.
+			</template>
+			<a
+				v-if="safeResolutionLabel && safeResolutionLabel !== resolution"
+				class="sidebar-vram-switch"
+				@click="applySafeResolution"
+			>
+				Switch to {{ safeResolutionLabel }}
+			</a>
+		</o-notification>
+
+		<!-- Static fallback tip: only when we CANNOT measure VRAM (tier unknown),
+		     so the dynamic warning above never double-fires with it. -->
+		<o-notification
+			v-if="showStaticVramWarning"
 			class="sidebar-tooltip"
 			variant="warning"
 			aria-close-label="Close message"
@@ -84,8 +128,8 @@
 				margin-bottom: 0.5rem;
 			"
 		>
-			With this option, the final picture is slightly zoomed in. Regions
-			near the borders of the screen will be cut off.
+			With this option, the final picture is slightly zoomed in. Regions near
+			the borders of the screen will be cut off.
 		</o-notification>
 
 		<o-field class="settings-toggle-row sidebar-toggle-row">
@@ -162,9 +206,8 @@
 				margin-bottom: 0.5rem;
 			"
 		>
-			After pressing the screenshot button in the iRacing Screenshot
-			Tool, you will need to press the keybind for taking a screenshot for
-			ReShade
+			After pressing the screenshot button in the iRacing Screenshot Tool,
+			you will need to press the keybind for taking a screenshot for ReShade
 		</o-notification>
 	</div>
 </template>
@@ -173,9 +216,18 @@
 import { defineComponent, h } from 'vue';
 import config from '../../utilities/config';
 import { checkIracingConfig } from '../../utilities/iracing-config-checks';
+import {
+	assessVram,
+	largestSafeResolution,
+	formatVramGiB,
+} from '../../utilities/vram-prediction';
 import { useOruga } from '@oruga-ui/oruga-next';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
+
+// How often to re-poll live GPU VRAM from main (koffi FFI). Cheap; keeps the
+// headroom colouring fresh as iRacing loads liveries/tracks.
+const VRAM_POLL_INTERVAL_MS = 4000;
 
 // Oruga 0.13's notification `message` prop is plain string only — HTML is
 // rendered as text. Use the `component` prop to inject rich content instead.
@@ -196,22 +248,33 @@ const ScreenshotErrorContent = defineComponent({
 								class: 'screenshot-error-log',
 							},
 							['Log: ', h('code', null, props.logFile)]
-					  )
+						)
 					: null,
 			]);
 	},
 });
 
-function getResolutionDimensions(label: string): { width: number; height: number } {
+function getResolutionDimensions(label: string): {
+	width: number;
+	height: number;
+} {
 	switch (label) {
-		case '1080p': return { width: 1920, height: 1080 };
-		case '2k': return { width: 2560, height: 1440 };
-		case '4k': return { width: 3840, height: 2160 };
-		case '5k': return { width: 5120, height: 2880 };
-		case '6k': return { width: 6400, height: 3600 };
-		case '7k': return { width: 7168, height: 4032 };
-		case '8k': return { width: 7680, height: 4320 };
-		default: return { width: 1920, height: 1080 };
+		case '1080p':
+			return { width: 1920, height: 1080 };
+		case '2k':
+			return { width: 2560, height: 1440 };
+		case '4k':
+			return { width: 3840, height: 2160 };
+		case '5k':
+			return { width: 5120, height: 2880 };
+		case '6k':
+			return { width: 6400, height: 3600 };
+		case '7k':
+			return { width: 7168, height: 4032 };
+		case '8k':
+			return { width: 7680, height: 4320 };
+		default:
+			return { width: 1920, height: 1080 };
 	}
 }
 
@@ -238,6 +301,9 @@ export default {
 			reshade: config.get('reshade'),
 			cropTopLeft: config.get('cropTopLeft'),
 			configWarnings: checkIracingConfig(),
+			// Live GPU VRAM from main (null until first poll / unavailable).
+			vramInfo: null,
+			vramTimer: null,
 		};
 	},
 	computed: {
@@ -251,7 +317,12 @@ export default {
 			if (this.resolution === 'Custom') {
 				const w = parseInt(this.customWidth, 10);
 				const h = parseInt(this.customHeight, 10);
-				if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+				if (
+					!Number.isFinite(w) ||
+					!Number.isFinite(h) ||
+					w <= 0 ||
+					h <= 0
+				) {
 					return null;
 				}
 				return { width: w, height: h };
@@ -289,6 +360,72 @@ export default {
 				height: base.height - Math.ceil(base.height * factor),
 			};
 		},
+		// Preset resolutions (excluding Custom) with their {width,height}, for
+		// per-option VRAM colouring and the safe-resolution picker.
+		presetList() {
+			return this.items
+				.filter((label) => label !== 'Custom')
+				.map((label) => ({
+					label,
+					dimensions: getResolutionDimensions(label),
+				}));
+		},
+		// iRacing's current window size (physical px) is the delta baseline; null
+		// when unknown/iRacing closed → the predictor assumes no growth.
+		baselineDims() {
+			const cw = this.vramInfo && this.vramInfo.currentWindow;
+			return cw && cw.width > 0 && cw.height > 0 ? cw : null;
+		},
+		// VRAM assessment for the currently selected resolution.
+		vramAssessment() {
+			return assessVram(
+				this.vramInfo,
+				this.targetDimensions || { width: 0, height: 0 },
+				this.baselineDims
+			);
+		},
+		// Largest preset that still assesses 'safe' (for the one-click suggestion).
+		safeResolutionLabel() {
+			const safe = largestSafeResolution(
+				this.presetList,
+				this.vramInfo,
+				this.baselineDims
+			);
+			return safe ? safe.label : null;
+		},
+		// "NVIDIA … : 18.6 GB free of 22.5 GB" — shown when a real reading exists.
+		vramStatusText() {
+			const info = this.vramInfo;
+			if (
+				!info ||
+				!(info.totalBytes > 0) ||
+				info.usedBytes == null ||
+				this.vramAssessment.freeBytes == null
+			) {
+				return '';
+			}
+			const name = info.adapterName ? `${info.adapterName}: ` : '';
+			return `${name}${formatVramGiB(
+				this.vramAssessment.freeBytes
+			)} free of ${formatVramGiB(info.totalBytes)}`;
+		},
+		// Dynamic VRAM warning replaces the static one whenever we can predict.
+		showDynamicVramWarning() {
+			const tier = this.vramAssessment.tier;
+			return tier === 'caution' || tier === 'risk';
+		},
+		// Static "high-res may crash" note only when we CANNOT predict (fail-open).
+		showStaticVramWarning() {
+			return (
+				this.vramAssessment.tier === 'unknown' &&
+				(this.resolution === '4k' ||
+					this.resolution === '5k' ||
+					this.resolution === '6k' ||
+					this.resolution === '7k' ||
+					this.resolution === '8k') &&
+				!this.disableTooltips
+			);
+		},
 	},
 	created() {
 		ipcRenderer.send('request-iracing-status', '');
@@ -305,6 +442,9 @@ export default {
 
 		ipcRenderer.on('iracing-connected', (event, arg) => {
 			this.iracingOpen = true;
+			// iRacing's window now exists → refresh immediately so its current
+			// size becomes the delta baseline for the prediction.
+			this.refreshVramInfo();
 		});
 
 		ipcRenderer.on('iracing-disconnected', (event, arg) => {
@@ -367,6 +507,19 @@ export default {
 		this.customHeight = config.get('customHeight');
 		this.resolution = config.get('resolution');
 		this.reshade = config.get('reshade');
+		// Start VRAM polling: one immediate read plus a light interval so the
+		// headroom colouring tracks liveries/track loads. Cleared on unmount.
+		this.refreshVramInfo();
+		this.vramTimer = setInterval(
+			() => this.refreshVramInfo(),
+			VRAM_POLL_INTERVAL_MS
+		);
+	},
+	beforeUnmount() {
+		if (this.vramTimer) {
+			clearInterval(this.vramTimer);
+			this.vramTimer = null;
+		}
 	},
 	updated() {
 		config.set('crop', this.crop);
@@ -403,6 +556,66 @@ export default {
 		},
 		restoreCursorAfterCapture() {
 			document.body.style.cursor = 'auto';
+		},
+		// Pull the latest VRAM reading from main (koffi FFI). Best-effort: on
+		// error we keep the previous reading so a transient failure doesn't wipe
+		// the colouring (and assessVram already fails open on a null reading).
+		// Each IPC call returns a fresh object, so we only reassign when a UI-
+		// relevant field actually changed — otherwise the 4s poll would trigger a
+		// re-render (and updated()'s config writes) every tick even while idle.
+		refreshVramInfo() {
+			ipcRenderer
+				.invoke('get-vram-info')
+				.then((info) => {
+					if (!this.vramSignatureChanged(info)) return;
+					this.vramInfo = info || null;
+				})
+				.catch(() => {
+					/* keep last reading */
+				});
+		},
+		// True when the incoming reading differs from the current one in any field
+		// that affects the sidebar (total/used/source/adapter/window baseline).
+		vramSignatureChanged(next) {
+			const prev = this.vramInfo;
+			if (!prev || !next) return prev !== next;
+			const pw = prev.currentWindow || {};
+			const nw = next.currentWindow || {};
+			return (
+				prev.totalBytes !== next.totalBytes ||
+				prev.usedBytes !== next.usedBytes ||
+				prev.source !== next.source ||
+				prev.adapterName !== next.adapterName ||
+				pw.width !== nw.width ||
+				pw.height !== nw.height
+			);
+		},
+		// Predicted headroom tier for a preset label (Custom is never coloured).
+		optionTier(label) {
+			if (label === 'Custom') return 'unknown';
+			return assessVram(
+				this.vramInfo,
+				getResolutionDimensions(label),
+				this.baselineDims
+			).tier;
+		},
+		// Inline colour for a resolution <option>. Chromium honours `color` on
+		// <option>; caution=amber, risk=red, safe/unknown keep the default.
+		optionStyle(label) {
+			const tier = this.optionTier(label);
+			if (tier === 'caution') return { color: '#ffdd57' };
+			if (tier === 'risk') return { color: '#ff6b6b' };
+			return {};
+		},
+		// One-click fix: jump to the largest preset that still assesses safe.
+		applySafeResolution() {
+			if (this.safeResolutionLabel) {
+				this.resolution = this.safeResolutionLabel;
+			}
+		},
+		// Template helper (imported fns aren't accessible in the template scope).
+		formatVram(bytes) {
+			return formatVramGiB(bytes);
 		},
 		takeScreenshot() {
 			// targetDimensions already accounts for Keep Aspect Ratio when on,
@@ -474,6 +687,48 @@ export default {
 .sidebar-target-hint__render {
 	color: rgba(255, 255, 255, 0.45);
 	font-variant-numeric: tabular-nums;
+}
+
+.sidebar-vram-status {
+	display: flex;
+	align-items: center;
+	margin-top: 0.25rem;
+	margin-bottom: 0.25rem;
+	font-size: 0.72rem;
+	line-height: 1.25;
+	color: rgba(255, 255, 255, 0.6);
+	font-variant-numeric: tabular-nums;
+}
+
+.sidebar-vram-status__dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-right: 0.4rem;
+	flex-shrink: 0;
+	background: rgba(255, 255, 255, 0.4);
+}
+
+.sidebar-vram-status__dot.is-safe {
+	background: #48c78e;
+}
+
+.sidebar-vram-status__dot.is-caution {
+	background: #ffdd57;
+}
+
+.sidebar-vram-status__dot.is-risk {
+	background: #ff6b6b;
+}
+
+.sidebar-vram-switch {
+	display: inline-block;
+	margin-left: 0.35rem;
+	font-weight: 700;
+	text-decoration: underline;
+	cursor: pointer;
+	color: inherit;
 }
 
 /* Sidebar tooltip notifications. Namespaced via .sidebar-tooltip so global

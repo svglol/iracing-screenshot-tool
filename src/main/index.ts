@@ -450,7 +450,21 @@ ipcMain.handle(
 );
 // Live GPU VRAM (total + used) for the sidebar's headroom guardrail. koffi FFI
 // runs main-side only; the renderer polls this and does the pure prediction.
-ipcMain.handle('get-vram-info', () => getVramInfo());
+// Includes iRacing's current window size (physical px) as the delta baseline,
+// but only when the native path is live — a koffi-disabled session returns
+// source 'fallback' (guardrail off), so we skip getIracingWindowDetails to
+// avoid a per-poll PowerShell spawn.
+ipcMain.handle('get-vram-info', () => {
+	const vram = getVramInfo();
+	let currentWindow: { width: number; height: number } | null = null;
+	if (vram.source === 'native' && vram.usedBytes != null) {
+		const win = getIracingWindowDetails();
+		if (win && win.width > 0 && win.height > 0) {
+			currentWindow = { width: win.width, height: win.height };
+		}
+	}
+	return { ...vram, currentWindow };
+});
 ipcMain.handle(
 	'desktop-capturer:get-source-id',
 	async (event, request: unknown) => {
