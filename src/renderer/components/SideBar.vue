@@ -252,6 +252,15 @@ const fs = require('fs');
 // headroom colouring fresh as iRacing loads liveries/tracks.
 const VRAM_POLL_INTERVAL_MS = 4000;
 
+// How often to re-poll iRacing connection status until it is first detected.
+// Closes a startup race: the poll bridge can emit its single 'Connected' event
+// before this renderer's IPC listeners exist, and the one-shot status query can
+// reply false while telemetry is still populating — either miss would otherwise
+// leave the capture button disabled until the app (or iRacing) is restarted. The
+// poll stops the moment iRacing is detected; steady-state connect/disconnect is
+// driven by the events.
+const IRACING_STATUS_POLL_INTERVAL_MS = 1500;
+
 // Quantise live VRAM usage to the sidebar's display precision (0.1 GB) before
 // storing it. usedBytes is a raw, constantly-jittering system-wide gauge; without
 // this, every poll would land in a new value, reassign vramInfo, re-render, and
@@ -335,6 +344,9 @@ export default {
 			// Live GPU VRAM from main (null until first poll / unavailable).
 			vramInfo: null,
 			vramTimer: null,
+			// Startup connection-detection poll; cleared once iRacing is first
+			// detected (see handleIracingConnected) or on unmount.
+			iracingStatusTimer: null,
 			// #10: true when iRacing is in exclusive fullscreen (capture → black).
 			exclusiveFullscreen: false,
 		};
@@ -458,6 +470,18 @@ export default {
 	created() {
 		ipcRenderer.send('request-iracing-status', '');
 
+		// Self-healing startup poll. The one-shot query above and the single
+		// 'Connected' event can BOTH be missed at startup: the poll bridge emits
+		// Connected before these listeners are attached (and before the window /
+		// renderer exist), and the one-shot query can reply false while telemetry
+		// is still populating. With no retry, iracingOpen would stay false and the
+		// capture button disabled until a restart. Re-poll until iRacing is first
+		// detected, then stop (handleIracingConnected) and let the connect /
+		// disconnect events drive steady state.
+		this.iracingStatusTimer = setInterval(() => {
+			ipcRenderer.send('request-iracing-status', '');
+		}, IRACING_STATUS_POLL_INTERVAL_MS);
+
 		ipcRenderer.on('hotkey-screenshot', (event, arg) => {
 			if (this.iracingOpen && !this.takingScreenshot) {
 				this.takeScreenshot();
@@ -465,16 +489,15 @@ export default {
 		});
 
 		ipcRenderer.on('iracing-status', (event, arg) => {
-			this.iracingOpen = arg;
+			if (arg) {
+				this.handleIracingConnected();
+			} else {
+				this.iracingOpen = false;
+			}
 		});
 
 		ipcRenderer.on('iracing-connected', (event, arg) => {
-			this.iracingOpen = true;
-			// iRacing's window now exists → refresh immediately so its current
-			// size becomes the delta baseline for the prediction, and so the
-			// exclusive-fullscreen warning reflects the freshly-connected sim.
-			this.refreshVramInfo();
-			this.refreshFullscreenState();
+			this.handleIracingConnected();
 		});
 
 		ipcRenderer.on('iracing-disconnected', (event, arg) => {
@@ -561,6 +584,7 @@ export default {
 			clearInterval(this.vramTimer);
 			this.vramTimer = null;
 		}
+		this.stopIracingStatusPoll();
 	},
 	updated() {
 		config.set('crop', this.crop);
@@ -575,6 +599,30 @@ export default {
 		config.set('resolution', this.resolution);
 	},
 	methods: {
+		// Mark iRacing connected and fire the one-time on-connect refreshes.
+		// Called from the 'iracing-connected' event AND the self-healing status
+		// poll, so a connection recovered after a missed event still primes the
+		// VRAM baseline and the exclusive-fullscreen warning. Idempotent: the
+		// refreshes only fire on the false→true edge, and the startup poll is
+		// stopped once we've latched on.
+		handleIracingConnected() {
+			const wasOpen = this.iracingOpen;
+			this.iracingOpen = true;
+			this.stopIracingStatusPoll();
+			if (!wasOpen) {
+				// iRacing's window now exists → refresh immediately so its current
+				// size becomes the delta baseline for the prediction, and so the
+				// exclusive-fullscreen warning reflects the freshly-connected sim.
+				this.refreshVramInfo();
+				this.refreshFullscreenState();
+			}
+		},
+		stopIracingStatusPoll() {
+			if (this.iracingStatusTimer) {
+				clearInterval(this.iracingStatusTimer);
+				this.iracingStatusTimer = null;
+			}
+		},
 		normalizeScreenshotError(payload) {
 			if (
 				payload &&
