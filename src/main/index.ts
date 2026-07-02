@@ -28,6 +28,7 @@ import {
 	resizeIracingWindowAsync,
 	getIracingWindowDetails,
 } from './window-utils';
+import { getVramInfo } from './vram-utils';
 import { createLogger } from '../utilities/logger';
 const log = createLogger('main');
 import {
@@ -447,6 +448,9 @@ ipcMain.handle(
 		);
 	}
 );
+// Live GPU VRAM (total + used) for the sidebar's headroom guardrail. koffi FFI
+// runs main-side only; the renderer polls this and does the pure prediction.
+ipcMain.handle('get-vram-info', () => getVramInfo());
 ipcMain.handle(
 	'desktop-capturer:get-source-id',
 	async (event, request: unknown) => {
