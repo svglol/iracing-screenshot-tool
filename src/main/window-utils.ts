@@ -415,6 +415,46 @@ export function getIracingWindowDetails(): IRacingWindowDetails | undefined {
 	return getIracingWindowDetailsViaPowerShell();
 }
 
+// Physical-pixel size of iRacing's window via the koffi path ONLY — this never
+// spawns PowerShell. Returns null when native is unavailable, iRacing isn't
+// running, or its window can't be resolved.
+//
+// This exists specifically for the VRAM guardrail's baseline read (index.ts
+// get-vram-info), which is polled every few seconds. getIracingWindowDetails()
+// above must not be used there: it falls back to a synchronous spawnSync
+// powershell.exe (~1s CLR cold start, blocking the main event loop each poll)
+// whenever the window is momentarily unresolved (iRacing startup) or native was
+// disabled — and that PowerShell child runs DPI-UNAWARE, so on a >100%-scaled
+// monitor GetWindowRect returns virtualized (DIP) coordinates smaller than
+// physical. A DIP baseline shrinks the predicted delta's denominator and
+// manufactures false-positive VRAM warnings on the very scaled monitors the
+// native path was added to protect. Fail-open: any miss returns null, which the
+// predictor treats as "no baseline" (assume no growth).
+export function getIracingWindowSizeNative(): {
+	width: number;
+	height: number;
+} | null {
+	const native = getNativeApi();
+	if (!native) {
+		return null;
+	}
+	try {
+		const details = native.getDetails();
+		if (!details || !(details.width > 0) || !(details.height > 0)) {
+			return null;
+		}
+		return { width: details.width, height: details.height };
+	} catch (error) {
+		// A genuine FFI fault disables native for the session (so the capture
+		// paths stop retrying it too); an unresolved window is transient — stay
+		// native and just report no baseline this poll. Either way: no PowerShell.
+		if (!(error instanceof IracingWindowUnresolvedError)) {
+			disableNative('getIracingWindowSizeNative', error);
+		}
+		return null;
+	}
+}
+
 // Restore / reposition path (via resize() in index.ts): quiet, no focus change.
 export function resizeIracingWindow(
 	width: number,

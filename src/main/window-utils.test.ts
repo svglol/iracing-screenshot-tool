@@ -3,6 +3,7 @@ import {
 	formatWindowHandle,
 	resolveResizePlacement,
 	getIracingWindowDetails,
+	getIracingWindowSizeNative,
 } from './window-utils';
 
 // SetWindowPos uFlags (mirrors the private constants in window-utils.ts)
@@ -121,6 +122,32 @@ describe('getIracingWindowDetails (native FFI smoke)', () => {
 			expect(Number.isFinite(details.top)).toBe(true);
 			expect(Number.isFinite(details.width)).toBe(true);
 			expect(Number.isFinite(details.height)).toBe(true);
+		}
+	);
+});
+
+// ---------------------------------------------------------------------------
+// getIracingWindowSizeNative — koffi-only baseline read (Windows only)
+//
+// The VRAM guardrail's baseline read: it must go through the in-process koffi
+// path ONLY (never the DPI-unaware, main-thread-blocking PowerShell fallback)
+// and fail open to null. With iRacing absent (the CI/dev norm) it returns null;
+// if iRacing is running it returns a positive {width,height}. It must never
+// throw and never return a non-positive dimension.
+// ---------------------------------------------------------------------------
+describe('getIracingWindowSizeNative (koffi-only baseline)', () => {
+	test.runIf(process.platform === 'win32')(
+		'returns null or a positive {width,height}, never throws',
+		() => {
+			const size = getIracingWindowSizeNative();
+			if (size === null) {
+				expect(size).toBeNull();
+				return;
+			}
+			expect(size.width).toBeGreaterThan(0);
+			expect(size.height).toBeGreaterThan(0);
+			expect(Number.isFinite(size.width)).toBe(true);
+			expect(Number.isFinite(size.height)).toBe(true);
 		}
 	);
 });

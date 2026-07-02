@@ -229,6 +229,14 @@ const fs = require('fs');
 // headroom colouring fresh as iRacing loads liveries/tracks.
 const VRAM_POLL_INTERVAL_MS = 4000;
 
+// Quantise live VRAM usage to the sidebar's display precision (0.1 GB) before
+// storing it. usedBytes is a raw, constantly-jittering system-wide gauge; without
+// this, every poll would land in a new value, reassign vramInfo, re-render, and
+// fire updated()'s synchronous config writes — even while idle. Rounding to the
+// shown precision means the reactive graph only re-evaluates when a user-visible
+// number actually changes.
+const VRAM_USAGE_QUANTUM_BYTES = 0.1 * 1024 ** 3;
+
 // Oruga 0.13's notification `message` prop is plain string only — HTML is
 // rendered as text. Use the `component` prop to inject rich content instead.
 const ScreenshotErrorContent = defineComponent({
@@ -336,15 +344,7 @@ export default {
 		targetDimensions() {
 			const base = this.baseTargetDimensions;
 			if (!base) return null;
-			if (!this.keepAspectRatio) return base;
-			const sw = parseInt(config.get('defaultScreenWidth'), 10);
-			const sh = parseInt(config.get('defaultScreenHeight'), 10);
-			if (!sw || !sh) return base;
-			const adjustedHeight = Math.round((base.width * sh) / sw);
-			if (!Number.isFinite(adjustedHeight) || adjustedHeight <= 0) {
-				return base;
-			}
-			return { width: base.width, height: adjustedHeight };
+			return this.applyAspectRatio(base);
 		},
 		// Dimensions of the SAVED image. iRacing renders at targetDimensions
 		// (the selected resolution); when Crop Watermark is on, the watermark is
@@ -360,14 +360,17 @@ export default {
 				height: base.height - Math.ceil(base.height * factor),
 			};
 		},
-		// Preset resolutions (excluding Custom) with their {width,height}, for
-		// per-option VRAM colouring and the safe-resolution picker.
+		// Preset resolutions (excluding Custom) with the SAME aspect-adjusted
+		// {width,height} the banner and capture use, for per-option VRAM colouring
+		// and the safe-resolution picker — so all four assess identical pixels.
 		presetList() {
 			return this.items
 				.filter((label) => label !== 'Custom')
 				.map((label) => ({
 					label,
-					dimensions: getResolutionDimensions(label),
+					dimensions: this.applyAspectRatio(
+						getResolutionDimensions(label)
+					),
 				}));
 		},
 		// iRacing's current window size (physical px) is the delta baseline; null
@@ -557,22 +560,56 @@ export default {
 		restoreCursorAfterCapture() {
 			document.body.style.cursor = 'auto';
 		},
+		// Apply the Keep Aspect Ratio height adjustment to a base {width,height}.
+		// Off (or unknown screen size) → returned unchanged. Shared by
+		// targetDimensions (selected resolution / capture) AND the per-option
+		// colouring + safe-resolution picker, so the option colours, the safe
+		// suggestion, the warning banner, and the actual capture all assess the
+		// same pixel count. Without this, on a non-16:9 monitor an option's colour
+		// could contradict its own banner and "switch to safe" could land on a
+		// warned resolution.
+		applyAspectRatio(base) {
+			if (!base) return base;
+			if (!this.keepAspectRatio) return base;
+			const sw = parseInt(config.get('defaultScreenWidth'), 10);
+			const sh = parseInt(config.get('defaultScreenHeight'), 10);
+			if (!sw || !sh) return base;
+			const adjustedHeight = Math.round((base.width * sh) / sw);
+			if (!Number.isFinite(adjustedHeight) || adjustedHeight <= 0) {
+				return base;
+			}
+			return { width: base.width, height: adjustedHeight };
+		},
 		// Pull the latest VRAM reading from main (koffi FFI). Best-effort: on
 		// error we keep the previous reading so a transient failure doesn't wipe
 		// the colouring (and assessVram already fails open on a null reading).
-		// Each IPC call returns a fresh object, so we only reassign when a UI-
-		// relevant field actually changed — otherwise the 4s poll would trigger a
-		// re-render (and updated()'s config writes) every tick even while idle.
+		// Each IPC call returns a fresh object, so we quantise the jittery usage
+		// and only reassign when a UI-relevant field changed — otherwise the poll
+		// would re-render (and fire updated()'s config writes) every tick.
 		refreshVramInfo() {
 			ipcRenderer
 				.invoke('get-vram-info')
 				.then((info) => {
-					if (!this.vramSignatureChanged(info)) return;
-					this.vramInfo = info || null;
+					const next = this.quantizeVramReading(info);
+					if (!this.vramSignatureChanged(next)) return;
+					this.vramInfo = next;
 				})
 				.catch(() => {
 					/* keep last reading */
 				});
+		},
+		// Round the live usage to the displayed 0.1 GB precision so sub-bucket
+		// jitter doesn't churn the reactive graph (see VRAM_USAGE_QUANTUM_BYTES).
+		quantizeVramReading(info) {
+			if (!info || info.usedBytes == null) {
+				return info || null;
+			}
+			return {
+				...info,
+				usedBytes:
+					Math.round(info.usedBytes / VRAM_USAGE_QUANTUM_BYTES) *
+					VRAM_USAGE_QUANTUM_BYTES,
+			};
 		},
 		// True when the incoming reading differs from the current one in any field
 		// that affects the sidebar (total/used/source/adapter/window baseline).
@@ -591,11 +628,13 @@ export default {
 			);
 		},
 		// Predicted headroom tier for a preset label (Custom is never coloured).
+		// Uses the aspect-adjusted dimensions so an option's colour matches the
+		// warning banner it would produce once selected.
 		optionTier(label) {
 			if (label === 'Custom') return 'unknown';
 			return assessVram(
 				this.vramInfo,
-				getResolutionDimensions(label),
+				this.applyAspectRatio(getResolutionDimensions(label)),
 				this.baselineDims
 			).tier;
 		},

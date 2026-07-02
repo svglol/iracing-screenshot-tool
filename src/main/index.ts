@@ -27,6 +27,7 @@ import {
 	resizeIracingWindow,
 	resizeIracingWindowAsync,
 	getIracingWindowDetails,
+	getIracingWindowSizeNative,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
 import { createLogger } from '../utilities/logger';
@@ -449,20 +450,19 @@ ipcMain.handle(
 	}
 );
 // Live GPU VRAM (total + used) for the sidebar's headroom guardrail. koffi FFI
-// runs main-side only; the renderer polls this and does the pure prediction.
-// Includes iRacing's current window size (physical px) as the delta baseline,
-// but only when the native path is live — a koffi-disabled session returns
-// source 'fallback' (guardrail off), so we skip getIracingWindowDetails to
-// avoid a per-poll PowerShell spawn.
+// runs main-side only; the renderer polls this (every few seconds) and does the
+// pure prediction. Includes iRacing's current window size (physical px) as the
+// delta baseline via the koffi-ONLY read — never getIracingWindowDetails(),
+// whose PowerShell fallback would both block this synchronous handler on a
+// spawnSync and return DPI-scaled (DIP) coordinates that skew the prediction on
+// scaled monitors. Skipped entirely unless we have a usable reading (native
+// total + live usage), since without it the predictor fails open anyway.
 ipcMain.handle('get-vram-info', () => {
 	const vram = getVramInfo();
-	let currentWindow: { width: number; height: number } | null = null;
-	if (vram.source === 'native' && vram.usedBytes != null) {
-		const win = getIracingWindowDetails();
-		if (win && win.width > 0 && win.height > 0) {
-			currentWindow = { width: win.width, height: win.height };
-		}
-	}
+	const currentWindow =
+		vram.source === 'native' && vram.usedBytes != null
+			? getIracingWindowSizeNative()
+			: null;
 	return { ...vram, currentWindow };
 });
 ipcMain.handle(
