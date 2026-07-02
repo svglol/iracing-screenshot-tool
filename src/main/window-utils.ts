@@ -12,6 +12,16 @@ export interface IRacingWindowDetails {
 	height: number;
 }
 
+// Result of the exclusive-fullscreen pre-flight (#10). `state` is the raw
+// QUERY_USER_NOTIFICATION_STATE; `attributed` is whether iRacing (not some other
+// app) is the foreground/display-owning window; `exclusiveFullscreen` is the
+// actionable conclusion (state 3 AND attributed).
+export interface ExclusiveFullscreenState {
+	state: number;
+	attributed: boolean;
+	exclusiveFullscreen: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Win32 numeric constants (see MS Learn winuser.h / tlhelp32.h). Exported so
 // the pure helpers below can be exercised without touching the FFI layer.
@@ -24,6 +34,14 @@ const HWND_NOTOPMOST = -2;
 const SW_RESTORE = 9;
 const GW_OWNER = 4;
 const TH32CS_SNAPPROCESS = 0x00000002;
+
+// shell32 SHQueryUserNotificationState (#10 exclusive-fullscreen detection).
+// S_OK means the read is valid; QUNS_RUNNING_D3D_FULL_SCREEN (3) is the ONLY
+// value that means a DWM-bypassing exclusive-fullscreen D3D app (capture → black).
+// QUNS_BUSY (2) is borderless / flip-model / fullscreen-optimized — composited,
+// captures fine — so this is a strict `=== 3` test, never a range.
+const S_OK = 0;
+export const QUNS_RUNNING_D3D_FULL_SCREEN = 3;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (no FFI) — unit-tested in window-utils.test.ts
@@ -45,6 +63,19 @@ export function formatWindowHandle(address: bigint | number): string {
 	return typeof address === 'bigint'
 		? address.toString()
 		: String(Math.trunc(Number(address)));
+}
+
+// Exclusive fullscreen iff the shell read succeeded (S_OK), the state is exactly
+// QUNS_RUNNING_D3D_FULL_SCREEN, AND the fullscreen app is attributed to iRacing.
+// SHQueryUserNotificationState is session-global (it doesn't say WHICH app), so
+// attribution (foreground window == iRacing) is mandatory — otherwise another
+// game's exclusive fullscreen would trip an iRacing-specific warning.
+export function isExclusiveFullscreenState(
+	hr: number,
+	state: number,
+	attributed: boolean
+): boolean {
+	return hr === S_OK && state === QUNS_RUNNING_D3D_FULL_SCREEN && attributed;
 }
 
 // Two SetWindowPos policies. Pre-capture RAISES iRacing into the foreground so
@@ -104,6 +135,7 @@ interface NativeApi {
 		top: number,
 		raise: boolean
 	): number | undefined;
+	getExclusiveFullscreenState(): ExclusiveFullscreenState;
 }
 
 // undefined = not yet initialized; null = unavailable (fall back to PowerShell)
@@ -191,6 +223,7 @@ function createNativeApi(): NativeApi | null {
 
 		const user32 = koffi.load('user32.dll');
 		const kernel32 = koffi.load('kernel32.dll');
+		const shell32 = koffi.load('shell32.dll');
 
 		// hWndInsertAfter is declared intptr_t (not HWND) so the numeric HWND_TOP
 		// (0) / HWND_NOTOPMOST (-2) sentinels can be passed directly — koffi opaque
@@ -226,6 +259,14 @@ function createNativeApi(): NativeApi | null {
 		);
 		const GetWindow = user32.func(
 			'HWND __stdcall GetWindow(HWND hWnd, uint32_t uCmd)'
+		);
+		const GetForegroundWindow = user32.func(
+			'HWND __stdcall GetForegroundWindow()'
+		);
+		// HRESULT out-param via a JS array [0], same convention as
+		// GetWindowThreadProcessId's lpdwProcessId below. 'long' = 4-byte HRESULT.
+		const SHQueryUserNotificationState = shell32.func(
+			'long __stdcall SHQueryUserNotificationState(_Out_ int *pquns)'
 		);
 		const CreateToolhelp32Snapshot = kernel32.func(
 			'HANDLE __stdcall CreateToolhelp32Snapshot(uint32_t dwFlags, uint32_t th32ProcessID)'
@@ -389,6 +430,31 @@ function createNativeApi(): NativeApi | null {
 				// numeric return (index.ts String()s it to match source ids).
 				return Number(koffi.address(hwnd));
 			},
+
+			getExclusiveFullscreenState(): ExclusiveFullscreenState {
+				// findWindow() first: undefined = iRacing not running (nothing to
+				// attribute), or it throws IracingWindowUnresolvedError (handled by
+				// the public wrapper). Sample the session-global shell state, then
+				// attribute it to iRacing via the foreground window.
+				const hwnd = findWindow();
+				const stateOut = [0];
+				const hr = SHQueryUserNotificationState(stateOut);
+				const state = hr === S_OK ? stateOut[0] : -1;
+				let attributed = false;
+				if (hwnd) {
+					const fg = GetForegroundWindow();
+					attributed = !!fg && koffi.address(fg) === koffi.address(hwnd);
+				}
+				return {
+					state,
+					attributed,
+					exclusiveFullscreen: isExclusiveFullscreenState(
+						hr,
+						state,
+						attributed
+					),
+				};
+			},
 		};
 	} catch (error) {
 		console.error(
@@ -450,6 +516,29 @@ export function getIracingWindowSizeNative(): {
 		// native and just report no baseline this poll. Either way: no PowerShell.
 		if (!(error instanceof IracingWindowUnresolvedError)) {
 			disableNative('getIracingWindowSizeNative', error);
+		}
+		return null;
+	}
+}
+
+// Exclusive-fullscreen pre-flight (#10) via the koffi path ONLY — never spawns
+// PowerShell. Returns the state (raw + attributed + conclusion) or null when
+// native is unavailable / iRacing isn't running / the window can't be resolved.
+// Diagnostic, not a capture fix: a true `exclusiveFullscreen` means the resize is
+// a no-op and the capture WILL be black. Fail-open: any miss returns null (no
+// warning, no block — the black-frame detector remains the ground-truth backstop).
+export function getIracingExclusiveFullscreenState(): ExclusiveFullscreenState | null {
+	const native = getNativeApi();
+	if (!native) {
+		return null;
+	}
+	try {
+		return native.getExclusiveFullscreenState();
+	} catch (error) {
+		// Same policy as getIracingWindowSizeNative: genuine FFI fault disables
+		// native for the session; an unresolved window is transient → null.
+		if (!(error instanceof IracingWindowUnresolvedError)) {
+			disableNative('getIracingExclusiveFullscreenState', error);
 		}
 		return null;
 	}

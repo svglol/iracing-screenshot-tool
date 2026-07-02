@@ -28,6 +28,8 @@ import {
 	resizeIracingWindowAsync,
 	getIracingWindowDetails,
 	getIracingWindowSizeNative,
+	getIracingExclusiveFullscreenState,
+	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
 import { createLogger } from '../utilities/logger';
@@ -75,6 +77,11 @@ let originalWindowBounds: {
 	height: number;
 } | null = null;
 let cameraState = 0;
+// #10: the raw QUERY_USER_NOTIFICATION_STATE sampled at the last capture's
+// pre-flight, stashed so the black-frame error path can enrich its message even
+// when pre-capture attribution failed (state was 3 but iRacing wasn't foreground,
+// e.g. the multi-monitor case). null = not sampled / not applicable.
+let lastCaptureFullscreenState: number | null = null;
 // electron-store v5 dynamic schema; typed `any` on purpose per D-12-01
 let config: any;
 let mainWindow: BrowserWindow | null;
@@ -285,6 +292,30 @@ function writeScreenshotErrorLog(payload: {
 	return logPath;
 }
 
+// #10: shown when iRacing is in exclusive fullscreen — the one deterministic,
+// actionable cause of a black capture. Used both by the pre-capture early-exit
+// and to enrich the worker's generic black-frame error.
+const EXCLUSIVE_FULLSCREEN_MESSAGE =
+	'iRacing is in exclusive fullscreen, so the screenshot would be black. In iRacing, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.';
+
+// If a worker error is the generic "captured frame is black" AND the last
+// pre-flight saw exclusive fullscreen (state 3, regardless of attribution),
+// rewrite it to the specific, actionable guidance. Covers the case the pre-
+// capture early-exit missed because iRacing wasn't the foreground window.
+function enrichBlackFrameError(data: unknown): unknown {
+	if (lastCaptureFullscreenState !== QUNS_RUNNING_D3D_FULL_SCREEN) {
+		return data;
+	}
+	const message =
+		data && typeof data === 'object'
+			? (data as { message?: unknown }).message
+			: null;
+	if (typeof message === 'string' && message.toLowerCase().includes('black')) {
+		return { ...(data as object), message: EXCLUSIVE_FULLSCREEN_MESSAGE };
+	}
+	return data;
+}
+
 function reportScreenshotError(
 	errorLike: unknown,
 	defaults: {
@@ -465,6 +496,11 @@ ipcMain.handle('get-vram-info', () => {
 			: null;
 	return { ...vram, currentWindow };
 });
+// #10: iRacing exclusive-fullscreen state for the sidebar's proactive warning.
+// koffi-only (never PowerShell), fails open to null. See window-utils.
+ipcMain.handle('get-iracing-fullscreen-state', () =>
+	getIracingExclusiveFullscreenState()
+);
 ipcMain.handle(
 	'desktop-capturer:get-source-id',
 	async (event, request: unknown) => {
@@ -768,6 +804,26 @@ app.on('ready', async () => {
 			return;
 		}
 
+		// #10: exclusive-fullscreen pre-flight. iRacing in legacy exclusive
+		// fullscreen bypasses DWM, so the resize (SetWindowPos) is a no-op and the
+		// capture comes back black after the full ~8s watchdog burn. Sample the
+		// state HERE — before we raise iRacing / steal focus (so GetForegroundWindow
+		// attribution is trustworthy) and before takingScreenshot is set (so no
+		// restore is needed on the early exit). Skip the doomed attempt ONLY when
+		// confident (state 3 AND attributed to iRacing); otherwise proceed and let
+		// the black-frame detector — enriched via the stashed state — be the
+		// backstop. Fails open: null (native off / iRacing closed) just proceeds.
+		const fullscreen = getIracingExclusiveFullscreenState();
+		lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
+		if (fullscreen && fullscreen.exclusiveFullscreen) {
+			log.info('Screenshot rejected', { reason: 'exclusive-fullscreen' });
+			reportScreenshotError(EXCLUSIVE_FULLSCREEN_MESSAGE, {
+				context: 'resize-screenshot:exclusive-fullscreen',
+				meta: { request: data },
+			});
+			return;
+		}
+
 		// Defensive clamp: the sidebar's o-input max is only a hint and the
 		// global-hotkey path bypasses the UI entirely, so main must not trust
 		// data.width/height blindly. Bound them to the capture ceiling and keep
@@ -990,7 +1046,7 @@ app.on('ready', async () => {
 
 	ipcMain.on('screenshot-error', (event, data) => {
 		restoreScreenshotState();
-		reportScreenshotError(data, {
+		reportScreenshotError(enrichBlackFrameError(data), {
 			source: 'worker',
 			context: 'worker:screenshot-error',
 		});

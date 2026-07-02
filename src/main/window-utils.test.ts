@@ -4,6 +4,9 @@ import {
 	resolveResizePlacement,
 	getIracingWindowDetails,
 	getIracingWindowSizeNative,
+	getIracingExclusiveFullscreenState,
+	isExclusiveFullscreenState,
+	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 
 // SetWindowPos uFlags (mirrors the private constants in window-utils.ts)
@@ -127,6 +130,41 @@ describe('getIracingWindowDetails (native FFI smoke)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// isExclusiveFullscreenState — the pure #10 classifier
+// ---------------------------------------------------------------------------
+describe('isExclusiveFullscreenState', () => {
+	const S_OK = 0;
+
+	test('flags only S_OK + QUNS_RUNNING_D3D_FULL_SCREEN + attributed', () => {
+		expect(
+			isExclusiveFullscreenState(S_OK, QUNS_RUNNING_D3D_FULL_SCREEN, true)
+		).toBe(true);
+	});
+
+	test('does NOT flag borderless / flip-model (QUNS_BUSY = 2)', () => {
+		// The critical false-positive guard: borderless/FSO is composited and
+		// captures fine, so state 2 must never be treated as exclusive.
+		expect(isExclusiveFullscreenState(S_OK, 2, true)).toBe(false);
+	});
+
+	test('does NOT flag a normal windowed desktop (QUNS_ACCEPTS_NOTIFICATIONS = 5)', () => {
+		expect(isExclusiveFullscreenState(S_OK, 5, true)).toBe(false);
+	});
+
+	test('does NOT flag when the read failed (hr !== S_OK)', () => {
+		expect(
+			isExclusiveFullscreenState(1, QUNS_RUNNING_D3D_FULL_SCREEN, true)
+		).toBe(false);
+	});
+
+	test('does NOT flag when unattributed (some OTHER app is fullscreen)', () => {
+		expect(
+			isExclusiveFullscreenState(S_OK, QUNS_RUNNING_D3D_FULL_SCREEN, false)
+		).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // getIracingWindowSizeNative — koffi-only baseline read (Windows only)
 //
 // The VRAM guardrail's baseline read: it must go through the in-process koffi
@@ -148,6 +186,31 @@ describe('getIracingWindowSizeNative (koffi-only baseline)', () => {
 			expect(size.height).toBeGreaterThan(0);
 			expect(Number.isFinite(size.width)).toBe(true);
 			expect(Number.isFinite(size.height)).toBe(true);
+		}
+	);
+});
+
+// ---------------------------------------------------------------------------
+// getIracingExclusiveFullscreenState — koffi SHQueryUserNotificationState smoke
+//
+// Exercises the real shell32 + user32 FFI chain. iRacing is normally absent in
+// CI/dev so null is expected; if it resolves, the shape must be well-formed and
+// never throw. With no D3D-exclusive app running, exclusiveFullscreen is false.
+// ---------------------------------------------------------------------------
+describe('getIracingExclusiveFullscreenState (native FFI smoke)', () => {
+	test.runIf(process.platform === 'win32')(
+		'returns null or a well-formed state object, never throws',
+		() => {
+			const result = getIracingExclusiveFullscreenState();
+			if (result === null) {
+				expect(result).toBeNull();
+				return;
+			}
+			expect(typeof result.state).toBe('number');
+			expect(typeof result.attributed).toBe('boolean');
+			expect(typeof result.exclusiveFullscreen).toBe('boolean');
+			// The dev/CI machine isn't running an exclusive-fullscreen D3D app.
+			expect(result.exclusiveFullscreen).toBe(false);
 		}
 	);
 });

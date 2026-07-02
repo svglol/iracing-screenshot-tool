@@ -40,6 +40,27 @@
 			>
 		</p>
 
+		<!-- #10: exclusive-fullscreen warning. iRacing in exclusive fullscreen
+		     makes every capture come back black (DWM bypass). Shown regardless of
+		     disableTooltips — a hard-failure safety signal, like the VRAM banner —
+		     and only when the state can be attributed to iRacing (foreground). -->
+		<o-notification
+			v-if="exclusiveFullscreen"
+			class="sidebar-tooltip"
+			variant="danger"
+			aria-close-label="Close message"
+			size="small"
+			style="
+				background-color: rgba(0, 0, 0, 0.3) !important;
+				margin-top: 0.5rem;
+				margin-bottom: 0.5rem;
+			"
+		>
+			iRacing is in <strong>exclusive fullscreen</strong> — screenshots will
+			capture black. In iRacing set <strong>Display &gt; Full Screen</strong>
+			to OFF (Borderless or Windowed) to enable capture.
+		</o-notification>
+
 		<!-- Live, measurement-driven VRAM warning. Shown regardless of
 		     disableTooltips: unlike the informational tips this is a safety
 		     signal that a capture may OOM-crash iRacing, and it also fires on the
@@ -312,6 +333,8 @@ export default {
 			// Live GPU VRAM from main (null until first poll / unavailable).
 			vramInfo: null,
 			vramTimer: null,
+			// #10: true when iRacing is in exclusive fullscreen (capture → black).
+			exclusiveFullscreen: false,
 		};
 	},
 	computed: {
@@ -446,8 +469,10 @@ export default {
 		ipcRenderer.on('iracing-connected', (event, arg) => {
 			this.iracingOpen = true;
 			// iRacing's window now exists → refresh immediately so its current
-			// size becomes the delta baseline for the prediction.
+			// size becomes the delta baseline for the prediction, and so the
+			// exclusive-fullscreen warning reflects the freshly-connected sim.
 			this.refreshVramInfo();
+			this.refreshFullscreenState();
 		});
 
 		ipcRenderer.on('iracing-disconnected', (event, arg) => {
@@ -510,13 +535,15 @@ export default {
 		this.customHeight = config.get('customHeight');
 		this.resolution = config.get('resolution');
 		this.reshade = config.get('reshade');
-		// Start VRAM polling: one immediate read plus a light interval so the
-		// headroom colouring tracks liveries/track loads. Cleared on unmount.
+		// Start polling: one immediate read plus a light interval so the VRAM
+		// colouring tracks liveries/track loads and the exclusive-fullscreen
+		// warning stays current. Both share one timer, cleared on unmount.
 		this.refreshVramInfo();
-		this.vramTimer = setInterval(
-			() => this.refreshVramInfo(),
-			VRAM_POLL_INTERVAL_MS
-		);
+		this.refreshFullscreenState();
+		this.vramTimer = setInterval(() => {
+			this.refreshVramInfo();
+			this.refreshFullscreenState();
+		}, VRAM_POLL_INTERVAL_MS);
 	},
 	beforeUnmount() {
 		if (this.vramTimer) {
@@ -610,6 +637,22 @@ export default {
 					Math.round(info.usedBytes / VRAM_USAGE_QUANTUM_BYTES) *
 					VRAM_USAGE_QUANTUM_BYTES,
 			};
+		},
+		// Poll iRacing's exclusive-fullscreen state (koffi, main-side). Only
+		// reassign when the warning boolean flips so — like the VRAM poll — a
+		// steady state doesn't re-render and churn updated()'s config writes.
+		refreshFullscreenState() {
+			ipcRenderer
+				.invoke('get-iracing-fullscreen-state')
+				.then((state) => {
+					const next = !!(state && state.exclusiveFullscreen);
+					if (next !== this.exclusiveFullscreen) {
+						this.exclusiveFullscreen = next;
+					}
+				})
+				.catch(() => {
+					/* keep last value */
+				});
 		},
 		// True when the incoming reading differs from the current one in any field
 		// that affects the sidebar (total/used/source/adapter/window baseline).
