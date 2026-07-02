@@ -12,8 +12,11 @@ import path from 'node:path';
 //
 // The addon ships as an ABI-stable N-API prebuild (napi8), so it loads in
 // Electron with NO electron-rebuild — the same low-risk packaging model as
-// koffi. It is externalized in electron.vite.config.mjs and asarUnpacked in
-// package.json (native/*.node), then required by absolute path at runtime.
+// koffi. It is loaded via a computed-path require() (resolveAddonPath below)
+// that rollup cannot statically analyze, so electron-vite leaves it as a
+// runtime require rather than bundling it — no `external` entry needed. The
+// .node is asarUnpacked in package.json (native/*.node) so the runtime path
+// resolves in a packaged build.
 //
 // Everything here fails open: if the addon is missing, the OS is too old, or a
 // grab throws, the caller falls back to the legacy getUserMedia capture path.

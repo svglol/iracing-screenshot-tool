@@ -116,7 +116,11 @@ pub fn is_supported() -> bool {
 /// integer. `timeout_ms` defaults to 1500ms. Any failure (bad HWND, no frame,
 /// timeout) is returned as an `Err` so the JS side can fall back to the legacy
 /// capture path.
-#[napi]
+// catch_unwind: convert any stray panic on the Node main thread into a thrown JS
+// error instead of aborting the whole Electron process (the JS side then falls
+// back to getUserMedia). Without it, a panic in a plain #[napi] fn unwinds across
+// the C ABI and calls abort().
+#[napi(catch_unwind)]
 pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<CaptureResult> {
     ensure_dpi_awareness();
 
@@ -130,7 +134,10 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
     let slot_worker = slot.clone();
 
     // Worker thread: Window is !Send, so build it here from the (Send) integer.
-    thread::spawn(move || {
+    // Builder::spawn (not thread::spawn) so an OS thread-creation failure surfaces
+    // as a catchable Err instead of panicking across the N-API boundary; the JS
+    // caller then falls back to getUserMedia rather than crashing the app.
+    let spawn_result = thread::Builder::new().name("wgc-capture".into()).spawn(move || {
         let hwnd_ptr = hwnd_int as *mut std::ffi::c_void;
         let window = Window::from_raw_hwnd(hwnd_ptr);
 
@@ -155,6 +162,11 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
         };
         let _ = tx.send(outcome);
     });
+    if let Err(e) = spawn_result {
+        return Err(napi::Error::from_reason(format!(
+            "WGC worker thread spawn failed: {e}"
+        )));
+    }
 
     // Bounded wait so we can never hang the caller. Give the worker a little
     // headroom beyond the requested timeout.
