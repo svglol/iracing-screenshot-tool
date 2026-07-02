@@ -32,7 +32,14 @@ import {
 	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
-import { isWgcAvailable } from './wgc-capture';
+import { captureIracingWindowNative, isWgcAvailable } from './wgc-capture';
+import sharp from 'sharp';
+import { DEFAULT_FORMAT } from '../utilities/filenameFormat';
+import {
+	buildUniqueScreenshotName,
+	resolveCropRect,
+	getOutputExtension,
+} from '../utilities/screenshot-output';
 import { createLogger } from '../utilities/logger';
 const log = createLogger('main');
 import {
@@ -99,7 +106,25 @@ const CAPTURE_ABORT_DEBOUNCE_MS = 400;
 // getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
 // requesting larger can never converge on the dim-match — bound requests here.
 const MAX_CAPTURE_DIMENSION = 10000;
+// #11 WGC native capture: settle delay after the resize so iRacing presents a
+// frame at the new size before the grab; hard cap on the (synchronous) native
+// grab; and the all-black brightness floor shared with the renderer's detector.
+const WGC_SETTLE_MS = 250;
+const WGC_TIMEOUT_MS = 1500;
+const WGC_BLACK_FRAME_MAX_BRIGHTNESS = 24;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
+
+// The subset of the resize-screenshot request payload the capture paths read.
+// The IPC handler itself keeps `data: any` (it mutates/clamps fields), but the
+// extracted helpers take this typed view.
+interface CaptureRequestData {
+	width: number;
+	height: number;
+	targetWidth?: number | null;
+	targetHeight?: number | null;
+	crop: boolean;
+	cropTopLeft?: boolean;
+}
 
 app.name = productName;
 app.commandLine.appendSwitch('js-flags', '--expose_gc');
@@ -913,17 +938,23 @@ app.on('ready', async () => {
 		});
 
 		if (!config.get('reshade')) {
-			// Run resize and source enumeration together. On the koffi path the
-			// resize is fast synchronous FFI (it completes before getSources begins,
-			// which is fine); the Promise.all overlap still matters for the
-			// PowerShell fallback, whose spawn would otherwise block getSources.
+			// #11: when High-Fidelity Capture (WGC) is enabled and loaded, grab the
+			// frame in-process (true RGBA, no chroma subsampling) — it needs no
+			// desktopCapturer source, so skip the enumeration for it. The default
+			// path keeps overlapping resize + enumeration (the Promise.all overlap
+			// still matters for the PowerShell resize fallback, whose spawn would
+			// otherwise block getSources).
+			const useNativeCapture =
+				config.get('nativeCapture') && isWgcAvailable();
 			const [id, windowSources] = await Promise.all([
 				resizeIracingWindowAsync(data.width, data.height, left, top),
-				desktopCapturer.getSources({
-					types: ['window'],
-					thumbnailSize: { width: 0, height: 0 },
-					fetchWindowIcons: false,
-				}),
+				useNativeCapture
+					? Promise.resolve<Electron.DesktopCapturerSource[]>([])
+					: desktopCapturer.getSources({
+							types: ['window'],
+							thumbnailSize: { width: 0, height: 0 },
+							fetchWindowIcons: false,
+						}),
 			]);
 
 			if (id === undefined) {
@@ -945,40 +976,25 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			let sourceId: string | null = null;
-			const match = findSourceByWindowHandles(windowSources, [String(id)]);
-			if (match) {
-				sourceId = String(match.id);
+			if (useNativeCapture) {
+				const outcome = await captureAndSaveViaWgc(id, data);
+				if (outcome === 'saved' || outcome === 'aborted') {
+					return;
+				}
+				// outcome === 'fallback': WGC couldn't deliver a usable frame — drop
+				// to the getUserMedia path, which needs the source enumeration we
+				// skipped above. The window is already resized/raised for it to reuse.
+				log.info('WGC capture unavailable — falling back to getUserMedia');
+				const fallbackSources = await desktopCapturer.getSources({
+					types: ['window'],
+					thumbnailSize: { width: 0, height: 0 },
+					fetchWindowIcons: false,
+				});
+				dispatchWorkerCapture(id, data, fallbackSources);
+				return;
 			}
-			log.debug('Source enumeration', {
-				windowSourceCount: windowSources.length,
-				matchedSourceId: sourceId,
-			});
 
-			log.info('Capture request sent to worker', {
-				width: data.width,
-				height: data.height,
-				sourceId,
-			});
-			workerWindow?.webContents.send('session-info', iracing.sessionInfo);
-			workerWindow?.webContents.send('telemetry', iracing.telemetry);
-			workerWindow?.webContents.send('screenshot-request', {
-				width: data.width,
-				height: data.height,
-				targetWidth: data.targetWidth,
-				targetHeight: data.targetHeight,
-				crop: data.crop,
-				cropTopLeft: data.cropTopLeft,
-				windowID: id,
-				sourceId,
-				captureBounds: {
-					x: left,
-					y: top,
-					width: data.width,
-					height: data.height,
-				},
-			});
-			armCaptureWatchdog();
+			dispatchWorkerCapture(id, data, windowSources);
 			return;
 		}
 
@@ -1174,6 +1190,229 @@ function clearCaptureWatchdog(): void {
 	if (captureWatchdog) {
 		clearTimeout(captureWatchdog);
 		captureWatchdog = null;
+	}
+}
+
+// Hand a resized iRacing window off to the getUserMedia worker path: match the
+// desktopCapturer source for the HWND, forward session/telemetry so the worker
+// can name the file, send the capture request, and arm the recovery watchdog.
+// This is both the default (non-WGC) path and the WGC fallback.
+function dispatchWorkerCapture(
+	id: number,
+	data: CaptureRequestData,
+	windowSources: Electron.DesktopCapturerSource[]
+): void {
+	let sourceId: string | null = null;
+	const match = findSourceByWindowHandles(windowSources, [String(id)]);
+	if (match) {
+		sourceId = String(match.id);
+	}
+	log.debug('Source enumeration', {
+		windowSourceCount: windowSources.length,
+		matchedSourceId: sourceId,
+	});
+
+	log.info('Capture request sent to worker', {
+		width: data.width,
+		height: data.height,
+		sourceId,
+	});
+	workerWindow?.webContents.send('session-info', iracing.sessionInfo);
+	workerWindow?.webContents.send('telemetry', iracing.telemetry);
+	workerWindow?.webContents.send('screenshot-request', {
+		width: data.width,
+		height: data.height,
+		targetWidth: data.targetWidth,
+		targetHeight: data.targetHeight,
+		crop: data.crop,
+		cropTopLeft: data.cropTopLeft,
+		windowID: id,
+		sourceId,
+		captureBounds: {
+			x: left,
+			y: top,
+			width: data.width,
+			height: data.height,
+		},
+	});
+	armCaptureWatchdog();
+}
+
+// Cheap all-black guard for a raw RGBA frame: sample a coarse grid and call it
+// black only if EVERY sampled pixel is essentially black (matches the renderer's
+// isFrameBlack threshold). Real scenes always have some brighter pixels, so this
+// won't false-positive on dark-but-valid shots; an all-black grab means capture
+// failed.
+function isRgbaBufferBlack(
+	buffer: Buffer,
+	frameWidth: number,
+	frameHeight: number
+): boolean {
+	const stepX = Math.max(1, Math.floor(frameWidth / 32));
+	const stepY = Math.max(1, Math.floor(frameHeight / 18));
+	for (let y = 0; y < frameHeight; y += stepY) {
+		for (let x = 0; x < frameWidth; x += stepX) {
+			const i = (y * frameWidth + x) * 4;
+			if (
+				buffer[i] + buffer[i + 1] + buffer[i + 2] >
+				WGC_BLACK_FRAME_MAX_BRIGHTNESS
+			) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+// Apply the user's output format to a sharp pipeline at max fidelity. JPEG uses
+// 4:4:4 (no chroma subsampling) so it preserves the true-RGBA color WGC grabbed
+// — subsampling here would throw away the exact advantage of this path. PNG is
+// lossless; WebP mirrors the renderer's quality-95 lossy setting.
+function encodeForFormat(
+	pipeline: ReturnType<typeof sharp>,
+	formatKey: unknown
+): ReturnType<typeof sharp> {
+	switch (formatKey) {
+		case 'png':
+			return pipeline.png();
+		case 'webp':
+			return pipeline.webp({ quality: 95 });
+		case 'jpeg':
+		default:
+			return pipeline.jpeg({ quality: 100, chromaSubsampling: '4:4:4' });
+	}
+}
+
+type WgcCaptureOutcome = 'saved' | 'fallback' | 'aborted';
+
+// #11: main-side WGC capture + save. Grabs one true-RGBA frame of the (already
+// resized/raised) iRacing window, crops the watermark margin, encodes at max
+// fidelity, writes the file + gallery thumbnail, notifies the UI, and restores.
+// Returns:
+//   'saved'    — file written, gallery notified, window restored.
+//   'fallback' — no usable frame (or save failed); caller should run the
+//                getUserMedia path. The window is left resized/raised for it.
+//   'aborted'  — capture was cancelled mid-flight (iRacing disconnected /
+//                already restored); caller must NOT fall back or restore again.
+async function captureAndSaveViaWgc(
+	id: number,
+	data: CaptureRequestData
+): Promise<WgcCaptureOutcome> {
+	// SetWindowPos is synchronous, but iRacing's swapchain needs a frame or two to
+	// re-render at the new size. Settle briefly so the grab isn't a stale frame.
+	await delay(WGC_SETTLE_MS);
+
+	// A disconnect/watchdog during the settle already ran restoreScreenshotState()
+	// (takingScreenshot=false) and reported. Don't grab a torn-down window or fall
+	// back — just bail.
+	if (!takingScreenshot) {
+		return 'aborted';
+	}
+
+	// NOTE: captureIracingWindowNative is a SYNCHRONOUS native call that blocks the
+	// main thread until the first frame arrives (typically a few ms; bounded by
+	// WGC_TIMEOUT_MS on failure). Acceptable during a capture, when the main
+	// process is otherwise idle; a future async addon would remove even this.
+	const frame = captureIracingWindowNative(id, WGC_TIMEOUT_MS);
+	if (!frame || !frame.data || frame.width < 1 || frame.height < 1) {
+		return 'fallback';
+	}
+	if (isRgbaBufferBlack(frame.data, frame.width, frame.height)) {
+		log.info('WGC frame was black — falling back to getUserMedia');
+		return 'fallback';
+	}
+
+	try {
+		const screenshotDir = path.resolve(config.get('screenshotFolder'));
+		const cacheDir = path.join(app.getPath('userData'), 'Cache');
+		fs.mkdirSync(screenshotDir, { recursive: true });
+		fs.mkdirSync(cacheDir, { recursive: true });
+
+		const ext = getOutputExtension(config.get('outputFormat'));
+		const useCustom = config.get('customFilenameFormat');
+		const formatString = useCustom
+			? config.get('filenameFormat') || DEFAULT_FORMAT
+			: DEFAULT_FORMAT;
+		// Same naming as the renderer path (shared screenshot-output helper), so
+		// WGC and getUserMedia produce identical file names.
+		const fileKey = buildUniqueScreenshotName({
+			formatString,
+			sessionInfo: iracing.sessionInfo,
+			telemetry: iracing.telemetry,
+			exists: (name) =>
+				fs.existsSync(path.join(screenshotDir, `${name}${ext}`)),
+		});
+		const savedPath = path.join(screenshotDir, `${fileKey}${ext}`);
+		const thumbPath = path.join(cacheDir, `${fileKey}.webp`);
+
+		const rawOptions = {
+			raw: {
+				width: frame.width,
+				height: frame.height,
+				channels: 4 as const,
+			},
+		};
+
+		// Crop the watermark margin (geometry shared with the renderer path). Guard
+		// an out-of-bounds rect — e.g. a stale pre-resize frame smaller than the
+		// target — by saving the full frame instead of throwing.
+		const cropRect = resolveCropRect({
+			sourceWidth: frame.width,
+			sourceHeight: frame.height,
+			targetWidth: data.targetWidth,
+			targetHeight: data.targetHeight,
+			crop: data.crop,
+			cropTopLeft: data.cropTopLeft ?? false,
+		});
+		const cropInBounds =
+			cropRect !== null &&
+			cropRect.left >= 0 &&
+			cropRect.top >= 0 &&
+			cropRect.left + cropRect.width <= frame.width &&
+			cropRect.top + cropRect.height <= frame.height;
+		if (cropRect && !cropInBounds) {
+			log.info('WGC crop rect out of bounds — saving full frame', {
+				frame: { width: frame.width, height: frame.height },
+				cropRect,
+			});
+		}
+		// A fresh pipeline per output (sharp instances are single-use).
+		const buildPipeline = () => {
+			const image = sharp(frame.data, rawOptions);
+			return cropInBounds && cropRect ? image.extract(cropRect) : image;
+		};
+
+		await encodeForFormat(buildPipeline(), config.get('outputFormat')).toFile(
+			savedPath
+		);
+		log.info('WGC screenshot saved', {
+			file: savedPath,
+			frame: { width: frame.width, height: frame.height },
+			cropped: cropInBounds,
+		});
+
+		// Gallery thumbnail from the same in-memory frame (transparent letterbox,
+		// matching the renderer's createThumbnail output).
+		await buildPipeline()
+			.resize(1280, 720, {
+				fit: 'contain',
+				background: { r: 0, g: 0, b: 0, alpha: 0 },
+			})
+			.webp()
+			.toFile(thumbPath);
+
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			mainWindow.webContents.send('screenshot-response', savedPath);
+		}
+		restoreScreenshotState();
+		return 'saved';
+	} catch (error) {
+		// A save failure after a good grab shouldn't silently drop the shot — fall
+		// back to the getUserMedia path, which re-captures and saves independently.
+		log.info('WGC save failed — falling back to getUserMedia', {
+			error: (error as Error).message || String(error),
+		});
+		return 'fallback';
 	}
 }
 
