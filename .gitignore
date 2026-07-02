@@ -32,3 +32,8 @@ bot/node_modules
 bot/.env
 bot/data/
 bot/logs/
+
+# Rust WGC capture addon build artifacts. The crate source (Cargo.toml,
+# Cargo.lock, build.rs, src/) and the built native/wgc-capture.node are tracked;
+# the target/ build tree (hundreds of MB of intermediates) is not.
+native/wgc-capture/target/

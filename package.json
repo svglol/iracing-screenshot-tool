@@ -20,7 +20,13 @@
             "out/**/*",
             "node_modules/**/*",
             "static/icon.*",
+            "native/wgc-capture.node",
             "!bot/**/*"
+        ],
+        "asarUnpack": [
+            "**/node_modules/@koromix/koffi-*/**",
+            "**/node_modules/koffi/**/*.node",
+            "native/*.node"
         ],
         "extraResources": [
             {
@@ -55,6 +61,7 @@
         "electron-updater": "^6.8.3",
         "image-size": "^0.8.3",
         "irsdk-node": "^4.4.0",
+        "koffi": "^3.1.0",
         "read-ini-file": "^3.0.0",
         "sharp": "^0.34.5",
         "vue": "^3.5.33",

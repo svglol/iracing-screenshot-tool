@@ -13,7 +13,12 @@ import {
 	sanitizeFilePart,
 	buildScreenshotFileKey,
 } from '../../utilities/screenshot-name';
-import { resolveFilenameFormat } from '../../utilities/filenameFormat';
+import { DEFAULT_FORMAT } from '../../utilities/filenameFormat';
+import {
+	buildUniqueScreenshotName,
+	resolveCropRect,
+	OUTPUT_EXTENSIONS,
+} from '../../utilities/screenshot-output';
 import { createLogger } from '../../utilities/logger';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -23,15 +28,49 @@ const sharp = require('sharp');
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
 const log = createLogger('worker');
 
+// Max time to wait for the capture stream's <video> to report loadedmetadata
+// before tearing it down, so a stalled stream can't wedge the capture.
+const HANDLE_STREAM_TIMEOUT_MS = 5000;
+
+// The getUserMedia desktop-capture path delivers I420 (YUV 4:2:0) frames, so the
+// source is already chroma-subsampled before we encode. JPEG at max quality is
+// the default (small files, one light extra loss stage); PNG is a lossless
+// container and WebP a smaller lossy option. True pixel-accuracy would require a
+// native RGBA capture backend, not a different encode format.
 const FORMAT_MAP = {
-	jpeg: { mime: 'image/jpeg', ext: '.jpg', quality: 0.95 },
-	png: { mime: 'image/png', ext: '.png', quality: undefined },
-	webp: { mime: 'image/webp', ext: '.webp', quality: 0.95 },
+	jpeg: { mime: 'image/jpeg', ext: OUTPUT_EXTENSIONS.jpeg, quality: 1 },
+	png: { mime: 'image/png', ext: OUTPUT_EXTENSIONS.png, quality: undefined },
+	webp: { mime: 'image/webp', ext: OUTPUT_EXTENSIONS.webp, quality: 0.95 },
 };
 
 function getOutputFormat() {
 	const key = config.get('outputFormat') || 'jpeg';
 	return FORMAT_MAP[key] || FORMAT_MAP.jpeg;
+}
+
+// A genuinely failed desktop capture (e.g. a GDI fallback on GPU-accelerated
+// content) returns an all-black frame that still passes the dimension check.
+// Sample a tiny downscale and treat it as failed only if the brightest pixel is
+// still essentially black — real night scenes always have some brighter pixels
+// (headlights, dash, sky), so this won't false-positive on dark-but-valid shots.
+const BLACK_FRAME_MAX_BRIGHTNESS = 24; // sum of R+G+B, ~8 per channel
+
+function isFrameBlack(sourceCanvas) {
+	const sampleW = 32;
+	const sampleH = 18;
+	const sample = new OffscreenCanvas(sampleW, sampleH);
+	const sctx = sample.getContext('2d', { willReadFrequently: true });
+	if (!sctx) {
+		return false;
+	}
+	sctx.drawImage(sourceCanvas, 0, 0, sampleW, sampleH);
+	const { data } = sctx.getImageData(0, 0, sampleW, sampleH);
+	for (let i = 0; i < data.length; i += 4) {
+		if (data[i] + data[i + 1] + data[i + 2] > BLACK_FRAME_MAX_BRIGHTNESS) {
+			return false;
+		}
+	}
+	return true;
 }
 
 let sessionInfo = null;
@@ -42,6 +81,10 @@ let cropTopLeft = false;
 let captureBounds = null;
 let captureTargetDiagnostics = null;
 let preResolvedSourceId = null;
+// Set true when main sends 'abort-capture' (iRacing disconnected mid-capture, or
+// the main-side watchdog fired). The in-flight capture checks this at each await
+// boundary and bails silently — main owns the recovery.
+let captureAborted = false;
 let targetWidth = null;
 let targetHeight = null;
 // Window dimensions = what SetWindowPos actually resized iRacing to, which is
@@ -232,37 +275,53 @@ async function createThumbnail(fileName, fileKey) {
 	log.info('Thumbnail created', { file: thumbPath });
 }
 
+// In-memory gallery thumbnail: downscale the captured frame (fit:contain,
+// transparent letterbox) without re-decoding the saved full-resolution file.
+// Uses an alpha:true canvas so the letterbox padding stays transparent, matching
+// the previous sharp output.
+const THUMB_WIDTH = 1280;
+const THUMB_HEIGHT = 720;
+
+async function renderThumbnailBlob(sourceCanvas, srcWidth, srcHeight) {
+	const scale = Math.min(THUMB_WIDTH / srcWidth, THUMB_HEIGHT / srcHeight);
+	const drawW = Math.max(1, Math.round(srcWidth * scale));
+	const drawH = Math.max(1, Math.round(srcHeight * scale));
+	const thumb = new OffscreenCanvas(THUMB_WIDTH, THUMB_HEIGHT);
+	const tctx = thumb.getContext('2d', { alpha: true });
+	if (!tctx) {
+		return null;
+	}
+	tctx.drawImage(
+		sourceCanvas,
+		0,
+		0,
+		srcWidth,
+		srcHeight,
+		Math.round((THUMB_WIDTH - drawW) / 2),
+		Math.round((THUMB_HEIGHT - drawH) / 2),
+		drawW,
+		drawH
+	);
+	return thumb.convertToBlob({ type: 'image/webp', quality: 0.8 });
+}
+
 function getFileNameString() {
 	const useCustom = config.get('customFilenameFormat');
 	const formatString = useCustom
-		? config.get('filenameFormat') || '{track}-{driver}-{counter}'
-		: '{track}-{driver}-{counter}';
-
-	// Resolve all tokens except {counter}
-	const resolved = resolveFilenameFormat(formatString, sessionInfo, telemetry);
+		? config.get('filenameFormat') || DEFAULT_FORMAT
+		: DEFAULT_FORMAT;
 
 	ensureDirectory(getScreenshotDir());
 
-	// Handle {counter} - find unique filename
-	if (resolved.includes('{counter}')) {
-		let count = 0;
-		let fileName = resolved.replace('{counter}', String(count));
-		while (fs.existsSync(getScreenshotPath(fileName))) {
-			count += 1;
-			fileName = resolved.replace('{counter}', String(count));
-		}
-		return fileName;
-	}
-
-	// No counter - still need uniqueness, append counter if file exists
-	if (fs.existsSync(getScreenshotPath(resolved))) {
-		let count = 1;
-		while (fs.existsSync(getScreenshotPath(resolved + '-' + count))) {
-			count += 1;
-		}
-		return resolved + '-' + count;
-	}
-	return resolved;
+	// Shared with the main-side WGC save path so both backends name files
+	// identically. exists() appends the current output extension via
+	// getScreenshotPath, matching the historical uniqueness check.
+	return buildUniqueScreenshotName({
+		formatString,
+		sessionInfo,
+		telemetry,
+		exists: (name) => fs.existsSync(getScreenshotPath(name)),
+	});
 }
 
 async function saveReshadeImage(sourceFile) {
@@ -294,30 +353,19 @@ async function saveReshadeImage(sourceFile) {
 		}
 
 		const reshadeProcessStart = performance.now();
-		if (crop && cropTopLeftFlag && targetWidth && targetHeight) {
-			// Legacy: crop the bottom-right corner off — output is the render size
-			// minus the watermark margin
-			await image
-				.extract({
-					left: 0,
-					top: 0,
-					width: targetWidth,
-					height: targetHeight,
-				})
-				.toFile(fileName);
-		} else if (crop && targetWidth && targetHeight) {
-			// Default: center-crop each side off — output is the render size minus
-			// the watermark margin
-			const cropX = Math.round((metadata.width - targetWidth) / 2);
-			const cropY = Math.round((metadata.height - targetHeight) / 2);
-			await image
-				.extract({
-					left: cropX,
-					top: cropY,
-					width: targetWidth,
-					height: targetHeight,
-				})
-				.toFile(fileName);
+		// Shared crop geometry (see screenshot-output.resolveCropRect): top-left
+		// mode drops the bottom-right watermark corner; centered mode trims the
+		// margin from all sides; null → no crop.
+		const cropRect = resolveCropRect({
+			sourceWidth: metadata.width,
+			sourceHeight: metadata.height,
+			targetWidth,
+			targetHeight,
+			crop,
+			cropTopLeft: cropTopLeftFlag,
+		});
+		if (cropRect) {
+			await image.extract(cropRect).toFile(fileName);
 		} else {
 			await image.toFile(fileName);
 		}
@@ -346,7 +394,7 @@ async function saveReshadeImage(sourceFile) {
 	}
 }
 
-async function saveImage(blob) {
+async function saveImage(blob, thumbBlob) {
 	try {
 		console.time('Save Image');
 		ensureDirectory(getScreenshotDir());
@@ -372,7 +420,22 @@ async function saveImage(blob) {
 		ipcRenderer.send('screenshot-response', fileName);
 
 		console.time('Save Thumbnail');
-		await createThumbnail(fileName, fileKey);
+		if (thumbBlob) {
+			const thumbPath = getThumbnailPath(fileKey);
+			const thumbStart = performance.now();
+			await fs.promises.writeFile(
+				thumbPath,
+				Buffer.from(await thumbBlob.arrayBuffer())
+			);
+			log.debug('Thumbnail write (in-memory)', {
+				elapsed: Math.round(performance.now() - thumbStart),
+				file: thumbPath,
+			});
+			log.info('Thumbnail created', { file: thumbPath });
+		} else {
+			// Fallback: no in-memory thumbnail was produced — re-decode the file.
+			await createThumbnail(fileName, fileKey);
+		}
 		console.timeEnd('Save Thumbnail');
 		if (global.gc) {
 			global.gc();
@@ -390,116 +453,105 @@ async function saveImage(blob) {
 }
 
 async function fullscreenScreenshot(callback) {
-	const handleStream = (stream) => {
-		console.timeEnd('Get Media');
-		let video = document.createElement('video');
+	// Draw the current frame of `video` (crop-adjusted) into an OffscreenCanvas,
+	// encode it, and hand the blob to the callback. The blob is self-contained,
+	// so the stream/video can be released immediately afterwards.
+	const encodeAndDeliver = async (video, captureTarget) => {
+		const captureRect = resolveDisplayCaptureRect(
+			video.videoWidth,
+			video.videoHeight,
+			captureTarget
+		);
 
-		video.addEventListener('loadedmetadata', async function () {
-			try {
-				video.style.height = this.videoHeight + 'px';
-				video.style.width = this.videoWidth + 'px';
+		let outputWidth, outputHeight, srcX, srcY;
+		if (crop && cropTopLeft && targetWidth && targetHeight) {
+			// Legacy: crop the bottom-right corner off — output is the render
+			// size minus the watermark margin
+			outputWidth = targetWidth;
+			outputHeight = targetHeight;
+			srcX = captureRect.x;
+			srcY = captureRect.y;
+		} else if (crop && targetWidth && targetHeight) {
+			// Default: center-crop each side off — output is the render size
+			// minus the watermark margin
+			outputWidth = targetWidth;
+			outputHeight = targetHeight;
+			const cropX = Math.round((captureRect.width - outputWidth) / 2);
+			const cropY = Math.round((captureRect.height - outputHeight) / 2);
+			srcX = captureRect.x + cropX;
+			srcY = captureRect.y + cropY;
+		} else {
+			outputWidth = captureRect.width;
+			outputHeight = captureRect.height;
+			srcX = captureRect.x;
+			srcY = captureRect.y;
+		}
 
-				video.play();
-				video.pause();
+		if (outputWidth < 1 || outputHeight < 1) {
+			throw new Error(
+				`Capture output is too small (${outputWidth}x${outputHeight})`
+			);
+		}
 
-				const captureTarget = normalizeCaptureTarget(
-					stream.__captureTarget
-				);
-				const captureRect = resolveDisplayCaptureRect(
-					this.videoWidth,
-					this.videoHeight,
-					captureTarget
-				);
-
-				let outputWidth, outputHeight, srcX, srcY;
-				if (crop && cropTopLeft && targetWidth && targetHeight) {
-					// Legacy: crop the bottom-right corner off — output is the render
-					// size minus the watermark margin
-					outputWidth = targetWidth;
-					outputHeight = targetHeight;
-					srcX = captureRect.x;
-					srcY = captureRect.y;
-				} else if (crop && targetWidth && targetHeight) {
-					// Default: center-crop each side off — output is the render size
-					// minus the watermark margin
-					outputWidth = targetWidth;
-					outputHeight = targetHeight;
-					const cropX = Math.round((captureRect.width - outputWidth) / 2);
-					const cropY = Math.round(
-						(captureRect.height - outputHeight) / 2
-					);
-					srcX = captureRect.x + cropX;
-					srcY = captureRect.y + cropY;
-				} else {
-					outputWidth = captureRect.width;
-					outputHeight = captureRect.height;
-					srcX = captureRect.x;
-					srcY = captureRect.y;
-				}
-
-				if (outputWidth < 1 || outputHeight < 1) {
-					throw new Error(
-						`Capture output is too small (${outputWidth}x${outputHeight})`
-					);
-				}
-
-				console.time('Create OffscreenCanvas');
-				const offscreen = new OffscreenCanvas(outputWidth, outputHeight);
-
-				const offctx = offscreen.getContext('2d', { alpha: false });
-				const drawStart = performance.now();
-				offctx.drawImage(
-					video,
-					srcX,
-					srcY,
-					outputWidth,
-					outputHeight,
-					0,
-					0,
-					outputWidth,
-					outputHeight
-				);
-				log.debug('Canvas draw', {
-					elapsed: Math.round(performance.now() - drawStart),
-					outputWidth,
-					outputHeight,
-				});
-
-				console.timeEnd('Create OffscreenCanvas');
-				console.time('To Blob');
-				const blobStart = performance.now();
-				const fmt = getOutputFormat();
-				// blobOpts inferred as { type: any } on first line; `quality` set
-				// conditionally — cast to any for the optional-property assignment.
-				const blobOpts: any = { type: fmt.mime };
-				if (fmt.quality !== undefined) blobOpts.quality = fmt.quality;
-				const blob = await offscreen.convertToBlob(blobOpts);
-				log.debug('Blob conversion', {
-					elapsed: Math.round(performance.now() - blobStart),
-					type: fmt.mime,
-				});
-				console.timeEnd('To Blob');
-				console.timeEnd('Draw Image');
-				callback(blob);
-			} catch (error) {
-				handleError(error);
-			} finally {
-				video.srcObject = null;
-				video.remove();
-
-				try {
-					stream.getTracks().forEach((track) => track.stop());
-					video = null;
-				} catch (error) {
-					console.log(error);
-				}
-			}
+		console.time('Create OffscreenCanvas');
+		const offscreen = new OffscreenCanvas(outputWidth, outputHeight);
+		const offctx = offscreen.getContext('2d', { alpha: false });
+		const drawStart = performance.now();
+		offctx.drawImage(
+			video,
+			srcX,
+			srcY,
+			outputWidth,
+			outputHeight,
+			0,
+			0,
+			outputWidth,
+			outputHeight
+		);
+		log.debug('Canvas draw', {
+			elapsed: Math.round(performance.now() - drawStart),
+			outputWidth,
+			outputHeight,
 		});
+		console.timeEnd('Create OffscreenCanvas');
 
-		video.srcObject = stream;
+		if (isFrameBlack(offscreen)) {
+			throw new Error(
+				'Captured frame is black — the capture source may have failed (GPU-accelerated content can fail to capture on some Windows setups)'
+			);
+		}
+
+		console.time('To Blob');
+		const blobStart = performance.now();
+		const fmt = getOutputFormat();
+		// blobOpts inferred as { type: any } on first line; `quality` set
+		// conditionally — cast to any for the optional-property assignment.
+		const blobOpts: any = { type: fmt.mime };
+		if (fmt.quality !== undefined) blobOpts.quality = fmt.quality;
+		const blob = await offscreen.convertToBlob(blobOpts);
+		log.debug('Blob conversion', {
+			elapsed: Math.round(performance.now() - blobStart),
+			type: fmt.mime,
+		});
+		console.timeEnd('To Blob');
+		console.timeEnd('Draw Image');
+
+		// Build the gallery thumbnail from the same in-memory frame instead of
+		// re-decoding the just-written full-resolution file with sharp.
+		const thumbBlob = await renderThumbnailBlob(
+			offscreen,
+			outputWidth,
+			outputHeight
+		);
+
+		callback(blob, thumbBlob);
 	};
 
 	const handleError = (error) => {
+		if (captureAborted) {
+			// Main already restored the window and reported the error on abort.
+			return;
+		}
 		ipcRenderer.send('screenshot-finished', '');
 		sendScreenshotError(error, 'fullscreen-capture', {
 			windowID,
@@ -553,24 +605,11 @@ async function fullscreenScreenshot(callback) {
 			);
 		}
 
-		// Acquire the capture stream, then verify (for window-mode captures only)
-		// that the stream came back at the post-resize window dimensions and not
-		// the prior native dimensions. SetWindowPos completes synchronously at
-		// the OS level but the OS-level capture pipeline may still be holding the
-		// previous frame; on slow / loaded user machines this race causes the
-		// captured PNG to come out at native resolution instead of the selected
-		// target. Display-mode captures intentionally capture the full display
-		// and extract the sub-region downstream — skip the dim-check for them.
-		//
-		// History: an earlier version of this guard (commit 3f5ff3c) compared
-		// against `targetWidth/targetHeight` (the un-expanded crop output dims),
-		// which never matched the actual stream dims; it was removed in af9dd43,
-		// which restored the original race. Compare against the *window* dims
-		// (= what SetWindowPos actually resized to) so the check matches cleanly.
-		const RETRY_DELAY_MS = 300;
-		const MAX_WAIT_MS = 8000;
-		const retryStart = performance.now();
-
+		// The desktop-capture pipeline can briefly keep delivering the prior
+		// (pre-resize) frame after SetWindowPos, so for window captures we wait
+		// until the stream's frames report the post-resize window dimensions.
+		// Display captures grab the full display and extract downstream, so they
+		// skip the dim wait.
 		const acquireStream = async () => {
 			const t0 = performance.now();
 			// Electron's getUserMedia accepts a `mandatory` Chrome-internal property
@@ -594,133 +633,202 @@ async function fullscreenScreenshot(callback) {
 			return s;
 		};
 
-		// In Electron's desktopCapturer flow, `track.getSettings().{width,height}`
-		// returns the constraint bounds (here 10000×10000), not actual frame
-		// dimensions. Probe the real dimensions via a temporary <video> element's
-		// videoWidth/videoHeight after loadedmetadata.
-		const probeStreamDimensions = async (
-			s: MediaStream
-		): Promise<{ w: number; h: number }> => {
-			const probe = document.createElement('video');
-			probe.muted = true;
-			(probe as any).playsInline = true;
-			probe.srcObject = s;
-			const ready = new Promise<void>((resolve, reject) => {
-				if (probe.readyState >= 1) {
-					resolve();
-					return;
-				}
-				probe.addEventListener('loadedmetadata', () => resolve(), {
-					once: true,
-				});
-				probe.addEventListener(
-					'error',
-					() => reject(new Error('probe error')),
-					{ once: true }
-				);
-			});
-			try {
-				probe.play().catch(() => {
-					/* best-effort: metadata fires regardless on some browsers */
-				});
-				await Promise.race([
-					ready,
-					new Promise<void>((_, reject) =>
-						setTimeout(() => reject(new Error('probe timeout')), 1500)
-					),
-				]);
-				return { w: probe.videoWidth || 0, h: probe.videoHeight || 0 };
-			} finally {
-				try {
-					probe.pause();
-				} catch {
-					/* noop */
-				}
-				probe.srcObject = null;
-				probe.remove();
-			}
-		};
-
-		let stream = await acquireStream();
-
+		const DIM_TOLERANCE = 2;
 		const captureKind =
 			captureTarget && captureTarget.kind === 'display'
 				? 'display'
 				: 'window';
-		if (captureKind === 'window' && windowWidth && windowHeight) {
-			// Tolerance to absorb capture-pipeline rounding to even dimensions
-			// (h.264 / DWM require even width/height; an odd target like 1145 is
-			// captured as 1144). 2px also covers minor DPI/border artifacts.
-			const DIM_TOLERANCE = 2;
-			const dimsMatch = (sw: number, sh: number) =>
-				Math.abs(sw - windowWidth) <= DIM_TOLERANCE &&
-				Math.abs(sh - windowHeight) <= DIM_TOLERANCE;
+		const wantDimCheck = Boolean(
+			captureKind === 'window' && windowWidth && windowHeight
+		);
+		// Tolerance absorbs capture-pipeline rounding to even dimensions (h.264 /
+		// DWM require even width/height; an odd target like 1145 is captured as
+		// 1144) plus minor DPI/border artifacts.
+		const dimsMatch = (sw: number, sh: number) =>
+			Math.abs(sw - windowWidth) <= DIM_TOLERANCE &&
+			Math.abs(sh - windowHeight) <= DIM_TOLERANCE;
 
-			let dims = await probeStreamDimensions(stream).catch(() => ({
-				w: 0,
-				h: 0,
-			}));
-			let streamW = dims.w;
-			let streamH = dims.h;
+		// Single-stream capture: acquire ONE stream, attach it to one <video>, and
+		// wait for an actually-presented frame via requestVideoFrameCallback (rVFC)
+		// instead of the old tear-down-and-re-acquire-every-300ms loop (which spun
+		// up a fresh desktop-capture session each iteration and double-decoded
+		// through a throwaway probe video). We poll successive frames of the SAME
+		// stream until the dimensions match the resized window, and only fully
+		// re-acquire as a bounded fallback for the rare stale-locked-track case.
+		const waitForVideoReady = (v: HTMLVideoElement): Promise<void> =>
+			new Promise((resolve, reject) => {
+				if (v.readyState >= 1) {
+					resolve();
+					return;
+				}
+				const cleanup = () => {
+					clearTimeout(timer);
+					v.removeEventListener('loadedmetadata', onReady);
+					v.removeEventListener('error', onError);
+				};
+				const onReady = () => {
+					cleanup();
+					resolve();
+				};
+				const onError = () => {
+					cleanup();
+					reject(new Error('capture video error'));
+				};
+				const timer = setTimeout(() => {
+					cleanup();
+					reject(
+						new Error('Timed out waiting for capture video metadata')
+					);
+				}, HANDLE_STREAM_TIMEOUT_MS);
+				v.addEventListener('loadedmetadata', onReady, { once: true });
+				v.addEventListener('error', onError, { once: true });
+			});
 
-			while (
-				!dimsMatch(streamW, streamH) &&
-				performance.now() - retryStart < MAX_WAIT_MS
-			) {
-				log.debug('Stream dim mismatch — retrying', {
-					streamW,
-					streamH,
-					windowWidth,
-					windowHeight,
-					waitMs: RETRY_DELAY_MS,
-				});
-				console.log(
-					`Stream dimensions ${streamW}x${streamH} do not match window ${windowWidth}x${windowHeight} — retrying in ${RETRY_DELAY_MS}ms`
-				);
+		// Resolve when the next frame is presented (rVFC), with an upper-bound
+		// fallback so an off-DOM video that never triggers rVFC can't hang the poll
+		// — a decoded frame is available shortly after play() regardless.
+		const nextFramePresented = (v: HTMLVideoElement): Promise<void> =>
+			new Promise((resolve) => {
+				let done = false;
+				const finish = () => {
+					if (!done) {
+						done = true;
+						resolve();
+					}
+				};
+				const rvfc = (v as any).requestVideoFrameCallback;
+				if (typeof rvfc === 'function') {
+					try {
+						rvfc.call(v, () => finish());
+					} catch {
+						/* fall through to the timeout */
+					}
+				}
+				setTimeout(finish, 120);
+			});
+
+		let stream: MediaStream | null = null;
+		let video: HTMLVideoElement | null = null;
+
+		const releaseCapture = () => {
+			if (video) {
+				try {
+					video.pause();
+				} catch {
+					/* noop */
+				}
+				video.srcObject = null;
+				video.remove();
+				video = null;
+			}
+			if (stream) {
 				try {
 					stream.getTracks().forEach((t) => t.stop());
 				} catch {
-					// best-effort cleanup
+					/* noop */
 				}
-				await delay(RETRY_DELAY_MS);
-				stream = await acquireStream();
-				dims = await probeStreamDimensions(stream).catch(() => ({
-					w: 0,
-					h: 0,
-				}));
-				streamW = dims.w;
-				streamH = dims.h;
+				stream = null;
 			}
+		};
 
-			if (!dimsMatch(streamW, streamH)) {
-				// Don't fail the capture — proceed with whatever the stream
-				// delivered. The user will see a wrong-resolution PNG instead of
-				// no PNG at all, which is a strictly better failure mode and
-				// leaves the warning in the log for diagnosis.
-				// Logger has no 'warn' level — use info; the console.warn below preserves the
-				// dev-tools severity badge.
-				log.info('Stream dim retry timeout — proceeding', {
-					streamW,
-					streamH,
+		try {
+			const MAX_WAIT_MS = 8000;
+			const REACQUIRE_LIMIT = 1;
+			const waitStart = performance.now();
+			let matched = false;
+
+			for (
+				let attempt = 0;
+				attempt <= REACQUIRE_LIMIT && !captureAborted;
+				attempt += 1
+			) {
+				stream = await acquireStream();
+				if (attempt === 0) {
+					console.timeEnd('Get Media');
+				}
+				const activeVideo = document.createElement('video');
+				video = activeVideo;
+				activeVideo.muted = true;
+				(activeVideo as any).playsInline = true;
+				activeVideo.srcObject = stream;
+				await waitForVideoReady(activeVideo);
+				await activeVideo.play().catch(() => {
+					/* muted autoplay; frames arrive regardless */
+				});
+				await nextFramePresented(activeVideo);
+
+				if (!wantDimCheck) {
+					matched = true;
+					break;
+				}
+
+				while (
+					!captureAborted &&
+					!dimsMatch(activeVideo.videoWidth, activeVideo.videoHeight) &&
+					performance.now() - waitStart < MAX_WAIT_MS
+				) {
+					await nextFramePresented(activeVideo);
+				}
+
+				if (dimsMatch(activeVideo.videoWidth, activeVideo.videoHeight)) {
+					matched = true;
+					break;
+				}
+
+				// Never reached the target size within the budget. If time remains,
+				// re-acquire once (stale-locked-track case); otherwise proceed with
+				// whatever we have.
+				if (performance.now() - waitStart >= MAX_WAIT_MS) {
+					break;
+				}
+				log.debug('Stream dim mismatch — re-acquiring once', {
+					streamW: activeVideo.videoWidth,
+					streamH: activeVideo.videoHeight,
 					windowWidth,
 					windowHeight,
-					elapsedMs: Math.round(performance.now() - retryStart),
+				});
+				releaseCapture();
+			}
+
+			if (captureAborted) {
+				// Aborted mid-acquisition (iRacing disconnected or watchdog). Main
+				// owns recovery — release and bail without reporting.
+				releaseCapture();
+				log.info('Capture aborted before handoff — skipping');
+				return;
+			}
+
+			if (!video) {
+				throw new Error('Capture stream did not produce a video frame');
+			}
+			const finalVideo = video;
+
+			if (wantDimCheck && !matched) {
+				// Proceed with whatever the stream delivered instead of failing — a
+				// wrong-resolution image beats no image, and the warning is logged
+				// for diagnosis.
+				log.info('Stream dim wait timeout — proceeding', {
+					streamW: finalVideo.videoWidth,
+					streamH: finalVideo.videoHeight,
+					windowWidth,
+					windowHeight,
+					elapsedMs: Math.round(performance.now() - waitStart),
 				});
 				console.warn(
-					`Timed out waiting for window dimensions ${windowWidth}x${windowHeight}; proceeding with ${streamW}x${streamH}`
+					`Timed out waiting for window dimensions ${windowWidth}x${windowHeight}; proceeding with ${finalVideo.videoWidth}x${finalVideo.videoHeight}`
 				);
-			} else {
+			} else if (wantDimCheck) {
 				log.debug('Stream dim confirmed', {
-					streamW,
-					streamH,
-					elapsedMs: Math.round(performance.now() - retryStart),
+					streamW: finalVideo.videoWidth,
+					streamH: finalVideo.videoHeight,
+					elapsedMs: Math.round(performance.now() - waitStart),
 				});
 			}
-		}
 
-		// Attach custom marker to MediaStream instance (not in lib.dom.d.ts).
-		(stream as any).__captureTarget = captureTarget;
-		handleStream(stream);
+			await encodeAndDeliver(finalVideo, captureTarget);
+		} finally {
+			releaseCapture();
+		}
 	} catch (error) {
 		handleError(error);
 	}
@@ -763,9 +871,18 @@ export default {
 				return;
 			}
 
-			fullscreenScreenshot((base64data) => {
-				saveImage(base64data);
+			captureAborted = false;
+			fullscreenScreenshot((blob, thumbBlob) => {
+				saveImage(blob, thumbBlob);
 			});
+		});
+
+		ipcRenderer.on('abort-capture', (event, reason) => {
+			// Main tells us to abandon the in-flight capture (iRacing disconnected
+			// mid-capture, or the watchdog fired). The capture loop and handoff
+			// check this flag and bail silently — main owns the recovery path.
+			captureAborted = true;
+			log.info('Capture aborted', { reason });
 		});
 
 		ipcRenderer.on('session-info', (event, arg) => {

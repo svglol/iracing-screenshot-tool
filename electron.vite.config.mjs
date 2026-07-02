@@ -16,6 +16,7 @@ export default defineConfig({
 					'electron-updater',
 					'irsdk-node',
 					'sharp',
+					'koffi',
 				],
 			},
 			commonjsOptions: {

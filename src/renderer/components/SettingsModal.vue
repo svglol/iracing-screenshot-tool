@@ -140,7 +140,7 @@
 					<hr />
 					<o-field label="Output Format">
 						<o-select v-model="outputFormat">
-							<option value="jpeg">JPEG (quality 95%)</option>
+							<option value="jpeg">JPEG (max quality)</option>
 							<option value="png">PNG (lossless)</option>
 							<option value="webp">WebP (quality 95%)</option>
 						</o-select>
@@ -181,9 +181,9 @@
 								>Prefer top-left watermark crop</span
 							>
 							<span class="description"
-								>Crops only the bottom-right corner (3%). When
-								off, the screenshot is cropped (6% total)
-								equally from all sides for a centered result.</span
+								>Crops only the bottom-right corner (3%). When off, the
+								screenshot is cropped (6% total) equally from all sides
+								for a centered result.</span
 							>
 						</label>
 					</o-field>
@@ -258,6 +258,27 @@
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
+							id="settings-native-capture-switch"
+							v-model="nativeCapture"
+							:rounded="false"
+							:disabled="!nativeCaptureSupported"
+							class="settings-light-switch"
+						/>
+						<label
+							for="settings-native-capture-switch"
+							class="settings-toggle-row__text"
+						>
+							<span class="label" style="margin-bottom: 0px"
+								>High-Fidelity Capture (WGC)</span
+							>
+							<span class="description">
+								{{ nativeCaptureDescription }}
+							</span>
+						</label>
+					</o-field>
+					<hr />
+					<o-field class="settings-toggle-row">
+						<o-switch
 							id="settings-reshade-switch"
 							v-model="reshade"
 							:rounded="false"
@@ -280,7 +301,12 @@
 					<o-field label="Reshade INI" />
 
 					<o-field addons class="settings-inline-field">
-						<o-input expanded disabled type="text" :model-value="reshadeFile" />
+						<o-input
+							expanded
+							disabled
+							type="text"
+							:model-value="reshadeFile"
+						/>
 						<p class="control">
 							<o-button
 								:disabled="!reshade"
@@ -300,7 +326,10 @@
 <script lang="ts">
 import config from '../../utilities/config';
 import { version } from '../../../package.json';
-import { FILENAME_FIELDS, DEFAULT_FORMAT } from '../../utilities/filenameFormat';
+import {
+	FILENAME_FIELDS,
+	DEFAULT_FORMAT,
+} from '../../utilities/filenameFormat';
 const { ipcRenderer, shell } = require('electron');
 const path = require('path');
 
@@ -320,6 +349,10 @@ export default {
 			toolVersion: version,
 			reshade: config.get('reshade'),
 			reshadeFile: config.get('reshadeFile'),
+			nativeCapture: config.get('nativeCapture'),
+			// Set from the main process in created(); assume supported until told
+			// otherwise so the toggle isn't briefly disabled on a capable machine.
+			nativeCaptureSupported: true,
 			customFilenameFormat: config.get('customFilenameFormat'),
 			filenameFormat: config.get('filenameFormat'),
 			outputFormat: config.get('outputFormat'),
@@ -367,6 +400,12 @@ export default {
 				return acc;
 			}, {});
 		},
+		nativeCaptureDescription() {
+			if (!this.nativeCaptureSupported) {
+				return 'Requires Windows 10 (1903) or newer — unavailable on this system.';
+			}
+			return 'Capture true un-subsampled color via Windows.Graphics.Capture instead of the default pipeline (which subsamples color). Falls back automatically if a capture fails.';
+		},
 	},
 	watch: {
 		outputFormat() {
@@ -399,6 +438,9 @@ export default {
 		reshade() {
 			config.set('reshade', this.reshade);
 		},
+		nativeCapture() {
+			config.set('nativeCapture', this.nativeCapture);
+		},
 		manualWindowRestore() {
 			config.set('manualWindowRestore', this.manualWindowRestore);
 		},
@@ -410,6 +452,16 @@ export default {
 		},
 	},
 	created() {
+		// Reflect whether the WGC native-capture path actually loaded on this
+		// machine (addon present + Win10 1903+). Fail-open to supported if the
+		// query is unavailable for any reason.
+		try {
+			this.nativeCaptureSupported =
+				ipcRenderer.sendSync('native-capture-available') !== false;
+		} catch {
+			this.nativeCaptureSupported = true;
+		}
+
 		ipcRenderer.send('request-iracing-status', '');
 
 		ipcRenderer.on('iracing-status', (event, arg) => {

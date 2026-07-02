@@ -64,6 +64,10 @@ const schema = {
 	},
 	outputFormat: {
 		type: 'string',
+		// The desktop-capture pipeline delivers chroma-subsampled (I420 4:2:0)
+		// frames, so no encode format is truly pixel-accurate. JPEG at max quality
+		// is the default (small files); PNG (lossless container) and WebP are
+		// options in Settings.
 		default: 'jpeg',
 		enum: ['jpeg', 'png', 'webp'],
 	},
@@ -106,6 +110,16 @@ const schema = {
 	reshadeFile: {
 		type: 'string',
 		default: 'C:\\Program Files (x86)\\iRacing\\ReShade.ini',
+	},
+	// Windows.Graphics.Capture path (#11): grabs true un-subsampled 8-bit RGBA
+	// via the native addon instead of the desktopCapturer/getUserMedia pipeline
+	// (which chroma-subsamples to I420 4:2:0). On by default (hardware-validated)
+	// — transparently falls back to getUserMedia when WGC is unavailable (missing
+	// addon / pre-1903 Windows) or on any capture fault, so enabling it by default
+	// never regresses a machine that can't use it.
+	nativeCapture: {
+		type: 'boolean',
+		default: true,
 	},
 };
 
