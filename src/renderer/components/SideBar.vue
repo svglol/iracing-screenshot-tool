@@ -41,11 +41,13 @@
 		</p>
 
 		<!-- #10: exclusive-fullscreen warning. iRacing in exclusive fullscreen
-		     makes every capture come back black (DWM bypass). Shown regardless of
-		     disableTooltips — a hard-failure safety signal, like the VRAM banner —
-		     and only when the state can be attributed to iRacing (foreground). -->
+		     makes the desktopCapturer grab come back black (DWM bypass). Shown
+		     regardless of disableTooltips — a hard-failure safety signal, like the
+		     VRAM banner — and only when the state is attributed to iRacing
+		     (foreground). Hidden in ReShade mode: ReShade captures the back buffer
+		     via injection, so it works in exclusive fullscreen (no black capture). -->
 		<o-notification
-			v-if="exclusiveFullscreen"
+			v-if="exclusiveFullscreen && !reshade"
 			class="sidebar-tooltip"
 			variant="danger"
 			aria-close-label="Close message"
@@ -477,6 +479,9 @@ export default {
 
 		ipcRenderer.on('iracing-disconnected', (event, arg) => {
 			this.iracingOpen = false;
+			// Clear the fullscreen warning at once — iRacing is gone, so any
+			// "exclusive fullscreen" banner is now stale (don't wait for the poll).
+			this.exclusiveFullscreen = false;
 		});
 
 		ipcRenderer.on('screenshot-response', (event, arg) => {

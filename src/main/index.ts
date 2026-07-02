@@ -292,16 +292,24 @@ function writeScreenshotErrorLog(payload: {
 	return logPath;
 }
 
-// #10: shown when iRacing is in exclusive fullscreen — the one deterministic,
-// actionable cause of a black capture. Used both by the pre-capture early-exit
-// and to enrich the worker's generic black-frame error.
+// #10: shown by the pre-capture early-exit, where we KNOW (state 3 + attributed)
+// iRacing is the exclusive-fullscreen app — the one deterministic, actionable
+// cause of a black capture.
 const EXCLUSIVE_FULLSCREEN_MESSAGE =
 	'iRacing is in exclusive fullscreen, so the screenshot would be black. In iRacing, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.';
 
+// Softer variant for the black-frame backstop. Enrichment below only runs when
+// the pre-flight saw state 3 but could NOT attribute it to iRacing (an
+// attributed hit would have early-exited), and SHQueryUserNotificationState is
+// session-global — so some OTHER app could be the fullscreen one. Word it as a
+// likely cause, not a fact.
+const EXCLUSIVE_FULLSCREEN_MESSAGE_UNATTRIBUTED =
+	'An application is running in exclusive fullscreen, which produces a black capture. If iRacing is in Full Screen, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.';
+
 // If a worker error is the generic "captured frame is black" AND the last
-// pre-flight saw exclusive fullscreen (state 3, regardless of attribution),
-// rewrite it to the specific, actionable guidance. Covers the case the pre-
-// capture early-exit missed because iRacing wasn't the foreground window.
+// pre-flight saw exclusive fullscreen (state 3), rewrite it to the actionable
+// guidance. This path is only reached when attribution failed (an attributed hit
+// early-exits before capture), so it uses the softer, non-committal message.
 function enrichBlackFrameError(data: unknown): unknown {
 	if (lastCaptureFullscreenState !== QUNS_RUNNING_D3D_FULL_SCREEN) {
 		return data;
@@ -311,7 +319,10 @@ function enrichBlackFrameError(data: unknown): unknown {
 			? (data as { message?: unknown }).message
 			: null;
 	if (typeof message === 'string' && message.toLowerCase().includes('black')) {
-		return { ...(data as object), message: EXCLUSIVE_FULLSCREEN_MESSAGE };
+		return {
+			...(data as object),
+			message: EXCLUSIVE_FULLSCREEN_MESSAGE_UNATTRIBUTED,
+		};
 	}
 	return data;
 }
@@ -804,24 +815,35 @@ app.on('ready', async () => {
 			return;
 		}
 
-		// #10: exclusive-fullscreen pre-flight. iRacing in legacy exclusive
-		// fullscreen bypasses DWM, so the resize (SetWindowPos) is a no-op and the
-		// capture comes back black after the full ~8s watchdog burn. Sample the
-		// state HERE — before we raise iRacing / steal focus (so GetForegroundWindow
-		// attribution is trustworthy) and before takingScreenshot is set (so no
-		// restore is needed on the early exit). Skip the doomed attempt ONLY when
-		// confident (state 3 AND attributed to iRacing); otherwise proceed and let
-		// the black-frame detector — enriched via the stashed state — be the
-		// backstop. Fails open: null (native off / iRacing closed) just proceeds.
-		const fullscreen = getIracingExclusiveFullscreenState();
-		lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
-		if (fullscreen && fullscreen.exclusiveFullscreen) {
-			log.info('Screenshot rejected', { reason: 'exclusive-fullscreen' });
-			reportScreenshotError(EXCLUSIVE_FULLSCREEN_MESSAGE, {
-				context: 'resize-screenshot:exclusive-fullscreen',
-				meta: { request: data },
-			});
-			return;
+		// #10: exclusive-fullscreen pre-flight — ONLY for the desktopCapturer path.
+		// iRacing in legacy exclusive fullscreen bypasses DWM, so the resize
+		// (SetWindowPos) is a no-op and the desktopCapturer grab comes back black
+		// after the full ~8s watchdog burn. ReShade does NOT have this failure: it
+		// hooks the swapchain and captures the back buffer via injection, so it
+		// works in exclusive fullscreen — blocking it would deny a working capture
+		// (the design's cardinal harm), so we skip the pre-flight entirely when
+		// ReShade mode is on. Sample HERE — before we raise iRacing / steal focus
+		// (so GetForegroundWindow attribution is trustworthy) and before
+		// takingScreenshot is set (so no restore is needed on the early exit). Skip
+		// the doomed attempt ONLY when confident (state 3 AND attributed);
+		// otherwise proceed and let the black-frame detector — enriched via the
+		// stashed state — be the backstop. Fails open: null (native off / iRacing
+		// closed) just proceeds.
+		if (!config.get('reshade')) {
+			const fullscreen = getIracingExclusiveFullscreenState();
+			lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
+			if (fullscreen && fullscreen.exclusiveFullscreen) {
+				log.info('Screenshot rejected', {
+					reason: 'exclusive-fullscreen',
+				});
+				reportScreenshotError(EXCLUSIVE_FULLSCREEN_MESSAGE, {
+					context: 'resize-screenshot:exclusive-fullscreen',
+					meta: { request: data },
+				});
+				return;
+			}
+		} else {
+			lastCaptureFullscreenState = null;
 		}
 
 		// Defensive clamp: the sidebar's o-input max is only a hint and the
