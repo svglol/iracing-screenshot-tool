@@ -486,8 +486,14 @@ export default {
 
 		ipcRenderer.on('screenshot-response', (event, arg) => {
 			this.restoreCursorAfterCapture();
+			// Always clear the capture latch on a completion reply. If we only
+			// cleared it inside the fs.existsSync() branch, a 'saved' response
+			// whose file can't be found (moved/renamed/AV-quarantined between the
+			// write and this check) would leave takingScreenshot stuck true and
+			// the capture button permanently disabled. File existence only gates
+			// the success toast, never the latch.
+			this.takingScreenshot = false;
 			if (fs.existsSync(arg)) {
-				this.takingScreenshot = false;
 				const file = arg
 					.split(/[\\/]/)
 					.pop()
