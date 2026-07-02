@@ -41,11 +41,14 @@
 		</p>
 
 		<!-- #10: exclusive-fullscreen warning. iRacing in exclusive fullscreen
-		     makes the desktopCapturer grab come back black (DWM bypass). Shown
-		     regardless of disableTooltips — a hard-failure safety signal, like the
-		     VRAM banner — and only when the state is attributed to iRacing
-		     (foreground). Hidden in ReShade mode: ReShade captures the back buffer
-		     via injection, so it works in exclusive fullscreen (no black capture). -->
+		     makes any DWM-based grab come back black (DWM bypass) — this applies to
+		     BOTH the desktopCapturer path and the #11 WGC native path (WGC is also a
+		     DWM-composition capture and can't capture true exclusive fullscreen), so
+		     the warning must show in either mode. Shown regardless of disableTooltips
+		     — a hard-failure safety signal, like the VRAM banner — and only when the
+		     state is attributed to iRacing (foreground). Hidden ONLY in ReShade mode:
+		     ReShade captures the back buffer via injection, so it works in exclusive
+		     fullscreen (no black capture). -->
 		<o-notification
 			v-if="exclusiveFullscreen && !reshade"
 			class="sidebar-tooltip"

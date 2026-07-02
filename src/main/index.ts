@@ -847,14 +847,18 @@ app.on('ready', async () => {
 			return;
 		}
 
-		// #10: exclusive-fullscreen pre-flight — ONLY for the desktopCapturer path.
+		// #10: exclusive-fullscreen pre-flight for every DWM-based capture path.
 		// iRacing in legacy exclusive fullscreen bypasses DWM, so the resize
-		// (SetWindowPos) is a no-op and the desktopCapturer grab comes back black
-		// after the full ~8s watchdog burn. ReShade does NOT have this failure: it
-		// hooks the swapchain and captures the back buffer via injection, so it
-		// works in exclusive fullscreen — blocking it would deny a working capture
-		// (the design's cardinal harm), so we skip the pre-flight entirely when
-		// ReShade mode is on. Sample HERE — before we raise iRacing / steal focus
+		// (SetWindowPos) is a no-op and any composition-based grab comes back black
+		// after the full ~8s watchdog burn. This covers BOTH the desktopCapturer
+		// path AND the #11 WGC native path: WGC's CreateForWindow is itself a DWM-
+		// composition capture (Microsoft docs confirm it can't capture true
+		// exclusive fullscreen), so it hits the identical wall — do NOT exempt it.
+		// Only ReShade escapes: it hooks the swapchain and captures the back buffer
+		// via injection, so it works in exclusive fullscreen — blocking that would
+		// deny a working capture (the design's cardinal harm), so we skip the
+		// pre-flight entirely ONLY in ReShade mode. Sample HERE — before we raise
+		// iRacing / steal focus
 		// (so GetForegroundWindow attribution is trustworthy) and before
 		// takingScreenshot is set (so no restore is needed on the early exit). Skip
 		// the doomed attempt ONLY when confident (state 3 AND attributed);
