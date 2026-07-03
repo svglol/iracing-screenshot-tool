@@ -114,6 +114,22 @@ export function isWgcAvailable(): boolean {
 	return getWgcApi() !== null;
 }
 
+// #11 diagnostics (observability-only): the reason the LAST
+// captureIracingWindowNative call returned null. Lets the failure-time diagnostics
+// distinguish the WGC fallback triggers (H1 timeout/no-frame vs H2 D3D/VRAM alloc
+// fail) instead of collapsing them all to 'fallback'. Holds the EXACT underlying
+// reason: 'wgc-unavailable ...' when the addon/OS gate is off, or the native error
+// message thrown by captureWindow ("WGC capture timed out" / "WGC capture produced
+// no frame" / "WGC capture failed: {e}" / "WGC worker thread spawn failed").
+// Cleared to null on a successful grab. Never influences capture flow.
+let lastNativeFailureReason: string | null = null;
+
+// The reason the most recent native grab returned null (null if the last grab
+// succeeded or none has run). Read by the main-process failure diagnostics.
+export function getLastNativeFailureReason(): string | null {
+	return lastNativeFailureReason;
+}
+
 // Capture one true-RGBA frame of the given window handle, or null on any failure.
 //
 // A grab failure (bad HWND, no frame, timeout) is treated as TRANSIENT: return
@@ -127,11 +143,19 @@ export function captureIracingWindowNative(
 ): WgcCaptureResult | null {
 	const api = getWgcApi();
 	if (!api) {
+		lastNativeFailureReason =
+			'wgc-unavailable (missing addon / unsupported OS)';
 		return null;
 	}
 	try {
-		return api.captureWindow(hwnd, timeoutMs);
+		const result = api.captureWindow(hwnd, timeoutMs);
+		lastNativeFailureReason = null;
+		return result;
 	} catch (error) {
+		// Surface the exact native message so diagnostics can tell timeout from
+		// alloc-fail; the observed behaviour (fall back to getUserMedia) is unchanged.
+		lastNativeFailureReason =
+			(error as Error)?.message || String(error) || 'unknown native error';
 		console.warn(
 			'[wgc-capture] captureWindow failed; falling back to getUserMedia',
 			error

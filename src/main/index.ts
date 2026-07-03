@@ -32,7 +32,11 @@ import {
 	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
-import { captureIracingWindowNative, isWgcAvailable } from './wgc-capture';
+import {
+	captureIracingWindowNative,
+	getLastNativeFailureReason,
+	isWgcAvailable,
+} from './wgc-capture';
 import sharp from 'sharp';
 import { DEFAULT_FORMAT } from '../utilities/filenameFormat';
 import {
@@ -113,6 +117,39 @@ const WGC_SETTLE_MS = 250;
 const WGC_TIMEOUT_MS = 1500;
 const WGC_BLACK_FRAME_MAX_BRIGHTNESS = 24;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
+
+// #11 diagnostics (observability-only): a snapshot of the most recent WGC capture
+// attempt, surfaced in the failure-time diagnostics so a user log can distinguish
+// the WGC fallback triggers (H1 timeout/no-frame vs H2 D3D/VRAM alloc fail) and
+// prove whether WGC was engaged at all. Written by captureAndSaveViaWgc; read by
+// buildMainScreenshotDiagnostics. This mirrors state — it NEVER influences the
+// capture/fallback flow, timeouts, or the display path.
+interface WgcAttemptDiagnostics {
+	// 'not-attempted' = WGC was not selected this capture (nativeCapture off or
+	// isWgcAvailable() false); 'saved'/'fallback'/'aborted' mirror the WGC outcome.
+	outcome: 'not-attempted' | 'saved' | 'fallback' | 'aborted';
+	// Exact fallback reason: the native error string (from getLastNativeFailureReason),
+	// 'black-frame', or 'pre-save-throw: ...'. null when the attempt did not fall back.
+	fallbackReason: string | null;
+	// Wall time of the native grab call in ms (null if the grab wasn't reached).
+	grabElapsedMs: number | null;
+	// Dimensions of the frame WGC returned (null if no frame arrived).
+	frameDims: { width: number; height: number } | null;
+}
+let lastWgcAttempt: WgcAttemptDiagnostics = {
+	outcome: 'not-attempted',
+	fallbackReason: null,
+	grabElapsedMs: null,
+	frameDims: null,
+};
+function resetWgcAttemptDiagnostics(): void {
+	lastWgcAttempt = {
+		outcome: 'not-attempted',
+		fallbackReason: null,
+		grabElapsedMs: null,
+		frameDims: null,
+	};
+}
 
 // The subset of the resize-screenshot request payload the capture paths read.
 // The IPC handler itself keeps `data: any` (it mutates/clamps fields), but the
@@ -203,6 +240,47 @@ function getConfigDiagnosticValue(key: string): unknown {
 	}
 }
 
+// #11 diagnostics (observability-only): which capture backend was selected/attempted
+// and, on a WGC fallback, exactly WHY — so a user's failure log distinguishes H1
+// (WGC timeout / no-frame) from H2 (D3D/VRAM alloc fail) and proves whether WGC was
+// even engaged. Every field fails open: an unreadable value logs null, never throws.
+function getCaptureBackendDiagnostics(): Record<string, unknown> {
+	let wgcAvailable: boolean | null;
+	try {
+		wgcAvailable = isWgcAvailable();
+	} catch {
+		wgcAvailable = null;
+	}
+
+	// Optional VRAM snapshot to test H2. getVramInfo is fully fail-open (returns a
+	// 'fallback'-classed value on any failure) but wrap it anyway so the diagnostics
+	// path can never be taken down by an FFI hiccup.
+	let vram: unknown = null;
+	try {
+		const info = getVramInfo();
+		vram = {
+			totalBytes: info.totalBytes,
+			usedBytes: info.usedBytes,
+			source: info.source,
+			adapterName: info.adapterName,
+		};
+	} catch {
+		vram = null;
+	}
+
+	return {
+		// Why WGC was / wasn't engaged.
+		nativeCapture: getConfigDiagnosticValue('nativeCapture'),
+		wgcAvailable,
+		// The most recent WGC attempt for this capture request.
+		wgcOutcome: lastWgcAttempt.outcome,
+		wgcFallbackReason: lastWgcAttempt.fallbackReason,
+		wgcGrabElapsedMs: lastWgcAttempt.grabElapsedMs,
+		wgcFrameDims: lastWgcAttempt.frameDims,
+		vram,
+	};
+}
+
 function buildMainScreenshotDiagnostics() {
 	const cpus = os.cpus() || [];
 	const displays = screen.getAllDisplays().map(serializeDisplay);
@@ -261,6 +339,7 @@ function buildMainScreenshotDiagnostics() {
 				sessionInfoReady: Boolean(iracing.sessionInfo),
 				window: getIracingWindowDetails() || null,
 			},
+			captureBackend: getCaptureBackendDiagnostics(),
 		},
 	};
 }
@@ -822,6 +901,11 @@ app.on('ready', async () => {
 			return;
 		}
 
+		// #11 diagnostics: clear the previous capture's WGC snapshot so the
+		// failure-time diagnostics reflect THIS request. Stays 'not-attempted' unless
+		// the WGC path runs and overwrites it. Observability-only.
+		resetWgcAttemptDiagnostics();
+
 		if (!iracing.telemetry) {
 			log.info('Screenshot rejected', { reason: 'no-telemetry' });
 			reportScreenshotError('iRacing telemetry is not available', {
@@ -1328,6 +1412,7 @@ async function captureAndSaveViaWgc(
 	// (takingScreenshot=false) and reported. Don't grab a torn-down window or fall
 	// back — just bail.
 	if (!takingScreenshot) {
+		lastWgcAttempt.outcome = 'aborted';
 		return 'aborted';
 	}
 
@@ -1335,11 +1420,25 @@ async function captureAndSaveViaWgc(
 	// main thread until the first frame arrives (typically a few ms; bounded by
 	// WGC_TIMEOUT_MS on failure). Acceptable during a capture, when the main
 	// process is otherwise idle; a future async addon would remove even this.
+	const grabStart = Date.now();
 	const frame = captureIracingWindowNative(id, WGC_TIMEOUT_MS);
+	// #11 diagnostics (observability-only): record grab timing + which frame (if any)
+	// WGC returned. grabElapsedMs ≈ WGC_TIMEOUT_MS+500 points at H1 (timeout); a small
+	// value with a 'WGC capture failed' reason points at H2 (alloc fail).
+	lastWgcAttempt.grabElapsedMs = Date.now() - grabStart;
+	lastWgcAttempt.frameDims =
+		frame && frame.width > 0 && frame.height > 0
+			? { width: frame.width, height: frame.height }
+			: null;
 	if (!frame || !frame.data || frame.width < 1 || frame.height < 1) {
+		lastWgcAttempt.outcome = 'fallback';
+		lastWgcAttempt.fallbackReason =
+			getLastNativeFailureReason() || 'no-frame (native returned null)';
 		return 'fallback';
 	}
 	if (isRgbaBufferBlack(frame.data, frame.width, frame.height)) {
+		lastWgcAttempt.outcome = 'fallback';
+		lastWgcAttempt.fallbackReason = 'black-frame';
 		log.info('WGC frame was black — falling back to getUserMedia');
 		return 'fallback';
 	}
@@ -1447,6 +1546,7 @@ async function captureAndSaveViaWgc(
 			mainWindow.webContents.send('screenshot-response', savedPath);
 		}
 		restoreScreenshotState();
+		lastWgcAttempt.outcome = 'saved';
 		return 'saved';
 	} catch (error) {
 		if (committed) {
@@ -1457,10 +1557,15 @@ async function captureAndSaveViaWgc(
 				error: (error as Error).message || String(error),
 			});
 			restoreScreenshotState();
+			lastWgcAttempt.outcome = 'saved';
 			return 'saved';
 		}
 		// Grab / crop / primary write failed with nothing written — safe to
 		// re-capture via the getUserMedia path.
+		lastWgcAttempt.outcome = 'fallback';
+		lastWgcAttempt.fallbackReason = `pre-save-throw: ${
+			(error as Error).message || String(error)
+		}`;
 		log.info(
 			'WGC capture failed before save — falling back to getUserMedia',
 			{
