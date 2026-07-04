@@ -9,10 +9,6 @@ import {
 	normalizeCaptureTarget,
 	resolveDisplayCaptureRect,
 } from '../../utilities/desktop-capture';
-import {
-	sanitizeFilePart,
-	buildScreenshotFileKey,
-} from '../../utilities/screenshot-name';
 import { DEFAULT_FORMAT } from '../../utilities/filenameFormat';
 import {
 	buildUniqueScreenshotName,

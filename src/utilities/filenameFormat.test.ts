@@ -94,4 +94,75 @@ describe('resolveFilenameFormat', () => {
 			).toBe('Track_1');
 		});
 	});
+
+	describe('hardening (cq-utilities#1/#2/#3)', () => {
+		const trackSession = (name: string) => ({
+			data: {
+				WeekendInfo: { TrackDisplayShortName: name },
+				DriverInfo: { DriverCarIdx: 0, Drivers: [] },
+			},
+		});
+
+		it('strips ASCII control chars / NUL / tab / newline', () => {
+			expect(
+				resolveFilenameFormat('{track}', trackSession('M\x00o\x1Fn\tz\na'), {
+					values: {},
+				})
+			).toBe('Monza');
+		});
+
+		it('prefixes Windows reserved device names', () => {
+			expect(
+				resolveFilenameFormat('{track}', trackSession('CON'), { values: {} })
+			).toBe('_CON');
+			expect(
+				resolveFilenameFormat('{track}', trackSession('NUL'), { values: {} })
+			).toBe('_NUL');
+		});
+
+		it('leaves reserved-name lookalikes alone (CONWAY, CON-{counter})', () => {
+			expect(
+				resolveFilenameFormat('{track}', trackSession('CONWAY'), {
+					values: {},
+				})
+			).toBe('CONWAY');
+			expect(
+				resolveFilenameFormat('{track}-{counter}', trackSession('CON'), {
+					values: {},
+				})
+			).toBe('CON-{counter}');
+		});
+
+		it('falls back when a counterless format resolves empty', () => {
+			// {driver} with no drivers → '' → no alnum, no counter → FALLBACK_FORMAT.
+			expect(
+				resolveFilenameFormat('{driver}', trackSession('Monza'), {
+					values: {},
+				})
+			).toBe(FALLBACK_FORMAT);
+		});
+
+		it('preserves an explicit bare {counter} format (no fallback)', () => {
+			expect(
+				resolveFilenameFormat('{counter}', trackSession('Monza'), {
+					values: {},
+				})
+			).toBe('{counter}');
+		});
+
+		it('preserves a non-Latin (CJK) name instead of falling back', () => {
+			const cjk = {
+				data: {
+					WeekendInfo: {},
+					DriverInfo: {
+						DriverCarIdx: 0,
+						Drivers: [{ CarIdx: 0, UserName: '鈴鹿太郎' }],
+					},
+				},
+			};
+			expect(
+				resolveFilenameFormat('{driver}', cjk, { values: { CamCarIdx: 0 } })
+			).toBe('鈴鹿太郎');
+		});
+	});
 });

@@ -47,13 +47,17 @@ export function buildUniqueScreenshotName(opts: {
 	const { formatString, sessionInfo, telemetry, exists } = opts;
 	const resolved = resolveFilenameFormat(formatString, sessionInfo, telemetry);
 
-	// {counter}: first non-colliding integer starting at 0.
+	// {counter}: first non-colliding integer starting at 0. Use split/join so EVERY
+	// {counter} occurrence is expanded — String.replace hits only the first, leaving
+	// a literal '{counter}' behind in a two-counter format (cq-utilities#4).
 	if (resolved.includes('{counter}')) {
+		const fillCounter = (n: number): string =>
+			resolved.split('{counter}').join(String(n));
 		let count = 0;
-		let name = resolved.replace('{counter}', String(count));
+		let name = fillCounter(count);
 		while (exists(name)) {
 			count += 1;
-			name = resolved.replace('{counter}', String(count));
+			name = fillCounter(count);
 		}
 		return name;
 	}
