@@ -85,6 +85,11 @@ let preResolvedSourceId = null;
 // the main-side watchdog fired). The in-flight capture checks this at each await
 // boundary and bails silently — main owns the recovery.
 let captureAborted = false;
+// True from the moment a screenshot-request begins processing until the capture
+// settles (cleared via fullscreenScreenshot().finally). A stray/duplicate request
+// while one is in flight is rejected so it can't overwrite the active capture's
+// shared module state and defeat its abort (cq-renderer-capture-views#3).
+let captureInFlight = false;
 let targetWidth = null;
 let targetHeight = null;
 // Window dimensions = what SetWindowPos actually resized iRacing to, which is
@@ -395,6 +400,13 @@ async function saveReshadeImage(sourceFile) {
 }
 
 async function saveImage(blob, thumbBlob) {
+	// Late-abort guard: main already restored the window + reported the error, so
+	// writing the file here would emit screenshot-finished/response and surface a
+	// "ghost" screenshot in the gallery (cq-renderer-capture-views#1).
+	if (captureAborted) {
+		log.info('Capture aborted before save — skipping delivery');
+		return;
+	}
 	try {
 		console.time('Save Image');
 		ensureDirectory(getScreenshotDir());
@@ -544,6 +556,12 @@ async function fullscreenScreenshot(callback) {
 			outputHeight
 		);
 
+		// A slow high-res encode (convertToBlob/renderThumbnailBlob above) can span
+		// a late abort — re-check before handing the frame off to saveImage.
+		if (captureAborted) {
+			log.info('Capture aborted after encode — skipping delivery');
+			return;
+		}
 		callback(blob, thumbBlob);
 	};
 
@@ -839,6 +857,18 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export default {
 	mounted() {
 		ipcRenderer.on('screenshot-request', (event, input) => {
+			// Reject a duplicate/stray request while a capture is active — otherwise
+			// it overwrites the in-flight capture's shared module state (windowID,
+			// crop, captureBounds, targetWidth/Height) and resets captureAborted,
+			// corrupting the active capture and defeating its abort
+			// (cq-renderer-capture-views#3). Main's takingScreenshot latch is the
+			// primary serializer; this is the worker-side backstop.
+			if (captureInFlight) {
+				log.warn(
+					'Duplicate screenshot-request ignored — capture already in flight'
+				);
+				return;
+			}
 			console.log(
 				`Screenshot - ${input.width}x${input.height} Crop - ${input.crop} TopLeft - ${input.cropTopLeft}`
 			);
@@ -872,8 +902,15 @@ export default {
 			}
 
 			captureAborted = false;
+			// Latch in-flight AFTER the windowID early-return so a rejected request
+			// never leaves the flag stuck. fullscreenScreenshot is async and never
+			// rejects (errors are swallowed by its internal handleError), so .finally
+			// always runs and clears the latch when the capture settles.
+			captureInFlight = true;
 			fullscreenScreenshot((blob, thumbBlob) => {
 				saveImage(blob, thumbBlob);
+			}).finally(() => {
+				captureInFlight = false;
 			});
 		});
 
