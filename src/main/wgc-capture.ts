@@ -1,5 +1,8 @@
 import { app } from 'electron';
 import path from 'node:path';
+import { createLogger } from '../utilities/logger';
+
+const log = createLogger('wgc-capture');
 
 // ---------------------------------------------------------------------------
 // Windows.Graphics.Capture (WGC) native capture loader (#11)
@@ -42,6 +45,20 @@ interface WgcAddon {
 // undefined = not yet initialized; null = unavailable (fall back to getUserMedia)
 let wgcApi: WgcAddon | null | undefined;
 
+// WHY WGC is unavailable this session (obs-capture-diagnostics#2) — so the
+// failure-time diagnostics record a concrete cause instead of a bare
+// wgcAvailable:false. Set in each createWgcApi() null branch; cleared on success.
+let wgcUnavailableReason: string | null = null;
+
+// The reason WGC is unavailable, or null when it IS available. Self-initializing:
+// forces createWgcApi() to run (via getWgcApi) so the reason is populated
+// regardless of call order — the invariant "reason===null iff isWgcAvailable()"
+// then holds even if this is read before any capture.
+export function getWgcUnavailableReason(): string | null {
+	getWgcApi();
+	return wgcUnavailableReason;
+}
+
 // Resolve the prebuilt addon on disk. Packaged: app.getAppPath() is
 // .../resources/app.asar and the .node is asarUnpacked to
 // .../resources/app.asar.unpacked/native/, so swap the segment. Dev: getAppPath()
@@ -54,6 +71,7 @@ function resolveAddonPath(): string {
 
 function createWgcApi(): WgcAddon | null {
 	if (process.platform !== 'win32') {
+		wgcUnavailableReason = 'wgc-unavailable (non-Windows platform)';
 		return null;
 	}
 
@@ -65,10 +83,11 @@ function createWgcApi(): WgcAddon | null {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		addon = require(resolveAddonPath());
 	} catch (error) {
-		console.error(
-			'[wgc-capture] addon unavailable; native capture disabled',
-			error
-		);
+		const msg = (error as Error)?.message || String(error);
+		wgcUnavailableReason = 'addon missing / ABI mismatch: ' + msg;
+		log.warn('WGC addon unavailable; native capture disabled', {
+			error: msg,
+		});
 		return null;
 	}
 
@@ -77,7 +96,8 @@ function createWgcApi(): WgcAddon | null {
 		typeof addon.captureWindow !== 'function' ||
 		typeof addon.isSupported !== 'function'
 	) {
-		console.error('[wgc-capture] addon loaded but ABI is unexpected');
+		wgcUnavailableReason = 'addon ABI unexpected';
+		log.error('WGC addon loaded but ABI is unexpected');
 		return null;
 	}
 
@@ -86,16 +106,18 @@ function createWgcApi(): WgcAddon | null {
 	// the whole main process.
 	try {
 		if (!addon.isSupported()) {
-			console.warn(
-				'[wgc-capture] Windows.Graphics.Capture not supported on this OS'
-			);
+			wgcUnavailableReason = 'OS unsupported (needs Win10 1903+)';
+			log.warn('Windows.Graphics.Capture not supported on this OS');
 			return null;
 		}
 	} catch (error) {
-		console.error('[wgc-capture] isSupported() threw; disabling', error);
+		const msg = (error as Error)?.message || String(error);
+		wgcUnavailableReason = 'isSupported() threw: ' + msg;
+		log.error('WGC isSupported() threw; disabling', { error: msg });
 		return null;
 	}
 
+	wgcUnavailableReason = null;
 	return addon;
 }
 
@@ -156,10 +178,10 @@ export function captureIracingWindowNative(
 		// alloc-fail; the observed behaviour (fall back to getUserMedia) is unchanged.
 		lastNativeFailureReason =
 			(error as Error)?.message || String(error) || 'unknown native error';
-		console.warn(
-			'[wgc-capture] captureWindow failed; falling back to getUserMedia',
-			error
-		);
+		log.warn('WGC captureWindow failed; falling back to getUserMedia', {
+			hwnd,
+			error: (error as Error)?.message || String(error),
+		});
 		return null;
 	}
 }

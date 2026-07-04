@@ -369,10 +369,9 @@ function createNative(): VramNative | null {
 			},
 		};
 	} catch (error) {
-		console.error(
-			'[vram-utils] koffi FFI unavailable; VRAM guardrail disabled',
-			error
-		);
+		log.warn('VRAM FFI unavailable; guardrail disabled', {
+			error: (error as Error)?.message || String(error),
+		});
 		return null;
 	}
 }
@@ -387,7 +386,9 @@ export function getVramInfo(): VramInfo {
 		try {
 			cachedTotal = api ? api.readTotal() : null;
 		} catch (error) {
-			console.error('[vram-utils] total VRAM read failed', error);
+			log.warn('total VRAM read failed', {
+				error: (error as Error)?.message || String(error),
+			});
 			cachedTotal = null;
 		}
 	}
@@ -423,7 +424,9 @@ export function getVramInfo(): VramInfo {
 				}
 			}
 		} catch (error) {
-			console.error('[vram-utils] used VRAM read failed', error);
+			log.warn('used VRAM read failed', {
+				error: (error as Error)?.message || String(error),
+			});
 			usedBytes = null;
 		}
 	}

@@ -173,7 +173,20 @@ if ((process as { type?: string }).type === 'renderer') {
 	// expected when the file simply doesn't exist yet, so swallow it.
 	try {
 		configInstance = new Store({ schema });
-	} catch {
+	} catch (parseErr) {
+		// config.json is corrupt (bad JSON). Record the corruption + reset BEFORE
+		// wiping the file so this isn't silent data loss (obs-error-visibility#4).
+		// Lazy require: config.ts also loads in the renderer, so never trigger
+		// logger init() at module load — only on an actual corruption event.
+		try {
+			const { createLogger } = require('../utilities/logger');
+			createLogger('config').error(
+				'config.json corrupt; deleting and resetting to defaults',
+				{ error: (parseErr as Error)?.message || String(parseErr) }
+			);
+		} catch {
+			// Logger unavailable — proceed with the reset regardless.
+		}
 		try {
 			const { app } = require('electron');
 			fs.unlinkSync(path.join(app.getPath('userData'), 'config.json'));

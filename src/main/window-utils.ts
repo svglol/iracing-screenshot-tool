@@ -1,4 +1,7 @@
 import { spawn, spawnSync } from 'child_process';
+import { createLogger } from '../utilities/logger';
+
+const log = createLogger('window-utils');
 
 const IRACING_PROCESS_NAME = 'iRacingSim64DX11';
 const IRACING_PROCESS_EXE = `${IRACING_PROCESS_NAME}.exe`;
@@ -152,10 +155,10 @@ function getNativeApi(): NativeApi | null {
 // repeatedly throw; PowerShell takes over from here.
 function disableNative(where: string, error: unknown): void {
 	nativeApi = null;
-	console.error(
-		`[window-utils] native FFI failed in ${where}; using PowerShell fallback`,
-		error
-	);
+	log.warn('native FFI failed; using PowerShell fallback', {
+		where,
+		error: (error as Error)?.message || String(error),
+	});
 }
 
 // Shared fallback policy for the three public entry points. A window-unresolved
@@ -164,9 +167,10 @@ function disableNative(where: string, error: unknown): void {
 // is a genuine FFI fault: disable native for the session, then fall back.
 function shouldKeepNativeAfter(where: string, error: unknown): void {
 	if (error instanceof IracingWindowUnresolvedError) {
-		console.warn(
-			`[window-utils] ${where}: ${error.message}; cross-checking via PowerShell`
-		);
+		log.warn('native window unresolved; cross-checking via PowerShell', {
+			where,
+			error: error.message,
+		});
 		return;
 	}
 	disableNative(where, error);
@@ -280,6 +284,9 @@ function createNativeApi(): NativeApi | null {
 		const CloseHandle = kernel32.func(
 			'bool __stdcall CloseHandle(HANDLE hObject)'
 		);
+		const GetLastError = kernel32.func(
+			'uint32_t __stdcall GetLastError()'
+		);
 
 		// CreateToolhelp32Snapshot returns INVALID_HANDLE_VALUE ((HANDLE)-1), not
 		// NULL, on failure. koffi.address() may surface that as the unsigned or the
@@ -388,7 +395,15 @@ function createNativeApi(): NativeApi | null {
 					bottom: number;
 				};
 				if (!GetWindowRect(hwnd, rect)) {
-					return undefined;
+					// The window resolved but its rect couldn't be read — treat as
+					// "unresolved" so the caller cross-checks via PowerShell
+					// (shouldKeepNativeAfter) instead of silently reporting not-found.
+					log.warn(
+						'GetWindowRect failed on resolved iRacing window'
+					);
+					throw new IracingWindowUnresolvedError(
+						'GetWindowRect failed on resolved iRacing window'
+					);
 				}
 				return {
 					handle: formatWindowHandle(koffi.address(hwnd)),
@@ -418,7 +433,29 @@ function createNativeApi(): NativeApi | null {
 					// back. SW_RESTORE clears both before we size it for capture.
 					ShowWindow(hwnd, SW_RESTORE);
 				}
-				SetWindowPos(hwnd, insertAfter, left, top, width, height, flags);
+				const ok = SetWindowPos(
+					hwnd,
+					insertAfter,
+					left,
+					top,
+					width,
+					height,
+					flags
+				);
+				if (!ok) {
+					// Observability-only: a failed pre-capture resize (stale HWND,
+					// compositor-rejected geometry) otherwise vanished silently.
+					// lastError is best-effort — koffi may not preserve GetLastError
+					// across the call, so treat 0 as 'unknown'.
+					log.warn('SetWindowPos failed', {
+						raise,
+						width,
+						height,
+						left,
+						top,
+						lastError: GetLastError() >>> 0,
+					});
+				}
 				if (raise) {
 					// Only pre-capture forces the window frontmost; the restore path
 					// deliberately does not steal focus back.
@@ -457,10 +494,9 @@ function createNativeApi(): NativeApi | null {
 			},
 		};
 	} catch (error) {
-		console.error(
-			'[window-utils] koffi FFI unavailable; using PowerShell fallback',
-			error
-		);
+		log.warn('koffi FFI unavailable; using PowerShell fallback', {
+			error: (error as Error)?.message || String(error),
+		});
 		return null;
 	}
 }
@@ -649,7 +685,9 @@ $rect = New-Object Win32Rect+RECT
 
 	if (result.status !== 0) {
 		if (result.stderr) {
-			console.error(result.stderr.trim());
+			log.warn('PowerShell window query returned stderr', {
+				stderr: result.stderr.trim(),
+			});
 		}
 
 		return undefined;
@@ -675,7 +713,9 @@ $rect = New-Object Win32Rect+RECT
 			height: Number(parsed.height) || 0,
 		};
 	} catch (error) {
-		console.error(error);
+		log.warn('PowerShell window query JSON parse failed', {
+			error: (error as Error)?.message || String(error),
+		});
 		return undefined;
 	}
 }
@@ -727,7 +767,9 @@ Write-Output ([int64]$window)
 
 	if (result.status !== 0) {
 		if (result.stderr) {
-			console.error(result.stderr.trim());
+			log.warn('PowerShell window query returned stderr', {
+				stderr: result.stderr.trim(),
+			});
 		}
 
 		return undefined;
@@ -817,13 +859,17 @@ Write-Output ([int64]$window)
 		// try/catch — a hard crash in the very safety net we fall back to. Treat
 		// it as "window not found" instead.
 		child.on('error', (error: Error) => {
-			console.error(error);
+			log.error('PowerShell fallback spawn failed', {
+				error: error.message || String(error),
+			});
 			resolve(undefined);
 		});
 		child.on('close', (code: number | null) => {
 			if (code !== 0) {
 				if (stderr.trim()) {
-					console.error(stderr.trim());
+					log.warn('PowerShell fallback returned stderr', {
+						stderr: stderr.trim(),
+					});
 				}
 				resolve(undefined);
 				return;

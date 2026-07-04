@@ -35,6 +35,7 @@ import { getVramInfo } from './vram-utils';
 import {
 	captureIracingWindowNative,
 	getLastNativeFailureReason,
+	getWgcUnavailableReason,
 	isWgcAvailable,
 } from './wgc-capture';
 import sharp from 'sharp';
@@ -318,6 +319,15 @@ function getCaptureBackendDiagnostics(): Record<string, unknown> {
 		// Why WGC was / wasn't engaged.
 		nativeCapture: getConfigDiagnosticValue('nativeCapture'),
 		wgcAvailable,
+		// The concrete reason WGC is unavailable (null when available), so a bare
+		// wgcAvailable:false is no longer a dead end (obs-capture-diagnostics#2).
+		wgcUnavailableReason: (() => {
+			try {
+				return getWgcUnavailableReason();
+			} catch {
+				return null;
+			}
+		})(),
 		// The most recent WGC attempt for this capture request.
 		wgcOutcome: lastWgcAttempt.outcome,
 		wgcFallbackReason: lastWgcAttempt.fallbackReason,
@@ -1934,7 +1944,10 @@ async function listReshadeScreenshotFiles(
 				size: stats.size,
 			});
 		} catch (error) {
-			console.log(error);
+			log.warn('ReShade screenshot stat failed', {
+				fullPath,
+				error: (error as Error)?.message || String(error),
+			});
 		}
 	}
 

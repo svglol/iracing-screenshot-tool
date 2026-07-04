@@ -1,6 +1,9 @@
 import * as path from 'path';
 import * as os from 'os';
 import { normalizeCaptureBounds } from '../utilities/desktop-capture';
+import { createLogger } from '../utilities/logger';
+
+const log = createLogger('main-utils');
 
 interface Bounds {
 	x: number;
@@ -332,9 +335,10 @@ export function getReshadeScreenshotFolder(
 		remapForeignUserProfileFolder(resolvedFolder);
 
 	if (remappedFrom) {
-		console.log(
-			`ReShade screenshot folder remapped from "${remappedFrom}" to "${folder}"`
-		);
+		log.info('ReShade screenshot folder remapped', {
+			from: remappedFrom,
+			to: folder,
+		});
 	}
 
 	return {
