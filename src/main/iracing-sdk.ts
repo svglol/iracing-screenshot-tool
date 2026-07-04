@@ -21,6 +21,10 @@ class IRacingBridge extends EventEmitter {
 	sessionInfo: SessionInfo | null;
 	Consts: { CameraState: any };
 	camControls: { setState: (state: number) => void };
+	// Latched true once telemetry first arrives on a connection, cleared on
+	// disconnect — so the 'telemetry first available' edge logs once per connect
+	// (obs-lifecycle-telemetry#1), never on every 16ms frame.
+	_hadTelemetry: boolean;
 
 	constructor() {
 		super();
@@ -30,6 +34,7 @@ class IRacingBridge extends EventEmitter {
 		this.loopActive = false;
 		this.telemetry = null;
 		this.sessionInfo = null;
+		this._hadTelemetry = false;
 		this.Consts = { CameraState };
 		this.camControls = {
 			setState: (state: number) => this.sdk.broadcastUnsafe(2, state, 0, 0),
@@ -64,8 +69,12 @@ class IRacingBridge extends EventEmitter {
 							this.connected = false;
 							this.telemetry = null;
 							this.sessionInfo = null;
+							this._hadTelemetry = false;
 							this.sdk.stopSDK();
-							log.info('iRacing disconnected');
+							// Low-level SDK teardown record; the app-facing 'iRacing
+							// disconnected' transition (with midCapture context) is logged
+							// by the index.ts iracing.on('Disconnected') handler.
+							log.info('SDK stopSDK');
 							this.emit('Disconnected');
 						}
 
@@ -77,7 +86,10 @@ class IRacingBridge extends EventEmitter {
 					if (!this.connected) {
 						this.sdk.startSDK();
 						this.connected = true;
-						log.info('iRacing connected');
+						// Low-level SDK start record; the app-facing 'iRacing connected'
+						// transition is logged by the index.ts iracing.on('Connected')
+						// handler.
+						log.info('SDK startSDK');
 						this.emit('Connected');
 					}
 
@@ -93,6 +105,15 @@ class IRacingBridge extends EventEmitter {
 						this.telemetry = telemetry
 							? flattenTelemetry(telemetry)
 							: null;
+						// False->true telemetry edge, once per connection: the
+						// authoritative "data is actually flowing" signal, distinct from
+						// the Connected transition (which fires a beat earlier at startSDK).
+						// Only ever latched true here; cleared on disconnect so a null
+						// frame mid-session can't re-fire it (obs-lifecycle-telemetry#1).
+						if (this.telemetry != null && !this._hadTelemetry) {
+							this._hadTelemetry = true;
+							log.info('iRacing telemetry first available');
+						}
 						this.emit('update');
 					}
 
@@ -113,6 +134,7 @@ class IRacingBridge extends EventEmitter {
 						this.connected = false;
 						this.telemetry = null;
 						this.sessionInfo = null;
+						this._hadTelemetry = false;
 						try {
 							this.sdk.stopSDK();
 						} catch {

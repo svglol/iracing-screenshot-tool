@@ -128,7 +128,7 @@ describe('IRacingBridge poll-loop self-heal', () => {
 		await stopBridge(bridge);
 	});
 
-	test('a clean start connects and logs the transition (no error)', async () => {
+	test('a clean start connects and logs the low-level SDK transition (no error)', async () => {
 		mocks.isSimRunning.mockResolvedValue(true);
 
 		const bridge = new IRacingBridge();
@@ -139,8 +139,28 @@ describe('IRacingBridge poll-loop self-heal', () => {
 
 		expect(mocks.logError).not.toHaveBeenCalled();
 		expect(connected).toHaveBeenCalledTimes(1);
-		expect(mocks.logInfo).toHaveBeenCalledWith('iRacing connected');
+		// The bridge logs the low-level SDK start; the app-facing 'iRacing
+		// connected' transition is logged by the index.ts handler (WP-G split).
+		expect(mocks.logInfo).toHaveBeenCalledWith('SDK startSDK');
 		expect(bridge.loopActive).toBe(true);
+
+		await stopBridge(bridge);
+	});
+
+	test('logs the telemetry-first-available edge once per connection', async () => {
+		mocks.isSimRunning.mockResolvedValue(true);
+		// waitForData true + a non-null telemetry frame → the false->true edge.
+		mocks.waitForData.mockReturnValue(true);
+		mocks.getTelemetry.mockReturnValue({ CamCameraState: ['UIHidden'] });
+
+		const bridge = new IRacingBridge();
+		await vi.advanceTimersByTimeAsync(100);
+
+		const edgeCalls = mocks.logInfo.mock.calls.filter(
+			(c) => c[0] === 'iRacing telemetry first available'
+		);
+		// Exactly once despite many frames — the _hadTelemetry latch holds.
+		expect(edgeCalls).toHaveLength(1);
 
 		await stopBridge(bridge);
 	});

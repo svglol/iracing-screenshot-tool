@@ -99,6 +99,10 @@ let config: any;
 let mainWindow: BrowserWindow | null;
 let workerWindow: BrowserWindow | null;
 let workerReady = false;
+// Last iRacing readiness value replied to the renderer's status heartbeat, so the
+// false->true self-heal edge (commit 07f8182) is logged once instead of on every
+// poll (obs-lifecycle-telemetry#3).
+let lastIracingStatusReply: boolean | null = null;
 let cancelReshadeWait: ((reason: string) => void) | null = null;
 // Backstop timer for the non-ReShade capture path: if the worker never posts
 // back (screenshot-finished/response/error), force-restore so the app can't
@@ -950,6 +954,32 @@ app.on('ready', async () => {
 		isPackaged: app.isPackaged,
 	});
 
+	// Startup environment baseline (obs-lifecycle-telemetry#4): one durable line
+	// pinning the GPU/VRAM/display/backend context every field report needs, so a
+	// bug can be triaged without asking the user to re-derive their setup. Reuses
+	// the already-assembled, fail-open diagnostics helpers (getCaptureBackendDiagnostics
+	// swallows WGC/VRAM FFI errors internally) so this can never throw out of ready.
+	let updateChannel: string | null = null;
+	try {
+		updateChannel = autoUpdater.channel;
+	} catch {
+		updateChannel = null;
+	}
+	log.info('Environment', {
+		version: app.getVersion(),
+		isPackaged: app.isPackaged,
+		channel: updateChannel,
+		platform: process.platform,
+		arch: process.arch,
+		electron: String(process.versions.electron || ''),
+		node: String(process.versions.node || ''),
+		captureBackend: getCaptureBackendDiagnostics(),
+		displays: {
+			count: screen.getAllDisplays().length,
+			primary: serializeDisplay(screen.getPrimaryDisplay()),
+		},
+	});
+
 	if (isDev) {
 		mainWindow?.webContents.openDevTools();
 		workerWindow?.webContents.openDevTools();
@@ -970,10 +1000,20 @@ app.on('ready', async () => {
 	});
 
 	ipcMain.on('request-iracing-status', (event) => {
-		event.reply('iracing-status', iracing.telemetry != null);
+		const ready = iracing.telemetry != null;
+		// Log only the edge, not every poll — the renderer heartbeats this
+		// continuously and logging each reply would flood app.log.
+		if (ready !== lastIracingStatusReply) {
+			log.info('iRacing status poll edge', { ready });
+			lastIracingStatusReply = ready;
+		}
+		event.reply('iracing-status', ready);
 	});
 
 	iracing.on('Connected', () => {
+		// App-facing lifecycle transition record (the low-level SDK start is logged
+		// as 'SDK startSDK' in iracing-sdk.ts) — obs-lifecycle-telemetry#1.
+		log.info('iRacing connected');
 		cancelPendingCaptureAbort();
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-connected', '');
@@ -981,6 +1021,9 @@ app.on('ready', async () => {
 	});
 
 	iracing.on('Disconnected', () => {
+		// midCapture is the actionable field: a disconnect mid-capture is the
+		// VRAM-exhaustion signature this app cares about (obs-lifecycle-telemetry#1).
+		log.info('iRacing disconnected', { midCapture: takingScreenshot });
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-disconnected', '');
 		}
@@ -1390,7 +1433,32 @@ app.on('activate', () => {
 	}
 });
 
-autoUpdater.on('update-downloaded', () => {
+// Auto-update observability (obs-lifecycle-telemetry#2 == obs-error-visibility#3):
+// previously only 'update-downloaded' was wired and checkForUpdates() was a
+// floating promise, so a failed update check (offline, 404 feed, signature error)
+// produced no app.log line and rejected unhandled. Wire the full event set; the
+// 'error' event and the checkForUpdates rejection log at ERROR so field triage can
+// filter them.
+autoUpdater.on('checking-for-update', () => {
+	log.info('Auto-update checking');
+});
+
+autoUpdater.on('update-available', (info) => {
+	log.info('Auto-update available', { version: info?.version });
+});
+
+autoUpdater.on('update-not-available', (info) => {
+	log.info('Auto-update not available', { version: info?.version });
+});
+
+autoUpdater.on('error', (error) => {
+	log.error('Auto-update error', {
+		error: (error as Error)?.message || String(error),
+	});
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+	log.info('Auto-update downloaded', { version: info?.version });
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		mainWindow.webContents.send('update-available', '');
 	}
@@ -1398,7 +1466,11 @@ autoUpdater.on('update-downloaded', () => {
 
 app.on('ready', () => {
 	if (process.env.NODE_ENV === 'production') {
-		autoUpdater.checkForUpdates();
+		autoUpdater.checkForUpdates().catch((error) => {
+			log.error('checkForUpdates failed', {
+				error: (error as Error)?.message || String(error),
+			});
+		});
 	}
 });
 
