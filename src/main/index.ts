@@ -1,6 +1,5 @@
 import { productName, build } from '../../package.json';
 import { autoUpdater } from 'electron-updater';
-import * as remoteMain from '@electron/remote/main';
 import {
 	app,
 	BrowserWindow,
@@ -189,8 +188,6 @@ app.name = productName;
 app.commandLine.appendSwitch('js-flags', '--expose_gc');
 // @ts-expect-error — ELECTRON_DISABLE_SECURITY_WARNINGS typed as string | undefined; legacy assignment preserved
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
-
-remoteMain.initialize();
 
 // Process-level crash safety nets (obs-error-visibility#1). Registered at module
 // load so an unhandled throw/rejection in the main process — or a GPU/utility
@@ -591,6 +588,48 @@ function attachRenderProcessDiagnostics(
 	);
 }
 
+// Whether a navigation target is the app's OWN origin: the electron-vite dev
+// server when running under `npm run dev`, else the packaged file:// bundle. Used
+// to gate will-navigate so a legitimate reload/initial load is never blocked.
+function isSameOriginAsApp(target: string): boolean {
+	try {
+		const url = new URL(target);
+		const devUrl = process.env.ELECTRON_RENDERER_URL;
+		if (devUrl) {
+			return url.origin === new URL(devUrl).origin;
+		}
+		// Packaged build: the renderer is loaded from a file:// path.
+		return url.protocol === 'file:';
+	} catch {
+		// Unparseable target — treat as off-origin and deny.
+		return false;
+	}
+}
+
+// Lock a window down against navigation-based attacks (cq-electron-security#3). A
+// compromised/injected renderer could otherwise navigate the window to an attacker
+// origin or spawn new BrowserWindows. This app never legitimately does either:
+// external links open in the OS browser via shell.openExternal (not an in-app
+// window), and all in-app routing is client-side vue-router (history.pushState,
+// which does NOT fire will-navigate). So: deny every window.open, and deny any
+// full-page navigation that leaves the app's own origin. The initial loadURL/
+// loadFile is not a "navigation" and is unaffected. Observability via log.warn.
+function hardenWindow(win: BrowserWindow, label: 'worker' | 'main'): void {
+	win.webContents.setWindowOpenHandler(({ url }) => {
+		log.warn('Blocked renderer window.open', { window: label, url });
+		return { action: 'deny' };
+	});
+	win.webContents.on('will-navigate', (event, url) => {
+		if (!isSameOriginAsApp(url)) {
+			event.preventDefault();
+			log.warn('Blocked off-origin renderer navigation', {
+				window: label,
+				url,
+			});
+		}
+	});
+}
+
 function createWindow(): void {
 	log.info('Creating worker window');
 	workerWindow = new BrowserWindow({
@@ -604,7 +643,7 @@ function createWindow(): void {
 		},
 	});
 
-	remoteMain.enable(workerWindow.webContents);
+	hardenWindow(workerWindow, 'worker');
 	attachRenderProcessDiagnostics(workerWindow, 'worker');
 
 	workerWindow.webContents.on('did-finish-load', () => {
@@ -648,7 +687,7 @@ function createWindow(): void {
 		},
 	});
 
-	remoteMain.enable(mainWindow.webContents);
+	hardenWindow(mainWindow, 'main');
 	Menu.setApplicationMenu(null);
 	attachRenderProcessDiagnostics(mainWindow, 'main');
 
