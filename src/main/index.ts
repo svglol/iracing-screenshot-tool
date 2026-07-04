@@ -105,7 +105,14 @@ let cancelReshadeWait: ((reason: string) => void) | null = null;
 // wedge with iRacing stuck resized + UI hidden.
 let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
 let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
-const CAPTURE_WATCHDOG_MS = 30000;
+// Kept strictly GREATER than waitForReshadeScreenshot's own 30000ms timeout: the
+// watchdog is armed the instant takingScreenshot flips (before the ReShade branch),
+// so on a genuine ReShade timeout its own wait must win the race and surface the
+// accurate "Timed out waiting for a ReShade screenshot" — not the watchdog's
+// worker-oriented "the capture worker did not respond". The reshade catch's
+// restoreScreenshotState() clears this watchdog before the 35s mark. The extra 5s
+// still nets a truly hung resize on any path.
+const CAPTURE_WATCHDOG_MS = 35000;
 const CAPTURE_ABORT_DEBOUNCE_MS = 400;
 // getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
 // requesting larger can never converge on the dim-match — bound requests here.
@@ -482,7 +489,18 @@ function reportScreenshotError(
 			main: getMainScreenshotDiagnostics(),
 		}),
 	});
-	const logFile = writeScreenshotErrorLog(payload);
+	// Guard the synchronous fs write: reportScreenshotError runs inside the
+	// watchdog and disconnect-abort setTimeout callbacks, so a disk error
+	// (ENOSPC/EACCES) here would become a process-killing uncaught exception
+	// during recovery. Best-effort — the renderer error still surfaces.
+	let logFile: string | undefined;
+	try {
+		logFile = writeScreenshotErrorLog(payload);
+	} catch (error) {
+		log.error('Failed to write screenshot error log', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
 	const rendererPayload = { ...payload, logFile };
 
 	console.error('Screenshot error:', rendererPayload.message);
@@ -1082,6 +1100,13 @@ app.on('ready', async () => {
 		}
 
 		takingScreenshot = true;
+		// Arm the recovery watchdog the instant the latch flips — before the
+		// branch split — so EVERY path is covered from here on, including a
+		// resizeIracingWindowAsync that HANGS (never resolves): a try/catch can
+		// only recover a rejection, so the watchdog is the sole net for a hang.
+		// The native-WGC and getUserMedia paths re-arm it (harmless clear+reset);
+		// restoreScreenshotState() clears it on success and on every error path.
+		armCaptureWatchdog();
 		originalWindowBounds = getIracingWindowDetails() || null;
 		parseCameraState(
 			(iracing.telemetry?.values as { CamCameraState?: string[] })
@@ -1120,18 +1145,103 @@ app.on('ready', async () => {
 			// path keeps overlapping resize + enumeration (the Promise.all overlap
 			// still matters for the PowerShell resize fallback, whose spawn would
 			// otherwise block getSources).
-			const useNativeCapture =
-				config.get('nativeCapture') && isWgcAvailable();
-			const [id, windowSources] = await Promise.all([
-				resizeIracingWindowAsync(data.width, data.height, left, top),
-				useNativeCapture
-					? Promise.resolve<Electron.DesktopCapturerSource[]>([])
-					: desktopCapturer.getSources({
-							types: ['window'],
-							thumbnailSize: { width: 0, height: 0 },
-							fetchWindowIcons: false,
-						}),
-			]);
+			try {
+				const useNativeCapture =
+					config.get('nativeCapture') && isWgcAvailable();
+				const [id, windowSources] = await Promise.all([
+					resizeIracingWindowAsync(data.width, data.height, left, top),
+					useNativeCapture
+						? Promise.resolve<Electron.DesktopCapturerSource[]>([])
+						: desktopCapturer.getSources({
+								types: ['window'],
+								thumbnailSize: { width: 0, height: 0 },
+								fetchWindowIcons: false,
+							}),
+				]);
+
+				if (id === undefined) {
+					log.info('iRacing window not found');
+					restoreScreenshotState();
+					reportScreenshotError('iRacing window not found', {
+						context: 'resize-screenshot:window-not-found',
+						meta: {
+							request: data,
+							defaultScreen: { width, height, left, top },
+						},
+					});
+					return;
+				}
+
+				log.info('iRacing window resized', {
+					width: data.width,
+					height: data.height,
+					handle: id,
+				});
+
+				if (useNativeCapture) {
+					// Arm the same recovery watchdog the worker path uses: if the WGC
+					// settle/grab/save ever hangs (e.g. a stalled disk or network
+					// screenshot folder), this force-restores instead of leaving iRacing
+					// stuck at capture size with its UI hidden. A 'saved'/'aborted'
+					// outcome clears it via restoreScreenshotState; 'fallback' re-arms it
+					// in dispatchWorkerCapture.
+					armCaptureWatchdog();
+					const outcome = await captureAndSaveViaWgc(id, data);
+					if (outcome === 'saved' || outcome === 'aborted') {
+						return;
+					}
+					// outcome === 'fallback': WGC couldn't deliver a usable frame — drop
+					// to the getUserMedia path, which needs the source enumeration we
+					// skipped above. The window is already resized/raised for it to reuse.
+					log.info(
+						'WGC capture unavailable — falling back to getUserMedia'
+					);
+					const fallbackSources = await desktopCapturer.getSources({
+						types: ['window'],
+						thumbnailSize: { width: 0, height: 0 },
+						fetchWindowIcons: false,
+					});
+					dispatchWorkerCapture(id, data, fallbackSources);
+					return;
+				}
+
+				dispatchWorkerCapture(id, data, windowSources);
+			} catch (error) {
+				// Any rejection on the primary getUserMedia / native path (getSources,
+				// the resize, the WGC grab) must self-heal immediately — otherwise
+				// takingScreenshot latches true forever and every later capture is
+				// rejected 'already-taking-screenshot'. Mirrors the ReShade catch. The
+				// trailing return stops a caught error falling through into ReShade code.
+				restoreScreenshotState();
+				reportScreenshotError(error, {
+					context: 'resize-screenshot:capture',
+					meta: { request: data },
+				});
+			}
+			return;
+		}
+
+		// ReShade path: use the raising pre-capture resize (un-minimize + size +
+		// foreground) just like the non-ReShade path — a quiet reposition would
+		// leave a minimized/background iRacing un-composited so ReShade's grab
+		// gets no frame. No desktopCapturer.getSources here, so just await it.
+		let reshadeLocation: {
+			folder: string;
+			rawFolder: string;
+			basePath: string;
+			remappedFrom: string;
+		} | null = null;
+
+		try {
+			// Raising pre-capture resize INSIDE the try so a rejection here recovers
+			// via the catch instead of wedging: it previously sat outside the ReShade
+			// try/catch, so a reject latched takingScreenshot true with no recovery.
+			const id = await resizeIracingWindowAsync(
+				data.width,
+				data.height,
+				left,
+				top
+			);
 
 			if (id === undefined) {
 				log.info('iRacing window not found');
@@ -1152,73 +1262,6 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			if (useNativeCapture) {
-				// Arm the same recovery watchdog the worker path uses: if the WGC
-				// settle/grab/save ever hangs (e.g. a stalled disk or network
-				// screenshot folder), this force-restores instead of leaving iRacing
-				// stuck at capture size with its UI hidden. A 'saved'/'aborted'
-				// outcome clears it via restoreScreenshotState; 'fallback' re-arms it
-				// in dispatchWorkerCapture.
-				armCaptureWatchdog();
-				const outcome = await captureAndSaveViaWgc(id, data);
-				if (outcome === 'saved' || outcome === 'aborted') {
-					return;
-				}
-				// outcome === 'fallback': WGC couldn't deliver a usable frame — drop
-				// to the getUserMedia path, which needs the source enumeration we
-				// skipped above. The window is already resized/raised for it to reuse.
-				log.info('WGC capture unavailable — falling back to getUserMedia');
-				const fallbackSources = await desktopCapturer.getSources({
-					types: ['window'],
-					thumbnailSize: { width: 0, height: 0 },
-					fetchWindowIcons: false,
-				});
-				dispatchWorkerCapture(id, data, fallbackSources);
-				return;
-			}
-
-			dispatchWorkerCapture(id, data, windowSources);
-			return;
-		}
-
-		// ReShade path: use the raising pre-capture resize (un-minimize + size +
-		// foreground) just like the non-ReShade path — a quiet reposition would
-		// leave a minimized/background iRacing un-composited so ReShade's grab
-		// gets no frame. No desktopCapturer.getSources here, so just await it.
-		const id = await resizeIracingWindowAsync(
-			data.width,
-			data.height,
-			left,
-			top
-		);
-
-		if (id === undefined) {
-			log.info('iRacing window not found');
-			restoreScreenshotState();
-			reportScreenshotError('iRacing window not found', {
-				context: 'resize-screenshot:window-not-found',
-				meta: {
-					request: data,
-					defaultScreen: { width, height, left, top },
-				},
-			});
-			return;
-		}
-
-		log.info('iRacing window resized', {
-			width: data.width,
-			height: data.height,
-			handle: id,
-		});
-
-		let reshadeLocation: {
-			folder: string;
-			rawFolder: string;
-			basePath: string;
-			remappedFrom: string;
-		} | null = null;
-
-		try {
 			const reshadeIniPath = config.get('reshadeFile');
 			const reshadeIni = loadIniFile.sync(reshadeIniPath);
 			reshadeLocation = getReshadeScreenshotFolder(
@@ -1244,18 +1287,26 @@ app.on('ready', async () => {
 				targetHeight: data.targetHeight,
 			});
 		} catch (error) {
+			// Guard against a duplicate report: if the watchdog or disconnect-abort
+			// already recovered (flipping takingScreenshot false — e.g. it cancelled
+			// this ReShade wait via clearPendingReshadeWait), that path already
+			// surfaced the error, so restore silently instead of reporting twice.
+			const wasCapturing = takingScreenshot;
 			restoreScreenshotState();
-			reportScreenshotError(error, {
-				context: 'resize-screenshot:reshade',
-				meta: {
-					request: data,
-					reshadeFile: config.get('reshadeFile'),
-					...(reshadeLocation || {}),
-					...(error && (error as { meta?: Record<string, unknown> }).meta
-						? (error as { meta: Record<string, unknown> }).meta
-						: {}),
-				},
-			});
+			if (wasCapturing) {
+				reportScreenshotError(error, {
+					context: 'resize-screenshot:reshade',
+					meta: {
+						request: data,
+						reshadeFile: config.get('reshadeFile'),
+						...(reshadeLocation || {}),
+						...(error &&
+						(error as { meta?: Record<string, unknown> }).meta
+							? (error as { meta: Record<string, unknown> }).meta
+							: {}),
+					},
+				});
+			}
 		}
 	});
 
@@ -1721,6 +1772,11 @@ function scheduleCaptureAbortOnDisconnect(): void {
 function restoreScreenshotState(): void {
 	clearCaptureWatchdog();
 	cancelPendingCaptureAbort();
+	// Cancel any in-flight ReShade wait so a watchdog / disconnect-abort recovery
+	// doesn't leave the wait's fs.watch + poller running, and so its own timeout
+	// can't later fire a second (now-stale) reportScreenshotError. No-op unless a
+	// ReShade capture is actually pending.
+	clearPendingReshadeWait('Screenshot recovery');
 	if (!takingScreenshot) {
 		return;
 	}
