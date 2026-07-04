@@ -3,6 +3,7 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { resolveRemotes, parseReleaseArgs } = require('./release-helpers');
 
 const BUILD_DIR = path.resolve(__dirname, '..', 'build');
 const PKG_PATH = path.resolve(__dirname, '..', 'package.json');
@@ -33,9 +34,9 @@ function getRepoSlug(remote) {
 // ---------------------------------------------------------------------------
 // 1. Parse arguments
 // ---------------------------------------------------------------------------
-const bump = process.argv[2];
+const { bump, requestedRemotes } = parseReleaseArgs(process.argv.slice(2));
 if (!['major', 'minor', 'patch'].includes(bump)) {
-	fail('Usage: node _scripts/release.js <major|minor|patch>');
+	fail('Usage: node _scripts/release.js <major|minor|patch> [--remote <name>]');
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,18 @@ try {
 		'GitHub CLI (gh) is required but not found. Install it from https://cli.github.com'
 	);
 }
+
+// Resolve publish target remotes ONCE, up front — before the expensive installer
+// build — so a bad --remote fails fast, and so we never fan the tag + installer
+// uploads out to every configured remote (e.g. a personal fork).
+let remotes;
+try {
+	const availableRemotes = runCapture('git remote').split('\n').filter(Boolean);
+	remotes = resolveRemotes(requestedRemotes, availableRemotes);
+} catch (error) {
+	fail(error.message);
+}
+console.log(`\n— Publish target remote(s): ${remotes.join(', ')}`);
 
 // ---------------------------------------------------------------------------
 // 3. Run tests
@@ -140,8 +153,11 @@ console.log(changelog || '(no changes)');
 // ---------------------------------------------------------------------------
 // 10. Push commit + tag to all remotes
 // ---------------------------------------------------------------------------
-const remotes = runCapture('git remote').split('\n').filter(Boolean);
 const branch = runCapture('git rev-parse --abbrev-ref HEAD');
+
+// Accumulate any push/release failures so the run can exit non-zero at the end
+// instead of printing "Released successfully" over a partial/total no-publish.
+const publishFailures = [];
 
 for (const remote of remotes) {
 	console.log(`\n— Pushing to ${remote}/${branch}…`);
@@ -150,6 +166,7 @@ for (const remote of remotes) {
 		run(`git push ${remote} ${tag}`);
 	} catch (error) {
 		console.error(`  Warning: failed to push to ${remote}, skipping.`);
+		publishFailures.push(`push to ${remote}: ${error.message}`);
 	}
 }
 
@@ -188,9 +205,23 @@ for (const remote of remotes) {
 		console.error(
 			`  Warning: failed to create release on ${repoSlug}, skipping.`
 		);
+		publishFailures.push(`GitHub release on ${repoSlug}: ${error.message}`);
 	}
 }
 
 fs.unlinkSync(notesFile);
+
+// A push or GitHub-release failure must NOT look like success to CI or a human.
+// The local commit + tag already exist, so the operator can retry the remote
+// steps manually rather than re-running the whole (already-committed) bump.
+if (publishFailures.length > 0) {
+	console.error('\n— Publish failures:');
+	publishFailures.forEach((f) => console.error(`  • ${f}`));
+	fail(
+		`Release ${tag} did NOT fully publish. The local commit + tag ${tag} exist; ` +
+			`fix the cause and re-run the pushes / \`gh release\` manually, or ` +
+			`\`git tag -d ${tag}\` and retry.`
+	);
+}
 
 console.log(`\n✓ Released ${tag} successfully!`);
