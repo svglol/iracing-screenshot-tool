@@ -35,7 +35,6 @@
 			v-model:active="showHelp"
 			has-modal-card
 			trap-focus
-			:destroy-on-hide="false"
 			:can-cancel="false"
 			aria-role="dialog"
 			aria-modal
@@ -47,7 +46,6 @@
 			v-model:active="showChangelog"
 			has-modal-card
 			trap-focus
-			:destroy-on-hide="false"
 			:can-cancel="false"
 			aria-role="dialog"
 			aria-modal

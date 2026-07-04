@@ -266,10 +266,9 @@ const IRACING_STATUS_POLL_INTERVAL_MS = 1500;
 
 // Quantise live VRAM usage to the sidebar's display precision (0.1 GB) before
 // storing it. usedBytes is a raw, constantly-jittering system-wide gauge; without
-// this, every poll would land in a new value, reassign vramInfo, re-render, and
-// fire updated()'s synchronous config writes — even while idle. Rounding to the
-// shown precision means the reactive graph only re-evaluates when a user-visible
-// number actually changes.
+// this, every poll would land in a new value, reassign vramInfo, and re-render —
+// even while idle. Rounding to the shown precision means the reactive graph only
+// re-evaluates when a user-visible number actually changes.
 const VRAM_USAGE_QUANTUM_BYTES = 0.1 * 1024 ** 3;
 
 // Oruga 0.13's notification `message` prop is plain string only — HTML is
@@ -322,7 +321,6 @@ function getResolutionDimensions(label: string): {
 }
 
 export default {
-	props: ['screenshot'],
 	// Declare 'screenshot' as a custom emit. Previously used 'click', which in
 	// Vue 3 is treated as a NATIVE DOM event unless explicitly declared —
 	// native clicks from child elements (e.g. <o-select> dropdown) bubbled
@@ -355,9 +353,6 @@ export default {
 		};
 	},
 	computed: {
-		disabled() {
-			return this.iracingOpen;
-		},
 		// {width, height} for the active resolution preset, or null when
 		// Custom is selected with empty/invalid inputs (so we suppress the
 		// hint instead of rendering "NaN x NaN").
@@ -589,17 +584,45 @@ export default {
 		}
 		this.stopIracingStatusPoll();
 	},
-	updated() {
-		config.set('crop', this.crop);
-		config.set('keepAspectRatio', this.keepAspectRatio);
-		config.set('reshade', this.reshade);
-		if (!isNaN(parseInt(this.customWidth))) {
-			config.set('customWidth', parseInt(this.customWidth));
-		}
-		if (!isNaN(parseInt(this.customHeight))) {
-			config.set('customHeight', parseInt(this.customHeight));
-		}
-		config.set('resolution', this.resolution);
+	// Persist each config-backed field only when IT actually changes
+	// (cq-renderer-settings-ui#2). The old updated() hook re-ran all six blocking
+	// sendSync 'config:set' writes on EVERY reactive change (VRAM poll,
+	// takingScreenshot latch, notifications) — a write storm on idle re-renders.
+	// The config.get(...)!==value guard also stops mounted()'s config→field copy
+	// and the reshade onDidChange round-trip from writing the same value back.
+	watch: {
+		crop(value) {
+			if (config.get('crop') !== value) {
+				config.set('crop', value);
+			}
+		},
+		keepAspectRatio(value) {
+			if (config.get('keepAspectRatio') !== value) {
+				config.set('keepAspectRatio', value);
+			}
+		},
+		reshade(value) {
+			if (config.get('reshade') !== value) {
+				config.set('reshade', value);
+			}
+		},
+		resolution(value) {
+			if (config.get('resolution') !== value) {
+				config.set('resolution', value);
+			}
+		},
+		customWidth(value) {
+			const n = parseInt(value);
+			if (!isNaN(n) && config.get('customWidth') !== n) {
+				config.set('customWidth', n);
+			}
+		},
+		customHeight(value) {
+			const n = parseInt(value);
+			if (!isNaN(n) && config.get('customHeight') !== n) {
+				config.set('customHeight', n);
+			}
+		},
 	},
 	methods: {
 		// Mark iRacing connected and fire the one-time on-connect refreshes.
@@ -674,7 +697,7 @@ export default {
 		// the colouring (and assessVram already fails open on a null reading).
 		// Each IPC call returns a fresh object, so we quantise the jittery usage
 		// and only reassign when a UI-relevant field changed — otherwise the poll
-		// would re-render (and fire updated()'s config writes) every tick.
+		// would re-render every tick.
 		refreshVramInfo() {
 			ipcRenderer
 				.invoke('get-vram-info')
@@ -702,7 +725,7 @@ export default {
 		},
 		// Poll iRacing's exclusive-fullscreen state (koffi, main-side). Only
 		// reassign when the warning boolean flips so — like the VRAM poll — a
-		// steady state doesn't re-render and churn updated()'s config writes.
+		// steady state doesn't re-render needlessly.
 		refreshFullscreenState() {
 			ipcRenderer
 				.invoke('get-iracing-fullscreen-state')
