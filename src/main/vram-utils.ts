@@ -1,4 +1,7 @@
 import type { VramInfo } from '../utilities/vram-prediction';
+import { createLogger } from '../utilities/logger';
+
+const log = createLogger('vram-utils');
 
 // ---------------------------------------------------------------------------
 // GPU VRAM measurement (main process, koffi FFI)
@@ -37,10 +40,56 @@ const PDH_MORE_DATA = 0x800007d2;
 const PDH_ITEM_SIZE = 24;
 const PDH_ITEM_CSTATUS_OFFSET = 8;
 const PDH_ITEM_VALUE_OFFSET = 16;
+// PDH counter-item status codes.
+const PDH_CSTATUS_VALID_DATA = 0x0;
+const PDH_CSTATUS_NEW_DATA = 0x1;
+
+export interface UsedInstance {
+	instanceName: string;
+	bytes: number;
+}
+
+// A PDH counter item is usable when its CStatus is VALID_DATA or NEW_DATA. The old
+// code accepted only VALID_DATA (0) and dropped NEW_DATA (1) — a driver reporting
+// NEW_DATA on the single collect would null out readUsed and silently disable the
+// VRAM guardrail (cq-capture-path#4). Pure + exported for unit testing (no FFI).
+export function isValidPdhStatus(cstatus: number): boolean {
+	return (
+		cstatus === PDH_CSTATUS_VALID_DATA || cstatus === PDH_CSTATUS_NEW_DATA
+	);
+}
+
+// Pick the dGPU's live usage from the per-adapter PDH instances (cq-capture-path#1).
+// A card can never use more DEDICATED VRAM than it physically has, so any instance
+// whose usage exceeds the chosen dedicated `totalBytes` is provably a FOREIGN
+// adapter and is excluded — this kills the multi-GPU false positive where the
+// global-busiest instance belonged to a different card than `total`, making
+// assessVram's freeBytes = max(0, total - used) clamp to 0 and over-warn. Returns
+// the busiest of the plausible set; falls back to the global busiest when the
+// filter empties (total unknown = 0, or — impossibly — every instance over-total).
+// Pure + exported for unit testing (no FFI).
+export function selectUsedInstance(
+	instances: UsedInstance[],
+	totalBytes: number
+): UsedInstance | null {
+	if (!instances || instances.length === 0) {
+		return null;
+	}
+	const busiest = (list: UsedInstance[]): UsedInstance =>
+		list.reduce((a, b) => (b.bytes > a.bytes ? b : a));
+
+	if (totalBytes > 0) {
+		const plausible = instances.filter((inst) => inst.bytes <= totalBytes);
+		if (plausible.length > 0) {
+			return busiest(plausible);
+		}
+	}
+	return busiest(instances);
+}
 
 interface VramNative {
 	readTotal(): { totalBytes: number; adapterName: string } | null;
-	readUsed(): number | null;
+	readUsed(): UsedInstance[] | null;
 }
 
 // undefined = uninitialized; null = unavailable (koffi failed to load / bind)
@@ -233,7 +282,7 @@ function createNative(): VramNative | null {
 				return best;
 			},
 
-			readUsed(): number | null {
+			readUsed(): UsedInstance[] | null {
 				const phQuery = Buffer.alloc(8);
 				if (PdhOpenQueryW(null, 0, phQuery) !== ERROR_SUCCESS) {
 					return null;
@@ -287,8 +336,10 @@ function createNative(): VramNative | null {
 						return null;
 					}
 					const n = itemCount.readUInt32LE(0);
-					// Busiest adapter instance = the dGPU during gameplay.
-					let maxBytes = -1;
+					// Collect per-adapter usage + identity so getVramInfo can
+					// adapter-match against the dedicated total (cq-capture-path#1)
+					// instead of blindly taking the global busiest instance.
+					const instances: UsedInstance[] = [];
 					for (let i = 0; i < n; i++) {
 						const off = i * PDH_ITEM_SIZE;
 						if (off + PDH_ITEM_SIZE > itemBuf.length) {
@@ -297,17 +348,21 @@ function createNative(): VramNative | null {
 						const cstatus = itemBuf.readUInt32LE(
 							off + PDH_ITEM_CSTATUS_OFFSET
 						);
-						if (cstatus !== 0) {
+						if (!isValidPdhStatus(cstatus)) {
 							continue;
 						}
 						const bytes = Number(
 							itemBuf.readBigInt64LE(off + PDH_ITEM_VALUE_OFFSET)
 						);
-						if (bytes > maxBytes) {
-							maxBytes = bytes;
-						}
+						// Identity is only for the multi-GPU mismatch diagnostic; the
+						// load-bearing value is `bytes`. The szName field is an LPWSTR
+						// (a raw 64-bit pointer at item offset 0) — dereferencing it via
+						// koffi from a BigInt address is unverified and could fault the
+						// process, so we label by enumeration index instead. The true
+						// LUID-name join needs DXGI (flagged follow-up), not PDH.
+						instances.push({ instanceName: `instance-${i}`, bytes });
 					}
-					return maxBytes >= 0 ? maxBytes : null;
+					return instances.length > 0 ? instances : null;
 				} finally {
 					PdhCloseQuery(hQuery);
 				}
@@ -340,7 +395,33 @@ export function getVramInfo(): VramInfo {
 	let usedBytes: number | null = null;
 	if (api) {
 		try {
-			usedBytes = api.readUsed();
+			const instances = api.readUsed();
+			if (instances && instances.length > 0) {
+				const totalForMatch = cachedTotal ? cachedTotal.totalBytes : 0;
+				const selected = selectUsedInstance(instances, totalForMatch);
+				usedBytes = selected ? selected.bytes : null;
+				// Multi-GPU diagnostic: if the adapter-matched instance isn't the
+				// global busiest, a foreign adapter was busier than the dGPU. This
+				// residual dual-dGPU case can't be adapter-joined without DXGI, so
+				// surface both identities rather than silently over- or under-warn.
+				const globalBusiest = instances.reduce((a, b) =>
+					b.bytes > a.bytes ? b : a
+				);
+				if (selected && selected !== globalBusiest) {
+					log.warn('VRAM used/total adapter mismatch', {
+						attributed: {
+							instance: selected.instanceName,
+							bytes: selected.bytes,
+						},
+						globalBusiest: {
+							instance: globalBusiest.instanceName,
+							bytes: globalBusiest.bytes,
+						},
+						totalBytes: totalForMatch,
+						adapterName: cachedTotal ? cachedTotal.adapterName : '',
+					});
+				}
+			}
 		} catch (error) {
 			console.error('[vram-utils] used VRAM read failed', error);
 			usedBytes = null;
