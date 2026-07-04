@@ -170,6 +170,41 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
 
 remoteMain.initialize();
 
+// Process-level crash safety nets (obs-error-visibility#1). Registered at module
+// load so an unhandled throw/rejection in the main process — or a GPU/utility
+// child-process death — lands in app.log (the only field-diagnostic surface)
+// instead of dying or wedging silently. Log-only and deliberately NON-fatal: they
+// do not re-throw/exit, so the capture watchdog + disconnect-abort recovery paths
+// keep running (see cq-main-index#2, where a timer-callback fs throw would
+// otherwise kill the process mid-recovery). NOTE: this suppresses Node/Electron's
+// default crash-on-uncaught / crash-on-unhandled-rejection behaviour — an
+// intentional trade for observability + those recovery paths surviving.
+process.on('uncaughtException', (error) => {
+	log.error('Uncaught exception in main process', {
+		message: error?.message || String(error),
+		stack: error?.stack,
+	});
+});
+process.on('unhandledRejection', (reason) => {
+	const err = reason instanceof Error ? reason : null;
+	log.error('Unhandled promise rejection in main process', {
+		message: err ? err.message : String(reason),
+		stack: err?.stack,
+	});
+});
+// GPU-process OOM/crash is a first-class failure mode for this VRAM-heavy capture
+// app, distinct from a renderer JS crash. child-process-gone is the modern superset
+// of the deprecated gpu-process-crashed (covers GPU + Utility + Zygote).
+app.on('child-process-gone', (_event, details) => {
+	log.error('Child process gone', {
+		type: details.type,
+		reason: details.reason,
+		exitCode: details.exitCode,
+		serviceName: details.serviceName,
+		name: details.name,
+	});
+});
+
 function createWindowIcon() {
 	// `process.resourcesPath` is set by Electron in BOTH dev and packaged modes
 	// (it points at the framework's resources dir in dev, e.g.
@@ -462,7 +497,55 @@ function reportScreenshotError(
 	return rendererPayload;
 }
 
+// Wire renderer crash / hang / load-failure diagnostics onto a window's
+// webContents so a silent renderer death finally leaves a durable app.log line
+// (obs-lifecycle-telemetry#5). For the worker, a render-process-gone ALSO flips
+// workerReady=false — an intentional stale-state correction (NOT purely log-only):
+// on a pure renderer crash 'closed' never fires, so without this the gate stays
+// stale-true from did-finish-load and the next capture is dispatched to a dead
+// worker and hangs until the 30s watchdog; with it, the capture is rejected
+// immediately with a logged crash cause.
+function attachRenderProcessDiagnostics(
+	win: BrowserWindow,
+	label: 'worker' | 'main'
+): void {
+	const wc = win.webContents;
+	wc.on('render-process-gone', (_event, details) => {
+		log.error('Renderer process gone', {
+			window: label,
+			reason: details.reason,
+			exitCode: details.exitCode,
+		});
+		if (label === 'worker') {
+			workerReady = false;
+		}
+	});
+	wc.on('unresponsive', () => {
+		log.warn('Renderer unresponsive', { window: label });
+	});
+	wc.on('responsive', () => {
+		log.info('Renderer responsive again', { window: label });
+	});
+	wc.on(
+		'did-fail-load',
+		(_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+			// Ignore sub-frame failures and ERR_ABORTED (-3) so dev-HMR/navigation
+			// churn doesn't spam ERROR lines.
+			if (!isMainFrame || errorCode === -3) {
+				return;
+			}
+			log.error('Renderer failed to load', {
+				window: label,
+				errorCode,
+				errorDescription,
+				url: validatedURL,
+			});
+		}
+	);
+}
+
 function createWindow(): void {
+	log.info('Creating worker window');
 	workerWindow = new BrowserWindow({
 		show: isDev,
 		icon: windowIcon,
@@ -475,13 +558,16 @@ function createWindow(): void {
 	});
 
 	remoteMain.enable(workerWindow.webContents);
+	attachRenderProcessDiagnostics(workerWindow, 'worker');
 
 	workerWindow.webContents.on('did-finish-load', () => {
 		workerReady = true;
+		log.info('Worker window ready', { workerReady: true });
 	});
 
 	workerWindow.on('closed', () => {
 		workerReady = false;
+		log.info('Worker window closed', { workerReady: false });
 	});
 
 	if (process.env.ELECTRON_RENDERER_URL) {
@@ -495,6 +581,7 @@ function createWindow(): void {
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 
+	log.info('Creating main window');
 	mainWindow = new BrowserWindow({
 		title: app.name,
 		show: false,
@@ -516,6 +603,7 @@ function createWindow(): void {
 
 	remoteMain.enable(mainWindow.webContents);
 	Menu.setApplicationMenu(null);
+	attachRenderProcessDiagnostics(mainWindow, 'main');
 
 	if (process.env.ELECTRON_RENDERER_URL) {
 		mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
