@@ -19,6 +19,7 @@
 //! acceptable) but never calls `process::exit`.
 
 use std::sync::mpsc;
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Mutex, Once};
 use std::thread;
 use std::time::Duration;
@@ -177,6 +178,15 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
             height,
         }),
         Ok(Err(msg)) => Err(napi::Error::from_reason(msg)),
-        Err(_) => Err(napi::Error::from_reason("WGC capture timed out")),
+        // Split the two recv_timeout failure modes so the JS diagnostics can tell a
+        // genuine slow grab (Timeout, grabElapsedMs ~ timeout+500) from a worker-thread
+        // panic (tx dropped -> Disconnected, returns immediately with grabElapsedMs ~ 0),
+        // which was previously mislabeled a timeout (cq-capture-path#3).
+        Err(RecvTimeoutError::Timeout) => {
+            Err(napi::Error::from_reason("WGC capture timed out"))
+        }
+        Err(RecvTimeoutError::Disconnected) => Err(napi::Error::from_reason(
+            "WGC worker exited without result (panic?)",
+        )),
     }
 }

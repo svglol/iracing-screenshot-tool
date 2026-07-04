@@ -138,8 +138,10 @@ const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 // capture/fallback flow, timeouts, or the display path.
 interface WgcAttemptDiagnostics {
 	// 'not-attempted' = WGC was not selected this capture (nativeCapture off or
-	// isWgcAvailable() false); 'saved'/'fallback'/'aborted' mirror the WGC outcome.
-	outcome: 'not-attempted' | 'saved' | 'fallback' | 'aborted';
+	// isWgcAvailable() false); 'attempted' = WGC was selected and is in-flight (set
+	// before the settle delay, so a disconnect mid-settle is attributed to WGC, not
+	// 'not-attempted'); 'saved'/'fallback'/'aborted' mirror the resolved WGC outcome.
+	outcome: 'not-attempted' | 'attempted' | 'saved' | 'fallback' | 'aborted';
 	// Exact fallback reason: the native error string (from getLastNativeFailureReason),
 	// 'black-frame', or 'pre-save-throw: ...'. null when the attempt did not fall back.
 	fallbackReason: string | null;
@@ -154,6 +156,13 @@ let lastWgcAttempt: WgcAttemptDiagnostics = {
 	grabElapsedMs: null,
 	frameDims: null,
 };
+// VRAM sampled at capture START — before iRacing can free its VRAM on an OOM exit
+// — so the disconnect diagnostic reports the pre-exit usage instead of the freed,
+// misleadingly-low reading getVramInfo() returns after iRacing is gone
+// (obs-capture-diagnostics#3). It is a pre-RESIZE baseline (sampled before the
+// window is grown to capture resolution), so it proves iRacing was consuming VRAM
+// before exit — it does NOT capture the high-res allocation peak.
+let captureStartVram: Record<string, unknown> | null = null;
 function resetWgcAttemptDiagnostics(): void {
 	lastWgcAttempt = {
 		outcome: 'not-attempted',
@@ -161,6 +170,7 @@ function resetWgcAttemptDiagnostics(): void {
 		grabElapsedMs: null,
 		frameDims: null,
 	};
+	captureStartVram = null;
 }
 
 // The subset of the resize-screenshot request payload the capture paths read.
@@ -333,7 +343,12 @@ function getCaptureBackendDiagnostics(): Record<string, unknown> {
 		wgcFallbackReason: lastWgcAttempt.fallbackReason,
 		wgcGrabElapsedMs: lastWgcAttempt.grabElapsedMs,
 		wgcFrameDims: lastWgcAttempt.frameDims,
+		// Live reading — may read FREED VRAM if iRacing has already exited (the OOM
+		// disconnect path fires reportScreenshotError only once telemetry is null).
 		vram,
+		// Pre-exit snapshot taken at capture start, so the disconnect diagnostic
+		// carries usage that actually supports the OOM hypothesis (obs-capture-diagnostics#3).
+		vramAtCaptureStart: captureStartVram,
 	};
 }
 
@@ -1160,6 +1175,22 @@ app.on('ready', async () => {
 		// The native-WGC and getUserMedia paths re-arm it (harmless clear+reset);
 		// restoreScreenshotState() clears it on success and on every error path.
 		armCaptureWatchdog();
+		// Snapshot VRAM now — before the window is resized and before iRacing can
+		// exit and free its VRAM — so an OOM-disconnect diagnostic reports the
+		// pre-exit usage, not the freed post-exit reading (obs-capture-diagnostics#3).
+		// Fully guarded: getVramInfo is already fail-open, but never let it throw out
+		// of the capture handler.
+		try {
+			const v = getVramInfo();
+			captureStartVram = {
+				totalBytes: v.totalBytes,
+				usedBytes: v.usedBytes,
+				source: v.source,
+				adapterName: v.adapterName,
+			};
+		} catch {
+			captureStartVram = null;
+		}
 		originalWindowBounds = getIracingWindowDetails() || null;
 		parseCameraState(
 			(iracing.telemetry?.values as { CamCameraState?: string[] })
@@ -1240,15 +1271,30 @@ app.on('ready', async () => {
 					// in dispatchWorkerCapture.
 					armCaptureWatchdog();
 					const outcome = await captureAndSaveViaWgc(id, data);
-					if (outcome === 'saved' || outcome === 'aborted') {
+					if (outcome === 'saved') {
+						return;
+					}
+					if (outcome === 'aborted') {
+						// An aborted capture is already reported by the disconnect/watchdog
+						// path — this is a correlation breadcrumb, not itself a failure.
+						log.info('WGC capture aborted mid-flight', {
+							grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+						});
 						return;
 					}
 					// outcome === 'fallback': WGC couldn't deliver a usable frame — drop
 					// to the getUserMedia path, which needs the source enumeration we
 					// skipped above. The window is already resized/raised for it to reuse.
-					log.info(
-						'WGC capture unavailable — falling back to getUserMedia'
-					);
+					// Emit the FULL attempt snapshot at this single fallback funnel — it
+					// fires BEFORE dispatchWorkerCapture, so a subsequent getUserMedia
+					// success can no longer erase the H1-vs-H2 evidence
+					// (obs-capture-diagnostics#1). Degraded-fidelity path → log.warn.
+					log.warn('WGC fell back to getUserMedia', {
+						fallbackReason: lastWgcAttempt.fallbackReason,
+						grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+						frameDims: lastWgcAttempt.frameDims,
+						outcome: lastWgcAttempt.outcome,
+					});
 					const fallbackSources = await desktopCapturer.getSources({
 						types: ['window'],
 						thumbnailSize: { width: 0, height: 0 },
@@ -1625,6 +1671,12 @@ async function captureAndSaveViaWgc(
 	id: number,
 	data: CaptureRequestData
 ): Promise<WgcCaptureOutcome> {
+	// WGC is now the active backend and in-flight. Mark it BEFORE the settle so a
+	// disconnect during the settle (scheduleCaptureAbortOnDisconnect → the
+	// diagnostics snapshot) attributes the aborted capture to WGC ('attempted')
+	// instead of the reset 'not-attempted' (obs-capture-diagnostics#4).
+	lastWgcAttempt.outcome = 'attempted';
+
 	// SetWindowPos is synchronous, but iRacing's swapchain needs a frame or two to
 	// re-render at the new size. Settle briefly so the grab isn't a stale frame.
 	await delay(WGC_SETTLE_MS);
@@ -1655,12 +1707,25 @@ async function captureAndSaveViaWgc(
 		lastWgcAttempt.outcome = 'fallback';
 		lastWgcAttempt.fallbackReason =
 			getLastNativeFailureReason() || 'no-frame (native returned null)';
+		// Immediate, precise breadcrumb at the point of failure. The caller's funnel
+		// (step 7) also logs this fallback durably — the two lines per no-frame event
+		// are intentional (interior precision + funnel durability), not a bug.
+		log.warn('WGC produced no frame — falling back', {
+			fallbackReason: lastWgcAttempt.fallbackReason,
+			grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+		});
 		return 'fallback';
 	}
 	if (isRgbaBufferBlack(frame.data, frame.width, frame.height)) {
 		lastWgcAttempt.outcome = 'fallback';
 		lastWgcAttempt.fallbackReason = 'black-frame';
-		log.info('WGC frame was black — falling back to getUserMedia');
+		// Degraded-fidelity path → log.warn (was log.info); enriched with the grab
+		// timing + frame dims so H1(slow/black) is distinguishable in the log. The
+		// caller funnel also logs this fallback — the double line is intentional.
+		log.warn('WGC frame was black — falling back to getUserMedia', {
+			grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+			frameDims: lastWgcAttempt.frameDims,
+		});
 		return 'fallback';
 	}
 
