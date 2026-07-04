@@ -136,6 +136,17 @@ export function isWgcAvailable(): boolean {
 	return getWgcApi() !== null;
 }
 
+// Test-only seam (cq-tests#3): inject a fake WgcAddon — or null (unavailable) /
+// undefined (restore the lazy createWgcApi path) — so the failure-reason state
+// machine below can be exercised without a real .node or a live window. NEVER
+// called by production code; it exists solely so wgc-capture.test.ts can drive
+// captureIracingWindowNative's lastNativeFailureReason transitions deterministically.
+export function __setWgcApiForTests(
+	api: WgcAddon | null | undefined
+): void {
+	wgcApi = api;
+}
+
 // #11 diagnostics (observability-only): the reason the LAST
 // captureIracingWindowNative call returned null. Lets the failure-time diagnostics
 // distinguish the WGC fallback triggers (H1 timeout/no-frame vs H2 D3D/VRAM alloc

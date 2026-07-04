@@ -31,6 +31,7 @@ import {
 	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
+import { decideCaptureBackend, classifyWgcResult } from './capture-decisions';
 import {
 	captureIracingWindowNative,
 	getLastNativeFailureReason,
@@ -1269,8 +1270,17 @@ app.on('ready', async () => {
 			// still matters for the PowerShell resize fallback, whose spawn would
 			// otherwise block getSources).
 			try {
+				// Backend selection via the pure, tested decider (cq-tests#2). We are
+				// already inside the non-ReShade branch, so reshade is provably false
+				// here — this resolves to 'wgc' or 'getUserMedia'; the 'reshade' arm is
+				// exercised by capture-decisions.test.ts. Equivalent to the previous
+				// inline `nativeCapture && isWgcAvailable()`.
 				const useNativeCapture =
-					config.get('nativeCapture') && isWgcAvailable();
+					decideCaptureBackend({
+						reshade: false,
+						nativeCapture: config.get('nativeCapture'),
+						wgcAvailable: isWgcAvailable(),
+					}) === 'wgc';
 				const [id, windowSources] = await Promise.all([
 					resizeIracingWindowAsync(data.width, data.height, left, top),
 					useNativeCapture
@@ -1743,9 +1753,10 @@ async function captureAndSaveViaWgc(
 			? { width: frame.width, height: frame.height }
 			: null;
 	if (!frame || !frame.data || frame.width < 1 || frame.height < 1) {
-		lastWgcAttempt.outcome = 'fallback';
-		lastWgcAttempt.fallbackReason =
-			getLastNativeFailureReason() || 'no-frame (native returned null)';
+		// Classification via the pure, tested helper (cq-tests#2).
+		const c = classifyWgcResult('no-frame', getLastNativeFailureReason());
+		lastWgcAttempt.outcome = c.outcome;
+		lastWgcAttempt.fallbackReason = c.fallbackReason;
 		// Immediate, precise breadcrumb at the point of failure. The caller's funnel
 		// (step 7) also logs this fallback durably — the two lines per no-frame event
 		// are intentional (interior precision + funnel durability), not a bug.
@@ -1756,8 +1767,9 @@ async function captureAndSaveViaWgc(
 		return 'fallback';
 	}
 	if (isRgbaBufferBlack(frame.data, frame.width, frame.height)) {
-		lastWgcAttempt.outcome = 'fallback';
-		lastWgcAttempt.fallbackReason = 'black-frame';
+		const c = classifyWgcResult('black', null);
+		lastWgcAttempt.outcome = c.outcome;
+		lastWgcAttempt.fallbackReason = c.fallbackReason;
 		// Degraded-fidelity path → log.warn (was log.info); enriched with the grab
 		// timing + frame dims so H1(slow/black) is distinguishable in the log. The
 		// caller funnel also logs this fallback — the double line is intentional.
