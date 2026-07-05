@@ -450,6 +450,34 @@ export default {
 				config.set('reshadeFile', file);
 			}
 		},
+		// Persist the manual-restore geometry on edit (cq-renderer-settings-ui#1).
+		// This replaces the old beforeUnmount() persistence, which never fired under
+		// the v-show Oruga modal (the component stays mounted for the app lifetime),
+		// silently losing ultrawide/Surround geometry on restart. config.set (not
+		// ipcRenderer.send) is what index.ts reads at startup; sending here would
+		// live-resize iRacing on every keystroke — that stays on Restore Now.
+		screenWidth() {
+			const value = parseInt(this.screenWidth, 10);
+			if (value >= 1080 && value <= 10320) {
+				config.set('defaultScreenWidth', value);
+			}
+		},
+		screenHeight() {
+			const value = parseInt(this.screenHeight, 10);
+			if (value >= 720 && value <= 10320) {
+				config.set('defaultScreenHeight', value);
+			}
+		},
+		screenLeft() {
+			if (this.screenLeft !== '') {
+				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
+			}
+		},
+		screenTop() {
+			if (this.screenTop !== '') {
+				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
+			}
+		},
 	},
 	created() {
 		// Reflect whether the WGC native-capture path actually loaded on this
@@ -476,54 +504,29 @@ export default {
 			this.iracingOpen = false;
 		});
 	},
-	beforeUnmount() {
-		if (
-			config.get('defaultScreenHeight') !== parseInt(this.screenHeight, 10)
-		) {
-			if (this.screenHeight >= 720 && this.screenHeight <= 10320) {
-				config.set('defaultScreenHeight', parseInt(this.screenHeight, 10));
-				ipcRenderer.send(
-					'defaultScreenHeight',
-					parseInt(this.screenHeight, 10)
-				);
-			}
-		}
-		if (config.get('defaultScreenWidth') !== parseInt(this.screenWidth, 10)) {
-			if (this.screenWidth >= 1080 && this.screenWidth <= 10320) {
-				ipcRenderer.send(
-					'defaultScreenWidth',
-					parseInt(this.screenWidth, 10)
-				);
-				config.set('defaultScreenWidth', parseInt(this.screenWidth, 10));
-			}
-		}
-
-		if (config.get('defaultScreenLeft') !== parseInt(this.screenLeft, 10)) {
-			if (this.screenLeft !== '') {
-				ipcRenderer.send(
-					'defaultScreenLeft',
-					parseInt(this.screenLeft, 10)
-				);
-				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
-			}
-		}
-
-		if (config.get('defaultScreenTop') !== parseInt(this.screenTop, 10)) {
-			if (this.screenTop !== '') {
-				ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop, 10));
-				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
-			}
-		}
-	},
 	methods: {
 		restoreNow() {
-			ipcRenderer.send('defaultScreenWidth', parseInt(this.screenWidth, 10));
-			ipcRenderer.send(
-				'defaultScreenHeight',
-				parseInt(this.screenHeight, 10)
-			);
+			const w = parseInt(this.screenWidth, 10);
+			const h = parseInt(this.screenHeight, 10);
+			// Live-resize iRacing now (what the button is for)…
+			ipcRenderer.send('defaultScreenWidth', w);
+			ipcRenderer.send('defaultScreenHeight', h);
 			ipcRenderer.send('defaultScreenLeft', parseInt(this.screenLeft, 10));
 			ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop, 10));
+			// …and persist, so a value left untouched since load (no watcher fired)
+			// is still saved when Restore Now is clicked (cq-renderer-settings-ui#1).
+			if (w >= 1080 && w <= 10320) {
+				config.set('defaultScreenWidth', w);
+			}
+			if (h >= 720 && h <= 10320) {
+				config.set('defaultScreenHeight', h);
+			}
+			if (this.screenLeft !== '') {
+				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
+			}
+			if (this.screenTop !== '') {
+				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
+			}
 		},
 		openFolderDialog() {
 			ipcRenderer

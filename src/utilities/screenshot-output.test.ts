@@ -66,6 +66,18 @@ describe('buildUniqueScreenshotName', () => {
 		expect(name).toBe('Daytona-0');
 	});
 
+	test('expands EVERY {counter} occurrence (cq-utilities#4)', () => {
+		// String.replace hit only the first — a two-{counter} format left a literal
+		// '{counter}' behind. split/join fills both.
+		const name = buildUniqueScreenshotName({
+			formatString: '{track}-{counter}-{counter}',
+			sessionInfo,
+			telemetry,
+			exists: () => false,
+		});
+		expect(name).toBe('Daytona-0-0');
+	});
+
 	test('appends -N to a counter-less format on collision', () => {
 		const taken = new Set(['Daytona', 'Daytona-1']);
 		const name = buildUniqueScreenshotName({

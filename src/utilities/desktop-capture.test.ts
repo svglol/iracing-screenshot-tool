@@ -379,6 +379,33 @@ describe('findSourceByWindowTitle', () => {
 	test('defaults correctly', () => {
 		expect(findSourceByWindowTitle()).toBeNull();
 	});
+
+	// cq-release-desktopcap#4: anchored (prefix) fallback, longest-wins, min-length.
+	test('does not select an interior-substring-only source', () => {
+		// The old bidirectional .includes would pick this "Toyota" window because
+		// the target CONTAINS "toyota"; the anchored fallback must reject it.
+		const s = [{ id: 'window:1:0', name: 'Toyota' }];
+		expect(
+			findSourceByWindowTitle(s, 'iRacing.com Simulator - Toyota @ Daytona')
+		).toBeNull();
+	});
+
+	test('prefers the longest (most-specific) anchored source', () => {
+		const s = [
+			{ id: 'window:1:0', name: 'iRacing' },
+			{ id: 'window:2:0', name: 'iRacing.com Simulator' },
+		];
+		// Both anchor the target as a prefix; the longer, more-specific one wins.
+		expect(
+			findSourceByWindowTitle(s, 'iRacing.com Simulator - Practice')
+		).toEqual(s[1]);
+	});
+
+	test('ignores trivially short source titles', () => {
+		// "iR" would prefix-anchor "iRacing…" but is too short to be meaningful.
+		const s = [{ id: 'window:1:0', name: 'iR' }];
+		expect(findSourceByWindowTitle(s, 'iRacing.com Simulator')).toBeNull();
+	});
 });
 
 // ---------------------------------------------------------------------------

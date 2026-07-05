@@ -341,8 +341,31 @@ export function resolveFilenameFormat(
 	// (e.g. Nürburgring → Nurburgring, Räikkönen → Raikkonen)
 	result = result.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+	// Strip ASCII control chars / NUL / DEL (cq-utilities#1): a NUL crashes the
+	// sharp write with ERR_INVALID_ARG_VALUE and a tab/newline corrupts the on-disk
+	// name. Done BEFORE the empty check below so an all-control-char name collapses
+	// to '' and triggers the fallback.
+	// eslint-disable-next-line no-control-regex
+	result = result.replace(/[\x00-\x1F\x7F]/g, '');
+
 	// Sanitize: replace Windows-filename-unsafe characters with underscore
 	result = result.replace(/[\\/:*?"<>|]/g, '_');
+
+	// All-empty fallback (cq-utilities#2): if every session-derived token resolved
+	// empty AND the user didn't ask for a bare {counter}, fall back rather than emit
+	// a degenerate '.jpg'. Unicode-aware — a purely CJK/Cyrillic name (no Latin
+	// a-z0-9) is legitimate content and must be preserved, so test \p{L}/\p{N}.
+	const withoutCounter = result.split('{counter}').join('');
+	if (!/[\p{L}\p{N}]/u.test(withoutCounter) && !result.includes('{counter}')) {
+		return FALLBACK_FORMAT;
+	}
+
+	// Windows reserved device names can't be a bare base filename (cq-utilities#3).
+	// Exact whole-name match only — 'CON-{counter}' and 'CONWAY' are valid and left
+	// alone, matching the real OS rule.
+	if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(result)) {
+		result = '_' + result;
+	}
 
 	return result;
 }

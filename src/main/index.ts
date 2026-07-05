@@ -1,6 +1,5 @@
 import { productName, build } from '../../package.json';
 import { autoUpdater } from 'electron-updater';
-import * as remoteMain from '@electron/remote/main';
 import {
 	app,
 	BrowserWindow,
@@ -32,7 +31,13 @@ import {
 	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
-import { captureIracingWindowNative, isWgcAvailable } from './wgc-capture';
+import { decideCaptureBackend, classifyWgcResult } from './capture-decisions';
+import {
+	captureIracingWindowNative,
+	getLastNativeFailureReason,
+	getWgcUnavailableReason,
+	isWgcAvailable,
+} from './wgc-capture';
 import sharp from 'sharp';
 import { DEFAULT_FORMAT } from '../utilities/filenameFormat';
 import {
@@ -95,13 +100,24 @@ let config: any;
 let mainWindow: BrowserWindow | null;
 let workerWindow: BrowserWindow | null;
 let workerReady = false;
+// Last iRacing readiness value replied to the renderer's status heartbeat, so the
+// false->true self-heal edge (commit 07f8182) is logged once instead of on every
+// poll (obs-lifecycle-telemetry#3).
+let lastIracingStatusReply: boolean | null = null;
 let cancelReshadeWait: ((reason: string) => void) | null = null;
 // Backstop timer for the non-ReShade capture path: if the worker never posts
 // back (screenshot-finished/response/error), force-restore so the app can't
 // wedge with iRacing stuck resized + UI hidden.
 let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
 let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
-const CAPTURE_WATCHDOG_MS = 30000;
+// Kept strictly GREATER than waitForReshadeScreenshot's own 30000ms timeout: the
+// watchdog is armed the instant takingScreenshot flips (before the ReShade branch),
+// so on a genuine ReShade timeout its own wait must win the race and surface the
+// accurate "Timed out waiting for a ReShade screenshot" — not the watchdog's
+// worker-oriented "the capture worker did not respond". The reshade catch's
+// restoreScreenshotState() clears this watchdog before the 35s mark. The extra 5s
+// still nets a truly hung resize on any path.
+const CAPTURE_WATCHDOG_MS = 35000;
 const CAPTURE_ABORT_DEBOUNCE_MS = 400;
 // getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
 // requesting larger can never converge on the dim-match — bound requests here.
@@ -113,6 +129,49 @@ const WGC_SETTLE_MS = 250;
 const WGC_TIMEOUT_MS = 1500;
 const WGC_BLACK_FRAME_MAX_BRIGHTNESS = 24;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
+
+// #11 diagnostics (observability-only): a snapshot of the most recent WGC capture
+// attempt, surfaced in the failure-time diagnostics so a user log can distinguish
+// the WGC fallback triggers (H1 timeout/no-frame vs H2 D3D/VRAM alloc fail) and
+// prove whether WGC was engaged at all. Written by captureAndSaveViaWgc; read by
+// buildMainScreenshotDiagnostics. This mirrors state — it NEVER influences the
+// capture/fallback flow, timeouts, or the display path.
+interface WgcAttemptDiagnostics {
+	// 'not-attempted' = WGC was not selected this capture (nativeCapture off or
+	// isWgcAvailable() false); 'attempted' = WGC was selected and is in-flight (set
+	// before the settle delay, so a disconnect mid-settle is attributed to WGC, not
+	// 'not-attempted'); 'saved'/'fallback'/'aborted' mirror the resolved WGC outcome.
+	outcome: 'not-attempted' | 'attempted' | 'saved' | 'fallback' | 'aborted';
+	// Exact fallback reason: the native error string (from getLastNativeFailureReason),
+	// 'black-frame', or 'pre-save-throw: ...'. null when the attempt did not fall back.
+	fallbackReason: string | null;
+	// Wall time of the native grab call in ms (null if the grab wasn't reached).
+	grabElapsedMs: number | null;
+	// Dimensions of the frame WGC returned (null if no frame arrived).
+	frameDims: { width: number; height: number } | null;
+}
+let lastWgcAttempt: WgcAttemptDiagnostics = {
+	outcome: 'not-attempted',
+	fallbackReason: null,
+	grabElapsedMs: null,
+	frameDims: null,
+};
+// VRAM sampled at capture START — before iRacing can free its VRAM on an OOM exit
+// — so the disconnect diagnostic reports the pre-exit usage instead of the freed,
+// misleadingly-low reading getVramInfo() returns after iRacing is gone
+// (obs-capture-diagnostics#3). It is a pre-RESIZE baseline (sampled before the
+// window is grown to capture resolution), so it proves iRacing was consuming VRAM
+// before exit — it does NOT capture the high-res allocation peak.
+let captureStartVram: Record<string, unknown> | null = null;
+function resetWgcAttemptDiagnostics(): void {
+	lastWgcAttempt = {
+		outcome: 'not-attempted',
+		fallbackReason: null,
+		grabElapsedMs: null,
+		frameDims: null,
+	};
+	captureStartVram = null;
+}
 
 // The subset of the resize-screenshot request payload the capture paths read.
 // The IPC handler itself keeps `data: any` (it mutates/clamps fields), but the
@@ -131,7 +190,40 @@ app.commandLine.appendSwitch('js-flags', '--expose_gc');
 // @ts-expect-error — ELECTRON_DISABLE_SECURITY_WARNINGS typed as string | undefined; legacy assignment preserved
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = false;
 
-remoteMain.initialize();
+// Process-level crash safety nets (obs-error-visibility#1). Registered at module
+// load so an unhandled throw/rejection in the main process — or a GPU/utility
+// child-process death — lands in app.log (the only field-diagnostic surface)
+// instead of dying or wedging silently. Log-only and deliberately NON-fatal: they
+// do not re-throw/exit, so the capture watchdog + disconnect-abort recovery paths
+// keep running (see cq-main-index#2, where a timer-callback fs throw would
+// otherwise kill the process mid-recovery). NOTE: this suppresses Node/Electron's
+// default crash-on-uncaught / crash-on-unhandled-rejection behaviour — an
+// intentional trade for observability + those recovery paths surviving.
+process.on('uncaughtException', (error) => {
+	log.error('Uncaught exception in main process', {
+		message: error?.message || String(error),
+		stack: error?.stack,
+	});
+});
+process.on('unhandledRejection', (reason) => {
+	const err = reason instanceof Error ? reason : null;
+	log.error('Unhandled promise rejection in main process', {
+		message: err ? err.message : String(reason),
+		stack: err?.stack,
+	});
+});
+// GPU-process OOM/crash is a first-class failure mode for this VRAM-heavy capture
+// app, distinct from a renderer JS crash. child-process-gone is the modern superset
+// of the deprecated gpu-process-crashed (covers GPU + Utility + Zygote).
+app.on('child-process-gone', (_event, details) => {
+	log.error('Child process gone', {
+		type: details.type,
+		reason: details.reason,
+		exitCode: details.exitCode,
+		serviceName: details.serviceName,
+		name: details.name,
+	});
+});
 
 function createWindowIcon() {
 	// `process.resourcesPath` is set by Electron in BOTH dev and packaged modes
@@ -203,6 +295,61 @@ function getConfigDiagnosticValue(key: string): unknown {
 	}
 }
 
+// #11 diagnostics (observability-only): which capture backend was selected/attempted
+// and, on a WGC fallback, exactly WHY — so a user's failure log distinguishes H1
+// (WGC timeout / no-frame) from H2 (D3D/VRAM alloc fail) and proves whether WGC was
+// even engaged. Every field fails open: an unreadable value logs null, never throws.
+function getCaptureBackendDiagnostics(): Record<string, unknown> {
+	let wgcAvailable: boolean | null;
+	try {
+		wgcAvailable = isWgcAvailable();
+	} catch {
+		wgcAvailable = null;
+	}
+
+	// Optional VRAM snapshot to test H2. getVramInfo is fully fail-open (returns a
+	// 'fallback'-classed value on any failure) but wrap it anyway so the diagnostics
+	// path can never be taken down by an FFI hiccup.
+	let vram: unknown = null;
+	try {
+		const info = getVramInfo();
+		vram = {
+			totalBytes: info.totalBytes,
+			usedBytes: info.usedBytes,
+			source: info.source,
+			adapterName: info.adapterName,
+		};
+	} catch {
+		vram = null;
+	}
+
+	return {
+		// Why WGC was / wasn't engaged.
+		nativeCapture: getConfigDiagnosticValue('nativeCapture'),
+		wgcAvailable,
+		// The concrete reason WGC is unavailable (null when available), so a bare
+		// wgcAvailable:false is no longer a dead end (obs-capture-diagnostics#2).
+		wgcUnavailableReason: (() => {
+			try {
+				return getWgcUnavailableReason();
+			} catch {
+				return null;
+			}
+		})(),
+		// The most recent WGC attempt for this capture request.
+		wgcOutcome: lastWgcAttempt.outcome,
+		wgcFallbackReason: lastWgcAttempt.fallbackReason,
+		wgcGrabElapsedMs: lastWgcAttempt.grabElapsedMs,
+		wgcFrameDims: lastWgcAttempt.frameDims,
+		// Live reading — may read FREED VRAM if iRacing has already exited (the OOM
+		// disconnect path fires reportScreenshotError only once telemetry is null).
+		vram,
+		// Pre-exit snapshot taken at capture start, so the disconnect diagnostic
+		// carries usage that actually supports the OOM hypothesis (obs-capture-diagnostics#3).
+		vramAtCaptureStart: captureStartVram,
+	};
+}
+
 function buildMainScreenshotDiagnostics() {
 	const cpus = os.cpus() || [];
 	const displays = screen.getAllDisplays().map(serializeDisplay);
@@ -261,6 +408,7 @@ function buildMainScreenshotDiagnostics() {
 				sessionInfoReady: Boolean(iracing.sessionInfo),
 				window: getIracingWindowDetails() || null,
 			},
+			captureBackend: getCaptureBackendDiagnostics(),
 		},
 	};
 }
@@ -368,7 +516,18 @@ function reportScreenshotError(
 			main: getMainScreenshotDiagnostics(),
 		}),
 	});
-	const logFile = writeScreenshotErrorLog(payload);
+	// Guard the synchronous fs write: reportScreenshotError runs inside the
+	// watchdog and disconnect-abort setTimeout callbacks, so a disk error
+	// (ENOSPC/EACCES) here would become a process-killing uncaught exception
+	// during recovery. Best-effort — the renderer error still surfaces.
+	let logFile: string | undefined;
+	try {
+		logFile = writeScreenshotErrorLog(payload);
+	} catch (error) {
+		log.error('Failed to write screenshot error log', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
 	const rendererPayload = { ...payload, logFile };
 
 	console.error('Screenshot error:', rendererPayload.message);
@@ -383,7 +542,97 @@ function reportScreenshotError(
 	return rendererPayload;
 }
 
+// Wire renderer crash / hang / load-failure diagnostics onto a window's
+// webContents so a silent renderer death finally leaves a durable app.log line
+// (obs-lifecycle-telemetry#5). For the worker, a render-process-gone ALSO flips
+// workerReady=false — an intentional stale-state correction (NOT purely log-only):
+// on a pure renderer crash 'closed' never fires, so without this the gate stays
+// stale-true from did-finish-load and the next capture is dispatched to a dead
+// worker and hangs until the 30s watchdog; with it, the capture is rejected
+// immediately with a logged crash cause.
+function attachRenderProcessDiagnostics(
+	win: BrowserWindow,
+	label: 'worker' | 'main'
+): void {
+	const wc = win.webContents;
+	wc.on('render-process-gone', (_event, details) => {
+		log.error('Renderer process gone', {
+			window: label,
+			reason: details.reason,
+			exitCode: details.exitCode,
+		});
+		if (label === 'worker') {
+			workerReady = false;
+		}
+	});
+	wc.on('unresponsive', () => {
+		log.warn('Renderer unresponsive', { window: label });
+	});
+	wc.on('responsive', () => {
+		log.info('Renderer responsive again', { window: label });
+	});
+	wc.on(
+		'did-fail-load',
+		(_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+			// Ignore sub-frame failures and ERR_ABORTED (-3) so dev-HMR/navigation
+			// churn doesn't spam ERROR lines.
+			if (!isMainFrame || errorCode === -3) {
+				return;
+			}
+			log.error('Renderer failed to load', {
+				window: label,
+				errorCode,
+				errorDescription,
+				url: validatedURL,
+			});
+		}
+	);
+}
+
+// Whether a navigation target is the app's OWN origin: the electron-vite dev
+// server when running under `npm run dev`, else the packaged file:// bundle. Used
+// to gate will-navigate so a legitimate reload/initial load is never blocked.
+function isSameOriginAsApp(target: string): boolean {
+	try {
+		const url = new URL(target);
+		const devUrl = process.env.ELECTRON_RENDERER_URL;
+		if (devUrl) {
+			return url.origin === new URL(devUrl).origin;
+		}
+		// Packaged build: the renderer is loaded from a file:// path.
+		return url.protocol === 'file:';
+	} catch {
+		// Unparseable target — treat as off-origin and deny.
+		return false;
+	}
+}
+
+// Lock a window down against navigation-based attacks (cq-electron-security#3). A
+// compromised/injected renderer could otherwise navigate the window to an attacker
+// origin or spawn new BrowserWindows. This app never legitimately does either:
+// external links open in the OS browser via shell.openExternal (not an in-app
+// window), and all in-app routing is client-side vue-router (history.pushState,
+// which does NOT fire will-navigate). So: deny every window.open, and deny any
+// full-page navigation that leaves the app's own origin. The initial loadURL/
+// loadFile is not a "navigation" and is unaffected. Observability via log.warn.
+function hardenWindow(win: BrowserWindow, label: 'worker' | 'main'): void {
+	win.webContents.setWindowOpenHandler(({ url }) => {
+		log.warn('Blocked renderer window.open', { window: label, url });
+		return { action: 'deny' };
+	});
+	win.webContents.on('will-navigate', (event, url) => {
+		if (!isSameOriginAsApp(url)) {
+			event.preventDefault();
+			log.warn('Blocked off-origin renderer navigation', {
+				window: label,
+				url,
+			});
+		}
+	});
+}
+
 function createWindow(): void {
+	log.info('Creating worker window');
 	workerWindow = new BrowserWindow({
 		show: isDev,
 		icon: windowIcon,
@@ -395,14 +644,17 @@ function createWindow(): void {
 		},
 	});
 
-	remoteMain.enable(workerWindow.webContents);
+	hardenWindow(workerWindow, 'worker');
+	attachRenderProcessDiagnostics(workerWindow, 'worker');
 
 	workerWindow.webContents.on('did-finish-load', () => {
 		workerReady = true;
+		log.info('Worker window ready', { workerReady: true });
 	});
 
 	workerWindow.on('closed', () => {
 		workerReady = false;
+		log.info('Worker window closed', { workerReady: false });
 	});
 
 	if (process.env.ELECTRON_RENDERER_URL) {
@@ -416,6 +668,7 @@ function createWindow(): void {
 		global.__static = path.join(__dirname, '/static').replace(/\\/g, '\\\\');
 	}
 
+	log.info('Creating main window');
 	mainWindow = new BrowserWindow({
 		title: app.name,
 		show: false,
@@ -435,8 +688,9 @@ function createWindow(): void {
 		},
 	});
 
-	remoteMain.enable(mainWindow.webContents);
+	hardenWindow(mainWindow, 'main');
 	Menu.setApplicationMenu(null);
+	attachRenderProcessDiagnostics(mainWindow, 'main');
 
 	if (process.env.ELECTRON_RENDERER_URL) {
 		mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -765,6 +1019,32 @@ app.on('ready', async () => {
 		isPackaged: app.isPackaged,
 	});
 
+	// Startup environment baseline (obs-lifecycle-telemetry#4): one durable line
+	// pinning the GPU/VRAM/display/backend context every field report needs, so a
+	// bug can be triaged without asking the user to re-derive their setup. Reuses
+	// the already-assembled, fail-open diagnostics helpers (getCaptureBackendDiagnostics
+	// swallows WGC/VRAM FFI errors internally) so this can never throw out of ready.
+	let updateChannel: string | null = null;
+	try {
+		updateChannel = autoUpdater.channel;
+	} catch {
+		updateChannel = null;
+	}
+	log.info('Environment', {
+		version: app.getVersion(),
+		isPackaged: app.isPackaged,
+		channel: updateChannel,
+		platform: process.platform,
+		arch: process.arch,
+		electron: String(process.versions.electron || ''),
+		node: String(process.versions.node || ''),
+		captureBackend: getCaptureBackendDiagnostics(),
+		displays: {
+			count: screen.getAllDisplays().length,
+			primary: serializeDisplay(screen.getPrimaryDisplay()),
+		},
+	});
+
 	if (isDev) {
 		mainWindow?.webContents.openDevTools();
 		workerWindow?.webContents.openDevTools();
@@ -785,10 +1065,20 @@ app.on('ready', async () => {
 	});
 
 	ipcMain.on('request-iracing-status', (event) => {
-		event.reply('iracing-status', iracing.telemetry != null);
+		const ready = iracing.telemetry != null;
+		// Log only the edge, not every poll — the renderer heartbeats this
+		// continuously and logging each reply would flood app.log.
+		if (ready !== lastIracingStatusReply) {
+			log.info('iRacing status poll edge', { ready });
+			lastIracingStatusReply = ready;
+		}
+		event.reply('iracing-status', ready);
 	});
 
 	iracing.on('Connected', () => {
+		// App-facing lifecycle transition record (the low-level SDK start is logged
+		// as 'SDK startSDK' in iracing-sdk.ts) — obs-lifecycle-telemetry#1.
+		log.info('iRacing connected');
 		cancelPendingCaptureAbort();
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-connected', '');
@@ -796,6 +1086,9 @@ app.on('ready', async () => {
 	});
 
 	iracing.on('Disconnected', () => {
+		// midCapture is the actionable field: a disconnect mid-capture is the
+		// VRAM-exhaustion signature this app cares about (obs-lifecycle-telemetry#1).
+		log.info('iRacing disconnected', { midCapture: takingScreenshot });
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-disconnected', '');
 		}
@@ -821,6 +1114,11 @@ app.on('ready', async () => {
 			});
 			return;
 		}
+
+		// #11 diagnostics: clear the previous capture's WGC snapshot so the
+		// failure-time diagnostics reflect THIS request. Stays 'not-attempted' unless
+		// the WGC path runs and overwrites it. Observability-only.
+		resetWgcAttemptDiagnostics();
 
 		if (!iracing.telemetry) {
 			log.info('Screenshot rejected', { reason: 'no-telemetry' });
@@ -910,6 +1208,29 @@ app.on('ready', async () => {
 		}
 
 		takingScreenshot = true;
+		// Arm the recovery watchdog the instant the latch flips — before the
+		// branch split — so EVERY path is covered from here on, including a
+		// resizeIracingWindowAsync that HANGS (never resolves): a try/catch can
+		// only recover a rejection, so the watchdog is the sole net for a hang.
+		// The native-WGC and getUserMedia paths re-arm it (harmless clear+reset);
+		// restoreScreenshotState() clears it on success and on every error path.
+		armCaptureWatchdog();
+		// Snapshot VRAM now — before the window is resized and before iRacing can
+		// exit and free its VRAM — so an OOM-disconnect diagnostic reports the
+		// pre-exit usage, not the freed post-exit reading (obs-capture-diagnostics#3).
+		// Fully guarded: getVramInfo is already fail-open, but never let it throw out
+		// of the capture handler.
+		try {
+			const v = getVramInfo();
+			captureStartVram = {
+				totalBytes: v.totalBytes,
+				usedBytes: v.usedBytes,
+				source: v.source,
+				adapterName: v.adapterName,
+			};
+		} catch {
+			captureStartVram = null;
+		}
 		originalWindowBounds = getIracingWindowDetails() || null;
 		parseCameraState(
 			(iracing.telemetry?.values as { CamCameraState?: string[] })
@@ -948,18 +1269,127 @@ app.on('ready', async () => {
 			// path keeps overlapping resize + enumeration (the Promise.all overlap
 			// still matters for the PowerShell resize fallback, whose spawn would
 			// otherwise block getSources).
-			const useNativeCapture =
-				config.get('nativeCapture') && isWgcAvailable();
-			const [id, windowSources] = await Promise.all([
-				resizeIracingWindowAsync(data.width, data.height, left, top),
-				useNativeCapture
-					? Promise.resolve<Electron.DesktopCapturerSource[]>([])
-					: desktopCapturer.getSources({
-							types: ['window'],
-							thumbnailSize: { width: 0, height: 0 },
-							fetchWindowIcons: false,
-						}),
-			]);
+			try {
+				// Backend selection via the pure, tested decider (cq-tests#2). We are
+				// already inside the non-ReShade branch, so reshade is provably false
+				// here — this resolves to 'wgc' or 'getUserMedia'; the 'reshade' arm is
+				// exercised by capture-decisions.test.ts. Equivalent to the previous
+				// inline `nativeCapture && isWgcAvailable()`.
+				const useNativeCapture =
+					decideCaptureBackend({
+						reshade: false,
+						nativeCapture: config.get('nativeCapture'),
+						wgcAvailable: isWgcAvailable(),
+					}) === 'wgc';
+				const [id, windowSources] = await Promise.all([
+					resizeIracingWindowAsync(data.width, data.height, left, top),
+					useNativeCapture
+						? Promise.resolve<Electron.DesktopCapturerSource[]>([])
+						: desktopCapturer.getSources({
+								types: ['window'],
+								thumbnailSize: { width: 0, height: 0 },
+								fetchWindowIcons: false,
+							}),
+				]);
+
+				if (id === undefined) {
+					log.info('iRacing window not found');
+					restoreScreenshotState();
+					reportScreenshotError('iRacing window not found', {
+						context: 'resize-screenshot:window-not-found',
+						meta: {
+							request: data,
+							defaultScreen: { width, height, left, top },
+						},
+					});
+					return;
+				}
+
+				log.info('iRacing window resized', {
+					width: data.width,
+					height: data.height,
+					handle: id,
+				});
+
+				if (useNativeCapture) {
+					// Arm the same recovery watchdog the worker path uses: if the WGC
+					// settle/grab/save ever hangs (e.g. a stalled disk or network
+					// screenshot folder), this force-restores instead of leaving iRacing
+					// stuck at capture size with its UI hidden. A 'saved'/'aborted'
+					// outcome clears it via restoreScreenshotState; 'fallback' re-arms it
+					// in dispatchWorkerCapture.
+					armCaptureWatchdog();
+					const outcome = await captureAndSaveViaWgc(id, data);
+					if (outcome === 'saved') {
+						return;
+					}
+					if (outcome === 'aborted') {
+						// An aborted capture is already reported by the disconnect/watchdog
+						// path — this is a correlation breadcrumb, not itself a failure.
+						log.info('WGC capture aborted mid-flight', {
+							grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+						});
+						return;
+					}
+					// outcome === 'fallback': WGC couldn't deliver a usable frame — drop
+					// to the getUserMedia path, which needs the source enumeration we
+					// skipped above. The window is already resized/raised for it to reuse.
+					// Emit the FULL attempt snapshot at this single fallback funnel — it
+					// fires BEFORE dispatchWorkerCapture, so a subsequent getUserMedia
+					// success can no longer erase the H1-vs-H2 evidence
+					// (obs-capture-diagnostics#1). Degraded-fidelity path → log.warn.
+					log.warn('WGC fell back to getUserMedia', {
+						fallbackReason: lastWgcAttempt.fallbackReason,
+						grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+						frameDims: lastWgcAttempt.frameDims,
+						outcome: lastWgcAttempt.outcome,
+					});
+					const fallbackSources = await desktopCapturer.getSources({
+						types: ['window'],
+						thumbnailSize: { width: 0, height: 0 },
+						fetchWindowIcons: false,
+					});
+					dispatchWorkerCapture(id, data, fallbackSources);
+					return;
+				}
+
+				dispatchWorkerCapture(id, data, windowSources);
+			} catch (error) {
+				// Any rejection on the primary getUserMedia / native path (getSources,
+				// the resize, the WGC grab) must self-heal immediately — otherwise
+				// takingScreenshot latches true forever and every later capture is
+				// rejected 'already-taking-screenshot'. Mirrors the ReShade catch. The
+				// trailing return stops a caught error falling through into ReShade code.
+				restoreScreenshotState();
+				reportScreenshotError(error, {
+					context: 'resize-screenshot:capture',
+					meta: { request: data },
+				});
+			}
+			return;
+		}
+
+		// ReShade path: use the raising pre-capture resize (un-minimize + size +
+		// foreground) just like the non-ReShade path — a quiet reposition would
+		// leave a minimized/background iRacing un-composited so ReShade's grab
+		// gets no frame. No desktopCapturer.getSources here, so just await it.
+		let reshadeLocation: {
+			folder: string;
+			rawFolder: string;
+			basePath: string;
+			remappedFrom: string;
+		} | null = null;
+
+		try {
+			// Raising pre-capture resize INSIDE the try so a rejection here recovers
+			// via the catch instead of wedging: it previously sat outside the ReShade
+			// try/catch, so a reject latched takingScreenshot true with no recovery.
+			const id = await resizeIracingWindowAsync(
+				data.width,
+				data.height,
+				left,
+				top
+			);
 
 			if (id === undefined) {
 				log.info('iRacing window not found');
@@ -980,73 +1410,6 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			if (useNativeCapture) {
-				// Arm the same recovery watchdog the worker path uses: if the WGC
-				// settle/grab/save ever hangs (e.g. a stalled disk or network
-				// screenshot folder), this force-restores instead of leaving iRacing
-				// stuck at capture size with its UI hidden. A 'saved'/'aborted'
-				// outcome clears it via restoreScreenshotState; 'fallback' re-arms it
-				// in dispatchWorkerCapture.
-				armCaptureWatchdog();
-				const outcome = await captureAndSaveViaWgc(id, data);
-				if (outcome === 'saved' || outcome === 'aborted') {
-					return;
-				}
-				// outcome === 'fallback': WGC couldn't deliver a usable frame — drop
-				// to the getUserMedia path, which needs the source enumeration we
-				// skipped above. The window is already resized/raised for it to reuse.
-				log.info('WGC capture unavailable — falling back to getUserMedia');
-				const fallbackSources = await desktopCapturer.getSources({
-					types: ['window'],
-					thumbnailSize: { width: 0, height: 0 },
-					fetchWindowIcons: false,
-				});
-				dispatchWorkerCapture(id, data, fallbackSources);
-				return;
-			}
-
-			dispatchWorkerCapture(id, data, windowSources);
-			return;
-		}
-
-		// ReShade path: use the raising pre-capture resize (un-minimize + size +
-		// foreground) just like the non-ReShade path — a quiet reposition would
-		// leave a minimized/background iRacing un-composited so ReShade's grab
-		// gets no frame. No desktopCapturer.getSources here, so just await it.
-		const id = await resizeIracingWindowAsync(
-			data.width,
-			data.height,
-			left,
-			top
-		);
-
-		if (id === undefined) {
-			log.info('iRacing window not found');
-			restoreScreenshotState();
-			reportScreenshotError('iRacing window not found', {
-				context: 'resize-screenshot:window-not-found',
-				meta: {
-					request: data,
-					defaultScreen: { width, height, left, top },
-				},
-			});
-			return;
-		}
-
-		log.info('iRacing window resized', {
-			width: data.width,
-			height: data.height,
-			handle: id,
-		});
-
-		let reshadeLocation: {
-			folder: string;
-			rawFolder: string;
-			basePath: string;
-			remappedFrom: string;
-		} | null = null;
-
-		try {
 			const reshadeIniPath = config.get('reshadeFile');
 			const reshadeIni = loadIniFile.sync(reshadeIniPath);
 			reshadeLocation = getReshadeScreenshotFolder(
@@ -1072,18 +1435,26 @@ app.on('ready', async () => {
 				targetHeight: data.targetHeight,
 			});
 		} catch (error) {
+			// Guard against a duplicate report: if the watchdog or disconnect-abort
+			// already recovered (flipping takingScreenshot false — e.g. it cancelled
+			// this ReShade wait via clearPendingReshadeWait), that path already
+			// surfaced the error, so restore silently instead of reporting twice.
+			const wasCapturing = takingScreenshot;
 			restoreScreenshotState();
-			reportScreenshotError(error, {
-				context: 'resize-screenshot:reshade',
-				meta: {
-					request: data,
-					reshadeFile: config.get('reshadeFile'),
-					...(reshadeLocation || {}),
-					...(error && (error as { meta?: Record<string, unknown> }).meta
-						? (error as { meta: Record<string, unknown> }).meta
-						: {}),
-				},
-			});
+			if (wasCapturing) {
+				reportScreenshotError(error, {
+					context: 'resize-screenshot:reshade',
+					meta: {
+						request: data,
+						reshadeFile: config.get('reshadeFile'),
+						...(reshadeLocation || {}),
+						...(error &&
+						(error as { meta?: Record<string, unknown> }).meta
+							? (error as { meta: Record<string, unknown> }).meta
+							: {}),
+					},
+				});
+			}
 		}
 	});
 
@@ -1167,7 +1538,32 @@ app.on('activate', () => {
 	}
 });
 
-autoUpdater.on('update-downloaded', () => {
+// Auto-update observability (obs-lifecycle-telemetry#2 == obs-error-visibility#3):
+// previously only 'update-downloaded' was wired and checkForUpdates() was a
+// floating promise, so a failed update check (offline, 404 feed, signature error)
+// produced no app.log line and rejected unhandled. Wire the full event set; the
+// 'error' event and the checkForUpdates rejection log at ERROR so field triage can
+// filter them.
+autoUpdater.on('checking-for-update', () => {
+	log.info('Auto-update checking');
+});
+
+autoUpdater.on('update-available', (info) => {
+	log.info('Auto-update available', { version: info?.version });
+});
+
+autoUpdater.on('update-not-available', (info) => {
+	log.info('Auto-update not available', { version: info?.version });
+});
+
+autoUpdater.on('error', (error) => {
+	log.error('Auto-update error', {
+		error: (error as Error)?.message || String(error),
+	});
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+	log.info('Auto-update downloaded', { version: info?.version });
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		mainWindow.webContents.send('update-available', '');
 	}
@@ -1175,7 +1571,11 @@ autoUpdater.on('update-downloaded', () => {
 
 app.on('ready', () => {
 	if (process.env.NODE_ENV === 'production') {
-		autoUpdater.checkForUpdates();
+		autoUpdater.checkForUpdates().catch((error) => {
+			log.error('checkForUpdates failed', {
+				error: (error as Error)?.message || String(error),
+			});
+		});
 	}
 });
 
@@ -1320,6 +1720,12 @@ async function captureAndSaveViaWgc(
 	id: number,
 	data: CaptureRequestData
 ): Promise<WgcCaptureOutcome> {
+	// WGC is now the active backend and in-flight. Mark it BEFORE the settle so a
+	// disconnect during the settle (scheduleCaptureAbortOnDisconnect → the
+	// diagnostics snapshot) attributes the aborted capture to WGC ('attempted')
+	// instead of the reset 'not-attempted' (obs-capture-diagnostics#4).
+	lastWgcAttempt.outcome = 'attempted';
+
 	// SetWindowPos is synchronous, but iRacing's swapchain needs a frame or two to
 	// re-render at the new size. Settle briefly so the grab isn't a stale frame.
 	await delay(WGC_SETTLE_MS);
@@ -1328,6 +1734,7 @@ async function captureAndSaveViaWgc(
 	// (takingScreenshot=false) and reported. Don't grab a torn-down window or fall
 	// back — just bail.
 	if (!takingScreenshot) {
+		lastWgcAttempt.outcome = 'aborted';
 		return 'aborted';
 	}
 
@@ -1335,12 +1742,41 @@ async function captureAndSaveViaWgc(
 	// main thread until the first frame arrives (typically a few ms; bounded by
 	// WGC_TIMEOUT_MS on failure). Acceptable during a capture, when the main
 	// process is otherwise idle; a future async addon would remove even this.
+	const grabStart = Date.now();
 	const frame = captureIracingWindowNative(id, WGC_TIMEOUT_MS);
+	// #11 diagnostics (observability-only): record grab timing + which frame (if any)
+	// WGC returned. grabElapsedMs ≈ WGC_TIMEOUT_MS+500 points at H1 (timeout); a small
+	// value with a 'WGC capture failed' reason points at H2 (alloc fail).
+	lastWgcAttempt.grabElapsedMs = Date.now() - grabStart;
+	lastWgcAttempt.frameDims =
+		frame && frame.width > 0 && frame.height > 0
+			? { width: frame.width, height: frame.height }
+			: null;
 	if (!frame || !frame.data || frame.width < 1 || frame.height < 1) {
+		// Classification via the pure, tested helper (cq-tests#2).
+		const c = classifyWgcResult('no-frame', getLastNativeFailureReason());
+		lastWgcAttempt.outcome = c.outcome;
+		lastWgcAttempt.fallbackReason = c.fallbackReason;
+		// Immediate, precise breadcrumb at the point of failure. The caller's funnel
+		// (step 7) also logs this fallback durably — the two lines per no-frame event
+		// are intentional (interior precision + funnel durability), not a bug.
+		log.warn('WGC produced no frame — falling back', {
+			fallbackReason: lastWgcAttempt.fallbackReason,
+			grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+		});
 		return 'fallback';
 	}
 	if (isRgbaBufferBlack(frame.data, frame.width, frame.height)) {
-		log.info('WGC frame was black — falling back to getUserMedia');
+		const c = classifyWgcResult('black', null);
+		lastWgcAttempt.outcome = c.outcome;
+		lastWgcAttempt.fallbackReason = c.fallbackReason;
+		// Degraded-fidelity path → log.warn (was log.info); enriched with the grab
+		// timing + frame dims so H1(slow/black) is distinguishable in the log. The
+		// caller funnel also logs this fallback — the double line is intentional.
+		log.warn('WGC frame was black — falling back to getUserMedia', {
+			grabElapsedMs: lastWgcAttempt.grabElapsedMs,
+			frameDims: lastWgcAttempt.frameDims,
+		});
 		return 'fallback';
 	}
 
@@ -1447,6 +1883,7 @@ async function captureAndSaveViaWgc(
 			mainWindow.webContents.send('screenshot-response', savedPath);
 		}
 		restoreScreenshotState();
+		lastWgcAttempt.outcome = 'saved';
 		return 'saved';
 	} catch (error) {
 		if (committed) {
@@ -1457,10 +1894,15 @@ async function captureAndSaveViaWgc(
 				error: (error as Error).message || String(error),
 			});
 			restoreScreenshotState();
+			lastWgcAttempt.outcome = 'saved';
 			return 'saved';
 		}
 		// Grab / crop / primary write failed with nothing written — safe to
 		// re-capture via the getUserMedia path.
+		lastWgcAttempt.outcome = 'fallback';
+		lastWgcAttempt.fallbackReason = `pre-save-throw: ${
+			(error as Error).message || String(error)
+		}`;
 		log.info(
 			'WGC capture failed before save — falling back to getUserMedia',
 			{
@@ -1528,6 +1970,11 @@ function scheduleCaptureAbortOnDisconnect(): void {
 function restoreScreenshotState(): void {
 	clearCaptureWatchdog();
 	cancelPendingCaptureAbort();
+	// Cancel any in-flight ReShade wait so a watchdog / disconnect-abort recovery
+	// doesn't leave the wait's fs.watch + poller running, and so its own timeout
+	// can't later fire a second (now-stale) reportScreenshotError. No-op unless a
+	// ReShade capture is actually pending.
+	clearPendingReshadeWait('Screenshot recovery');
 	if (!takingScreenshot) {
 		return;
 	}
@@ -1613,7 +2060,10 @@ async function listReshadeScreenshotFiles(
 				size: stats.size,
 			});
 		} catch (error) {
-			console.log(error);
+			log.warn('ReShade screenshot stat failed', {
+				fullPath,
+				error: (error as Error)?.message || String(error),
+			});
 		}
 	}
 

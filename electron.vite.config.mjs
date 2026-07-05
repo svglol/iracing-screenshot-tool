@@ -12,7 +12,6 @@ export default defineConfig({
 			rollupOptions: {
 				external: [
 					'electron',
-					'@electron/remote',
 					'electron-updater',
 					'irsdk-node',
 					'sharp',
@@ -42,7 +41,7 @@ export default defineConfig({
 		plugins: [vue()],
 		build: {
 			rollupOptions: {
-				external: ['electron', '@electron/remote', 'sharp'],
+				external: ['electron', 'sharp'],
 			},
 		},
 		resolve: {

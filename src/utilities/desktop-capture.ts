@@ -124,6 +124,11 @@ export function findSourceByWindowHandles(
 	);
 }
 
+// Shortest source title allowed to anchor-match. A trivially short title (e.g.
+// "iR") would prefix-anchor almost any iRacing window and mis-select an unrelated
+// source, so ignore sources below this length in the fuzzy fallback.
+const MIN_FUZZY_MATCH_LENGTH = 5;
+
 export function findSourceByWindowTitle(
 	sources: DesktopCaptureSourceLike[] = [],
 	title: unknown = ''
@@ -135,20 +140,36 @@ export function findSourceByWindowTitle(
 
 	const externalSources = sources.filter(isExternalWindowSource);
 
-	return (
-		externalSources.find(
-			(source) => normalizeWindowTitle(source.name) === normalizedTitle
-		) ||
-		externalSources.find((source) => {
-			const sourceTitle = normalizeWindowTitle(source.name);
-			return (
-				sourceTitle &&
-				(normalizedTitle.includes(sourceTitle) ||
-					sourceTitle.includes(normalizedTitle))
-			);
-		}) ||
-		null
+	const exact = externalSources.find(
+		(source) => normalizeWindowTitle(source.name) === normalizedTitle
 	);
+	if (exact) {
+		return exact;
+	}
+
+	// Anchored (prefix) fuzzy fallback: accept a source only when its title is a
+	// prefix of the iRacing title or vice-versa. The old bidirectional interior
+	// `.includes` mis-selected any external window whose title merely SHARED a
+	// substring (e.g. a "Toyota" window for "iRacing.com Simulator - Toyota @ …"),
+	// returning the first enumeration hit. Among anchored candidates prefer the
+	// longest (most-specific) title (cq-release-desktopcap#4).
+	let best: DesktopCaptureSourceLike | null = null;
+	let bestLength = 0;
+	for (const source of externalSources) {
+		const sourceTitle = normalizeWindowTitle(source.name);
+		if (!sourceTitle || sourceTitle.length < MIN_FUZZY_MATCH_LENGTH) {
+			continue;
+		}
+		const anchored =
+			normalizedTitle.startsWith(sourceTitle) ||
+			sourceTitle.startsWith(normalizedTitle);
+		if (anchored && sourceTitle.length > bestLength) {
+			best = source;
+			bestLength = sourceTitle.length;
+		}
+	}
+
+	return best;
 }
 
 export function findSourceByKnownIracingTitle(

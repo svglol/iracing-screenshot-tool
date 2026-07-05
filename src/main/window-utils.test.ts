@@ -1,3 +1,15 @@
+// window-utils.ts now creates a module-top logger (createLogger('window-utils')),
+// whose eager init() calls electron app.getPath() — undefined under vitest. Mock
+// the logger so importing the module under test doesn't throw at collection time.
+vi.mock('../utilities/logger', () => ({
+	createLogger: () => ({
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		debug: vi.fn(),
+	}),
+}));
+
 import {
 	matchesIracingExe,
 	formatWindowHandle,

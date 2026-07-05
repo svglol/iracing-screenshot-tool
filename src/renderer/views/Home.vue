@@ -323,6 +323,15 @@ export default {
 					slug: 'delete',
 				},
 			],
+			// Held so beforeUnmount can tear them down — otherwise an HMR reload (or
+			// any future remount) stacks duplicate 'screenshot-response' handlers
+			// (N gallery unshifts per capture) and leaks the config subscription
+			// (cq-renderer-capture-views#2). Declared here (not bare on `this`) so
+			// vue-tsc types the assignments; Vue 3 does not proxy function values.
+			onScreenshotResponse: null as
+				| ((event: unknown, filePath: string) => void)
+				| null,
+			configFolderDisposer: null as (() => void) | null,
 		};
 	},
 	computed: {
@@ -376,7 +385,8 @@ export default {
 		},
 	},
 	mounted() {
-		ipcRenderer.on('screenshot-response', async (event, filePath) => {
+		// Hoist to an instance field so beforeUnmount can removeListener it.
+		this.onScreenshotResponse = async (_event, filePath: string) => {
 			if (!fs.existsSync(filePath)) {
 				return;
 			}
@@ -399,14 +409,28 @@ export default {
 			this.currentURL = toDisplayPath(filePath);
 
 			void this.ensureWindowThumbnails(0, this.galleryLoadId);
-		});
+		};
+		ipcRenderer.on('screenshot-response', this.onScreenshotResponse);
 
 		void this.loadGallery();
 
-		config.onDidChange('screenshotFolder', (newValue) => {
-			dir = normalizeFolder(newValue);
-			void this.loadGallery();
-		});
+		// electron-store's onDidChange returns an unsubscribe fn — hold it to unsub.
+		this.configFolderDisposer = config.onDidChange(
+			'screenshotFolder',
+			(newValue) => {
+				dir = normalizeFolder(newValue);
+				void this.loadGallery();
+			}
+		);
+	},
+	beforeUnmount() {
+		if (this.onScreenshotResponse) {
+			ipcRenderer.removeListener(
+				'screenshot-response',
+				this.onScreenshotResponse
+			);
+		}
+		this.configFolderDisposer?.();
 	},
 	methods: {
 		getImageUrl(item) {
