@@ -1,13 +1,13 @@
 # iRacing Screenshot Tool
 
 **Description:** Electron + Vue 3 desktop app for taking high-resolution screenshots of iRacing, with a separate Discord bot for community bug reports and feature requests mirrored to GitHub Issues.
-**Stack:** Electron 41 + Vue 3 + Oruga + Vite + Vitest + TypeScript (desktop) · Node 24 + discord.js 14 + Fastify 5 + Octokit + better-sqlite3 (bot)
+**Stack:** Electron 41 + Vue 3 + Oruga + Vite + Vitest + TypeScript + sharp + a native Rust Windows.Graphics.Capture addon reached via koffi FFI (desktop) · Node 24 + discord.js 14 + Fastify 5 + Octokit + better-sqlite3 (bot)
 **Repository:** svglol/iracing-screenshot-tool
 
 ## What This Is
 
 A two-part project:
-- **Desktop app (`src/`)** — Electron 41 / Vue 3 / Oruga UI for capturing iRacing screenshots with configurable resolution, filename format, output format (JPEG/PNG/WebP), watermark cropping, and session-field tokens resolved from iRacing telemetry via `irsdk-node`. Built with Vite; tests under Vitest; source tree is full TypeScript.
+- **Desktop app (`src/`)** — Electron 41 / Vue 3 / Oruga UI for capturing iRacing screenshots with configurable resolution, filename format, output format (JPEG/PNG/WebP), watermark cropping, and session-field tokens resolved from iRacing telemetry via `irsdk-node`. Capture runs through a native Rust Windows.Graphics.Capture addon (`native/wgc-capture.node`) by default and falls open to `getUserMedia`/`desktopCapturer` when WGC is unavailable; window resize and VRAM probing go through `koffi` FFI. Built with Vite; tests under Vitest (329 across 16 files); source tree is full TypeScript.
 - **Discord bot (`bot/`)** — Separate always-on Node 24 service that relays community bug/feature reports between a public Discord channel and GitHub Issues (source of truth), with reaction-based upvoting, Maintainer-role triage commands, attachment re-hosting to an orphan branch, and reporter pings on status changes via HMAC-verified GitHub webhook over Cloudflare Tunnel.
 
 ## Core Value
@@ -21,17 +21,25 @@ A two-part project:
 - **v1.4 shipped** (2026-04-22) — Phases 5-7. Tooling modernization: Babel package renames + ESLint 9 flat config + TypeScript 5.7 + typescript-eslint 8 + `--legacy-peer-deps` retired.
 - **v2.0 shipped** (2026-04-22) — Phases 8-13. Vue 3 migration complete: Vue 2.7 → Vue 3 + Buefy → Oruga + webpack → Vite + Jest → Vitest + ESLint/Vue ecosystem cleanup (neostandard, flat-config-native) + `.js` → `.ts` across full `src/` tree + Electron DevTools cleanup. 6 phases, 19 plans, 29 content commits. Tests 256/256 under Vitest (~220ms, 3× faster). Installer 115.5 MB (−2.19% vs v1.4 baseline).
 
+**Everything below shipped as quick tasks — no GSD milestone was opened after v2.0.** This is why STATE.md shows no active phase despite three months of releases.
+
+- **v3.0.0 → v3.0.5** (2026-04-29 → 2026-07-01) — UI/UX polish and capture fixes: gallery virtualization (dropped `o-carousel`), keep-aspect-ratio toggle with live target-resolution hint, HelpModal/ChangelogModal overflow fixes, settings light-switch toggles, direct-crop watermark perf (PR #58), capture without iRacing session info, screenshot-error toast rendered as a component rather than an HTML string.
+- **v3.1.0** (2026-07-03) — Native WGC high-fidelity capture. Rust `Windows.Graphics.Capture` addon shipped default-ON (`nativeCapture: true`), hardware-validated 2026-07-02, falling open to `getUserMedia`. Also VRAM guardrail (OOM prediction + safe-preset switch), exclusive-fullscreen detection, koffi resize + DPI correctness.
+- **v3.1.1** (2026-07-05) — Reliability, diagnostics & hardening via PR #62. The 13-WP remediation of the 2026-07-03 observability/code-quality audit: structured logger foundation, process/renderer crash nets, three permanent-wedge paths killed, capture abort/in-flight guards, filename-sanitizer hardening, VRAM adapter-matching, native-stack + WGC failure diagnostics, release-pipeline hardening, test infra. Tests 256 → **329**.
+
 ## Next Milestone
 
-_None active — v2.0 shipped 2026-04-22. Run `/gsd-new-milestone` to scope v2.1._
+_None active — v3.1.1 shipped 2026-07-05. Run `/gsd-new-milestone` to scope the next milestone._
 
-**v2.1 candidates seeded:**
+**Candidates, highest-value first:**
+- **WP-K Stages 1–3** — the deliberately deferred remainder of the security hardening: `contextIsolation` flip (needs a preload `contextBridge` + ~10-renderer-file migration of in-process `fs`/`sharp`/`clipboard` work), CSP, code signing. Each needs live-Electron runtime verification that type-check/vitest cannot provide, hence separate PRs. **Standing consequence until Stage 1 lands: the renderer holds in-process filesystem access.**
+- **`sharp` 0.34.5 → 0.35.3** — clears the inherited libvips CVEs (CVE-2026-33327/33328/35590/35591). Breaking, native, and load-bearing for the whole capture path, so it wants a real hardware capture to verify rather than a green suite.
+- **Replace `markdown-it`** (was framed as bundle-size work: +85.6% contribution; renderer bundle now 3.13 MB) — now doubles as the *only* remedy for the `linkify-it`/`markdown-it` ReDoS advisories, which have **no published fix**. Swapping to `marked`/`micromark`, or lazy-loading it, resolves both concerns at once.
 - Stricter tsconfig flags (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, re-enable `noImplicitAny` + `strictNullChecks` — 151 latent errors from v2.0 transitional relaxations)
 - Bot workspace Vitest migration (kept separate from v2.0; ~294 tests)
-- Renderer bundle size optimization (markdown-it +85.6% contribution; swap to marked/micromark or lazy-load)
 - TS `any` cleanup (10 targeted casts in SFCs)
-- Dev-mode `<script>` injection for vue-devtools connectivity (QoL restore)
-- Electron 41 → 42+ bump (triggered by CVE or LTS cadence)
+- Dev-mode `<script>` injection for vue-devtools connectivity (QoL restore). Consider instead whether `@vue/devtools` still earns its place — `installDevTools()` was deleted in Phase 13, and its nested `electron` copy contributes 17 high-severity advisories to every Dependabot scan.
+- Electron 41 → 42+ bump (triggered by CVE or LTS cadence). **Not currently CVE-triggered:** 41.2.1 sits above the `<=39.8.4` vulnerable range.
 
 ## Requirements
 
@@ -74,9 +82,21 @@ _None active — v2.0 shipped 2026-04-22. Run `/gsd-new-milestone` to scope v2.1
 - ✓ Legacy ESLint plugins retired (import@2, node@11, promise@4, standard@4) — v2.0 (LINT-08)
 - ✓ Electron DevTools install error fixed + `prettier@2.8.8` transitive cleanup — v2.0 (FIX-01)
 
+Post-v2.0 items shipped as quick tasks, so they carry no REQ-IDs — a traceability gap worth closing if any of this is ever re-audited:
+
+- ✓ Native WGC high-fidelity capture, default-ON with automatic fall-open to `getUserMedia` — v3.1.0
+- ✓ VRAM OOM prediction with warning + one-click safe-preset switch, adapter-matched on multi-GPU machines — v3.1.0 / v3.1.1
+- ✓ Exclusive-fullscreen detection with guidance to switch to Borderless/Windowed — v3.1.0
+- ✓ koffi-based window resize + high-DPI correctness — v3.1.0
+- ✓ Structured leveled logging (warn/error ungated in packaged builds), JSON-lines with line-boundary-safe rotation and home-path redaction — v3.1.1
+- ✓ Crash safety nets: `uncaughtException`/`unhandledRejection`/`child-process-gone`/`render-process-gone` all leave durable log lines — v3.1.1
+- ✓ Three permanent-wedge paths eliminated (iRacing SDK poll self-heal, capture-latch watchdog, guarded error-report write) — v3.1.1
+- ✓ Filename sanitizer hardened: control/NUL bytes, Windows reserved device names, Unicode-aware emptiness, global `{counter}` fill — v3.1.1
+- ✓ `@electron/remote` removed entirely + window navigation locked down (`setWindowOpenHandler` deny + off-origin `will-navigate` guard) — v3.1.1 (WP-K Stage 0)
+
 ### Active
 
-_No active requirements — v2.0 shipped all 18 requirements. Run `/gsd-new-milestone` to define v2.1 requirements._
+_No active requirements. v2.0 shipped all 18 of its requirements; everything since has gone through quick tasks. Run `/gsd-new-milestone` to define the next set._
 
 ### Out of Scope
 - In-app "Report a bug" button from the Electron app itself — privacy + scope implications, defer to future milestone
@@ -97,11 +117,16 @@ _No active requirements — v2.0 shipped all 18 requirements. Run `/gsd-new-mile
 - **Windows-only Electron target** (iRacing requirement) — bot code is cross-platform but desktop app is Win-only
 - **Node 24+ for bot** — pinned via `.nvmrc`, uses native ESM and modern features
 - **Fine-grained GitHub PAT** — scoped to this one repo; manual rotation documented in `bot/README.md`
+- **Exclusive fullscreen is uncapturable, by both backends.** WGC is DWM-based and comes back black in iRacing's exclusive Full Screen exactly as `desktopCapturer` does — shipping the native addon did *not* relax this. Only hook injection (ReShade) works there. The app detects the condition and directs the user to Borderless/Windowed; treat any "fix this" impulse as out of scope.
+- **The `getUserMedia` fallback path has a hard I420 4:2:0 fidelity ceiling.** Every frame is chroma-subsampled, so "lossless PNG" is not pixel-accurate on that path; true RGBA requires the native WGC grab. Corollary: if native ever falls back silently, the 1.5×-oversized-screenshot symptom (physical pixels at 150% display scaling) returns — the fingerprint is `streamW ≠ windowWidth` in the "Stream dim retry timeout" log line.
+- **Window resize is the only external VRAM lever.** iRacing's OOM ceiling cannot be raised from outside the process, so robustness here means predict/refuse plus graceful recovery — never "survive a bigger capture". Related: "Could not start video source" is a per-GPU/VRAM capture-surface allocation failure, *not* a display-size limit (disproven — 8K over-display capture works on some machines via both backends), so it must not be fixed with a display clamp.
 
 ## Context
 
 **Codebase:**
-- Electron app: `src/main/` (Node-side), `src/renderer/` (Vue 3 UI + Oruga + FA v7), `src/utilities/` (shared). Full TypeScript across `src/` tree; `.vue` SFCs use `<script lang="ts">`. Built with Vite via `electron-vite`; tests under Vitest.
+- Electron app: `src/main/` (Node-side), `src/renderer/` (Vue 3 UI + Oruga + FA v7), `src/utilities/` (shared). Full TypeScript across `src/` tree; `.vue` SFCs use `<script lang="ts">`. Built with Vite via `electron-vite`; tests under Vitest (329 across 16 files, renderer-capable harness via happy-dom + `@vue/test-utils`).
+- Native capture: `native/wgc-capture/` is the Rust crate (source tracked, `target/` ignored); the built `native/wgc-capture.node` **is committed** and must be rebuilt + re-committed whenever `lib.rs` changes (`cargo build --release`, copy the DLL over the `.node`). `asarUnpack` covers it plus the koffi binaries.
+- Externalization matters for security triage: `electron.vite.config.mjs` externalizes all main-process deps plus `electron`/`electron-updater`/`irsdk-node`/`sharp`/`koffi`, while the renderer externalizes only `electron`/`sharp` — so everything else in the renderer is bundled, and electron-builder prunes devDependencies from the shipped `node_modules`.
 - Bot: `bot/src/` ESM modules, `bot/docs/` deployment guides, own `package.json`. Still on Jest (separate from v2.0 Vitest migration; v2.1 candidate).
 - `/bot/` excluded from electron-builder packaging (`!bot/**/*` in `build.files`) and from root Vitest (`bot/**` in `vitest.config.mjs` exclude).
 
@@ -142,6 +167,14 @@ _No active requirements — v2.0 shipped all 18 requirements. Run `/gsd-new-mile
 | Transitional TS relaxations (`noImplicitAny: false` + `strictNullChecks: false`) | v2.0 Phase 12 | ⚠ Transitional — 151 latent errors deferred to v2.1; avoids blocking v2.0 ship on strict-type-fixes scope creep |
 | D-13-01 option (a): delete `installDevTools()` entirely | v2.0 Phase 13 | ✓ Good — `@vue/devtools` v8 is a standalone Electron app, not an in-process `require`. Deletion is simpler than rewriting to inject `<script>` tags at runtime |
 | Autonomous-mode execution across 5 sequential phases | v2.0 Phases 9-13 | ✓ Good — `/gsd-autonomous` one-phase-at-a-time rhythm (discuss → plan → execute → verify → iterate) shipped entire v2.0 milestone in single session; bot/** scope isolation preserved throughout |
+| Native Rust WGC addon shipped default-ON, falling open to `getUserMedia` | v3.1.0 | ✓ Good — hardware-validated 2026-07-02; default-ON is what actually delivers true-color capture to users, and the fall-open keeps unsupported machines working. Did **not** relax the exclusive-fullscreen ceiling |
+| `koffi` FFI for window resize + VRAM probing (rather than a second native addon) | v3.1.0 | ✓ Good — no extra build step or rebuild burden; cost is that koffi failures are silent unless explicitly logged, which is what WP-E fixed |
+| Decompose the obs/quality audit into 13 independently-gated work packages | v3.1.1 | ✓ Good — WP-A (logger) as keystone unblocked B/C/E/F/G; each WP landed with its own type-check + test gate, so a bad WP never blocked the rest. 13/13 complete |
+| WP-K staged: ship the statically-verifiable subset, defer the rest | v3.1.1 | ✓ Right call — `contextIsolation`/CSP/signing cannot be proven by type-check or vitest, and the Vue3-registration lesson showed a missed require rewrite fails *only* at runtime. Deferring beat shipping unverifiable security changes |
+| Plant an `electron` stub in Node's `require.cache` via `createRequire` instead of `vi.mock` | v3.1.1 | ✓ Good — `vi.mock('electron')` cannot intercept the native top-level `const x = require('electron')` in logger/config; this is the reusable pattern for those modules |
+| Triage dependency advisories by *reachability in the packaged app*, not raw count | 2026-07-29 | ✓ Good — 61 Dependabot findings reduced to 10 shipped, and the one critical (`tar`) was genuinely reachable via the update-extract path. Prevents both panic and complacency |
+| Consolidate release notes into one retrospective, deliberately non-semver file | 2026-07-29 | ✓ Good — `release.js` keys on `RELEASE-NOTES-v${newVersion}.md`, so a semver name would make a future release publish stale notes. Reasoning recorded in the commit body to stop a well-meaning rename |
+| Remove `.planning/` from git tracking to honour the existing `.gitignore` | 2026-07-29 | ✓ Resolves a real trap — the dir was ignored while 167 files stayed tracked, so any *new* planning artifact was invisible to `git status`/`git add`. Cost: planning history is local-only from here, and collaborators lose the dir on next pull |
 
 ## Evolution
 
@@ -162,4 +195,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-04-22 — v2.0 Vue 3 Migration shipped.*
+*Last updated: 2026-07-29 — refreshed for the v3.x line (v3.1.1 shipped 2026-07-05). Note: `.planning/` was untracked from git on this date, so future edits to this file live only in the working tree unless force-added.*
