@@ -24,7 +24,8 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_UNORDERED_ACCESS, D3D11_BUFFER_DESC, D3D11_BUFFER_UAV, D3D11_BUFFER_UAV_FLAG_RAW,
     D3D11_BUFFEREX_SRV, D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_READ, D3D11_CPU_ACCESS_WRITE,
     D3D11_FEATURE_DATA_FORMAT_SUPPORT2, D3D11_FEATURE_FORMAT_SUPPORT2,
-    D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE, D3D11_MAP_READ,
+    D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE,
+    D3D11_MAP_FLAG_DO_NOT_WAIT, D3D11_MAP_READ,
     D3D11_MAP_WRITE_DISCARD, D3D11_MAPPED_SUBRESOURCE, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
     D3D11_SAMPLER_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0,
     D3D11_SUBRESOURCE_DATA, D3D11_TEX2D_SRV, D3D11_TEX2D_UAV, D3D11_TEXTURE2D_DESC,
@@ -49,6 +50,11 @@ const SHADER_SOURCE: &str = include_str!("shaders.hlsl");
 const TILE: u32 = 8;
 /// Must match DIGEST_STRIDE in shaders.hlsl.
 const DIGEST_STRIDE: u32 = 4;
+
+/// Staging buffers in the digest readback ring. Needs to cover the frames the GPU
+/// can have in flight; 4 is comfortably past D3D11's usual 3-frame depth, and each
+/// slot is 8 bytes, so there is no reason to be stingy.
+const DIGEST_RING: usize = 4;
 
 fn div_ceil(value: u32, divisor: u32) -> u32 {
     if divisor == 0 {
@@ -146,10 +152,18 @@ pub struct D3d11Backend {
     /// shaders.hlsl for why this exists at all.
     highlight_gain: f32,
 
-    // 2 x u32 digest lanes, plus a staging buffer to read them back.
+    // 2 x u32 digest lanes, plus a RING of staging buffers to read them back.
+    //
+    // The ring is what makes the readback asynchronous: frame N's result is copied
+    // into slot N % DIGEST_RING and collected a frame or two later with
+    // D3D11_MAP_FLAG_DO_NOT_WAIT, instead of stalling the capture thread until the
+    // GPU catches up. `digest_buffer` itself needs no ring — the clear, dispatch and
+    // copy are ordered on the GPU timeline, so each copy captures its own frame.
     digest_buffer: ID3D11Buffer,
     digest_uav: ID3D11UnorderedAccessView,
-    digest_staging: ID3D11Buffer,
+    digest_staging: Vec<ID3D11Buffer>,
+    digest_submitted: u64,
+    digest_collected: u64,
     // Zero-filled source used to reset the digest lanes each frame without a
     // dedicated clear shader.
     digest_zero: ID3D11Buffer,
@@ -280,7 +294,9 @@ impl D3d11Backend {
         // the better-supported path for interlocked ops at FL11_0.
         let digest_buffer = create_uav_buffer(&device, 8, 4, true)?;
         let digest_uav = create_raw_uav(&device, &digest_buffer, 2)?;
-        let digest_staging = create_staging_buffer(&device, 8)?;
+        let digest_staging = (0..DIGEST_RING)
+            .map(|_| create_staging_buffer(&device, 8))
+            .collect::<Result<Vec<_>, _>>()?;
         let digest_zero = create_immutable_buffer(&device, &[0u8; 8])?;
 
         Ok(Self {
@@ -308,6 +324,8 @@ impl D3d11Backend {
             digest_buffer,
             digest_uav,
             digest_staging,
+            digest_submitted: 0,
+            digest_collected: 0,
             digest_zero,
             sinks: HashMap::new(),
             scratch_source: None,
@@ -513,6 +531,60 @@ impl D3d11Backend {
             real: 1,
             synthetic,
         })
+    }
+
+    /// Read the oldest outstanding digest slot.
+    ///
+    /// `blocking = false` uses `D3D11_MAP_FLAG_DO_NOT_WAIT`, which returns
+    /// `DXGI_ERROR_WAS_STILL_DRAWING` rather than stalling when the GPU has not
+    /// finished — that HRESULT is the entire point of this change and is treated as
+    /// "not ready yet", not as an error.
+    fn collect_digest(&mut self, blocking: bool) -> Option<u64> {
+        // 0x887A000A. Compared numerically to avoid dragging in the DXGI error
+        // constants for one value.
+        const WAS_STILL_DRAWING: i32 = 0x887A000Au32 as i32;
+
+        if self.digest_collected >= self.digest_submitted {
+            return None;
+        }
+        let slot = (self.digest_collected as usize) % DIGEST_RING;
+        let flags = if blocking {
+            0
+        } else {
+            D3D11_MAP_FLAG_DO_NOT_WAIT.0 as u32
+        };
+
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        // SAFETY: `slot` is in range, and the staging buffer is 8 bytes of two u32
+        // lanes written by CSDigest.
+        let result = unsafe {
+            self.context.Map(
+                &self.digest_staging[slot],
+                0,
+                D3D11_MAP_READ,
+                flags,
+                Some(&mut mapped),
+            )
+        };
+        if let Err(error) = result {
+            if !blocking && error.code().0 == WAS_STILL_DRAWING {
+                return None;
+            }
+            // A real fault. Give up on this slot rather than wedging the ring, and let
+            // the sample simply carry no digest.
+            self.digest_collected += 1;
+            return None;
+        }
+
+        // SAFETY: the map succeeded, so pData points at the mapped 8 bytes.
+        let value = unsafe {
+            let ptr = mapped.pData as *const u32;
+            let value = (*ptr as u64) | ((*ptr.add(1) as u64) << 32);
+            self.context.Unmap(&self.digest_staging[slot], 0);
+            value
+        };
+        self.digest_collected += 1;
+        Some(value)
     }
 
     /// D3D11_FEATURE_FORMAT_SUPPORT2 for a typed UAV store of `format`.
@@ -795,13 +867,21 @@ impl AccumulateBackend for D3d11Backend {
         Ok(())
     }
 
-    fn digest(&mut self, source: &ID3D11Texture2D) -> Result<u64, BackendError> {
+    fn submit_digest(&mut self, source: &ID3D11Texture2D) -> Result<(), BackendError> {
+        // If the ring is full the GPU is further behind than it should ever be. Rather
+        // than overwrite an uncollected slot, block on the oldest — correctness first,
+        // and it costs one stall in a situation that should not arise.
+        if self.digest_submitted - self.digest_collected >= DIGEST_RING as u64 {
+            let _ = self.collect_digest(true);
+        }
+
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         unsafe { source.GetDesc(&mut desc) };
 
         let srv = self.source_srv(source)?;
         self.write_accumulate_cb(desc.Width, desc.Height, 0.0)?;
 
+        let slot = (self.digest_submitted as usize) % DIGEST_RING;
         unsafe {
             // Reset both lanes by copying an 8-byte zero buffer over them.
             self.context.CopyResource(&self.digest_buffer, &self.digest_zero);
@@ -823,25 +903,42 @@ impl AccumulateBackend for D3d11Backend {
                 1,
             );
 
+            // Clear -> dispatch -> copy are ordered on the GPU timeline, so this slot
+            // receives THIS frame's digest even though later frames are already being
+            // submitted behind it.
             self.context
-                .CopyResource(&self.digest_staging, &self.digest_buffer);
+                .CopyResource(&self.digest_staging[slot], &self.digest_buffer);
         }
         self.unbind();
 
-        // Blocking map: this is a GPU sync point once per frame. At the measured
-        // margins (design note §1) we are several times inside the per-sample budget,
-        // and correctness — knowing whether to accumulate this frame BEFORE we do —
-        // is worth more than pipelining it.
-        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-        let lanes = unsafe {
-            self.context
-                .Map(&self.digest_staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
-            let ptr = mapped.pData as *const u32;
-            let value = (*ptr as u64) | ((*ptr.add(1) as u64) << 32);
-            self.context.Unmap(&self.digest_staging, 0);
-            value
-        };
-        Ok(lanes)
+        self.digest_submitted += 1;
+        Ok(())
+    }
+
+    fn poll_digests(&mut self) -> Vec<u64> {
+        let mut out = Vec::new();
+        while self.digest_collected < self.digest_submitted {
+            match self.collect_digest(false) {
+                Some(value) => out.push(value),
+                // Still in flight. Stop here rather than skipping ahead, so results
+                // stay in submission order.
+                None => break,
+            }
+        }
+        out
+    }
+
+    fn drain_digests(&mut self) -> Vec<u64> {
+        let mut out = Vec::new();
+        while self.digest_collected < self.digest_submitted {
+            match self.collect_digest(true) {
+                Some(value) => out.push(value),
+                // A blocking collect only returns None on a genuine device error, in
+                // which case the rest will fail too.
+                None => break,
+            }
+        }
+        out
     }
 
     fn accumulate(

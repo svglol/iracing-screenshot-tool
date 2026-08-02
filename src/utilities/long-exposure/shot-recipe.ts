@@ -354,6 +354,17 @@ export interface RecipeValidation {
 	warnings: string[];
 }
 
+// How much interpolation work a configuration asks for: render megapixels times the
+// factor. One scalar, and the only one that has to be comparable across shots.
+export function interpolationLoad(opts: {
+	renderWidth: number;
+	renderHeight: number;
+	interpolationFactor: number;
+}): number {
+	const megapixels = (opts.renderWidth * opts.renderHeight) / 1e6;
+	return Number((megapixels * Math.max(1, opts.interpolationFactor)).toFixed(3));
+}
+
 // Validate a plan against live replay bounds. Split from resolvePlan so the UI can
 // show live feasibility without attempting a capture.
 export function validatePlan(opts: {
@@ -362,6 +373,14 @@ export function validatePlan(opts: {
 	// Live replay bounds from telemetry.
 	replayFrameNumEnd: number | null;
 	currentSessionNum: number | null;
+	// The smallest interpolation load THIS MACHINE has been observed to choke on,
+	// learned from previous captures. Null until there is evidence.
+	//
+	// Deliberately measured rather than hard-coded: the point at which interpolation
+	// stops being free depends entirely on the GPU, and a threshold calibrated on one
+	// card would be wrong everywhere else. Silent until this machine has actually
+	// demonstrated a limit.
+	lossyInterpolationLoad?: number | null;
 }): RecipeValidation {
 	const { plan, recipe, replayFrameNumEnd, currentSessionNum } = opts;
 	const errors: string[] = [];
@@ -412,6 +431,26 @@ export function validatePlan(opts: {
 		warnings.push(
 			`This capture will take about ${Math.round(plan.predictedWallClockSeconds)} seconds of real time at 1/${plan.playbackDivisor} playback speed.`
 		);
+	}
+
+	// Interpolation that cannot keep up buys synthetic samples with real ones, and the
+	// result looks under-blurred rather than obviously broken — so it is worth saying
+	// BEFORE the shot, once this machine has shown where its limit is.
+	if (recipe.interpolationFactor > 1) {
+		const load = interpolationLoad({
+			renderWidth: plan.renderWidth,
+			renderHeight: plan.renderHeight,
+			interpolationFactor: recipe.interpolationFactor,
+		});
+		const limit = opts.lossyInterpolationLoad;
+		if (typeof limit === 'number' && limit > 0 && load >= limit) {
+			warnings.push(
+				`At this size, ${recipe.interpolationFactor}x interpolation has previously cost this machine real samples. ` +
+					(recipe.supersample > 1
+						? 'Turning off supersampling would fix it and buy samples directly.'
+						: 'Consider a lower factor or a smaller capture size.')
+			);
+		}
 	}
 
 	return { errors, warnings };

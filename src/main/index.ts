@@ -964,6 +964,8 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			restoreWindow: () => restoreScreenshotState(),
 			vramInfo: () => getVramInfo(),
 			baselineDims: () => getIracingWindowSizeNative(),
+			lossyInterpolationLoad: () =>
+				config.get('longExposureLossyInterpolationLoad') || null,
 			delay,
 			now: () => Date.now(),
 			signal,
@@ -1004,6 +1006,26 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			toolVersion: app.getVersion(),
 			capturedAt: new Date().toISOString(),
 		});
+
+		// Learn this machine's own interpolation limit from what actually happened.
+		// Recording the SMALLEST load that has ever fallen short means the pre-flight
+		// warning tightens as evidence accumulates and never fires without any.
+		const interp = outcome.interpolation;
+		if (
+			interp?.enabled &&
+			interp.achievedRatio !== null &&
+			interp.achievedRatio < 0.6
+		) {
+			const known = config.get('longExposureLossyInterpolationLoad') || 0;
+			if (known === 0 || interp.load < known) {
+				config.set('longExposureLossyInterpolationLoad', interp.load);
+				log.info('Recorded a new interpolation load limit for this machine', {
+					load: interp.load,
+					achievedRatio: interp.achievedRatio,
+					previous: known || null,
+				});
+			}
+		}
 
 		log.info('Long exposure saved', {
 			file: written.masterPath,

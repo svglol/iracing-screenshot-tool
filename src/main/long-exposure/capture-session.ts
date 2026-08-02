@@ -99,8 +99,21 @@ export interface LongExposureInterpolationReport {
 	// side by side make that visible.
 	realSamples: number;
 	syntheticSamples: number;
+	// CPU-side time in the frame handler, EXCLUDING the first frame. Since the digest
+	// readback stopped blocking, this no longer includes waiting for the GPU — so a
+	// small number here does NOT prove we kept up. `realSamples` against
+	// `plan.predictedSamples` is the ground truth; treat these as secondary.
 	meanFrameMs: number | null;
 	maxFrameMs: number | null;
+	// The first frame alone: sink allocation plus NVOFA session creation (~30 ms).
+	// One-time, and reported separately so it cannot distort the mean.
+	setupFrameMs: number | null;
+	// renderMegapixels x factor — one scalar for "how much interpolation work this
+	// configuration asks for". Used to learn THIS MACHINE's own limit rather than
+	// hard-coding a threshold measured on one particular GPU.
+	load: number;
+	// achieved / predicted real samples. Well below 1 means we could not keep up.
+	achievedRatio: number | null;
 }
 
 export interface LongExposureOutcome {
@@ -177,6 +190,7 @@ export interface NativeSessionApi {
 		backend: string;
 		meanFrameMs?: number;
 		maxFrameMs?: number;
+		setupFrameMs?: number;
 		interpolation?: NativeInterpolationStatus | null;
 		samples: Array<{
 			u: number;
@@ -204,6 +218,10 @@ export interface CaptureSessionDeps {
 	// Live VRAM measurement and iRacing's current window size, for the pre-flight.
 	vramInfo(): VramInfo | null;
 	baselineDims(): Dimensions | null;
+	// The smallest interpolation load this machine has been seen to choke on, or null
+	// when it has never choked. Injected so the pure planner stays pure and the
+	// persistence lives in the main process.
+	lossyInterpolationLoad?(): number | null;
 	delay(ms: number): Promise<void>;
 	// Wall clock. TIMEOUTS ONLY — never used to decide replay position.
 	now(): number;
@@ -275,14 +293,20 @@ export function buildInterpolationReport(opts: {
 	syntheticSamples: number;
 	meanFrameMs: number | null;
 	maxFrameMs: number | null;
+	setupFrameMs: number | null;
+	renderWidth: number;
+	renderHeight: number;
+	predictedSamples: number;
 }): LongExposureInterpolationReport {
 	const { requestedFactor, status } = opts;
 	const enabled = status?.enabled === true;
+	const achievedFactor = enabled ? (status?.factor ?? 1) : 1;
+	const renderMegapixels = (opts.renderWidth * opts.renderHeight) / 1e6;
 	return {
 		requestedFactor,
 		enabled,
 		// Never claim the requested factor when the hardware declined it.
-		achievedFactor: enabled ? (status?.factor ?? 1) : 1,
+		achievedFactor,
 		reason: status?.reason ?? null,
 		gridSize: status?.gridSize ?? 0,
 		bidirectional: status?.bidirectional === true,
@@ -290,7 +314,49 @@ export function buildInterpolationReport(opts: {
 		syntheticSamples: opts.syntheticSamples,
 		meanFrameMs: opts.meanFrameMs,
 		maxFrameMs: opts.maxFrameMs,
+		setupFrameMs: opts.setupFrameMs,
+		load: Number((renderMegapixels * achievedFactor).toFixed(3)),
+		achievedRatio:
+			opts.predictedSamples > 0
+				? Number((opts.realSamples / opts.predictedSamples).toFixed(3))
+				: null,
 	};
+}
+
+// Below this share of the predicted real-sample count, a capture is treated as
+// having failed to keep up with the sim rather than merely having been unlucky.
+//
+// Calibrated against field data: an unaffected 5120x2880 capture landed at 1.08 of
+// prediction while the same shot with 8x interpolation landed at 0.27. The predictor
+// itself is only accurate to ~6%, and sample counts bounce around run to run, so the
+// threshold sits far below either to avoid crying wolf.
+export const SAMPLE_SHORTFALL_RATIO = 0.6;
+
+// Whether a capture lost real samples to interpolation, and what to do about it.
+// Exported for tests: "requested 8x, got a third of the samples" is precisely the
+// case that must not pass silently, because the resulting image looks under-blurred
+// rather than obviously broken.
+export function diagnoseInterpolationShortfall(
+	report: LongExposureInterpolationReport,
+	opts: { supersample: number }
+): string | null {
+	if (!report.enabled || report.achievedRatio === null) {
+		return null;
+	}
+	if (report.achievedRatio >= SAMPLE_SHORTFALL_RATIO) {
+		return null;
+	}
+	const percent = Math.round(report.achievedRatio * 100);
+	const remedy =
+		opts.supersample > 1
+			? 'Turn off supersampling (which also buys samples directly) or lower the interpolation factor.'
+			: 'Lower the interpolation factor, or reduce the capture resolution.';
+	return (
+		`Frame interpolation at ${report.achievedFactor}x could not keep up: this shot ` +
+		`captured ${report.realSamples} real frames, about ${percent}% of the ${'~'}` +
+		`predicted count, so synthetic samples were bought with real ones and the ` +
+		`streak will look shorter and coarser than it should. ${remedy}`
+	);
 }
 
 export async function executeRecipe(
@@ -317,6 +383,7 @@ export async function executeRecipe(
 		recipe,
 		replayFrameNumEnd: live.replayFrameNumEnd,
 		currentSessionNum: live.replaySessionNum,
+		lossyInterpolationLoad: deps.lossyInterpolationLoad?.() ?? null,
 	});
 	if (validation.errors.length > 0) {
 		return failure('invalid-recipe', validation.errors.join(' '), { plan });
@@ -735,6 +802,12 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		syntheticSamples: result.synthesized ?? 0,
 		meanFrameMs: result.meanFrameMs ?? null,
 		maxFrameMs: result.maxFrameMs ?? null,
+		setupFrameMs: result.setupFrameMs ?? null,
+		// The delivered size, not the requested one — DPI and client-area geometry
+		// mean WGC decides this.
+		renderWidth,
+		renderHeight,
+		predictedSamples: plan.predictedSamples,
 	});
 
 	if (!result.data || result.width < 1 || result.height < 1) {
@@ -785,6 +858,14 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 				interpolation.reason ? ` (${interpolation.reason})` : ''
 			}.`
 		);
+	}
+	// Got it, but it cost more than it gave. This is the failure that otherwise looks
+	// like "the blur just isn't very strong" rather than like a problem.
+	const shortfall = diagnoseInterpolationShortfall(interpolation, {
+		supersample: recipe.supersample,
+	});
+	if (shortfall) {
+		interpolationWarnings.push(shortfall);
 	}
 
 	return {

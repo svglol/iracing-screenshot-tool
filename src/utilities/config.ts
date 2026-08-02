@@ -173,6 +173,17 @@ const schema = {
 		type: 'number',
 		default: 0,
 	},
+	// Learned, not configured: the smallest interpolation load (render megapixels x
+	// factor) at which THIS machine has been observed to fall behind the sim and lose
+	// real samples. 0 = no evidence yet, and no warning is shown.
+	//
+	// Measured rather than hard-coded because where interpolation stops being free
+	// depends entirely on the GPU — a threshold calibrated on one card would be wrong
+	// on every other.
+	longExposureLossyInterpolationLoad: {
+		type: 'number',
+		default: 0,
+	},
 	// png16 is the 16-bit master (written by our own encoder — sharp reduces 16-bit
 	// to 8 before encoding). The others produce an 8-bit file only.
 	longExposureFormat: {

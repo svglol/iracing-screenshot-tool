@@ -8,8 +8,10 @@ import {
 import { ReplayController, type ReplayState } from './replay-control';
 import {
 	buildInterpolationReport,
+	diagnoseInterpolationShortfall,
 	executeRecipe,
 	type CaptureSessionDeps,
+	type LongExposureInterpolationReport,
 	type NativeSessionApi,
 } from './capture-session';
 
@@ -440,19 +442,24 @@ describe('frame interpolation', () => {
 			gridSize: number;
 			bidirectional: boolean;
 		} | null,
-		synthesized = 0
+		synthesized = 0,
+		// Comfortably above any prediction the harness can produce, so the default
+		// fixture represents a capture that KEPT UP. Tests that want the fall-behind
+		// case pass a small number explicitly.
+		accepted = 500
 	): Partial<NativeSessionApi> {
 		return {
 			longExposureFinish: () => ({
 				data: Buffer.alloc(640 * 360 * 8),
 				width: 640,
 				height: 360,
-				accepted: 12,
+				accepted,
 				synthesized,
 				rejected: 0,
 				backend: 'd3d11-compute',
 				meanFrameMs: 4.5,
 				maxFrameMs: 9.25,
+				setupFrameMs: 33,
 				interpolation: status,
 				samples: [],
 				error: null,
@@ -496,11 +503,42 @@ describe('frame interpolation', () => {
 			enabled: true,
 			achievedFactor: 4,
 			bidirectional: true,
-			realSamples: 12,
+			realSamples: 500,
 			syntheticSamples: 36,
 		});
 		// No warning when it worked.
 		expect(outcome.warnings.join(' ')).not.toMatch(/interpolation/i);
+	});
+
+	// The exact case seen in the field: interpolation ran, but consumption fell behind
+	// the sim, so real samples were traded for synthetic ones. The image looks merely
+	// under-blurred, which is why it has to be said out loud.
+	it('warns when interpolation ran but could not keep up', async () => {
+		const harness = makeHarness({
+			nativeOverrides: nativeWithInterpolation(
+				{
+					enabled: true,
+					factor: 8,
+					reason: null,
+					gridSize: 4,
+					bidirectional: true,
+				},
+				14,
+				3
+			),
+		});
+		const outcome = await executeRecipe(
+			recipe({ interpolationFactor: 8, supersample: 2 }),
+			harness.deps
+		);
+
+		// The shot still succeeds — this is a quality warning, not a failure.
+		expect(outcome.ok).toBe(true);
+		expect(outcome.image).not.toBeNull();
+		expect(outcome.warnings.join(' ')).toMatch(/could not keep up/i);
+		expect(outcome.warnings.join(' ')).toMatch(/supersampling/i);
+		expect(outcome.interpolation?.achievedRatio).toBeLessThan(0.6);
+		expectAnchorRestored(harness.events);
 	});
 
 	// The case that must never look like success: asked for, hardware said no.
@@ -617,6 +655,10 @@ describe('buildInterpolationReport', () => {
 			syntheticSamples: 0,
 			meanFrameMs: null,
 			maxFrameMs: null,
+			setupFrameMs: null,
+			renderWidth: 2560,
+			renderHeight: 1440,
+			predictedSamples: 100,
 		});
 		expect(report.requestedFactor).toBe(8);
 		expect(report.enabled).toBe(false);
@@ -632,6 +674,10 @@ describe('buildInterpolationReport', () => {
 			syntheticSamples: 0,
 			meanFrameMs: null,
 			maxFrameMs: null,
+			setupFrameMs: null,
+			renderWidth: 2560,
+			renderHeight: 1440,
+			predictedSamples: 100,
 		});
 		expect(report.enabled).toBe(false);
 		expect(report.achievedFactor).toBe(1);
@@ -652,12 +698,133 @@ describe('buildInterpolationReport', () => {
 			syntheticSamples: 597,
 			meanFrameMs: 6.1,
 			maxFrameMs: 20,
+			setupFrameMs: 33,
+			renderWidth: 2560,
+			renderHeight: 1440,
+			predictedSamples: 200,
 		});
 		// The two must never be merged: comparing realSamples across interpolation
 		// on/off at the same settings is the only way to see whether synthetic
 		// samples were bought with real ones.
 		expect(report.realSamples).toBe(200);
 		expect(report.syntheticSamples).toBe(597);
+	});
+
+	it('computes load as render megapixels x achieved factor', () => {
+		const report = buildInterpolationReport({
+			requestedFactor: 8,
+			status: {
+				enabled: true,
+				factor: 8,
+				reason: null,
+				gridSize: 4,
+				bidirectional: true,
+			},
+			realSamples: 3,
+			syntheticSamples: 14,
+			meanFrameMs: 30.7,
+			maxFrameMs: 53,
+			setupFrameMs: 33,
+			renderWidth: 5120,
+			renderHeight: 2880,
+			predictedSamples: 11,
+		});
+		// 5120x2880 = 14.7456 Mpx, x8 = 117.965
+		expect(report.load).toBeCloseTo(117.965, 2);
+		expect(report.achievedRatio).toBeCloseTo(3 / 11, 3);
+	});
+
+	// A declined request has an achieved factor of 1, so its load must reflect what
+	// actually ran — otherwise the machine would "learn" a limit from work it never did.
+	it('bases load on the achieved factor, not the requested one', () => {
+		const report = buildInterpolationReport({
+			requestedFactor: 8,
+			status: {
+				enabled: false,
+				factor: 8,
+				reason: 'no NVIDIA driver',
+				gridSize: 0,
+				bidirectional: false,
+			},
+			realSamples: 100,
+			syntheticSamples: 0,
+			meanFrameMs: 2,
+			maxFrameMs: 5,
+			setupFrameMs: 1,
+			renderWidth: 2560,
+			renderHeight: 1440,
+			predictedSamples: 100,
+		});
+		expect(report.load).toBeCloseTo(3.6864, 3);
+	});
+});
+
+// The failure the user actually hit: interpolation ran, but consumption fell behind
+// the sim, so real samples were traded for synthetic ones and the image came out
+// under-blurred rather than obviously broken.
+describe('diagnoseInterpolationShortfall', () => {
+	const report = (over: Partial<LongExposureInterpolationReport> = {}) =>
+		({
+			requestedFactor: 8,
+			enabled: true,
+			achievedFactor: 8,
+			reason: null,
+			gridSize: 4,
+			bidirectional: true,
+			realSamples: 3,
+			syntheticSamples: 14,
+			meanFrameMs: 30.7,
+			maxFrameMs: 53,
+			setupFrameMs: 33,
+			load: 117.965,
+			achievedRatio: 3 / 11,
+			...over,
+		}) as LongExposureInterpolationReport;
+
+	it('flags a capture that fell well short of its predicted real samples', () => {
+		const message = diagnoseInterpolationShortfall(report(), {
+			supersample: 2,
+		});
+		expect(message).toMatch(/could not keep up/i);
+		expect(message).toMatch(/3 real frames/);
+		// Supersample on is the cheapest thing to give up, and it buys samples twice.
+		expect(message).toMatch(/supersampling/i);
+	});
+
+	it('suggests a lower factor when supersampling is already off', () => {
+		const message = diagnoseInterpolationShortfall(report(), {
+			supersample: 1,
+		});
+		expect(message).toMatch(/lower the interpolation factor/i);
+		expect(message).not.toMatch(/supersampling/i);
+	});
+
+	it('stays silent when the capture kept up', () => {
+		expect(
+			diagnoseInterpolationShortfall(
+				report({ realSamples: 13, achievedRatio: 13 / 12 }),
+				{ supersample: 2 }
+			)
+		).toBeNull();
+	});
+
+	// Sample counts bounce run to run and the predictor is only good to ~6%, so a
+	// modest shortfall must not cry wolf.
+	it('tolerates a modest shortfall', () => {
+		expect(
+			diagnoseInterpolationShortfall(report({ achievedRatio: 0.75 }), {
+				supersample: 1,
+			})
+		).toBeNull();
+	});
+
+	it('says nothing when interpolation never ran', () => {
+		expect(
+			diagnoseInterpolationShortfall(
+				report({ enabled: false, achievedFactor: 1, achievedRatio: 0.1 }),
+				{ supersample: 1 }
+			)
+		).toBeNull();
 	});
 });
 

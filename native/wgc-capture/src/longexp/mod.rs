@@ -73,6 +73,16 @@ struct SampleRecord {
     accepted: bool,
 }
 
+/// Bookkeeping for the asynchronous digest readback: which sample each outstanding
+/// digest belongs to, and the last one seen, so duplicates can be spotted in order.
+#[derive(Default)]
+struct DigestTracking {
+    /// Log index per submitted digest, in submission order. `None` once the sample
+    /// log has hit its cap and the sample was not recorded.
+    pending: std::collections::VecDeque<Option<usize>>,
+    last: Option<u64>,
+}
+
 /// State shared between the JS thread and the capture worker. Everything here is
 /// plain atomics or a Mutex over Send data — the D3D11 backend deliberately lives
 /// elsewhere (see `BackendSlot`) so this stays trivially Send + Sync.
@@ -105,8 +115,19 @@ struct SessionShared {
     rejected: AtomicU32,
     /// Wall time spent inside the frame handler, for the same reason: it is the
     /// direct measure of whether we can still keep up with the sim.
+    ///
+    /// The FIRST frame is excluded and reported separately as `setup_ns`. It does
+    /// sink allocation, shader constant setup and — when interpolation is on — the
+    /// whole NVOFA session creation, which ran ~30 ms and swamped the mean on short
+    /// exposures. Folding one-time cost into a steady-state average made the metric
+    /// lie exactly when the exposure was shortest.
     frame_time_total_ns: AtomicU64,
     frame_time_max_ns: AtomicU64,
+    /// Frames counted into the total above; excludes the setup frame.
+    timed_frames: AtomicU32,
+    setup_ns: AtomicU64,
+
+    digests: Mutex<DigestTracking>,
 
     /// 1 = off. Read once, when the first frame establishes the frame size.
     interpolation_factor: AtomicU32,
@@ -235,8 +256,10 @@ impl Accumulator {
                 *slot = Some(status);
             }
         }
-        let digest = backend
-            .digest(&texture)
+        // Submitted, never awaited. See `submit_digest` for why this stopped being a
+        // blocking readback: the sync was costing two real frames in three at 5K.
+        backend
+            .submit_digest(&texture)
             .map_err(|e| format!("digest failed: {e}"))?;
         let presented_at = frame.timestamp().map(|t| t.Duration).unwrap_or(0);
 
@@ -244,41 +267,86 @@ impl Accumulator {
         let session_time = f64::from_bits(self.shared.session_time_bits.load(Ordering::Relaxed));
         let replay_frame = self.shared.replay_frame.load(Ordering::Relaxed);
 
-        // Duplicate rejection. Because resolve normalises by ACCUMULATED WEIGHT, a
-        // rejected frame contributes to neither numerator nor denominator and the
-        // exposure stays correct — there is no separate reweighting step.
-        let is_duplicate = self.last_digest == Some(digest);
-        if is_duplicate {
-            self.shared.rejected.fetch_add(1, Ordering::Relaxed);
-            backend.note_rejected_frame();
-        } else {
-            let weight = f32::from_bits(self.shared.weight_bits.load(Ordering::Relaxed));
-            let outcome = backend
-                .accumulate_sample(PRIMARY_SINK, &texture, weight)
-                .map_err(|e| format!("accumulate failed: {e}"))?;
-            self.shared
-                .accepted
-                .fetch_add(outcome.real, Ordering::Relaxed);
-            self.shared
-                .synthesized
-                .fetch_add(outcome.synthetic, Ordering::Relaxed);
-            self.last_digest = Some(digest);
-        }
+        // Every frame is accumulated. Duplicates are DETECTED, a frame or two later,
+        // and reported — never excluded. Resolve normalises by accumulated weight, so
+        // a duplicate only gives one instant double weight among hundreds of samples;
+        // that is negligible next to the real frames the old synchronous check cost us.
+        let weight = f32::from_bits(self.shared.weight_bits.load(Ordering::Relaxed));
+        let outcome = backend
+            .accumulate_sample(PRIMARY_SINK, &texture, weight)
+            .map_err(|e| format!("accumulate failed: {e}"))?;
+        self.shared
+            .accepted
+            .fetch_add(outcome.real, Ordering::Relaxed);
+        self.shared
+            .synthesized
+            .fetch_add(outcome.synthetic, Ordering::Relaxed);
 
-        if let Ok(mut log) = self.shared.log.lock() {
+        // Remember where this sample's log entry went so its digest can be filled in
+        // when the GPU hands it back. `None` once the log is capped.
+        let log_index = if let Ok(mut log) = self.shared.log.lock() {
             if log.len() < MAX_SAMPLE_LOG {
                 log.push(SampleRecord {
                     u,
                     session_time,
                     replay_frame,
-                    digest,
+                    digest: 0,
                     presented_at,
-                    accepted: !is_duplicate,
+                    accepted: true,
                 });
+                Some(log.len() - 1)
+            } else {
+                None
             }
+        } else {
+            None
+        };
+        if let Ok(mut tracking) = self.shared.digests.lock() {
+            tracking.pending.push_back(log_index);
         }
+
+        // Collect whatever the GPU has finished. Non-blocking by construction, so a
+        // frame still in flight simply arrives on a later call.
+        let ready = backend.poll_digests();
+        drop(guard);
+        absorb_digests(&self.shared, &ready);
+
         self.last_presented_at = presented_at;
         Ok(())
+    }
+
+}
+
+/// Match completed digests to the samples that produced them, in submission order,
+/// and count duplicates.
+///
+/// Lives on `SessionShared` rather than on the handler so the worker thread can do
+/// the final blocking drain after the capture loop has already torn the handler down.
+fn absorb_digests(shared: &SessionShared, digests: &[u64]) {
+    if digests.is_empty() {
+        return;
+    }
+    let (Ok(mut tracking), Ok(mut log)) = (shared.digests.lock(), shared.log.lock()) else {
+        return;
+    };
+    for &digest in digests {
+        let Some(log_index) = tracking.pending.pop_front() else {
+            break;
+        };
+        let is_duplicate = tracking.last == Some(digest);
+        if let Some(index) = log_index {
+            if let Some(record) = log.get_mut(index) {
+                record.digest = digest;
+                // `accepted` now means "carried NEW CONTENT", not "was accumulated" —
+                // every frame is accumulated. A false here is what the evenness report
+                // reads as a duplicate.
+                record.accepted = !is_duplicate;
+            }
+        }
+        if is_duplicate {
+            shared.rejected.fetch_add(1, Ordering::Relaxed);
+        }
+        tracking.last = Some(digest);
     }
 }
 
@@ -335,15 +403,22 @@ impl GraphicsCaptureApiHandler for Accumulator {
         // Timed because interpolation's whole risk is that it makes this slower than
         // iRacing presents, at which point we drop real samples to manufacture
         // synthetic ones — a net loss. Measuring is how that stays visible.
+        let is_setup_frame = !self.sink_ready;
         let started = std::time::Instant::now();
         let result = self.handle_frame(frame);
         let elapsed = started.elapsed().as_nanos() as u64;
-        self.shared
-            .frame_time_total_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.shared
-            .frame_time_max_ns
-            .fetch_max(elapsed, Ordering::Relaxed);
+        if is_setup_frame {
+            // One-time cost. Reported on its own rather than averaged in.
+            self.shared.setup_ns.store(elapsed, Ordering::Relaxed);
+        } else {
+            self.shared
+                .frame_time_total_ns
+                .fetch_add(elapsed, Ordering::Relaxed);
+            self.shared
+                .frame_time_max_ns
+                .fetch_max(elapsed, Ordering::Relaxed);
+            self.shared.timed_frames.fetch_add(1, Ordering::Relaxed);
+        }
 
         if let Err(message) = result {
             // Record and keep going: a single failed frame must not lose a capture
@@ -398,6 +473,20 @@ fn run_session(
 
     if let Err(error) = &capture_result {
         record_error(&shared, format!("capture failed: {error}"));
+    }
+
+    // The capture loop has stopped, so blocking costs nothing: collect the two or
+    // three digests still in flight and finish the diagnostic log. Done on this
+    // thread, which owns the device, and before resolve.
+    {
+        let remaining = match backend_slot.0.lock() {
+            Ok(mut guard) => match guard.as_mut() {
+                Some(backend) => backend.drain_digests(),
+                None => Vec::new(),
+            },
+            Err(_) => Vec::new(),
+        };
+        absorb_digests(&shared, &remaining);
     }
 
     // Resolve on THIS thread — the same one that created every D3D11 resource and
@@ -484,11 +573,16 @@ pub struct LongExposureStats {
     pub synthesized: u32,
     pub rejected: u32,
     pub saw_frame: bool,
-    /// Mean and worst wall time spent consuming one frame, in milliseconds. The
-    /// budget is one iRacing present (~25 ms at the measured 39 fps at 5K); crossing
-    /// it means we are the bottleneck rather than the sim.
+    /// Mean and worst wall time spent consuming one frame, in milliseconds,
+    /// EXCLUDING the first frame. The budget is one iRacing present (~25 ms at the
+    /// measured 39 fps at 5K); crossing it means we are the bottleneck rather than
+    /// the sim.
     pub mean_frame_ms: f64,
     pub max_frame_ms: f64,
+    /// The first frame on its own: sink allocation plus, when interpolation is on,
+    /// NVOFA session creation. One-time, and large enough (~30 ms) to swamp the mean
+    /// on a short exposure if it were folded in.
+    pub setup_frame_ms: f64,
     pub interpolation: Option<LongExposureInterpolationReport>,
     /// Dimensions WGC is actually delivering, once the first frame has arrived.
     /// The caller resized the window, but DPI and client-area geometry mean the
@@ -512,6 +606,7 @@ pub struct LongExposureResult {
     pub backend: String,
     pub mean_frame_ms: f64,
     pub max_frame_ms: f64,
+    pub setup_frame_ms: f64,
     pub interpolation: Option<LongExposureInterpolationReport>,
     pub samples: Vec<LongExposureSample>,
     pub error: Option<String>,
@@ -535,16 +630,17 @@ fn interpolation_report(shared: &SessionShared) -> Option<LongExposureInterpolat
 
 /// Mean and max frame-handler wall time, in ms. `frames` is the number of frames the
 /// handler actually ran for — accepted plus rejected, since both were processed.
-fn frame_timings(shared: &SessionShared) -> (f64, f64) {
-    let frames = shared.accepted.load(Ordering::Relaxed) + shared.rejected.load(Ordering::Relaxed);
+fn frame_timings(shared: &SessionShared) -> (f64, f64, f64) {
+    let frames = shared.timed_frames.load(Ordering::Relaxed);
     let total_ns = shared.frame_time_total_ns.load(Ordering::Relaxed) as f64;
     let max_ns = shared.frame_time_max_ns.load(Ordering::Relaxed) as f64;
+    let setup_ns = shared.setup_ns.load(Ordering::Relaxed) as f64;
     let mean_ms = if frames == 0 {
         0.0
     } else {
         total_ns / frames as f64 / 1.0e6
     };
-    (mean_ms, max_ns / 1.0e6)
+    (mean_ms, max_ns / 1.0e6, setup_ns / 1.0e6)
 }
 
 /// Whether a long-exposure session can run at all. WGC support is checked by the
@@ -763,8 +859,9 @@ pub fn long_exposure_stats(session: u32) -> napi::Result<LongExposureStats> {
             .ok()
             .and_then(|g| *g)
             .unwrap_or((0, 0));
-        let (mean_frame_ms, max_frame_ms) = frame_timings(&entry.shared);
+        let (mean_frame_ms, max_frame_ms, setup_frame_ms) = frame_timings(&entry.shared);
         Ok(LongExposureStats {
+            setup_frame_ms,
             accepted: entry.shared.accepted.load(Ordering::Relaxed),
             synthesized: entry.shared.synthesized.load(Ordering::Relaxed),
             rejected: entry.shared.rejected.load(Ordering::Relaxed),
@@ -883,8 +980,9 @@ pub fn long_exposure_finish(
         None => (None, 0, 0),
     };
 
-    let (mean_frame_ms, max_frame_ms) = frame_timings(&entry.shared);
+    let (mean_frame_ms, max_frame_ms, setup_frame_ms) = frame_timings(&entry.shared);
     Ok(LongExposureResult {
+        setup_frame_ms,
         data,
         width,
         height,

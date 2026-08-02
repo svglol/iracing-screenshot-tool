@@ -5,6 +5,7 @@ import {
 	resolvePlan,
 	validatePlan,
 	variantSuffix,
+	interpolationLoad,
 	MAX_HIGHLIGHT_RECOVERY_STOPS,
 	type LongExposureRecipe,
 } from './shot-recipe';
@@ -350,6 +351,117 @@ describe('validatePlan', () => {
 			validate({}, { replayFrameNumEnd: null, currentSessionNum: null })
 				.errors
 		).toEqual([]);
+	});
+});
+
+// The pre-flight warning learns THIS machine's limit from measured captures rather
+// than hard-coding one, because where interpolation stops being free depends entirely
+// on the GPU. Until there is evidence it must say nothing at all.
+describe('validatePlan — interpolation load', () => {
+	const planFor = (over: Partial<LongExposureRecipe>) => {
+		const r = normalizeRecipe(over, base());
+		return { recipe: r, plan: resolvePlan(r) };
+	};
+
+	it('says nothing when the machine has never fallen behind', () => {
+		const { recipe, plan } = planFor({
+			interpolationFactor: 8,
+			supersample: 2,
+		});
+		for (const lossyInterpolationLoad of [null, undefined, 0]) {
+			const { warnings } = validatePlan({
+				plan,
+				recipe,
+				replayFrameNumEnd: null,
+				currentSessionNum: null,
+				lossyInterpolationLoad,
+			});
+			expect(warnings.join(' ')).not.toMatch(/interpolation/i);
+		}
+	});
+
+	it('warns once the planned load reaches a known-lossy one', () => {
+		const { recipe, plan } = planFor({
+			interpolationFactor: 8,
+			supersample: 2,
+		});
+		const load = interpolationLoad({
+			renderWidth: plan.renderWidth,
+			renderHeight: plan.renderHeight,
+			interpolationFactor: recipe.interpolationFactor,
+		});
+		const { warnings } = validatePlan({
+			plan,
+			recipe,
+			replayFrameNumEnd: null,
+			currentSessionNum: null,
+			lossyInterpolationLoad: load,
+		});
+		expect(warnings.join(' ')).toMatch(/cost this machine real samples/i);
+		// Supersample is the cheapest thing to give up and it buys samples twice.
+		expect(warnings.join(' ')).toMatch(/supersampling/i);
+	});
+
+	it('stays quiet for a lighter configuration than the known limit', () => {
+		const { recipe, plan } = planFor({
+			interpolationFactor: 2,
+			supersample: 1,
+		});
+		const { warnings } = validatePlan({
+			plan,
+			recipe,
+			replayFrameNumEnd: null,
+			currentSessionNum: null,
+			// A limit measured at a much heavier configuration.
+			lossyInterpolationLoad: 100,
+		});
+		expect(warnings.join(' ')).not.toMatch(/interpolation/i);
+	});
+
+	it('never warns when interpolation is off', () => {
+		const { recipe, plan } = planFor({
+			interpolationFactor: 1,
+			supersample: 2,
+		});
+		const { warnings } = validatePlan({
+			plan,
+			recipe,
+			replayFrameNumEnd: null,
+			currentSessionNum: null,
+			lossyInterpolationLoad: 0.0001,
+		});
+		expect(warnings.join(' ')).not.toMatch(/interpolation/i);
+	});
+});
+
+describe('interpolationLoad', () => {
+	it('is render megapixels times the factor', () => {
+		expect(
+			interpolationLoad({
+				renderWidth: 5120,
+				renderHeight: 2880,
+				interpolationFactor: 8,
+			})
+		).toBeCloseTo(117.965, 2);
+		expect(
+			interpolationLoad({
+				renderWidth: 2560,
+				renderHeight: 1440,
+				interpolationFactor: 8,
+			})
+		).toBeCloseTo(29.491, 2);
+	});
+
+	// Both of these must compare as "no interpolation work", so a factor-1 shot can
+	// never teach the machine a limit.
+	it('treats factor 0 and 1 alike', () => {
+		const at = (interpolationFactor: number) =>
+			interpolationLoad({
+				renderWidth: 1920,
+				renderHeight: 1080,
+				interpolationFactor,
+			});
+		expect(at(0)).toBe(at(1));
 	});
 });
 

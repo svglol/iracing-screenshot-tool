@@ -72,9 +72,13 @@ export interface NativeLongExposureResult {
 	synthesized?: number;
 	rejected: number;
 	backend: string;
-	// Wall time per consumed frame. The budget is one iRacing present.
+	// CPU-side time per consumed frame, EXCLUDING the first. Since the digest stopped
+	// blocking these no longer include waiting on the GPU, so a small value does NOT
+	// prove we kept up — compare accepted against the predicted count for that.
 	meanFrameMs?: number;
 	maxFrameMs?: number;
+	// The first frame alone: sink allocation plus NVOFA session creation.
+	setupFrameMs?: number;
 	interpolation?: NativeLongExposureInterpolation | null;
 	samples: NativeLongExposureSample[];
 	error: string | null;
@@ -87,6 +91,7 @@ export interface NativeLongExposureStats {
 	sawFrame: boolean;
 	meanFrameMs?: number;
 	maxFrameMs?: number;
+	setupFrameMs?: number;
 	interpolation?: NativeLongExposureInterpolation | null;
 	// Dimensions WGC is actually delivering, once the first frame has arrived (0
 	// before that). The caller resized the window, but DPI and client-area geometry

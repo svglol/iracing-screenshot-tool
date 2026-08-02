@@ -522,8 +522,16 @@ that dedups on the telemetry frame counter at slow motion is broken.
    `InterlockedXor`/`InterlockedAdd` into a 2×u32 UAV). Cost is a fraction of the
    accumulate pass and it runs on the texture already resident on the GPU — no
    readback of pixels, only 8 bytes. A digest equal to the immediately preceding
-   frame's ⇒ iRacing presented identical content ⇒ **reject, do not accumulate**,
-   increment `duplicatesRejected`.
+   frame's ⇒ iRacing presented identical content ⇒ **recorded as a duplicate**.
+
+   **AMENDED 2026-08-02: duplicates are reported, not rejected.** The readback used to
+   be a blocking `Map` so the decision could be made before accumulating — a full GPU
+   sync per frame. In the field that sync cost us two real frames in three at
+   5120×2880 once interpolation was added, which is a far worse defect than the thing
+   it guarded against. It is now an asynchronous staging ring, and every frame is
+   accumulated. Safe because resolve normalises by accumulated weight: a duplicate
+   only gives one instant double weight among hundreds of samples. See
+   `long-exposure-frame-interpolation.md` §8.
 2. **Presentation timestamp (corroborating).** `Frame::timestamp()`
    (`SystemRelativeTime`) is recorded per sample for the evenness report. It cannot
    by itself prove duplication, but a repeated digest with a *distinct* timestamp is

@@ -218,17 +218,11 @@ defect is H1/H2/H3.
 
 ---
 
-## 4. Known adjacent issue
+## 4. ~~Known adjacent issue~~ — RESOLVED 2026-08-02, see §8
 
-`D3d11Backend::digest` does a **blocking `Map` every frame** to read back the
-64-bit content hash before deciding whether to accumulate. That is a full GPU sync
-per sample. It was affordable at the measured margins, and duplicates have never
-actually been observed (`rejected: 0` on every field shot) — but it is the first
-thing to move off the critical path if sample throughput becomes the constraint.
-
-Options: a ring of staging buffers read with `D3D11_MAP_FLAG_DO_NOT_WAIT` and a
-one-frame lag; or gate the digest behind a setting, defaulting off, since the
-telemetry-side evidence says duplicates do not occur in this pipeline.
+`D3d11Backend::digest` used to do a **blocking `Map` every frame**. It became the
+constraint exactly as predicted, and it is now a staging ring read with
+`D3D11_MAP_FLAG_DO_NOT_WAIT`. See §8.
 
 ---
 
@@ -467,3 +461,85 @@ perceptual improvement in the feature — but because a sidecar written before t
 existed carries no such field, so a non-zero default would silently make old recipes
 reproduce differently. Reproducibility outranks a better-looking first shot. The panel
 explains the setting instead.
+
+---
+
+## 8. The blocking digest, and the failure it caused — fixed 2026-08-02
+
+### 8.1 Caught in the field, exactly as §4 predicted
+
+Two shots of the same anchor at 5120×2880, from the user's own screenshots folder:
+
+| shot | render | interp | **real samples** | synth | mean ms | median gap |
+|---|---|---|---|---|---|---|
+| 19 | 5120×2880 | off | 13 | 0 | 12.1 | 0.0015 |
+| **20** | 5120×2880 | **8×** | **3** | 14 | **30.7** | **0.0049** |
+
+At that size iRacing renders ~39 fps, so a frame arrives every **~25.6 ms** and shot
+20 spent **30.7 ms** consuming each one. It caught roughly one frame in three — the
+median gap tripling says so directly.
+
+The visible result was "almost no motion blur", for two compounding reasons: three
+real positions instead of thirteen, **and** a shorter streak (0.0098 s of sim time
+covered against 0.018 s). The same run at 2560×1440 (shots 17/18) was completely
+unaffected — 12 real vs 14 with interpolation off.
+
+**The §3.4 extrapolation was wrong.** It predicted ~+5 ms; the real cost at 8× was
++18.6 ms. Do not trust per-pixel scaling of this pipeline across a 4× size jump.
+
+### 8.2 The fix
+
+The digest is now submitted and collected asynchronously: a ring of `DIGEST_RING = 4`
+staging buffers, read with `D3D11_MAP_FLAG_DO_NOT_WAIT`, with the stragglers drained
+(blocking, harmlessly) after the capture loop ends.
+
+**Duplicates are now REPORTED, not rejected.** That is safe because resolve normalises
+by accumulated weight, so a duplicate merely gives one instant double weight among
+hundreds of samples. Weigh that against what the sync was costing — two real frames in
+three — and it is not a close call.
+
+Measured after the change, 1266×753:
+
+| | before | after |
+|---|---|---|
+| factor 1, mean ms/frame | 0.51 | **0.04** |
+| factor 8, mean ms/frame | ~0.90 | **0.30** |
+
+Verified on hardware that detection still works, which is the part that could have
+silently broken: a canvas redrawing identical pixels every `requestAnimationFrame`
+produced **95 duplicates detected out of 96 samples**, while the animated scene
+produced **0 out of 92**. All digests were collected in both cases (96/96, 92/92).
+
+### 8.3 `meanFrameMs` no longer means what it used to — read this before using it
+
+The old blocking `Map` waited for **all** queued GPU work, so `meanFrameMs`
+accidentally measured GPU cost too. It no longer does: it is now CPU-side submit time
+only, and **a small value does not prove we kept up.**
+
+The ground truth is `sampling.achieved` against `plan.predictedSamples`. Everything
+that judges whether interpolation is affordable keys off that ratio, not off timing.
+
+Two related corrections shipped with it:
+
+- **Setup is reported separately** (`setupFrameMs`). The first frame allocates the
+  sink and creates the NVOFA session — ~30 ms, and it is identical at factors 2, 4 and
+  8, which is how we know it is one-time. Averaged in, it dominated any short exposure:
+  shot 17's "4.7 ms mean" over 12 samples was mostly that one frame.
+- **Two guardrails**, in `capture-session.ts` and `shot-recipe.ts`. After a shot,
+  `diagnoseInterpolationShortfall` warns when real samples came in below
+  `SAMPLE_SHORTFALL_RATIO` (0.6) of prediction, naming the remedy. Before a shot,
+  `validatePlan` warns when the planned `interpolationLoad` (render Mpx × factor)
+  reaches one this machine has already been seen to choke on.
+
+  That limit is **learned, never hard-coded** (`longExposureLossyInterpolationLoad`,
+  written by `index.ts` after each capture). Where interpolation stops being free
+  depends entirely on the GPU, so a constant measured on a 4090 would be wrong
+  everywhere else — and the warning stays silent until this machine has produced
+  evidence of its own.
+
+### 8.4 Still not measured
+
+Whether the digest fix makes 5120×2880 + 8× viable **is not known**. Removing the sync
+stops the CPU stalling, but it does not reduce GPU work; if the GPU genuinely needs
+more than 25.6 ms per frame, the queue simply backs up instead. Re-shoot the shot
+19/20 pair and compare `sampling.achieved`.

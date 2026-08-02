@@ -118,10 +118,31 @@ pub trait AccumulateBackend {
     /// what removes JRT's RAM wall entirely.
     fn create_sink(&mut self, sink_id: &str, width: u32, height: u32) -> Result<(), BackendError>;
 
-    /// Content digest of a source frame, for duplicate rejection. Must be
-    /// deterministic for identical pixel content and independent of thread
-    /// scheduling — a nondeterministic digest would manufacture false duplicates.
-    fn digest(&mut self, source: &ID3D11Texture2D) -> Result<u64, BackendError>;
+    /// Queue a content digest of a source frame. **Does not block.**
+    ///
+    /// This used to be a synchronous `digest()` that mapped the result back on the
+    /// spot — a full GPU sync once per frame. Field data showed that sync dominating
+    /// the per-frame cost at large render sizes (12.1 ms/frame at 5120x2880), and
+    /// once frame interpolation was added on top it pushed consumption past iRacing's
+    /// present interval, so we started DROPPING REAL FRAMES. Losing real samples is a
+    /// far worse defect than the duplicates this was guarding against — which have
+    /// never once been observed in the field (`rejected: 0` on every shot to date).
+    ///
+    /// So the digest is now submitted here and collected later, and duplicates are
+    /// REPORTED rather than rejected. That is safe because resolve normalises by
+    /// accumulated weight: a duplicate merely gives one instant double weight among
+    /// hundreds of samples, which is negligible, whereas the sync was costing us
+    /// two frames in three.
+    fn submit_digest(&mut self, source: &ID3D11Texture2D) -> Result<(), BackendError>;
+
+    /// Digests that have become readable since the last call, in submission order.
+    /// Never blocks: a frame whose GPU work is still in flight simply is not
+    /// returned yet.
+    fn poll_digests(&mut self) -> Vec<u64>;
+
+    /// Block until every outstanding digest is readable. Called once, after the
+    /// capture loop has ended, where a stall costs nothing.
+    fn drain_digests(&mut self) -> Vec<u64>;
 
     /// sRGB -> linear, then add `weight * colour` into the sink's accumulator and
     /// `weight` into its accumulated-weight channel.
