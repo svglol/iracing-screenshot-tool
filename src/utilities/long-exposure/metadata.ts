@@ -72,11 +72,20 @@ export interface LongExposureSidecar {
 		reason: string | null;
 		gridSize: number;
 		bidirectional: boolean;
-		// Per-frame consumption cost. The budget is one iRacing present, so this is
-		// what tells a later reader whether a low sample count was interpolation's
-		// fault.
+		// CPU-side per-frame cost, EXCLUDING the first frame. Since the digest
+		// readback stopped blocking these no longer include waiting on the GPU, so a
+		// small value does NOT prove the capture kept up — `achievedRatio` is the
+		// number that answers that.
 		meanFrameMs: number | null;
 		maxFrameMs: number | null;
+		// The first frame alone: sink allocation plus NVOFA session creation.
+		setupFrameMs: number | null;
+		// Render megapixels x achieved factor — how much interpolation work this shot
+		// asked for, comparable across shots and machines.
+		load: number;
+		// achieved / predicted REAL samples. The ground truth for "did interpolation
+		// cost us real frames". Well below 1 means it did.
+		achievedRatio: number | null;
 	} | null;
 
 	image: {

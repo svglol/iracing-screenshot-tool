@@ -115,6 +115,9 @@ describe('buildSidecar', () => {
 				bidirectional: true,
 				meanFrameMs: 6.25,
 				maxFrameMs: 18,
+				setupFrameMs: 33,
+				load: 14.746,
+				achievedRatio: 0.95,
 			},
 			// Deliberately NOT (factor-1) x accepted: frames whose flow estimation
 			// failed contribute a real sample and no synthetic ones, and the sidecar
@@ -138,6 +141,12 @@ describe('buildSidecar', () => {
 		// The real sample count stays exactly what it was, so it remains comparable
 		// against a shot taken with interpolation off.
 		expect(result.sampling.achieved).toBe(stats.accepted);
+		// The diagnostics that actually answer "did interpolation cost real frames"
+		// have to reach the sidecar — an explicit field-by-field mapping here once
+		// dropped all three of these silently.
+		expect(result.interpolation?.setupFrameMs).toBe(33);
+		expect(result.interpolation?.load).toBe(14.746);
+		expect(result.interpolation?.achievedRatio).toBe(0.95);
 	});
 
 	it('records a declined request honestly rather than as success', () => {
@@ -155,6 +164,9 @@ describe('buildSidecar', () => {
 				bidirectional: false,
 				meanFrameMs: null,
 				maxFrameMs: null,
+				setupFrameMs: null,
+				load: 3.686,
+				achievedRatio: 1.02,
 			},
 			synthesizedSamples: 0,
 			imageWidth: 1920,

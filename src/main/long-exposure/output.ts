@@ -227,18 +227,10 @@ export async function writeLongExposure(
 		plan,
 		stats,
 		backend,
-		interpolation: interpolation
-			? {
-					requestedFactor: interpolation.requestedFactor,
-					enabled: interpolation.enabled,
-					achievedFactor: interpolation.achievedFactor,
-					reason: interpolation.reason,
-					gridSize: interpolation.gridSize,
-					bidirectional: interpolation.bidirectional,
-					meanFrameMs: interpolation.meanFrameMs,
-					maxFrameMs: interpolation.maxFrameMs,
-				}
-			: null,
+		// Spread rather than field-by-field: an explicit mapping here silently dropped
+		// setupFrameMs / load / achievedRatio when they were added, so the sidecar —
+		// the one place these diagnostics are actually read — reported none of them.
+		interpolation,
 		synthesizedSamples: interpolation?.syntheticSamples ?? 0,
 		imageWidth: image.width,
 		imageHeight: image.height,
