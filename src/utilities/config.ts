@@ -121,6 +121,51 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	// --- Long exposure (docs/design/long-exposure.md) ---------------------
+	// The last parameter set the user shot with, so re-opening the panel resumes
+	// where they left off. The anchor is deliberately NOT persisted: it belongs to
+	// a moment in a specific replay and is read fresh (or carried in the recipe for
+	// a re-shoot).
+	longExposureShutter: {
+		type: 'string',
+		default: '1/8',
+	},
+	// 0 = derive the playback speed from the sample target. Any other value pins it.
+	longExposurePlaybackSpeed: {
+		type: 'number',
+		default: 0,
+	},
+	longExposureTargetSamples: {
+		type: 'number',
+		default: 240,
+	},
+	longExposureSupersample: {
+		type: 'number',
+		default: 1,
+		enum: [1, 2],
+	},
+	longExposureWeighting: {
+		type: 'string',
+		default: 'box',
+		enum: ['box', 'linear', 'ease'],
+	},
+	longExposureTonemap: {
+		type: 'string',
+		default: 'none',
+		enum: ['none', 'reinhard', 'aces'],
+	},
+	// Exposure compensation in stops, applied in linear space before tonemapping.
+	longExposureExposureCompensation: {
+		type: 'number',
+		default: 0,
+	},
+	// png16 is the 16-bit master (written by our own encoder — sharp reduces 16-bit
+	// to 8 before encoding). The others produce an 8-bit file only.
+	longExposureFormat: {
+		type: 'string',
+		default: 'png16',
+		enum: ['png16', 'png', 'jpeg', 'webp'],
+	},
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

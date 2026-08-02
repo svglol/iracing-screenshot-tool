@@ -33,6 +33,72 @@ export interface WgcCaptureResult {
 	height: number;
 }
 
+// One entry of the native per-sample diagnostic log (long exposure). See
+// utilities/long-exposure/sample-stats.ts for what it is used for.
+export interface NativeLongExposureSample {
+	u: number;
+	sessionTime: number;
+	replayFrameNum: number;
+	digest: string;
+	presentedAt: string;
+	accepted: boolean;
+}
+
+export interface NativeLongExposureResult {
+	// Tightly packed 16-bit RGBA, little-endian. null when the resolve produced
+	// nothing (no accumulated samples, or a GPU fault — see `error`).
+	data: Buffer | null;
+	width: number;
+	height: number;
+	accepted: number;
+	rejected: number;
+	backend: string;
+	samples: NativeLongExposureSample[];
+	error: string | null;
+}
+
+export interface NativeLongExposureStats {
+	accepted: number;
+	rejected: number;
+	sawFrame: boolean;
+	// Dimensions WGC is actually delivering, once the first frame has arrived (0
+	// before that). The caller resized the window, but DPI and client-area geometry
+	// mean the delivered size is WGC's to report, not ours to assume.
+	frameWidth: number;
+	frameHeight: number;
+	error: string | null;
+}
+
+// The long-exposure accumulation surface (design note §3/§7). Kept as a separate
+// interface from the still-capture pair so a build of the addon that predates the
+// feature degrades to "long exposure unavailable" rather than crashing on load.
+export interface WgcLongExposureAddon {
+	// Compiles the compute kernels and throws with a reason if this machine can't
+	// run them. Cheap and side-effect-free — no device, no GPU work.
+	longExposureProbe(): string;
+	// Open a live capture of the window. The accumulation gate starts CLOSED.
+	longExposureBegin(hwnd: number): number;
+	longExposureSetSample(
+		session: number,
+		weight: number,
+		u: number,
+		replayFrameNum: number,
+		sessionTime: number
+	): void;
+	longExposureSetGate(session: number, open: boolean): void;
+	longExposureStats(session: number): NativeLongExposureStats;
+	longExposureFinish(
+		session: number,
+		outWidth: number,
+		outHeight: number,
+		supersample: number,
+		tonemap: number,
+		exposureMul: number,
+		timeoutMs: number
+	): NativeLongExposureResult;
+	longExposureAbort(session: number, timeoutMs: number): void;
+}
+
 interface WgcAddon {
 	// Whether Windows.Graphics.Capture is available on this OS build. WGC's
 	// CreateForWindow needs Win10 1903 (build 18362) or newer.
@@ -129,6 +195,20 @@ export function getWgcApi(): WgcAddon | null {
 		wgcApi = createWgcApi();
 	}
 	return wgcApi;
+}
+
+// The long-exposure accumulation surface of the SAME addon, or null when this
+// build predates the feature (or WGC is unavailable at all). Kept separate from
+// getWgcApi so an older .node degrades to "long exposure unavailable" while still
+// serving still captures — the addon is loaded once either way.
+export function getLongExposureAddon(): WgcLongExposureAddon | null {
+	const api = getWgcApi() as unknown as
+		| (WgcAddon & Partial<WgcLongExposureAddon>)
+		| null;
+	if (!api || typeof api.longExposureBegin !== 'function') {
+		return null;
+	}
+	return api as unknown as WgcLongExposureAddon;
 }
 
 // Whether the WGC path is available this session (used to gate UI / pre-flight).

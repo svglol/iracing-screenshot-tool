@@ -38,6 +38,23 @@ import {
 	getWgcUnavailableReason,
 	isWgcAvailable,
 } from './wgc-capture';
+import {
+	getLongExposureApi,
+	getLongExposureAvailability,
+} from './long-exposure/long-exposure-native';
+import {
+	ReplayController,
+	readReplayState,
+} from './long-exposure/replay-control';
+import { executeRecipe } from './long-exposure/capture-session';
+import { writeLongExposure } from './long-exposure/output';
+import {
+	createDefaultRecipe,
+	normalizeRecipe,
+	resolvePlan,
+	type LongExposureRecipe,
+} from '../utilities/long-exposure/shot-recipe';
+import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
 import sharp from 'sharp';
 import { DEFAULT_FORMAT } from '../utilities/filenameFormat';
 import {
@@ -797,6 +814,260 @@ ipcMain.handle('get-iracing-fullscreen-state', () =>
 // unsupported system. Fails open in the loader, so a false here is definitive.
 ipcMain.on('native-capture-available', (event) => {
 	event.returnValue = isWgcAvailable();
+});
+
+// ---------------------------------------------------------------------------
+// Long-exposure photo mode
+//
+// See docs/design/long-exposure.md. The sim-facing parts (replay control, GPU
+// accumulation, anchor restoration) live in main/long-exposure/; everything here
+// is the bridge: guard against a concurrent capture, hand the session the same
+// window/camera handling the still path uses, and write the result.
+// ---------------------------------------------------------------------------
+
+// Separate latch from `takingScreenshot` because a long exposure outlives the
+// window restore: the file write happens after iRacing is already back to normal,
+// and a second capture must not start in that gap.
+let longExposureActive = false;
+// The live abort signal for the running capture, so the UI can cancel. Abort is
+// cooperative and unwinds through the same finally as any other exit, so the
+// anchor is still restored.
+let longExposureSignal: { aborted: boolean } | null = null;
+
+// Replay control bound to the live SDK bridge. Every position/speed change the
+// feature makes goes through here — broadcast messages only, never synthesised
+// input or UI automation.
+const replayController = new ReplayController({
+	readState: () =>
+		readReplayState(
+			(iracing.telemetry?.values as Record<string, unknown>) || null
+		),
+	setPlaySpeed: (speed, slowMotion) =>
+		iracing.sdk.changeReplaySpeed(speed, slowMotion),
+	setPlayPosition: (mode, frame) =>
+		iracing.sdk.changeReplayPosition(mode, frame),
+	// Wrapped rather than passed by reference: `delay` is a const declared at the
+	// end of this file, so referencing it directly here would hit its TDZ at module
+	// evaluation time.
+	delay: (ms) => delay(ms),
+	now: () => Date.now(),
+});
+
+// Availability of the compute backend + whether a shot can be set up right now.
+// The renderer polls this to enable/disable the panel and explain why.
+ipcMain.handle('long-exposure:availability', () => {
+	const availability = getLongExposureAvailability();
+	const state = replayController.state();
+	return {
+		...availability,
+		// A long exposure needs a replay: there is no window of past frames to
+		// integrate over in a live session.
+		inReplay: state !== null,
+		anchorFrame: state?.replayFrameNum ?? null,
+		replayFrameNumEnd: state?.replayFrameNumEnd ?? null,
+		sessionNum: state?.replaySessionNum ?? null,
+		frameRate: state?.frameRate ?? null,
+		busy: longExposureActive || takingScreenshot,
+	};
+});
+
+// Cooperative cancel. Does NOT itself restore anything — the running capture's
+// finally does that, which is the whole point of routing abort through the same
+// unwind path as success.
+ipcMain.handle('long-exposure:abort', () => {
+	if (longExposureSignal) {
+		longExposureSignal.aborted = true;
+		log.info('Long exposure abort requested');
+		return true;
+	}
+	return false;
+});
+
+ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
+	if (longExposureActive || takingScreenshot) {
+		return {
+			ok: false,
+			failure: 'busy',
+			message: 'A capture is already in progress.',
+			warnings: [],
+		};
+	}
+
+	const live = replayController.state();
+	if (!live) {
+		return {
+			ok: false,
+			failure: 'invalid-recipe',
+			message:
+				'Long exposure needs a replay. Open a replay and scrub to the moment you want.',
+			warnings: [],
+		};
+	}
+
+	// #10: the same exclusive-fullscreen pre-flight the still path runs. WGC is
+	// DWM-based, so exclusive fullscreen comes back black on this path too — and a
+	// long exposure would burn the full playback duration before finding out.
+	const fullscreen = getIracingExclusiveFullscreenState();
+	lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
+	if (fullscreen && fullscreen.exclusiveFullscreen) {
+		return {
+			ok: false,
+			failure: 'exclusive-fullscreen',
+			message: EXCLUSIVE_FULLSCREEN_MESSAGE,
+			warnings: [],
+		};
+	}
+
+	// The anchor comes from the recipe when the UI supplied one (a re-shoot reuses
+	// the stored anchor), and from the live cursor only on a fresh shot.
+	const defaults = createDefaultRecipe({
+		anchorFrame: live.replayFrameNum,
+		sessionNum: live.replaySessionNum ?? 0,
+		width: width || 1920,
+		height: height || 1080,
+		outputDir: path.resolve(config.get('screenshotFolder')),
+	});
+	const recipe: LongExposureRecipe = normalizeRecipe(
+		(rawRecipe as Partial<LongExposureRecipe>) || {},
+		defaults
+	);
+
+	const signal = { aborted: false };
+	longExposureSignal = signal;
+	longExposureActive = true;
+	takingScreenshot = true;
+	originalWindowBounds = getIracingWindowDetails() || null;
+	parseCameraState(
+		(iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState
+	);
+	try {
+		iracing.camControls.setState(
+			cameraState | iracing.Consts.CameraState.UIHidden
+		);
+	} catch (error) {
+		log.debug('Could not hide the iRacing UI for long exposure', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
+
+	try {
+		const outcome = await executeRecipe(recipe, {
+			replay: replayController,
+			native: getLongExposureApi(),
+			backendName: getLongExposureAvailability().backend,
+			backendUnavailableReason: getLongExposureAvailability().reason,
+			resizeWindow: async (renderWidth, renderHeight) =>
+				resizeIracingWindowAsync(renderWidth, renderHeight, left, top),
+			// Reuse the still path's restore exactly, so a long exposure leaves
+			// iRacing in the same state a normal screenshot would.
+			restoreWindow: () => restoreScreenshotState(),
+			vramInfo: () => getVramInfo(),
+			baselineDims: () => getIracingWindowSizeNative(),
+			delay,
+			now: () => Date.now(),
+			signal,
+			onProgress: (update) =>
+				broadcastToWindows('long-exposure:progress', update),
+		});
+
+		if (!outcome.ok || !outcome.image || !outcome.plan || !outcome.stats) {
+			log.warn('Long exposure did not produce an image', {
+				failure: outcome.failure,
+				message: outcome.message,
+				restoredExactly: outcome.restore.landedExactly,
+			});
+			return {
+				ok: false,
+				failure: outcome.failure,
+				message: outcome.message,
+				warnings: outcome.warnings,
+				restore: outcome.restore,
+			};
+		}
+
+		const written = await writeLongExposure({
+			image: outcome.image,
+			recipe,
+			plan: outcome.plan,
+			stats: outcome.stats,
+			backend: outcome.backend,
+			screenshotDir: path.resolve(config.get('screenshotFolder')),
+			cacheDir: path.join(app.getPath('userData'), 'Cache'),
+			sessionInfo: iracing.sessionInfo,
+			telemetry: iracing.telemetry,
+			filenameFormat: config.get('customFilenameFormat')
+				? config.get('filenameFormat') || DEFAULT_FORMAT
+				: DEFAULT_FORMAT,
+			toolName: productName,
+			toolVersion: app.getVersion(),
+			capturedAt: new Date().toISOString(),
+		});
+
+		log.info('Long exposure saved', {
+			file: written.masterPath,
+			sampling: describeSampleStats(outcome.stats),
+			backend: outcome.backend,
+		});
+
+		// Same gallery notification the still path uses, so a long exposure appears
+		// in the strip like any other shot. The 8-bit preview is what the gallery
+		// shows when the master is 16-bit, because Chromium renders it far faster.
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			mainWindow.webContents.send(
+				'screenshot-response',
+				written.previewPath || written.masterPath
+			);
+		}
+
+		return {
+			ok: true,
+			failure: null,
+			message: null,
+			warnings: outcome.warnings,
+			restore: outcome.restore,
+			masterPath: written.masterPath,
+			previewPath: written.previewPath,
+			sidecarPath: written.sidecarPath,
+			stats: outcome.stats,
+			plan: outcome.plan,
+			backend: outcome.backend,
+			// Echo the recipe back with the resolved anchor so a re-shoot reuses the
+			// SAME moment rather than re-reading a cursor the user may have moved.
+			recipe,
+		};
+	} catch (error) {
+		const message = (error as Error)?.message || String(error);
+		log.error('Long exposure failed', { error: message });
+		return { ok: false, failure: 'resolve-failed', message, warnings: [] };
+	} finally {
+		longExposureActive = false;
+		longExposureSignal = null;
+		// executeRecipe's own finally already restored the window and the cursor;
+		// this is the backstop for a throw before that could run.
+		restoreScreenshotState();
+	}
+});
+
+// Live preview of what a recipe would do, for the parameter UI: chosen playback
+// speed, predicted samples, and how long the user will be waiting. Pure — it never
+// touches the sim.
+ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
+	const live = replayController.state();
+	const defaults = createDefaultRecipe({
+		anchorFrame: live?.replayFrameNum ?? 0,
+		sessionNum: live?.replaySessionNum ?? 0,
+		width: width || 1920,
+		height: height || 1080,
+		outputDir: path.resolve(config.get('screenshotFolder')),
+	});
+	const recipe = normalizeRecipe(
+		(rawRecipe as Partial<LongExposureRecipe>) || {},
+		defaults
+	);
+	return {
+		recipe,
+		plan: resolvePlan(recipe, { renderFps: live?.frameRate ?? undefined }),
+	};
 });
 ipcMain.handle(
 	'desktop-capturer:get-source-id',

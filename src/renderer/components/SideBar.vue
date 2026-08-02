@@ -235,6 +235,17 @@
 			After pressing the screenshot button in the iRacing Screenshot Tool,
 			you will need to press the keybind for taking a screenshot for ReShade
 		</o-notification>
+
+		<!-- Long exposure. Self-contained: it owns its own parameters, its own
+		     availability polling and its own capture call, because a long exposure
+		     is a replay-driven recipe rather than a variation on the still path.
+		     Deliberately NOT gated on the ReShade toggle: accumulation always runs
+		     through the native WGC + D3D11 compute path regardless of which backend
+		     stills use, so hiding it here would deny a working capture to anyone
+		     running ReShade in borderless. Exclusive fullscreen — the case that
+		     genuinely can't work — is caught by the capture pre-flight with a
+		     specific message. -->
+		<LongExposurePanel :reshade="reshade" />
 	</div>
 </template>
 
@@ -248,6 +259,7 @@ import {
 	formatVramGiB,
 } from '../../utilities/vram-prediction';
 import { useOruga } from '@oruga-ui/oruga-next';
+import LongExposurePanel from './LongExposurePanel.vue';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 
@@ -321,6 +333,7 @@ function getResolutionDimensions(label: string): {
 }
 
 export default {
+	components: { LongExposurePanel },
 	// Declare 'screenshot' as a custom emit. Previously used 'click', which in
 	// Vue 3 is treated as a NATIVE DOM event unless explicitly declared —
 	// native clicks from child elements (e.g. <o-select> dropdown) bubbled
