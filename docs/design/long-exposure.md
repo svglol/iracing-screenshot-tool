@@ -162,12 +162,14 @@ samples   S = T · R · P
 wall time W = T · P
 ```
 
-`T = N / 60` where `N` is the exposure window length in replay frames.
+`T = N / 60` for a whole-frame window, where `N` is its length in replay frames.
+Below one replay frame `T` is the requested exposure itself and `N` is only the
+**seek span** — one frame, the frame the window starts inside (see below).
 
 | Shutter | T (s) | N frames | P=1 | P=2 | P=4 | P=8 | P=16 | wall @P=16 |
 |---|---|---|---|---|---|---|---|---|
 | 1/1000 | 0.001 | 1 | 1 | 1 | 1 | 1 | 1 | 0.02 s |
-| 1/125 | 0.008 | 1 | 1 | 2 | 4 | 8 | 15 | 0.13 s |
+| 1/125 | 0.008 | 1 | 1 | 1 | 1 | 3 | 7 | 0.13 s |
 | 1/60 | 0.017 | 1 | 1 | 2 | 4 | 8 | 16 | 0.27 s |
 | 1/30 | 0.033 | 2 | 2 | 4 | 8 | 16 | 32 | 0.53 s |
 | 1/15 | 0.067 | 4 | 4 | 8 | 16 | 32 | 64 | 1.1 s |
@@ -176,7 +178,10 @@ wall time W = T · P
 | 0.5" | 0.5 | 30 | 30 | 60 | 120 | 240 | 480 | 8.0 s |
 | 1" | 1.0 | 60 | 60 | 120 | 240 | 480 | **960** | 16 s |
 
-(`R = 60`; double every count at 120 fps.)
+(`R = 60`; double every count at 120 fps. Counts floor, and never below 1 — we
+always get the frame we stop on. The 1/125 row read 1/2/4/8/15 before sub-frame
+windows landed: those were 120 fps numbers against a window that in practice
+quantised to 1/60 anyway.)
 
 JRT's ceiling is 512 blended samples of *captured* frames, extended to 8192 only by
 synthesising in-betweens. At 1/16 speed and 120 fps we reach **1920 real,
@@ -223,17 +228,40 @@ Two modes, both resolving to the same recipe field:
 defaulted to 60 when unavailable. It is only ever a *predictor*: the achieved
 sample count is measured and reported, never assumed.
 
-Exposures at or below one replay frame (1/1000 … 1/60) resolve to `N = 1` and are
-served by a single-sample capture at P = 1, i.e. exactly the existing WGC still path
-with no motion blur — matching JRT's 1/1000 = 1 sample rung.
+### Exposures shorter than one replay frame
 
-**This is a limitation of our planner, NOT of the replay format, and it makes five
-shutter stops inert.** The tape stores positions at 60 Hz but iRacing renders ~10
-distinct interpolated frames between each pair (§1 of the frame-interpolation note), so
-a sub-replay-frame exposure is capturable: seek to `anchor − 1`, play, and accumulate
-only the tail subset. As it stands, asking for 1/1000 silently delivers 1/60 — 16× the
-intended blur. See `long-exposure-subframe-windows.md`, which also covers the two stated
-invariants that fix would bend (§4's wall-clock rule and §9's bit-exact window bounds).
+**IMPLEMENTED 2026-08-02.** The table above quantises `T = N / 60`, which used to be
+the whole story: 1/1000 … 1/60 all resolved to `N = 1` and produced a byte-identical
+plan, so four of those five stops were inert and asking for 1/1000 silently delivered
+16× the intended blur.
+
+That was a limitation of our planner, not of the replay format. The tape stores
+positions at 60 Hz but iRacing renders ~10 distinct interpolated frames between each
+pair (§1 of the frame-interpolation note), so a sub-replay-frame exposure is
+capturable: seek to `anchor − 1`, play, and accumulate only the tail subset of the
+rendered frames.
+
+So the window is now **continuous at its start and frame-indexed everywhere else**:
+
+| | value | why |
+|---|---|---|
+| `startFrame` | `anchor − ceil(T × 60)`, integral | the seek target, and the safety net that bounds the start to one replay frame |
+| window start | `anchorTime − T`, continuous | what actually bounds the exposure |
+| `endFrame` | `anchor`, integral | unchanged — termination never moved |
+
+Exposures of one replay frame or longer are **unchanged**: they still quantise to
+whole frames (1/8 is still 8 frames = 0.133 s), and their continuous start lands
+exactly on `startFrame`, so no stored recipe changes meaning. Only shutters faster
+than 1/60 take the new path.
+
+Two consequences worth stating: a 1/1000 exposure resolving to a single sample is
+now the *correct* result rather than a quantisation failure — that is what a 1/1000
+shutter is — and the ladder's fast half is genuinely distinct, which is what
+`planBracketSinks` needs to be worth wiring up.
+
+This bends two invariants stated elsewhere in this note, both amended in place: §4's
+wall-clock rule and §9's bit-exact window bounds. `long-exposure-subframe-windows.md`
+is the full brief.
 
 ### Accumulation precision — fp32, and here is the proof
 
@@ -292,10 +320,28 @@ supplies the *continuous* position used for weighting (§5). `ReplayFrameNumEnd`
 `ReplayPlaySpeed`, `ReplayPlaySlowMotion` and `IsReplayPlaying` are read to
 pre-flight and to restore.
 
-**Wall-clock time is never used to decide replay position, window boundaries, or
-termination. It is used only as a timeout on operations that can fail.** A stalled
-frame or drifting playback speed therefore cannot silently change the exposure — it
-can only make the capture take longer, or time out loudly.
+**Wall-clock time is never used to decide replay position or termination. It is
+used as a timeout on operations that can fail, and — since sub-replay-frame windows
+— to place the START of a window shorter than one replay frame.** A stalled frame or
+drifting playback speed can make the capture take longer or time out loudly; it
+cannot change where the exposure ends or when we stop.
+
+**AMENDED 2026-08-02: the window START is the one exception, and it is bounded.**
+The original rule was absolute, and had to give way to make the fast half of the
+shutter ladder mean anything. `ReplaySessionTime` is quantised to replay frames
+(§10 Q1), so the only continuous position available inside a frame is interpolated
+from elapsed wall time. Two things keep it defensible:
+
+- **The error is bounded by one replay frame.** `startFrame` is still integral, is
+  still what the seek targets, and still gates the router: no sample before it can
+  ever be accumulated, whatever the clock says. A bad estimate can move the start
+  within that frame; it cannot escape it.
+- **The status quo it replaced was a 16x error.** 1/1000 through 1/125 all rounded
+  onto 1/60 and produced identical images. A start bounded by one replay frame is
+  strictly better than a guaranteed 16x overshoot on four stops.
+
+Everything else in this section stands unchanged: `ReplayFrameNum` decides where we
+are, whether a seek landed, and when to stop.
 
 ### The window trails the anchor: `[anchor − N, anchor]`
 
@@ -376,16 +422,32 @@ to a set of independent sinks:
 ```ts
 interface AccumulatorSink {
   id: string;              // 'primary' in v1; bracket stops get their own
-  startFrame: number;      // first replay frame this sink consumes (inclusive)
+  startFrame: number;      // integral: the seek target, and the safety net
   endFrame: number;        // == anchorFrame for every sink, always
+  exposureSeconds: number; // the window: [anchorTime − this, anchorTime]
   weighting: WeightingCurve;
   label: string;           // '1/8' — drives output naming
 }
 ```
 
-`offer(frame, replayFrameNum, sessionTime)` forwards to every sink whose
-`[startFrame, endFrame]` contains the position, with **that sink's own weight** for
-that position. v1 instantiates exactly one sink.
+`offer(frame, replayFrameNum, sessionTime)` forwards to every sink the position is
+inside, with **that sink's own weight** for that position. v1 instantiates exactly
+one sink.
+
+"Inside" is three tests, and they are not redundant: `replayFrameNum >= startFrame`
+(the frame-indexed safety net), `sessionTime >= anchorTime − exposureSeconds` (the
+continuous start, which is what actually bounds the exposure), and
+`replayFrameNum <= endFrame` (termination). For a window of one replay frame or
+longer the first two coincide exactly; below one frame the second is what makes the
+stop mean anything. See §3.
+
+One further wrinkle the router handles: the control loop pushes one weight per tick
+and that weight governs every frame iRacing presents until the next push, so a tick
+covers a *span* of sim time — ~1 ms at 1/16 playback, which is a quarter of a 1/250
+exposure. The tick that straddles the window start is therefore weighted by the
+fraction of itself that fell inside, rather than being all-or-nothing. Standard
+antialiasing, one multiply, and it turns a stair-step at the fast end into a smooth
+ramp. Only the start is treated this way; the anchor end is never scaled.
 
 ### Weighting is a function of *position*, not sample index
 
@@ -435,11 +497,16 @@ Adding bracketing is: build N sinks instead of 1.
 // 1/60 primary → also emits 1/125 … 1/1000, all ending on the anchor
 sinks = shutterLadderAtOrFaster(primary).map(stop => ({
   id: stop.key, label: stop.label,
-  startFrame: anchor - framesFor(stop),   // ← the ONLY thing that differs
-  endFrame: anchor,                       // ← identical for all
+  exposureSeconds: resolveExposureSeconds(stop.seconds),  // ← the ONLY difference
+  startFrame: anchor - windowFramesForExposure(...),      // the seek span
+  endFrame: anchor,                                       // ← identical for all
   weighting: primary.weighting,
 }))
 ```
+
+Since §3, **every stop on the ladder produces a distinct window**, including the
+fast five that used to collapse onto one frame. That makes bracketing more useful
+and more expensive at the same time — see `long-exposure-bracketing.md` §3.3.
 
 No change to the capture loop, the replay control, the backend, or output — the
 router already offers to all sinks and skips the ones whose range hasn't opened yet.
@@ -618,18 +685,35 @@ asks whether you want EXR enough to take the dependency.
 
 "The same replay window captured twice must produce near-identical output."
 
-What is guaranteed bit-exactly: the window boundaries (frame-indexed, integer), the
-weighting function (position-parameterised), the normalisation, the tonemap, and the
-output pipeline.
+What is guaranteed bit-exactly: the window **end** (frame-indexed, integer — always
+the anchor), the seek target and safety net (`startFrame`, frame-indexed, integer),
+the weighting function (position-parameterised), the normalisation, the tonemap, and
+the output pipeline.
 
-What is not: *which* wall-clock instants got sampled. That depends on iRacing's
-render timing and cannot be controlled without hooking the sim, which is forbidden
-(and rightly). Two captures of the same window differ only by sample jitter, and for
-S ≫ 1 the normalised average converges — the difference is noise-like and shrinks as
-1/√S, not a structural difference.
+**AMENDED 2026-08-02: the window START is exact to one rendered frame, not
+bit-exact.** This list used to open with "the window boundaries (frame-indexed,
+integer)", and for a window of one replay frame or longer it still holds exactly —
+those quantise to whole frames as they always did, and `sinkStartTime` reads the
+start off the frame map rather than deriving it, so it is bit-identical run to run.
+A window *shorter* than one replay frame has no frame boundary to start on: its
+start is interpolated within the frame from elapsed wall time, so two captures of
+the same recipe can differ slightly in exposure **duration**, not merely in sample
+jitter. That is a real weakening of what this section promised, and the reasoning
+for accepting it is in §4.
 
-The sidecar records achieved sample count and evenness precisely so the user can
-verify that two shots were sampled comparably rather than having to trust it.
+What is not guaranteed: *which* wall-clock instants got sampled. That depends on
+iRacing's render timing and cannot be controlled without hooking the sim, which is
+forbidden (and rightly). Two captures of the same window differ only by sample
+jitter, and for S ≫ 1 the normalised average converges — the difference is noise-like
+and shrinks as 1/√S, not a structural difference.
+
+The sidecar records achieved sample count, evenness, **and the achieved window**
+(`sampling.achievedWindowSeconds` — the sim time from first accepted sample to last)
+precisely so the user can verify that two shots were sampled and exposed comparably
+rather than having to trust it. It is `SIDECAR_VERSION` 2 that carries that field;
+a v1 sidecar reading `shutter: '1/250'` with `effectiveMs: 16.67` is the record of a
+shot that asked for 1/250 and got 1/60, and re-executing that recipe on a current
+build honours the 1/250 — deliberately, and both sidecars say so.
 
 ---
 
@@ -641,10 +725,19 @@ verify that two shots were sampled comparably rather than having to trust it.
    playback. This mattered more than the note predicted: it made `u` take only
    `windowFrames` distinct values, so tapered curves banded visibly — a user
    reported it as "the blending is not so smooth". Fixed by interpolating within a
-   replay frame from elapsed wall time (`subFramePosition`). That is a deliberate,
-   bounded exception to the wall-clock rule below: it affects a sample's WEIGHT
+   replay frame from elapsed wall time (`subFramePosition`).
+
+   **WIDENED 2026-08-02.** This entry used to end: *"it affects a sample's WEIGHT
    only, never the window bounds or termination, so a bad estimate can make the
-   taper slightly uneven but can never change the exposure.
+   taper slightly uneven but can never change the exposure."* That is no longer
+   true, and pretending otherwise would be worse than either behaviour. The same
+   interpolated position now also decides where a window **shorter than one replay
+   frame** opens, because a sub-frame window has no frame boundary to open on. So a
+   bad estimate can change the exposure — by at most one replay frame, since
+   `startFrame` stays integral and still gates the router. What it still cannot
+   touch: the window END, termination, or any window of one replay frame or longer.
+   §4 has the full argument, and `long-exposure-subframe-windows.md` has the
+   defect it removes.
 2. ~~**Seek landing tolerance.**~~ **ANSWERED 2026-08-02: `RpyPos_Begin` lands
    exactly.** Every seek across a field session landed on the requested frame, and
    every anchor restore reported `corrections: 0`. The corrective-seek path remains

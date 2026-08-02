@@ -1,10 +1,20 @@
 # Long exposure — sub-replay-frame exposure windows
 
-Status: **not started.** This is a handoff brief.
+Status: **implemented 2026-08-02** on `feat/long-exposure-replay` (`90aa455`).
+Not yet verified against live iRacing — see §9.
 Prerequisite reading: `docs/design/long-exposure.md` §3 (sampling) and §5 (the sink
-model), then §4 and §10 of the same note for the wall-clock rule this proposal
-deliberately bends.
-Feature branch: `feat/long-exposure-replay` (head `098c417`).
+model), then §4 and §10 Q1 of the same note for the wall-clock rule this bends. All
+three sections have been amended in place; this brief is the reasoning behind them.
+
+**What shipped differs from §4.1 below in one respect, deliberately.** The brief
+specifies a `startTime` field on the sink, in absolute session-time seconds. A sink
+is planned *before* the seek, and the frame → session-time origin does not exist
+until *after* it lands (`capture-session.ts` re-anchors the map on a settled
+reading, precisely so bounds and samples share an origin). An absolute start baked
+in at plan time would be in the wrong origin. The sink therefore carries
+`exposureSeconds` — the window LENGTH — and `sinkStartTime(sink, frameTimeOf)`
+derives the start from the anchor, which every sink shares. Same window, no origin
+problem, and the sink stays a pure value.
 
 **The idea in one line:** the replay tape stores *positions* at 60 Hz, but iRacing
 renders ~10 distinct interpolated frames between each pair of them — so an exposure
@@ -182,7 +192,12 @@ carrying sub-frame values, confirm a round-trip still reproduces the same plan, 
 what an old sidecar (whole-frame value, written before this existed) should mean. The
 safe reading is that old recipes keep their quantised behaviour.
 
-## 6. Interaction with bracketing — this invalidates a premise there
+## 6. Interaction with bracketing — this invalidated a premise there
+
+**Resolved: this landed first, and `long-exposure-bracketing.md` §3.3 has been
+rewritten to match.** The order below was decided in favour of doing this first, so
+bracketing never gets a dedupe written and then deleted. The cost — full-price VRAM
+and a two-batch warp dispatch — is now recorded in that brief rather than here.
 
 `long-exposure-bracketing.md` §3.3 argues that five stops collapse to a one-frame window,
 so `planBracketSinks` should **dedupe by window length, turning 11 sinks into 7**. That
@@ -214,17 +229,45 @@ then deletes.
 3. **Should `framesForExposure` keep its `max(1, …)` floor?** Yes for the seek; the
    question is whether anything else should still consume it.
 
-## 8. Do this in order
+## 8. Do this in order — DONE, steps 1–6
 
-1. Add `startTime` to `AccumulatorSink` and make `sinksOpenAt` / `routeFrame` continuous,
-   with tests. Pure functions, no hardware needed. (§4.1, §4.2)
-2. Move the inline `inWindow` test in `capture-session.ts` to match — it currently
-   duplicates the frame comparison. (§4.2)
-3. Fractional boundary weight. (§5.3)
-4. Planner + `resolvePlan`, and fix the `isSingleFrame` warning. (§4.3, §5.4)
-5. Update main note §4, §9, §10 Q1 — the invariants this changes. (§5.1, §5.2)
-6. Rewrite bracketing §3.3. (§6)
-7. Verify on hardware: shoot 1/60, 1/125, 1/250 at the same anchor and confirm the streak
-   length halves each time. **Streak length is the observable** — sample count alone will
-   not tell you the window was right, because a shorter window legitimately collects fewer
-   samples.
+1. ✅ Continuous window on `AccumulatorSink` (`exposureSeconds` + `sinkStartTime`,
+   see the header note), `sinksOpenAt` / `routeFrame` gate on session time.
+2. ✅ The inline `inWindow` test in `capture-session.ts` is gone — the loop asks
+   `routeFrame` once and uses an open sink AS the gate condition, so the two can no
+   longer disagree.
+3. ✅ Fractional boundary weight (`startBoundaryCoverage`), start only.
+4. ✅ `resolveExposureSeconds` / `windowFramesForExposure` in the planner;
+   `isSingleFrame` → `isSingleSample`, keyed on predicted samples.
+5. ✅ Main note §3, §4, §5, §9 and §10 Q1 amended in place.
+6. ✅ Bracketing §3.3 rewritten — the dedupe it prescribed is now a regression, and
+   the 8-UAV constraint in its §3.1 needs batching instead.
+7. ⏳ Verify on hardware: see §9.
+
+**Answers to §7's open questions, as implemented.** Q1 (is the fast end worth it):
+all four stops ship — a 1-sample 1/1000 is the correct result for a 1/1000 shutter,
+and the plan warns via `isSingleSample` when only one frame will land. Q2 (native-side
+gating): not done, and the fractional boundary weight is why — it reduces the
+~1 ms control quantum to a weighted ramp, so per-rendered-frame gating buys little.
+Q3 (`framesForExposure`'s floor): kept, and it now has exactly one consumer — the
+whole-frame quantiser. `windowFramesForExposure` (ceil) owns the seek span.
+
+## 9. Hardware verification — outstanding
+
+Everything above is verified by 628 unit tests, including an end-to-end harness run
+at a realistic 1/16-playback tick rate that measures the achieved window per stop:
+16.67 / 8.67 / 4.67 ms for 1/60 / 1/125 / 1/250, with the straddling boundary tick at
+1/3 weight — i.e. weighted windows of 16.67 / 8.0 / 4.0 ms, exactly nominal.
+
+**That is a simulation of the transport, not the sim.** What it cannot tell you:
+whether iRacing really presents ~10 distinct frames inside the last replay frame at
+the moment the gate opens, and whether the sub-frame time estimate tracks reality
+well enough that the streak actually shortens.
+
+Shoot 1/60, 1/125 and 1/250 at the same anchor, 2560×1440, **supersample off** (the
+fast stops get roughly twice the samples there), and confirm the streak length halves
+each step. **Streak length is the observable** — sample count alone will not tell you
+the window was right, because a shorter window legitimately collects fewer samples.
+Sample counts also carry ±13% run-to-run noise; use `sampling.medianGapSeconds` if a
+stable number is needed, and `sampling.achievedWindowSeconds` for the window itself,
+which is what the sidecar now records for exactly this comparison.

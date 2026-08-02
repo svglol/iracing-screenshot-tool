@@ -2,8 +2,9 @@
 
 Status: **not started.** This is a handoff brief for the next session.
 Prerequisite reading: `docs/design/long-exposure.md` §5 (the sink model), then
-`docs/design/long-exposure-frame-interpolation.md` §6–§7 for what landed most
-recently.
+`docs/design/long-exposure-frame-interpolation.md` §6–§7, and
+`docs/design/long-exposure-subframe-windows.md` — sub-replay-frame windows have
+since landed and they **invalidated §3.3 of this brief**, which is rewritten below.
 Feature branch: `feat/long-exposure-replay` (`891864a`, `95ddc80`).
 
 **The idea in one line:** with a trailing window every bracket stop shares the same
@@ -24,6 +25,7 @@ this work would be wiring rather than design. All of it is live and covered:
 | `routeFrame()` / `sinksOpenAt()` | `accumulator-sinks.ts` | live — already called with a **one-element array** |
 | `earliestStartFrame()` | `accumulator-sinks.ts` | written, tested, unused |
 | Per-sink weighting (`u` against each sink's OWN window) | `routeFrame` | done |
+| Per-sink continuous window (`exposureSeconds`, `sinkStartTime()`) | `accumulator-sinks.ts` | done — every stop on the ladder is now distinct, see §3.3 |
 | Backend N-sink support (`create_sink(sink_id, …)`, `resolve(sink_id, …)`) | `longexp/d3d11.rs` | **already keyed by string id, HashMap-backed** |
 | VRAM estimate scaling by `sinkCount` | `utilities/long-exposure/vram-budget.ts` | done, tested at `sinkCount: 10` |
 
@@ -122,9 +124,11 @@ traffic is irreducible — every sink has its own accumulator and must be writte
 the warp sampling stops multiplying, which is the whole win.
 
 **Constraint that sizes the design:** D3D11 feature level 11_0 guarantees 8 UAV slots
-to a compute shader. That caps a single dispatch at 8 sinks, which happens to fit: §3.3
-dedupes 11 stops down to 7. More than 8 sinks would need the dispatch run twice over
-disjoint sink subsets, re-warping once per batch rather than once per sink.
+to a compute shader. That caps a single dispatch at 8 sinks. This used to fit, because
+§3.3 deduped 11 stops down to 7 — **it no longer does, and §3.3 has been rewritten**.
+A full ladder is 11 distinct sinks, so the dispatch runs twice over disjoint subsets,
+re-warping once per batch rather than once per sink. Two warps for 11 sinks still
+beats eleven, so the shape of §3.1 is unchanged; only the batching is new.
 
 **Do not discover any of this by measuring a slow capture — it is structural.**
 
@@ -139,25 +143,47 @@ the stable key shared by the planner, the native map and the sidecar. Something 
 `1/8 → 1-8`, `0.5 → 0s5`. Note `variantSuffix()` already appends `--{variantId}` for
 the Spotter Pack seam, so pick a scheme that composes with it rather than collides.
 
-### 3.3 Most of the fast end of the bracket set is redundant, and it is expensive
+### 3.3 Every stop is now distinct — there is nothing to dedupe, and it costs full price
 
-`framesForExposure()` is `max(1, round(seconds × 60))`. So on the ladder:
+**REWRITTEN 2026-08-02. This section used to prescribe a dedupe. That dedupe is now
+dead code waiting to be written — do NOT write it.**
+
+The original argument: `framesForExposure()` was `max(1, round(seconds × 60))`, so
+1/1000, 1/500, 1/250, 1/125 and 1/60 all collapsed to a one-frame window and would
+have produced five essentially identical images, each costing a full accumulator.
+`planBracketSinks` should therefore dedupe by window length, 11 sinks → 7.
+
+That collapse was the defect fixed by `long-exposure-subframe-windows.md`. A sink now
+carries a continuous `exposureSeconds`, so the ladder looks like this:
 
 | stop | 1/1000 | 1/500 | 1/250 | 1/125 | 1/60 | 1/30 | 1/15 | 1/8 | 1/4 | 0.5" | 1" |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| window frames | 1 | 1 | 1 | 1 | 1 | 2 | 4 | 8 | 15 | 30 | 60 |
+| window (ms) | 1.0 | 2.0 | 4.0 | 8.0 | 16.7 | 33.3 | 66.7 | 133 | 250 | 500 | 1000 |
+| seek span (frames) | 1 | 1 | 1 | 1 | 1 | 2 | 4 | 8 | 15 | 30 | 60 |
 
-**Five stops all collapse to a one-frame window and would produce five essentially
-identical images**, each costing a full accumulator.
+**All 11 windows are distinct** (there is a test asserting exactly that), so
+bracketing emits 11 genuinely different images and there is nothing to collapse.
+The seek span row is why the fast five still share a `startFrame`: they all start
+inside the last replay frame, at different moments within it.
 
-At 5120×2880 an accumulator is `14.75 Mpx × 16 B = 236 MB`. Bracketing from 1" is 11
-stops = **2.6 GB**, of which ~1.2 GB is those duplicates. At 4K with 2× supersample it
-is 531 MB per sink — 11 stops = **5.8 GB**, which will hard-refuse on a lot of cards.
+Three consequences, and they are the ones that size this work:
 
-So `planBracketSinks` should **dedupe by window length**, keeping the slowest stop of
-each distinct frame count. That turns 11 sinks into 7 and is a few lines in a function
-that already has tests around it. The VRAM pre-flight then tells the truth, and the
-existing hard-refuse path (§7 of the main design note) does its job.
+- **VRAM returns to full price.** At 5120×2880 an accumulator is
+  `14.75 Mpx × 16 B = 236 MB`, so 11 stops is **2.6 GB** — none of it recoverable by
+  deduping. At 4K with 2× supersample it is 531 MB per sink, **5.8 GB** for 11, which
+  will hard-refuse on a lot of cards. The hard-refuse pre-flight (§7 of the main note)
+  becomes load-bearing rather than theoretical, and the "bracket to N stops faster"
+  control in open question 1 stops being a nicety and starts being the mitigation.
+- **11 sinks exceeds the 8-UAV cap** that §3.1 sized the multi-sink warp kernel
+  against. D3D11 feature level 11_0 guarantees 8 UAV slots to a compute shader, and
+  §3.1 was written assuming this section would dedupe down to 7. It will not. The
+  dispatch has to run in two batches over disjoint sink subsets, re-warping once per
+  batch — twice, not eleven times, so the §3.1 win survives; it just is not free.
+- **The fast stops are cheap in samples, not in memory.** A 1/1000 sink accumulates
+  ~1 sample and still costs a full 236 MB accumulator, because memory scales with sink
+  count and not sample count (main note §5). That is the whole structural win over JRT
+  read backwards: the thing that makes 960 samples free is the same thing that makes
+  an eleventh stop expensive.
 
 ---
 
@@ -191,13 +217,16 @@ existing hard-refuse path (§7 of the main design note) does its job.
 
 ## 6. Do this in order
 
-1. Dedupe `planBracketSinks` by window length, with a test. (§3.3 — cheapest, and it
-   changes the VRAM maths everything else is sized against.)
+1. Decide how many stops a bracket emits, and pre-flight the VRAM for that number.
+   (§3.3 — this changes the maths everything else is sized against, and it replaces
+   the dedupe this step used to say. There is no dedupe to write: all 11 windows are
+   distinct. Open question 1 — "bracket to N stops faster" — is now the lever that
+   keeps a 5.8 GB shot from being the default.)
 2. Native: multi-sink create / per-sink weights / multi-image finish.
 3. Capture session: plan N, route N, `sinkCount: sinks.length`.
-4. Give the warp kernel N accumulator UAVs. (§3.1 — and read its 2026-08-02 revision
-   first: do NOT split it into warp-then-accumulate, which is what the original text
-   said and would now be a regression.)
+4. Give the warp kernel N accumulator UAVs, in batches of 8. (§3.1 — and read its
+   2026-08-02 revision first: do NOT split it into warp-then-accumulate, which is what
+   the original text said and would now be a regression.)
 5. Output: N files, with id sanitising. (§3.2)
 6. UI toggle + predicted stop list and VRAM.
 7. Measure: one bracketed capture should cost the same wall-clock as one unbracketed
