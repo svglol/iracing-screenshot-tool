@@ -126,6 +126,25 @@
 				</label>
 			</o-field>
 
+			<!-- The trade users won't guess: 2x supersample is 4x the pixels, which
+			     roughly halves iRacing's frame rate and therefore halves the sample
+			     count. Fewer samples means larger per-sample displacement, which shows
+			     up as a ladder of discrete ghosts on fast objects — a STRUCTURED
+			     artefact the eye reads as a defect. The aliasing supersampling removes
+			     is unstructured, and the motion blur already hides much of it. So on
+			     moving subjects, samples usually beat pixels. -->
+			<o-notification
+				v-if="supersample && !disableTooltips"
+				class="sidebar-tooltip"
+				variant="warning"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Supersampling roughly halves the sample count, which makes fast
+				objects break into visible ghosts. Turn it off for moving subjects;
+				keep it for static ones.
+			</o-notification>
+
 			<o-field label="Tonemap">
 				<o-select v-model="tonemap" expanded :disabled="busy">
 					<option value="none">None</option>

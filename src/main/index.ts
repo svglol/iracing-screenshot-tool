@@ -938,7 +938,8 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 	takingScreenshot = true;
 	originalWindowBounds = getIracingWindowDetails() || null;
 	parseCameraState(
-		(iracing.telemetry?.values as { CamCameraState?: string[] })?.CamCameraState
+		(iracing.telemetry?.values as { CamCameraState?: string[] })
+			?.CamCameraState
 	);
 	try {
 		iracing.camControls.setState(
@@ -1051,6 +1052,16 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 // Live preview of what a recipe would do, for the parameter UI: chosen playback
 // speed, predicted samples, and how long the user will be waiting. Pure — it never
 // touches the sim.
+// iRacing's current window area in physical pixels, or null when unknown. Feeds
+// the resize-aware sample-count prediction (FrameRate is measured at THIS size,
+// but the capture runs at the render size).
+function currentWindowPixels(): number | null {
+	const size = getIracingWindowSizeNative();
+	return size && size.width > 0 && size.height > 0
+		? size.width * size.height
+		: null;
+}
+
 ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
 	const live = replayController.state();
 	const defaults = createDefaultRecipe({
@@ -1066,7 +1077,10 @@ ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
 	);
 	return {
 		recipe,
-		plan: resolvePlan(recipe, { renderFps: live?.frameRate ?? undefined }),
+		plan: resolvePlan(recipe, {
+			renderFps: live?.frameRate ?? undefined,
+			currentWindowPixels: currentWindowPixels(),
+		}),
 	};
 });
 ipcMain.handle(

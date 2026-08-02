@@ -26,7 +26,7 @@ import {
 	predictSampleCount,
 	predictWallClockSeconds,
 	solvePlaybackDivisor,
-	usableRenderFps,
+	scaleRenderFpsForResize,
 	type PlaybackDivisor,
 	type WeightingCurve,
 } from './exposure-math';
@@ -247,12 +247,24 @@ export interface ResolvedPlan {
 
 export function resolvePlan(
 	recipe: LongExposureRecipe,
-	conditions: { renderFps?: number } = {}
+	conditions: {
+		renderFps?: number;
+		// Pixel count of iRacing's CURRENT window. FrameRate is measured there, but
+		// the capture runs at the render size — so without this the sample-count
+		// prediction is optimistic by roughly the resize factor.
+		currentWindowPixels?: number | null;
+	} = {}
 ): ResolvedPlan {
 	const exposureSeconds = recipe.exposureMs / 1000;
 	const windowFrames = framesForExposure(exposureSeconds);
 	const effectiveExposureSeconds = exposureSecondsForFrames(windowFrames);
-	const renderFps = usableRenderFps(conditions.renderFps);
+	const renderWidth = recipe.width * recipe.supersample;
+	const renderHeight = recipe.height * recipe.supersample;
+	const renderFps = scaleRenderFpsForResize({
+		reportedFps: conditions.renderFps,
+		currentPixels: conditions.currentWindowPixels,
+		renderPixels: renderWidth * renderHeight,
+	});
 
 	const playbackDivisor =
 		recipe.playbackSpeed ??
@@ -277,8 +289,8 @@ export function resolvePlan(
 			exposureSeconds: effectiveExposureSeconds,
 			playbackDivisor,
 		}),
-		renderWidth: recipe.width * recipe.supersample,
-		renderHeight: recipe.height * recipe.supersample,
+		renderWidth,
+		renderHeight,
 		isSingleFrame: windowFrames <= 1,
 	};
 }

@@ -17,7 +17,10 @@
 // Every dependency is injected, so the whole state machine — including the restore
 // guarantee — is testable with no sim, no GPU and no window.
 
-import { REPLAY_FRAMES_PER_SECOND } from '../../utilities/long-exposure/exposure-math';
+import {
+	REPLAY_FRAMES_PER_SECOND,
+	subFramePosition,
+} from '../../utilities/long-exposure/exposure-math';
 import {
 	planPrimarySink,
 	routeFrame,
@@ -228,7 +231,13 @@ export async function executeRecipe(
 		);
 	}
 
-	const plan = resolvePlan(recipe, { renderFps: live.frameRate ?? undefined });
+	// The current window size lets the predictor discount FrameRate for the resize
+	// to render size — without it the sample-count estimate runs ~2x optimistic.
+	const baseline = deps.baselineDims();
+	const plan = resolvePlan(recipe, {
+		renderFps: live.frameRate ?? undefined,
+		currentWindowPixels: baseline ? baseline.width * baseline.height : null,
+	});
 	const validation = validatePlan({
 		plan,
 		recipe,
@@ -436,8 +445,6 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		};
 	}
 
-	// Re-read after the seek so window bounds and the sample stream share one
-	// session-time origin.
 	// Re-anchor the frame->session-time map on a reading taken AFTER the seek, so
 	// the sink's window bounds and the live sample stream share one origin.
 	// windowFrames is always >= 1, so this map is always strictly increasing.
@@ -461,6 +468,12 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	let rolling = false;
 	let lastFrameNum = settled.replayFrameNum;
 	let reachedAnchor = false;
+	// When the replay frame number last CHANGED, in wall-clock ms. Used only to
+	// interpolate the taper weight WITHIN a replay frame — ReplaySessionTime is
+	// frame-quantised, so without this every sample sharing a frame gets an
+	// identical weight and tapered curves band visibly (see subFramePosition).
+	// Never used for boundaries or termination, which stay frame-indexed.
+	let frameChangedAt = deps.now();
 
 	for (;;) {
 		if (aborted()) {
@@ -475,6 +488,9 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		const state = deps.replay.state();
 		if (state) {
 			const frameNum = state.replayFrameNum;
+			if (frameNum !== lastFrameNum) {
+				frameChangedAt = deps.now();
+			}
 
 			// The gate opens the moment we cross into the window, and NOT before —
 			// so pre-roll frames can never join the exposure.
@@ -483,19 +499,33 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			native.longExposureSetGate(session, inWindow);
 
 			if (inWindow) {
+				// Interpolate within the replay frame. ReplaySessionTime only ticks at
+				// 60 Hz, so at 1/16 playback ~10 consecutive samples would otherwise
+				// share one position — and one weight — producing a visibly banded
+				// taper. The frame index still decides everything that matters.
+				const subFrame = subFramePosition({
+					elapsedSinceFrameChangeMs: deps.now() - frameChangedAt,
+					playbackDivisor: plan.playbackDivisor,
+				});
+				const sessionTime =
+					frameTimeOf(frameNum) + subFrame / REPLAY_FRAMES_PER_SECOND;
+
 				const [contribution] = routeFrame({
 					sinks: [sink],
 					replayFrameNum: frameNum,
-					sessionTime: state.replaySessionTime ?? frameTimeOf(frameNum),
+					sessionTime,
 					frameTimeOf,
 				});
 				if (contribution) {
+					// The interpolated time goes into the sample log too, so the
+					// evenness report measures actual sample spacing rather than the
+					// frame-quantised staircase (which reported a flat 1/60 s).
 					native.longExposureSetSample(
 						session,
 						contribution.weight,
 						contribution.u,
 						frameNum,
-						state.replaySessionTime ?? frameTimeOf(frameNum)
+						sessionTime
 					);
 				}
 			}

@@ -188,6 +188,28 @@ from the sim, so contact patches, suspension travel and wheel rotation are corre
 rather than optical-flow-guessed; and because slow motion costs only wall-clock
 time, the "expensive" setting is patience, not memory.
 
+### Supersampling costs samples — and samples usually matter more
+
+Measured on hardware: at 2560×1440 with 2× supersample (5120×2880 render) iRacing
+dropped from ~73 fps to ~39 fps, roughly halving the achieved sample count.
+
+This is a real and under-appreciated trade. Temporal undersampling produces
+**structured** artefacts — a ladder of discrete ghosts, which the eye reads as a
+defect. Spatial undersampling produces **unstructured** artefacts (aliasing), which
+the motion blur itself substantially hides. So for a moving subject, spending the
+frame budget on samples generally beats spending it on supersampled pixels; a
+long-exposure image is already anti-aliased along the direction of motion.
+
+Supersample earns its place on *static* or near-static subjects, where there is no
+streak to hide edges and no sample count to protect.
+
+The corollary for prediction: `FrameRate` telemetry is read at the user's CURRENT
+window size, before we resize to render size, so an unscaled reading over-predicts
+the sample count by roughly the resize factor. `scaleRenderFpsForResize` discounts
+it by √(currentPixels / renderPixels) — an empirical fit that matched the measured
+capture within ~6%, documented as a prediction shown beside an achieved count
+rather than a promise.
+
 ### Choosing the playback speed
 
 Two modes, both resolving to the same recipe field:
@@ -597,15 +619,20 @@ verify that two shots were sampled comparably rather than having to trust it.
 
 ## 10. Open questions
 
-1. **`ReplaySessionTime` granularity.** Is it genuinely continuous between replay
-   frames, or quantised to 1/60 s? Continuous gives smooth taper weights; quantised
-   degrades `linear`/`ease` to 16 steps per replay frame at P=16 (visually
-   negligible, but I'd rather know). `box` is unaffected either way. Needs a hardware
-   read; the code works correctly under both.
-2. **Seek landing tolerance.** How close does `RpyPos_Begin` land, and does it ever
-   settle off-by-one? The restore path already corrects with relative seeks and
-   reports `landedExactly`, but the tolerance and `MAX_CORRECTIONS` constants are
-   currently conservative guesses that want one hardware session to tune.
+1. ~~**`ReplaySessionTime` granularity.**~~ **ANSWERED 2026-08-02: it is quantised
+   to replay frames.** Measured sample logs show a median sim-time gap between
+   accepted samples of exactly 1/60 s, with ~10 samples per replay frame at 1/16
+   playback. This mattered more than the note predicted: it made `u` take only
+   `windowFrames` distinct values, so tapered curves banded visibly — a user
+   reported it as "the blending is not so smooth". Fixed by interpolating within a
+   replay frame from elapsed wall time (`subFramePosition`). That is a deliberate,
+   bounded exception to the wall-clock rule below: it affects a sample's WEIGHT
+   only, never the window bounds or termination, so a bad estimate can make the
+   taper slightly uneven but can never change the exposure.
+2. ~~**Seek landing tolerance.**~~ **ANSWERED 2026-08-02: `RpyPos_Begin` lands
+   exactly.** Every seek across a field session landed on the requested frame, and
+   every anchor restore reported `corrections: 0`. The corrective-seek path remains
+   as insurance but has not yet been exercised on hardware.
 3. **Slow-motion divisor range.** iRacing's own sample demonstrates 1…16. Are
    non-power-of-two divisors (e.g. 3, 6, 12) accepted and stable? We restrict to
    {1,2,4,8,16} in v1 for safety; if arbitrary integers work, the sample-count solver

@@ -11,8 +11,12 @@ import {
 	framesForExposure,
 	isWeightingCurve,
 	nearestPlaybackDivisor,
+	MIN_USABLE_RENDER_FPS,
 	predictSampleCount,
 	predictWallClockSeconds,
+	replayFrameWallMs,
+	scaleRenderFpsForResize,
+	subFramePosition,
 	shutterStopsAtOrFaster,
 	solvePlaybackDivisor,
 	usableRenderFps,
@@ -281,6 +285,139 @@ describe('nearestPlaybackDivisor', () => {
 		for (const value of [0.4, 1.6, 5, 11, 15.9, 40]) {
 			expect(PLAYBACK_DIVISORS).toContain(nearestPlaybackDivisor(value));
 		}
+	});
+});
+
+describe('replayFrameWallMs', () => {
+	it('is 1/60 s of wall clock at real-time playback', () => {
+		expect(replayFrameWallMs(1)).toBeCloseTo(16.667, 2);
+	});
+
+	// The reason the taper staircase is visible at all: at 1/16 a single replay
+	// frame occupies over a quarter-second of real time, during which ~10 frames
+	// are rendered and would otherwise share one weight.
+	it('stretches to 267 ms per replay frame at 1/16 playback', () => {
+		expect(replayFrameWallMs(16)).toBeCloseTo(266.67, 1);
+	});
+
+	it('treats a nonsense divisor as real time', () => {
+		expect(replayFrameWallMs(0)).toBeCloseTo(16.667, 2);
+		expect(replayFrameWallMs(NaN)).toBeCloseTo(16.667, 2);
+	});
+});
+
+describe('subFramePosition', () => {
+	// ReplaySessionTime is frame-quantised (field-measured), so without this the
+	// taper weight is a staircase with one step per replay frame.
+	it('interpolates linearly across a replay frame', () => {
+		const at = (ms: number) =>
+			subFramePosition({
+				elapsedSinceFrameChangeMs: ms,
+				playbackDivisor: 16,
+			});
+		expect(at(0)).toBe(0);
+		expect(at(66.67)).toBeCloseTo(0.25, 2);
+		expect(at(133.3)).toBeCloseTo(0.5, 2);
+	});
+
+	// Never reaches 1: a sample must not be attributed to the NEXT replay frame,
+	// because the frame index stays authoritative for boundaries and termination.
+	it('never reaches 1, even when a frame overruns', () => {
+		expect(
+			subFramePosition({
+				elapsedSinceFrameChangeMs: 10000,
+				playbackDivisor: 16,
+			})
+		).toBeLessThan(1);
+		expect(
+			subFramePosition({
+				elapsedSinceFrameChangeMs: 266.67,
+				playbackDivisor: 16,
+			})
+		).toBeLessThan(1);
+	});
+
+	it('returns 0 for non-positive or non-finite elapsed time', () => {
+		for (const ms of [0, -5, NaN, Infinity]) {
+			expect(
+				subFramePosition({
+					elapsedSinceFrameChangeMs: ms,
+					playbackDivisor: 16,
+				})
+			).toBe(0);
+		}
+	});
+
+	// The whole point: enough distinct positions that a tapered curve reads as a
+	// gradient rather than as bands.
+	it('yields many distinct positions across one replay frame', () => {
+		const positions = new Set<number>();
+		for (let ms = 0; ms < 267; ms += 26) {
+			positions.add(
+				subFramePosition({
+					elapsedSinceFrameChangeMs: ms,
+					playbackDivisor: 16,
+				})
+			);
+		}
+		expect(positions.size).toBeGreaterThanOrEqual(10);
+	});
+});
+
+describe('scaleRenderFpsForResize', () => {
+	// Field data: 73 fps reported at 2560x1440, capture ran at 5120x2880, and the
+	// achieved rate was 38.75 fps. The sqrt law lands within ~6%.
+	it('discounts the reported rate for a larger render size', () => {
+		const scaled = scaleRenderFpsForResize({
+			reportedFps: 73,
+			currentPixels: 2560 * 1440,
+			renderPixels: 5120 * 2880,
+		});
+		expect(scaled).toBeCloseTo(36.5, 0);
+		expect(Math.abs(scaled - 38.75)).toBeLessThan(4);
+	});
+
+	it('does not scale when the render is no larger than the current window', () => {
+		expect(
+			scaleRenderFpsForResize({
+				reportedFps: 73,
+				currentPixels: 2560 * 1440,
+				renderPixels: 1920 * 1080,
+			})
+		).toBe(73);
+	});
+
+	// Fail open: with no baseline we cannot model the resize, so don't invent one.
+	it('passes the reading through when the current window is unknown', () => {
+		for (const current of [null, undefined, 0, NaN]) {
+			expect(
+				scaleRenderFpsForResize({
+					reportedFps: 73,
+					currentPixels: current as number | null,
+					renderPixels: 5120 * 2880,
+				})
+			).toBe(73);
+		}
+	});
+
+	it('never predicts below the usable floor', () => {
+		expect(
+			scaleRenderFpsForResize({
+				reportedFps: 40,
+				currentPixels: 640 * 360,
+				renderPixels: 7680 * 4320,
+			})
+		).toBeGreaterThanOrEqual(MIN_USABLE_RENDER_FPS);
+	});
+
+	it('falls back to the assumed rate when FrameRate is unavailable', () => {
+		expect(
+			scaleRenderFpsForResize({
+				reportedFps: null,
+				currentPixels: null,
+				renderPixels: 1920 * 1080,
+			})
+		).toBe(ASSUMED_RENDER_FPS);
 	});
 });
 

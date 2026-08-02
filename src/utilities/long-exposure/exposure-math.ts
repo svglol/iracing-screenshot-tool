@@ -120,6 +120,43 @@ export function usableRenderFps(reported: unknown): number {
 	);
 }
 
+// FrameRate telemetry is read at the user's CURRENT window size, but we capture
+// after resizing iRacing to the render size — which for a 2x supersampled 1440p
+// shot is four times the pixels. Predicting from the unscaled reading overestimates
+// the sample count by roughly 2x, which is what a field capture showed: 1166
+// predicted against 620 achieved at 5120x2880.
+//
+// Neither naive model fits. Pure pixel-linear scaling assumes fully GPU-bound
+// rendering and under-predicts badly (it would have said 293); no scaling at all
+// assumes fully CPU-bound and over-predicts. A square-root law sits between the two
+// and matched that capture closely (73 fps / sqrt(4) = 36.5 predicted vs 38.75
+// measured).
+//
+// This is an empirical fit against ONE data point on ONE machine. It is a
+// prediction shown next to an achieved count, never a promise — so being roughly
+// right beats being precisely wrong in a fixed direction.
+export function scaleRenderFpsForResize(opts: {
+	reportedFps: unknown;
+	currentPixels?: number | null;
+	renderPixels: number;
+}): number {
+	const base = usableRenderFps(opts.reportedFps);
+	const { currentPixels, renderPixels } = opts;
+	if (
+		!isFiniteNumber(currentPixels) ||
+		(currentPixels as number) <= 0 ||
+		!isFiniteNumber(renderPixels) ||
+		renderPixels <= 0 ||
+		renderPixels <= (currentPixels as number)
+	) {
+		// Unknown baseline, or the render is no larger than the current window —
+		// nothing to scale down.
+		return base;
+	}
+	const scaled = base * Math.sqrt((currentPixels as number) / renderPixels);
+	return Math.max(MIN_USABLE_RENDER_FPS, scaled);
+}
+
 // Predicted sample count for a window. Floors, because a partial sample is not a
 // sample — and never below 1, since we always get the frame we stop on.
 export function predictSampleCount(opts: {
@@ -199,6 +236,61 @@ export function nearestPlaybackDivisor(value: unknown): PlaybackDivisor {
 	return PLAYBACK_DIVISORS.reduce((best, candidate) =>
 		Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best
 	);
+}
+
+// ---------------------------------------------------------------------------
+// Sub-frame position
+//
+// FIELD FINDING (2026-08-02): ReplaySessionTime is QUANTISED TO REPLAY FRAMES, not
+// continuous. Measured sample logs show a median sim-time gap between accepted
+// samples of exactly 1/60 s, with ~10 samples sharing each value at 1/16 playback.
+// (This settles open question 1 in the design note.)
+//
+// Left alone, that makes the taper weight a staircase: `u` takes only
+// `windowFrames` distinct values, so on a 15-frame window every sample lands in one
+// of 15 brightness levels and the streak shows visible banding. `box` is immune
+// (all weights 1); `linear` and `ease` are not — which is exactly what a user
+// reported as "the blending is not so smooth".
+//
+// The fix is to interpolate within a replay frame using elapsed wall time. This is
+// a deliberate, bounded exception to "wall clock is only ever used for timeouts":
+// it affects the WEIGHT of a sample and nothing else. Window boundaries and
+// termination remain frame-indexed, so a bad estimate here can only make the taper
+// slightly uneven — it can never change the exposure, the window, or when we stop.
+// ---------------------------------------------------------------------------
+
+// How long one replay frame lasts in WALL-clock milliseconds at a given
+// slow-motion divisor. At 1/16, a single 1/60 s replay frame occupies 267 ms of
+// real time — which is precisely why the staircase is visible.
+export function replayFrameWallMs(playbackDivisor: number): number {
+	const divisor =
+		isFiniteNumber(playbackDivisor) && playbackDivisor > 0
+			? playbackDivisor
+			: 1;
+	return (1000 / REPLAY_FRAMES_PER_SECOND) * divisor;
+}
+
+// Fractional progress through the current replay frame, in [0, 1). Clamped just
+// below 1 so a sample can never be attributed to the NEXT frame — the frame index
+// stays authoritative.
+export function subFramePosition(opts: {
+	elapsedSinceFrameChangeMs: number;
+	playbackDivisor: number;
+}): number {
+	const { elapsedSinceFrameChangeMs, playbackDivisor } = opts;
+	if (
+		!isFiniteNumber(elapsedSinceFrameChangeMs) ||
+		elapsedSinceFrameChangeMs <= 0
+	) {
+		return 0;
+	}
+	const frameMs = replayFrameWallMs(playbackDivisor);
+	if (frameMs <= 0) {
+		return 0;
+	}
+	// 0.999 rather than 1: a sample that overruns its frame's expected duration
+	// (a hitch) must still be weighted as belonging to the frame we observed.
+	return Math.min(0.999, elapsedSinceFrameChangeMs / frameMs);
 }
 
 // ---------------------------------------------------------------------------
