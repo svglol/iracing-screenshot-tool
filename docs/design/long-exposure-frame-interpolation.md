@@ -93,6 +93,34 @@ than *flat, energy-less blur*.
 
 ## 3. Frame interpolation: the design
 
+### 3.0 Verified on hardware, 2026-08-02 — do not re-derive
+
+- **`nvofapi64.dll` ships with the NVIDIA driver** (found in `System32`, file version
+  tracking the driver's). **Nothing for the end user to install**, which preserves
+  the constraint JRT violated.
+- Its exports include **`NvOFAPICreateInstanceD3D11`**, alongside `…Cuda`, `…D3D12`
+  and `…Vk`, plus `NvOFInit` / `NvOFExecute` / `NvOFDestroy` /
+  `NvOFGetMaxSupportedApiVersion`. The D3D11 path is real and reachable.
+- **The public SDK repo does NOT contain a D3D11 header.** `NVIDIA/NVIDIAOpticalFlowSDK`
+  ships exactly two headers — `nvOpticalFlowCommon.h` and `nvOpticalFlowCuda.h`
+  (verified against the git tree). `NV_OF_D3D11_API_FUNCTION_LIST` is only in the
+  gated SDK download from developer.nvidia.com. **Do not guess its layout**: a wrong
+  function-pointer table calls arbitrary addresses rather than failing cleanly.
+- **Adapter risk is real and now instrumented.** `windows-capture` creates its
+  device against the DEFAULT adapter. The dev box has an AMD iGPU beside the RTX
+  4090; it resolved to the 4090, but a hybrid laptop may not. `longExposureDeviceInfo()`
+  reports adapter / vendor id / `isNvidia`, threaded through the availability gate.
+  NVOFA cannot bind to a non-NVIDIA device, so this must gate the interpolation
+  path — and must NOT gate the base feature.
+
+Known from `nvOpticalFlowCommon.h` (public, so no download needed for these):
+`NV_OF_FLOW_VECTOR` is `{ int16_t flowx; int16_t flowy; }`;
+`NV_OF_OUTPUT_VECTOR_GRID_SIZE` ∈ {1, 2, 4}; `NV_OF_BUFFER_FORMAT` includes
+`ABGR8`, `GRAYSCALE8` and `NV12`; `NV_OF_PERF_LEVEL` ∈ {SLOW=5, MEDIUM=10, FAST=20};
+`NV_OF_API_VERSION` is `(major << 4) | minor`, currently 2.0.
+**Still unverified — get from the real header, do not assume:** the fixed-point
+scale of the flow vectors, and the exact `NV_OF_D3D11_API_FUNCTION_LIST` layout.
+
 ### 3.1 "CUDA level" almost certainly needs no CUDA
 
 The reference tool calls this its CUDA level, which framed the whole thing as a
