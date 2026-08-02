@@ -34,8 +34,10 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_USAGE_DYNAMIC, D3D11_USAGE_STAGING,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT, DXGI_FORMAT_R16G16_SINT, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_UNKNOWN,
-    DXGI_SAMPLE_DESC,
+    DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM,
+    DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_FORMAT_R16G16_SINT, DXGI_FORMAT_R8G8B8A8_TYPELESS,
+    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8_UNORM,
+    DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC,
 };
 
 use super::backend::{
@@ -103,11 +105,19 @@ struct Interpolation {
     luma_registration: [NvOfBuffer; 2],
     cur: usize,
 
-    /// Retained previous frame in full colour, for the warp. WGC's frame textures are
-    /// recycled by the frame pool, so keeping our own copy is what makes a previous
-    /// frame available at all — and it removes a dependence on that recycling.
-    prev_rgba: ID3D11Texture2D,
-    prev_srv: ID3D11ShaderResourceView,
+    /// Retained frames in full colour, for the warp — ping-ponged so the previous one
+    /// survives without a second copy. WGC's frame textures are recycled by the frame
+    /// pool, so keeping our own copy is what makes a previous frame available at all;
+    /// `cur` indexes the one this frame was copied into.
+    ///
+    /// Created `_TYPELESS` and viewed as `_UNORM_SRGB` specifically so the texture
+    /// unit performs sRGB->linear as PART OF the bilinear filter the warp does. WGC's
+    /// own textures are created `_UNORM`, which cannot take an `_SRGB` view — so
+    /// owning BOTH frames rather than only the previous one is what buys the correct
+    /// (and cheaper) linear-space filtering. The copy count per frame is unchanged:
+    /// it was one before, retaining `prev`, and it is one now.
+    rgba: [ID3D11Texture2D; 2],
+    rgba_srv: [ID3D11ShaderResourceView; 2],
 
     flow_fwd_srv: ID3D11ShaderResourceView,
     flow_fwd_registration: NvOfBuffer,
@@ -197,18 +207,23 @@ struct ResolveCb {
 
 /// Mirrors `cbuffer WarpParams : register(b2)`. HLSL packs this as three 16-byte
 /// registers and so does `repr(C)` here; the layout test at the bottom pins it.
+///
+/// `factor` plus the two real-frame weights describe the WHOLE synthetic run, which
+/// is what lets one dispatch replace `factor - 1` of them: the shader derives each
+/// position as `k / factor` and each weight as `lerp(prev, cur, position)`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct WarpCb {
     warp_size: [u32; 2],
     flow_size: [u32; 2],
-    t: f32,
-    weight: f32,
+    factor: u32,
+    prev_weight: f32,
+    cur_weight: f32,
     flow_grid: u32,
     has_bwd: u32,
     consistency_px: f32,
     highlight_gain: f32,
-    _pad: [f32; 2],
+    _pad: f32,
 }
 
 fn compile(entry: &str) -> Result<ID3DBlob, BackendError> {
@@ -354,6 +369,36 @@ impl D3d11Backend {
             ));
         }
 
+        // The warp needs the capture format to have an sRGB view (see `srgb_view_pair`
+        // and the note on `Interpolation::rgba`). Declining here rather than falling
+        // back to an in-shader conversion keeps the kernel branch-free, and declining
+        // costs nothing: interpolation is an optional accelerator and this returns a
+        // reason, not an error. A format we do not recognise is also a format whose
+        // channel layout the warp cannot assume, so proceeding would be the riskier
+        // choice anyway.
+        let (typeless_format, srgb_format) = srgb_view_pair(source_format).ok_or_else(|| {
+            BackendError(format!(
+                "the capture format ({source_format:?}) has no sRGB view, which the warp needs \
+                 to filter in linear light"
+            ))
+        })?;
+
+        // MEDIUM, and FAST HAS BEEN TRIED AND REJECTED ON HARDWARE — do not "optimise"
+        // this again without reading §9.7 of the frame-interpolation note.
+        //
+        // The reasoning that makes FAST look attractive is sound as far as it goes:
+        // once the synthetic loop was folded into one dispatch (§9.1), factors 2, 4 and
+        // 8 all cost the SAME, which identifies the flow call rather than the warp as
+        // the remaining per-frame cost. An uncontended bench at 7680x4320 duly measured
+        // MEDIUM -> FAST at 41.7 -> 31.3 ms, a 1.33x win.
+        //
+        // On a live replay it went the OTHER WAY: 34.6 -> 46.6 ms per frame, i.e. ~35%
+        // SLOWER, on the same anchor and settings. The bench is run alone on the GPU;
+        // in the field iRacing is saturating it, and NVOFA is a dedicated unit whose
+        // cost does not compete for the same resources as our compute. So the bench
+        // measures a regime this code never actually runs in, for this particular knob.
+        //
+        // Net: FAST costs flow accuracy AND buys nothing in the field. MEDIUM stays.
         let flow = NvOpticalFlow::create(
             &self.device,
             &self.context,
@@ -402,15 +447,19 @@ impl D3d11Backend {
             (None, None)
         };
 
-        // Retained previous frame, in the capture's own format.
-        let prev_desc = texture_desc(
+        // Retained frames, ping-ponged. TYPELESS so each can carry an _SRGB view; the
+        // copy from WGC's _UNORM texture into a _TYPELESS one of the same type group
+        // is a legal `CopyResource`, which is the whole reason this works.
+        let rgba_desc = texture_desc(
             width,
             height,
-            source_format,
+            typeless_format,
             D3D11_BIND_SHADER_RESOURCE.0 as u32,
         );
-        let prev_rgba = create_texture(&self.device, &prev_desc)?;
-        let prev_srv = create_texture_srv(&self.device, &prev_rgba, source_format)?;
+        let rgba0 = create_texture(&self.device, &rgba_desc)?;
+        let rgba1 = create_texture(&self.device, &rgba_desc)?;
+        let rgba_srv0 = create_texture_srv(&self.device, &rgba0, srgb_format)?;
+        let rgba_srv1 = create_texture_srv(&self.device, &rgba1, srgb_format)?;
 
         Ok(Interpolation {
             factor,
@@ -421,8 +470,8 @@ impl D3d11Backend {
             luma_uav: [luma_uav0, luma_uav1],
             luma_registration: [luma_reg0, luma_reg1],
             cur: 0,
-            prev_rgba,
-            prev_srv,
+            rgba: [rgba0, rgba1],
+            rgba_srv: [rgba_srv0, rgba_srv1],
             flow_fwd_srv,
             flow_fwd_registration,
             flow_bwd_srv,
@@ -436,19 +485,28 @@ impl D3d11Backend {
 
     /// The full per-frame interpolation sequence.
     ///
-    /// Order matters and is not rearrangeable: the warp reads the retained previous
-    /// frame, so the retain must happen LAST, after every synthetic sample has been
-    /// accumulated.
-    ///
     ///   1. current frame -> luma plane (ping-pong slot `cur`)
-    ///   2. NVOFA: flow between the previous luma plane and this one
-    ///   3. for k in 1..factor: warp to t = k/factor and accumulate
-    ///   4. accumulate the REAL frame
-    ///   5. retain this frame as `prev`, and flip the ping-pong
+    ///   2. current frame -> retained colour copy (ping-pong slot `cur`)
+    ///   3. NVOFA: flow between the previous luma plane and this one
+    ///   4. ONE warp dispatch covering every synthetic position between the two
+    ///   5. accumulate the REAL frame
+    ///   6. flip the ping-pong, so this frame becomes the next one's predecessor
     ///
-    /// Step 2 is asynchronous — it only submits work. We never read flow back on the
+    /// Order matters. Both retains happen before the warp, because the warp now reads
+    /// BOTH frames through the owned copies (that is what makes their sRGB views —
+    /// and so linear-space filtering — possible); the ping-pong is what keeps the
+    /// predecessor alive while the successor is written, so neither copy clobbers the
+    /// other and the per-frame copy count stays at one.
+    ///
+    /// Step 3 is asynchronous — it only submits work. We never read flow back on the
     /// CPU, so unlike the digest there is no sync point here at all; the D3D11 driver
     /// orders the warp's reads after NVOFA's writes for us.
+    ///
+    /// COST NOTE (measured, 7680x4320): steps 1-3 are FIXED per captured frame and
+    /// dominate. Factors 2, 4 and 8 all cost the same (41.4 / 41.7 / 41.2 ms) because
+    /// step 4 is now a single dispatch whose marginal cost per synthetic sample is
+    /// nearly nil. Anything that wants this cheaper must attack the luma pass, the
+    /// copy, or NVOFA — not the warp.
     fn accumulate_interpolated(
         &mut self,
         sink_id: &str,
@@ -474,12 +532,25 @@ impl D3d11Backend {
             )));
         }
 
+        // A plain _UNORM view of WGC's own texture. The luma pass wants the
+        // GAMMA-ENCODED values (that is the Y' a flow engine is tuned for) and the
+        // real-sample accumulate converts in-shader, so both keep using this rather
+        // than the sRGB views the warp uses.
         let source_srv = self.source_srv(source)?;
 
         // 1. Luma for the flow engine.
         self.dispatch_luma(interp, &source_srv)?;
 
-        // 2 & 3. Only once a previous frame exists.
+        // 2. Retain this frame in colour. Into the ping-pong slot the PREVIOUS frame
+        //    is not occupying, so the warp below can still read its predecessor.
+        // SAFETY: same dimensions by construction, and the destination is the
+        // _TYPELESS member of the source's own format group, which `CopyResource`
+        // accepts.
+        unsafe {
+            self.context.CopyResource(&interp.rgba[interp.cur], source);
+        }
+
+        // 3 & 4. Only once a previous frame exists.
         let mut synthetic = 0u32;
         if interp.have_prev {
             let prev_index = 1 - interp.cur;
@@ -494,17 +565,13 @@ impl D3d11Backend {
             );
 
             match flow_result {
+                // ONE dispatch for all factor-1 synthetic samples. It used to be one
+                // each, and each read and wrote the whole 236 MB accumulator at 5K —
+                // ~80% of the pass's traffic, multiplied by factor-1. The kernel now
+                // sums them in registers and touches the accumulator once.
                 Ok(()) => {
-                    for k in 1..interp.factor {
-                        let t = k as f32 / interp.factor as f32;
-                        // The synthetic sample's weight is the weighting curve at the
-                        // interpolated position — which, because the curve is
-                        // parameterised by POSITION rather than sample index, is just
-                        // the lerp between the two real samples' weights.
-                        let synthetic_weight = interp.prev_weight + (weight - interp.prev_weight) * t;
-                        self.dispatch_warp(interp, &sink_uav, &source_srv, t, synthetic_weight)?;
-                        synthetic += 1;
-                    }
+                    self.dispatch_warp(interp, &sink_uav, interp.prev_weight, weight)?;
+                    synthetic = interp.factor - 1;
                 }
                 // A flow failure mid-capture costs us the in-betweens for this frame
                 // and nothing else. The real sample below still lands, so the exposure
@@ -514,15 +581,14 @@ impl D3d11Backend {
             }
         }
 
-        // 4. The real frame.
+        // 5. The real frame, from WGC's texture exactly as it always was — this path
+        //    is untouched, because a one-sample box exposure with highlight recovery
+        //    off is bit-for-bit the existing still capture and that equivalence is
+        //    worth more than the pow()s it costs.
         self.accumulate_with_srv(sink_width, sink_height, &sink_uav, &source_srv, weight)?;
 
-        // 5. Retain, and flip the ping-pong so this frame's luma becomes next frame's
-        //    previous without a copy.
-        // SAFETY: both textures are the same size and format by construction.
-        unsafe {
-            self.context.CopyResource(&interp.prev_rgba, source);
-        }
+        // 6. Flip both ping-pongs at once: this frame's luma plane and colour copy
+        //    become the next frame's predecessors, with no further copying.
         interp.cur = 1 - interp.cur;
         interp.have_prev = true;
         interp.prev_weight = weight;
@@ -658,26 +724,31 @@ impl D3d11Backend {
         Ok(())
     }
 
-    /// Warp prev and current to position `t` and accumulate the result with `weight`.
-    /// One fused pass — no intermediate full-resolution texture is ever written.
+    /// Warp prev and current to EVERY synthetic position between them and accumulate
+    /// the whole run in one pass.
+    ///
+    /// One dispatch, not `factor - 1` of them, and one accumulator read-modify-write
+    /// rather than one per sample. The shader derives each position and weight from
+    /// `factor` plus the two real frames' weights, so nothing per-sample crosses the
+    /// CPU boundary either. No intermediate full-resolution texture is ever written.
     fn dispatch_warp(
         &self,
         interp: &Interpolation,
         sink_uav: &ID3D11UnorderedAccessView,
-        source_srv: &ID3D11ShaderResourceView,
-        t: f32,
-        weight: f32,
+        prev_weight: f32,
+        cur_weight: f32,
     ) -> Result<(), BackendError> {
         let data = WarpCb {
             warp_size: [interp.width, interp.height],
             flow_size: [interp.config.flow_width, interp.config.flow_height],
-            t,
-            weight,
+            factor: interp.factor,
+            prev_weight,
+            cur_weight,
             flow_grid: interp.config.grid_size,
             has_bwd: u32::from(interp.flow_bwd_srv.is_some()),
             consistency_px: FLOW_CONSISTENCY_PX,
             highlight_gain: self.highlight_gain,
-            _pad: [0.0; 2],
+            _pad: 0.0,
         };
         write_constant_buffer(&self.context, &self.cb_warp, &data)?;
 
@@ -689,6 +760,12 @@ impl D3d11Backend {
             .clone()
             .unwrap_or_else(|| interp.flow_fwd_srv.clone());
 
+        // Both colour taps come from the owned _SRGB views, so the texture unit
+        // linearises during filtering. `cur` was copied in earlier this frame; the
+        // other slot still holds its predecessor.
+        let cur_srv = interp.rgba_srv[interp.cur].clone();
+        let prev_srv = interp.rgba_srv[1 - interp.cur].clone();
+
         unsafe {
             self.context.CSSetShader(&self.cs_warp, None);
             // WarpParams is register(b2).
@@ -697,13 +774,13 @@ impl D3d11Backend {
             self.context.CSSetSamplers(0, Some(&[Some(self.sampler_linear.clone())]));
             // t0 gSource, t2 gFlowFwd, t3 gFlowBwd, t4 gPrev.
             self.context
-                .CSSetShaderResources(0, Some(&[Some(source_srv.clone())]));
+                .CSSetShaderResources(0, Some(&[Some(cur_srv)]));
             self.context.CSSetShaderResources(
                 2,
                 Some(&[
                     Some(interp.flow_fwd_srv.clone()),
                     Some(bwd),
-                    Some(interp.prev_srv.clone()),
+                    Some(prev_srv),
                 ]),
             );
             self.context
@@ -1267,6 +1344,34 @@ fn create_raw_uav(
     uav.ok_or_else(|| BackendError("CreateUnorderedAccessView(raw) returned null".into()))
 }
 
+/// For a capture format, the `(TYPELESS, UNORM_SRGB)` pair the warp's retained copies
+/// need — or `None` when the format has no sRGB view at all.
+///
+/// An `_SRGB` view can only be created over a resource that was created `_TYPELESS`,
+/// and WGC's frame-pool textures are created `_UNORM`. So the retained copies are made
+/// `_TYPELESS` (same type group, which is what makes `CopyResource` from WGC's texture
+/// legal) and viewed as `_UNORM_SRGB`, at which point the texture unit does
+/// sRGB->linear as part of bilinear filtering — both cheaper than a shader `pow()` and
+/// more correct, because filtering gamma-encoded values blends in the wrong space.
+///
+/// We ask WGC for `ColorFormat::Rgba8`, so R8G8B8A8_UNORM is what we actually get;
+/// BGRA is covered because it is the other 8-bit order WGC can deliver. Anything else
+/// (notably RGBA16F, which is scRGB and already linear) returns `None` and interpolation
+/// declines with a reason — it is an optional accelerator, so that costs nothing.
+fn srgb_view_pair(format: DXGI_FORMAT) -> Option<(DXGI_FORMAT, DXGI_FORMAT)> {
+    match format {
+        DXGI_FORMAT_R8G8B8A8_UNORM | DXGI_FORMAT_R8G8B8A8_UNORM_SRGB => Some((
+            DXGI_FORMAT_R8G8B8A8_TYPELESS,
+            DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        )),
+        DXGI_FORMAT_B8G8R8A8_UNORM | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB => Some((
+            DXGI_FORMAT_B8G8R8A8_TYPELESS,
+            DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+        )),
+        _ => None,
+    }
+}
+
 /// A plain 2D texture descriptor: one mip, one slice, GPU-resident.
 fn texture_desc(
     width: u32,
@@ -1459,6 +1564,21 @@ mod tests {
         );
     }
 
+    /// Actually compile every kernel, not merely look for its name.
+    ///
+    /// This is the same work `probe_shaders()` does at runtime and it needs no device
+    /// and no GPU — `D3DCompile` lives in d3dcompiler_47.dll, a Windows system
+    /// component since 8.1, and this crate is Windows-only. So an HLSL error is caught
+    /// by `cargo test` rather than by a user halfway through a sixteen-second capture,
+    /// which is the difference that matters for the two kernels (`CSLuma`,
+    /// `CSWarpAccumulate`) that only ever DISPATCH on NVIDIA hardware.
+    #[test]
+    fn every_kernel_compiles() {
+        if let Err(error) = probe_shaders() {
+            panic!("shaders.hlsl does not compile: {}", error.0);
+        }
+    }
+
     /// The interpolation kernels have to exist under exactly these names or the
     /// probe's `compile()` calls fail at runtime on every machine.
     #[test]
@@ -1610,13 +1730,14 @@ mod tests {
         let cb = WarpCb {
             warp_size: [0; 2],
             flow_size: [0; 2],
-            t: 0.0,
-            weight: 0.0,
+            factor: 0,
+            prev_weight: 0.0,
+            cur_weight: 0.0,
             flow_grid: 0,
             has_bwd: 0,
             consistency_px: 0.0,
             highlight_gain: 1.0,
-            _pad: [0.0; 2],
+            _pad: 0.0,
         };
         let base = &cb as *const _ as usize;
         let offset = |f: *const _| f as usize - base;
@@ -1624,14 +1745,110 @@ mod tests {
         // Register 0: uint2 gWarpSize, uint2 gFlowSize.
         assert_eq!(offset(&cb.warp_size as *const _ as *const u8), 0);
         assert_eq!(offset(&cb.flow_size as *const _ as *const u8), 8);
-        // Register 1: float gT, float gWarpWeight, uint gFlowGrid, uint gHasBwd.
-        assert_eq!(offset(&cb.t as *const _ as *const u8), 16);
-        assert_eq!(offset(&cb.weight as *const _ as *const u8), 20);
-        assert_eq!(offset(&cb.flow_grid as *const _ as *const u8), 24);
-        assert_eq!(offset(&cb.has_bwd as *const _ as *const u8), 28);
-        // Register 2: float gConsistencyPx, float gWarpHighlightGain, float2 gPadW.
-        assert_eq!(offset(&cb.consistency_px as *const _ as *const u8), 32);
-        assert_eq!(offset(&cb.highlight_gain as *const _ as *const u8), 36);
+        // Register 1: uint gFactor, float gPrevWeight, float gCurWeight, uint gFlowGrid.
+        assert_eq!(offset(&cb.factor as *const _ as *const u8), 16);
+        assert_eq!(offset(&cb.prev_weight as *const _ as *const u8), 20);
+        assert_eq!(offset(&cb.cur_weight as *const _ as *const u8), 24);
+        assert_eq!(offset(&cb.flow_grid as *const _ as *const u8), 28);
+        // Register 2: uint gHasBwd, float gConsistencyPx, float gWarpHighlightGain,
+        // float gPadW.
+        assert_eq!(offset(&cb.has_bwd as *const _ as *const u8), 32);
+        assert_eq!(offset(&cb.consistency_px as *const _ as *const u8), 36);
+        assert_eq!(offset(&cb.highlight_gain as *const _ as *const u8), 40);
+    }
+
+    /// The HLSL declaration order has to match the Rust mirror field for field. The
+    /// offset test above proves the BYTES line up but would happily pass with two
+    /// same-typed fields transposed, which is exactly the mistake that makes every
+    /// synthetic sample take the wrong weight while everything still runs.
+    ///
+    /// This also catches the two files drifting apart wholesale — which has happened,
+    /// via a `git checkout` of one and not the other.
+    #[test]
+    fn warp_constant_buffer_fields_are_declared_in_the_same_order_as_the_hlsl() {
+        let block = SHADER_SOURCE
+            .split("cbuffer WarpParams : register(b2)")
+            .nth(1)
+            .expect("shaders.hlsl must declare cbuffer WarpParams at b2")
+            .split("};")
+            .next()
+            .expect("the WarpParams cbuffer must be terminated");
+
+        let mut cursor = 0usize;
+        for name in [
+            "gWarpSize",
+            "gFlowSize",
+            "gFactor",
+            "gPrevWeight",
+            "gCurWeight",
+            "gFlowGrid",
+            "gHasBwd",
+            "gConsistencyPx",
+            "gWarpHighlightGain",
+            "gPadW",
+        ] {
+            let at = block[cursor..]
+                .find(name)
+                .unwrap_or_else(|| panic!("WarpParams is missing {name}, or declares it too early"));
+            cursor += at + name.len();
+        }
+    }
+
+    /// Every 8-bit capture format WGC can hand us must resolve to a TYPELESS/sRGB
+    /// pair, because the warp filters in linear light and an `_SRGB` view is the only
+    /// way to get the texture unit to do that. Anything else must decline rather than
+    /// silently filter in the wrong space.
+    #[test]
+    fn srgb_view_pair_covers_the_capture_formats_and_declines_the_rest() {
+        assert_eq!(
+            srgb_view_pair(DXGI_FORMAT_R8G8B8A8_UNORM),
+            Some((
+                DXGI_FORMAT_R8G8B8A8_TYPELESS,
+                DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+            ))
+        );
+        assert_eq!(
+            srgb_view_pair(DXGI_FORMAT_B8G8R8A8_UNORM),
+            Some((
+                DXGI_FORMAT_B8G8R8A8_TYPELESS,
+                DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+            ))
+        );
+        // scRGB half-float is already linear and is not something the warp's sRGB
+        // assumption covers, so it must decline rather than guess.
+        use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_R16G16B16A16_FLOAT;
+        assert_eq!(srgb_view_pair(DXGI_FORMAT_R16G16B16A16_FLOAT), None);
+        assert_eq!(srgb_view_pair(DXGI_FORMAT_UNKNOWN), None);
+    }
+
+    /// The whole point of §9.1: at factor N the accumulator is read and written ONCE
+    /// per captured frame, not N-1 times. Texture traffic is unchanged, so the saving
+    /// is the accumulator's — which at 5120x2880 is 32 B/px against ~8 B/px of colour.
+    #[test]
+    fn folding_the_loop_removes_the_per_sample_accumulator_traffic() {
+        // Bytes per pixel per captured frame, at 5120x2880.
+        let accumulator_rw = 32.0f64; // fp32 RGBA read + write
+        let colour_per_sample = 8.0f64; // two filtered RGBA8 taps
+
+        for factor in [2u32, 4, 8] {
+            let samples = f64::from(factor - 1);
+            let before = samples * (accumulator_rw + colour_per_sample);
+            let after = accumulator_rw + samples * colour_per_sample;
+            // Factor 2 emits exactly one synthetic sample, so there is nothing to
+            // fold and the two are identical — the saving starts at factor 4.
+            assert!(after <= before, "factor {factor} must not get more expensive");
+            if factor > 2 {
+                assert!(after < before, "factor {factor} must get cheaper");
+            }
+            if factor == 8 {
+                // ~3x, which is what the design note predicts for factor 8.
+                let ratio = before / after;
+                assert!(
+                    (2.8..3.6).contains(&ratio),
+                    "factor 8 should be about 3x cheaper, got {ratio}"
+                );
+            }
+        }
     }
 
     /// `cbuffer AccumulateParams` is one 16-byte register: uint2 + float + float.
@@ -1651,6 +1868,10 @@ mod tests {
 
     /// Synthetic sample positions must be strictly inside (0, 1) — a sample AT 0 or 1
     /// would duplicate a real frame and double-count it in the exposure.
+    ///
+    /// The derivation now lives in the shader (`t = k / gFactor` for k in 1..gFactor),
+    /// since folding the loop moved it there; this pins the arithmetic the kernel is
+    /// expected to reproduce.
     #[test]
     fn synthetic_sample_positions_lie_strictly_between_the_real_frames() {
         for factor in [2u32, 4, 8] {
@@ -1670,6 +1891,9 @@ mod tests {
     /// The weight of a synthetic sample is the weighting curve evaluated at its
     /// position, which — because the curve is parameterised by POSITION and not by
     /// sample index — is exactly the lerp between the neighbouring real weights.
+    ///
+    /// That lerp is why folding the loop into the kernel needed no per-sample data on
+    /// the constant buffer: `gPrevWeight` and `gCurWeight` describe the whole run.
     #[test]
     fn synthetic_weights_interpolate_between_the_real_samples() {
         let (prev, cur) = (0.25f32, 0.75f32);

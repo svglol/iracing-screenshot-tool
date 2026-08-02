@@ -1,8 +1,18 @@
 # Long exposure — frame interpolation, and the "unnatural blending" problem
 
-Status: **implemented and hardware-verified on the GPU path; NOT yet verified
-against a live iRacing replay.** See §6 for exactly what was measured and what is
-still owed.
+Status: **implemented and hardware-verified, including on a live iRacing replay.**
+The §9 warp optimisation landed a measured **2.63× on per-frame consumption** at
+5120×2880 (§9.3) — real but **not sufficient**: 8× still reaches only ~47% of the
+interpolation-off sample count.
+
+**Before touching this path again, read §9.5–§9.8.** A bench that runs the same kernel
+without iRacing shows 8× at 5120×2880 keeping up comfortably when it has the GPU to
+itself, so the remaining field gap is **contention with iRacing's own rendering**, not
+an inefficient kernel. Three obvious follow-ups have since been measured and are all
+dead — group shape (§9.6, zero effect), dropping 8× to 4× (§9.7, saves nothing), and
+`NV_OF_PERF_LEVEL_FAST` (§9.7, faster on the bench and ~35% SLOWER on a replay).
+§9.8 records the metric to use and the noise floor, because most of those questions
+cannot be answered from sample counts at all.
 Prerequisite reading: `docs/design/long-exposure.md`.
 Feature branch: `feat/long-exposure-replay` (commits `d7c5cc0`, `70a89ca`).
 
@@ -352,7 +362,10 @@ the capture log — shoot the same moment twice, interpolation off then on, and 
 - **Warp and accumulate are fused into one pass** (`CSWarpAccumulate`), not the
   separate warp-then-accumulate of §3.2. A synthetic sample therefore never writes a
   full-resolution intermediate texture, which is most of why the measured cost came
-  in under the §3.4 estimate.
+  in under the §3.4 estimate. **Since §9.1 the fusion goes further**: one dispatch
+  covers every synthetic sample between a pair of real frames, so they never exist
+  simultaneously at all. Anything that proposes materialising them — including the
+  original text of the bracketing brief §3.1 — is undoing this.
 - **Where flow is untrustworthy the shader falls back to a cross-dissolve of the
   unwarped frames.** That is precisely the image produced with interpolation off, so
   the worst case of a bad flow field is the status quo rather than a new artefact.
@@ -564,46 +577,358 @@ looks perfect while three frames in four are being dropped. Judge affordability 
 
 ---
 
-## 9. Next: make the warp path cheaper (not started)
+## 9. Making the warp path cheaper — implemented 2026-08-02
 
-~91 ms for seven passes is ~13 ms each, i.e. roughly 46 GB/s effective on a card that
-does ~1000 GB/s. **The path is latency-bound, not fundamentally too much work**, so
-there is real headroom before "5K at 8× is impossible" is the honest answer.
+~91 ms for seven passes was ~13 ms each, i.e. roughly 46 GB/s effective on a card that
+does ~1000 GB/s. **The path was latency-bound, not fundamentally too much work**, so
+there was real headroom before "5K at 8× is impossible" became the honest answer.
 
-Two changes, in value order:
+Both changes below are built and unit-tested. **Neither is yet measured against a live
+iRacing replay** — see §9.3 for exactly what that owes and how to read the result.
 
-### 9.1 One accumulator read-modify-write per frame, not per synthetic sample
+### 9.1 One accumulator read-modify-write per frame, not per synthetic sample — DONE
 
-`CSWarpAccumulate` currently runs once per synthetic sample, and each run reads AND
-writes the whole accumulator: at 14.75 Mpx that is 236 MB in + 236 MB out, about
-**80% of the pass's traffic**, repeated `factor - 1` times.
+`CSWarpAccumulate` used to run once per synthetic sample, and each run read AND wrote
+the whole accumulator: at 14.75 Mpx that is 236 MB in + 236 MB out, about **80% of the
+pass's traffic**, repeated `factor - 1` times.
 
-Fold the loop inside the kernel: one dispatch that computes all `factor - 1` warped
-samples, sums them (weighted) in registers, and does a **single** accumulator
-read-modify-write. Texture sampling is unchanged; accumulator traffic drops by
-`factor - 1`. Expect roughly 3× on the whole pass at factor 8.
+The loop now lives inside the kernel. One dispatch computes every warped sample, sums
+them weighted **in registers**, and does a **single** accumulator read-modify-write.
 
-This also makes factor 8 nearly as cheap as factor 2, which changes the guardrail's
-shape — re-measure the learned load afterwards.
+The part worth not re-deriving: **no per-sample data crosses the CPU boundary either.**
+`WarpParams` carries `gFactor`, `gPrevWeight` and `gCurWeight`, and the shader derives
+position as `k / gFactor` and weight as `lerp(gPrevWeight, gCurWeight, position)`. That
+lerp *is* the weighting curve evaluated at the interpolated position, because the curve
+is parameterised by position rather than by sample index (design note §5) — so three
+scalars describe the whole run and the constant buffer is written once per frame
+instead of `factor - 1` times.
 
-Note this interacts with the bracketing brief §3.1, which wants the warp SPLIT from
-the accumulate for N sinks. Both are the same insight from opposite ends: the warp is
-per-frame, the accumulate is per-sink. Do them together if bracketing lands first.
+Traffic per captured pixel, at 5120×2880 and factor 8:
 
-### 9.2 Let the hardware do sRGB→linear
+| | before | after |
+|---|---|---|
+| accumulator (32 B/px RW) | 7 × 32 = 224 B | **32 B** |
+| colour taps (2 × RGBA8) | 7 × 8 = 56 B | 7 × 8 = 56 B |
+| total | 280 B | **88 B** |
 
-Bind the source and retained frames through an `R8G8B8A8_UNORM_SRGB` SRV. The texture
-unit then decodes sRGB **as part of bilinear filtering**, which:
+≈3.2×, which is the predicted figure. Note it is only a saving from factor 4 up: at
+factor 2 there is exactly one synthetic sample and nothing to fold. **Factor 8 is now
+much closer in cost to factor 2 than it was**, which changes the shape of the learned
+guardrail — hence §9.3.
 
-- removes three `pow()` per pixel per pass (plus the one in `expand_highlights`), and
-- **fixes a documented correctness compromise** — §7 notes that hardware bilinear
-  currently blends sRGB-ENCODED values and we linearise afterwards. With an `_SRGB`
-  view the blend happens in linear space, which is what it should always have been.
+Also: the flow field and the trust derived from it do not depend on `t`, so they are
+now sampled once for the whole run rather than once per synthetic sample. That was
+free and is the same insight applied to the flow reads.
 
-Faster and more correct in the same change.
+### 9.2 Let the hardware do sRGB→linear — DONE
 
-**Constraint:** an `_SRGB` view requires the resource to have been created `TYPELESS`.
-WGC's frame-pool textures are created `R8G8B8A8_UNORM`, so this needs the owned
-ping-pong copies (which the interpolation path already keeps for `prev`) to be
-`R8G8B8A8_TYPELESS` with two views. That is one extra full-res copy per frame at most,
-and the path already does one.
+The retained frames are bound through an `R8G8B8A8_UNORM_SRGB` SRV, so the texture unit
+decodes sRGB **as part of bilinear filtering**. That removes every `pow()` from the warp
+(21 per pixel per frame at factor 8) and fixes a real correctness compromise: hardware
+bilinear used to filter sRGB-ENCODED values with a single linearisation afterwards, and
+the average of gamma-encoded values is not the gamma encoding of the average. The blend,
+the cross-dissolve and the prev/cur lerp now all happen in linear light.
+
+**A side benefit worth knowing about:** synthetic samples are now consistent with real
+ones. `CSAccumulate` has always linearised *then* averaged; the warp used to average
+*then* linearise. They now agree, so there is one less reason for a streak to differ in
+character between real and synthetic contributions.
+
+Four implementation facts, none of which are guesses:
+
+- **It needed TWO owned frames, not one.** An `_SRGB` view requires the resource to have
+  been created `_TYPELESS`, and WGC's frame-pool textures are created `_UNORM`. The path
+  already owned a copy of `prev`; the *current* frame had to become an owned copy too.
+  So the retained frames are a `_TYPELESS` ping-pong pair viewed as `_UNORM_SRGB`, and
+  `INTERPOLATION_BYTES_PER_PIXEL` went from `4+1+1` to `4+4+1+1`. **The number of full-res
+  copies per frame is unchanged at one** — this costs a surface, not bandwidth.
+- **`CopyResource` from WGC's `_UNORM` texture into our `_TYPELESS` one is legal**
+  because they are in the same type group. That is the whole mechanism.
+- **The plain (unwarped) taps use `SampleLevel` at the texel centre, not `Load`.**
+  Whether a `Load` through an `_SRGB` view applies the decode is not something the
+  shader should have to be right about — if it did not, those values would be encoded
+  while the warped ones are linear, and the mix would be wrong exactly at the
+  disocclusions around a moving car. Sampling goes through the filter path, where the
+  decode is unambiguous. **Do not "optimise" this back to a `Load`.**
+- **A capture format with no sRGB pair declines interpolation** with a reason, rather
+  than falling back to an in-shader conversion. We ask WGC for `Rgba8` so this never
+  fires in practice; BGRA is covered too. It keeps the kernel branch-free, and
+  declining costs nothing because interpolation is an optional accelerator. A format we
+  do not recognise is also one whose channel layout the warp cannot assume, so
+  proceeding would have been the riskier choice.
+
+Correction to what §9.2 originally claimed: the sRGB-blending compromise was documented
+in the `CSWarpAccumulate` source comment, not in §7. §7's four decisions are unaffected
+by this change.
+
+### 9.3 Measured on a live replay, 2026-08-02 — 2.6× faster, still short
+
+Same anchor, 5120×2880, ss2, 1/60, 1/16 playback, as §8.4. Shots 25/26 against the
+pre-optimisation 23/24:
+
+| shot | build | interp | pred | **real** | synth | achievedRatio | median gap | **ms/frame** |
+|---|---|---|---|---|---|---|---|---|
+| 23 | old | off | 11 | 13 | 0 | — | 0.00144 | 23.0 |
+| 24 | old | 8× | 11 | **4** | 21 | — | 0.00569 | **91.0** |
+| 26 | **new** | off | 11 | 15 | 0 | 1.364 | 0.00144 | 23.0 |
+| 25 | **new** | 8× | 11 | **7** | 42 | **0.636** | 0.00216 | **34.6** |
+
+(ms/frame is the median sim-time gap converted to wall clock at 1/16 playback — the
+honest per-frame consumption cost, and the one number `meanFrameMs` stopped reporting.)
+
+**Per-frame consumption fell 2.63×, from 91 ms to 34.6 ms, and real samples went 4 → 7.**
+Against a predicted 3× on the warp alone that is right where it should be: the fixed
+costs per frame — luma pass, the retained-frame copy, the NVOFA call, the real sample's
+own accumulate — do not shrink, so the whole-frame figure lands slightly under the
+warp's own improvement.
+
+**But it is still not enough, and the reason matters.** iRacing presents every ~23–26 ms
+and we now consume in 34.6 ms, so we still miss roughly one frame in three. 8× reached
+47% of the interpolation-off baseline (7 against 15), up from 31% (4 against 13).
+
+It is tempting to compute an effective bandwidth from this (~1.3 GB in ~28 ms ≈
+46 GB/s, on a card that does ~1000 GB/s) and conclude the kernel is desperately
+inefficient. **That inference is wrong, and §9.5 is the measurement that shows why: we
+do not have the card to ourselves.** iRacing is rendering 5120×2880 frames throughout.
+
+Two consequences that are NOT cosmetic:
+
+- **`SAMPLE_SHORTFALL_RATIO` (0.6) is now mis-calibrated.** Shot 25's ratio of 0.636
+  clears it, so `diagnoseInterpolationShortfall` stays SILENT on a shot that lost more
+  than half its real samples against the off baseline. The threshold was calibrated
+  against a bimodal field sample (1.08 unaffected vs 0.27 lossy); this change created
+  the middle case it was never fitted to.
+- **`longExposureLossyInterpolationLoad` stayed 0** for the same reason — neither shot
+  dipped under 0.6, so the machine learned nothing and the pre-shot warning is silent
+  at this configuration too. The reset itself was correct and is done; the learning
+  rule just no longer fires where it should.
+
+**Already verified on hardware, so do NOT spend a replay session re-deriving it:** the
+colour path is correct end to end. Capturing a uniformly-grey, continuously-presenting
+window twice — interpolation off, then 8× — gave mean red **32798 vs 32796**, a ratio
+of 0.9999, with `259 = 7 × (38 - 1)` synthetic samples from 38 real ones. That single
+number rules out the whole class of silent failures this change could have introduced:
+
+- **`CopyResource` into the `_TYPELESS` destination lands.** It returns nothing, so a
+  rejected copy would have left the retained frames black; at 8× that is seven black
+  samples per real one and the mean would have collapsed to ~1/8, not matched to 6×10⁻⁵.
+- **The `_SRGB` views decode exactly once.** Not decoding, or decoding twice, both move
+  a mid-grey by far more than two parts in 32,000.
+- **The folded loop's derived positions and weights are right**, since the synthetic
+  count matches `(factor - 1) × (real - 1)` exactly and the weighted mean is unchanged.
+
+What that test deliberately does NOT tell you is anything about throughput: at 640×480
+nothing was ever going to be dropped. It is a correctness check, and the sample-count
+question in the list above is still open.
+
+### 9.5 The bench that reframed all of this — GPU contention, not a slow kernel
+
+A benchmark harness was built to measure the warp path **without a replay session**: a
+window that presents continuously at a chosen physical size, captured for a fixed
+wall-clock window at factor 1 and factor 8, reporting real samples per second. Same
+ground truth as the field measurement, no iRacing required.
+
+Two traps it had to survive, both of which silently produce flattering numbers:
+
+- **The window gets clamped to `SM_CXMAXTRACK` × `SM_CYMAXTRACK`** — the primary
+  monitor plus border slop, 2580×1460 on this machine. The first run reported a perfect
+  1.003 ratio at "5120×2880" while actually measuring a quarter of the pixels. A window
+  escapes only by answering `WM_GETMINMAXINFO` with a larger `ptMaxTrackSize`; iRacing's
+  own window proc does not impose the default, which is why the app's ordinary
+  `SetWindowPos` resize reaches 8K with none of this. The bench now asks the addon what
+  WGC is **delivering** and refuses to run on a mis-sized window.
+- **At 5120×2880 the new build is source-limited**, so it cannot discriminate anything.
+  Measurements that need to separate variants were taken at 7680×4320.
+
+**Results, alone on the GPU:**
+
+| build | 5120×2880 8× | 7680×4320 8× |
+|---|---|---|
+| pre-optimisation | 32.1 ms | 60.0 ms |
+| new | **≤21.0 ms** (source-limited at 48 fps) | **40.9 ms** |
+
+**And here is the finding that matters.** At 5120×2880 alone on the GPU, the new build
+keeps up with a 48 fps source — 8× interpolation at 5K is comfortably affordable. On a
+live replay at the *same resolution* it needs 34.6 ms. The kernel did not change between
+those two measurements; **what changed is that iRacing is rendering 5120×2880 frames at
+the same time.** We are getting roughly 60% of the GPU, and the ~46 GB/s "effective
+bandwidth" is our share of a contended card, not evidence of an inefficient kernel.
+
+**Corollary: reducing per-frame WORK is the only lever, and §9.1 already pulled it.**
+Under contention, time scales with work issued. That is also why §9.1's traffic cut
+translated almost proportionally into wall clock.
+
+### 9.7 Where the remaining cost actually is: NVOFA, not the warp
+
+The bench swept the whole ladder at 7680×4320, alone on the GPU:
+
+| factor | ms/frame | real | synthetic |
+|---|---|---|---|
+| 1 (off) | 20.9 | 288 | 0 |
+| 2 | 41.4 | 145 | 156 |
+| 4 | 41.7 | 144 | 465 |
+| 8 | 41.2 | 146 | 1099 |
+
+**Factors 2, 4 and 8 cost the same.** That is §9.1 working exactly as designed — the
+marginal cost of an extra synthetic sample is now nearly nil — but it also means the
+whole +20.5 ms over interpolation-off is **fixed per-frame overhead**: the luma pass,
+the retained copy, and the NVOFA flow call. Luma + copy move only ~430 MB at 8K, ~1.4 ms
+at any plausible bandwidth, so NVOFA is the bulk.
+
+Changing one line appeared to confirm it — **on the bench**:
+
+| NVOFA perf level | 8× ms/frame (bench, 8K) | real | vs off |
+|---|---|---|---|
+| `MEDIUM` | 41.7 | 144 | 0.502 |
+| `FAST` | **31.3** | **192** | **0.667** |
+
+1.33× off the entire per-frame cost. It was built, installed, and shot on a live replay.
+
+**On the replay it went the OTHER WAY** (shot 34 against shot 25, same anchor and
+settings, adjacent interpolation-off baselines):
+
+| build | ms/frame (field, 5K) | real | vs adjacent off |
+|---|---|---|---|
+| `MEDIUM` (shot 25) | **34.6** | 7 | 0.47 |
+| `FAST` (shot 34) | **46.6** | 5 | 0.42 |
+
+**~35% slower where the bench predicted 25% faster. `FAST` is REJECTED**: it costs flow
+accuracy and buys nothing. `MEDIUM` stays, and the constant carries this history inline
+so it is not re-litigated.
+
+**The lesson is about the bench, and it is the important part of this section.** The
+bench runs alone on the GPU; the field does not. NVOFA is a **dedicated hardware unit**
+that does not compete with our compute for the same resources — so alone it dominates
+the critical path (nothing else is competing), while under contention with iRacing it is
+not what we are waiting on at all. The bench measured a regime this code never runs in.
+
+**So: trust the bench for changes that reduce SM work** — that is what contends with
+iRacing, and it is why §9.1's fold transferred to the field almost proportionally
+(2.4× on the bench-equivalent metric, 2.63× measured in the field). **Do not trust it
+for anything that shifts work between GPU units.** Confirm those on a replay or not at
+all.
+
+There is no intermediate rung to retry: `NV_OF_PERF_LEVEL` is only SLOW(5) /
+MEDIUM(10) / FAST(20).
+
+### 9.8 How to measure this at all — the metric, and the noise floor
+
+Five interpolation-off shots at identical settings produced **13, 15, 13, 11, 12** real
+samples: mean 12.75, **sd 1.71, i.e. ±13%**. A single-pair A/B on raw sample count
+therefore cannot resolve anything smaller than roughly a 30% effect, which is why
+"7 vs 5" between two 8× shots is *not* by itself evidence of anything.
+
+**Use `sampling.medianGapSeconds`, converted to wall clock (× the playback divisor).**
+Every one of those same five shots reported a median gap of **0.00144 s to three
+significant figures** — it is an average over the frames within a shot rather than a
+count of them, so it is dramatically more stable, and it is a direct per-frame cost in
+ms rather than a proxy. The whole §9 story reads cleanly in it and is ambiguous without
+it:
+
+| | ms/frame |
+|---|---|
+| interpolation off | 23.0 (= iRacing's present interval; we are not the bottleneck) |
+| 8×, pre-§9 | 77.9 / 79.5 / 91.0 |
+| 8×, post-§9 `MEDIUM` | **34.6** |
+| 8×, post-§9 `FAST` | 46.6 |
+
+`meanFrameMs` remains useless for this (§8.3), and `achievedRatio` is the right
+*affordability gate* but too noisy to compare two builds with.
+
+**Consequence for §9.4: dropping 8× to 4× saves NOTHING.** The bench says so directly.
+That was a plausible prediction from the traffic model and it is simply wrong, because
+after §9.1 the factor barely enters the cost. Do not spend a replay session on it.
+
+### 9.6 Group-shape tuning: measured, and it does NOTHING. Do not repeat it.
+
+An earlier draft of this section proposed occupancy and coalescing as the top
+candidates. **Both were measured at 7680×4320 and both are refuted:**
+
+| variant | threads/group | width | 8× ms/frame |
+|---|---|---|---|
+| pre-optimisation | 64 | 8 | 60.0 |
+| warp 8×8 (shipped) | 64 | 8 | **40.9** |
+| warp 32×2 | 64 | 32 | 40.5 |
+| warp 32×8 | 256 | 32 | 40.6 |
+| warp 64×4 | 256 | 64 | 40.9 |
+
+All four post-optimisation variants land within 1% — noise. 8×8 vs 32×2 isolates
+*width* at constant thread count; 32×2 vs 32×8 isolates *occupancy* at constant width.
+Neither moves anything.
+
+**Why the coalescing argument was wrong, since it sounds so plausible:** it reasoned
+that an 8-wide group makes each 32-thread wave straddle four rows 80 KB apart. True,
+but irrelevant — *every* accumulator element is visited by some group, so L2 coalesces
+across groups and the per-wave pattern does not survive to DRAM. A scattered access
+pattern only costs when the data is scattered, not when the traversal order is.
+
+The variants were built and then **reverted**: a knob that buys nothing should not ship.
+`CSWarpAccumulate` uses `TILE` (8×8) like every other kernel.
+
+### 9.4 What is left
+
+Given §9.5, the honest ordering has changed. **The kernel is close to as good as it
+gets for the work it does; the remaining field gap is contention plus the sheer volume
+of work that 8× at 5K with 2× supersample asks for.**
+
+**Three of the obvious candidates have now been measured and are dead. Read §9.6–§9.8
+before proposing anything here:**
+
+1. ~~Group shape / occupancy~~ — **zero effect**, four variants within 1% (§9.6).
+2. ~~Drop 8× to 4×~~ — **saves nothing**; after §9.1 the factor barely enters the cost
+   (§9.7).
+3. ~~`NV_OF_PERF_LEVEL_FAST`~~ — **1.33× on the bench, ~35% SLOWER on a replay** (§9.7).
+
+**What is left that is actually supported by measurement:**
+
+1. **Turn supersampling off.** The main design note §3 is blunt that supersampling buys
+   pixels at the direct cost of samples, and it quarters the interpolation cost as well.
+   2560×1440 is documented as completely unaffected at any factor. This is a settings
+   answer needing no code, and it is now the leading candidate by some distance.
+2. Reduce **SM** work — that is the resource that contends with iRacing (§9.7). The
+   remaining SM-side costs are the luma pass, the retained copy, and the real sample's
+   own accumulate.
+
+If more is wanted from the code, in value order:
+
+- **Merge the real sample into the warp dispatch — the best remaining lead.** Per
+  captured frame we currently do **two** full accumulator read-modify-writes: one in
+  `CSWarpAccumulate` for the synthetic sum, then another in `CSAccumulate` for the real
+  frame. At 5120×2880 that is 32 B/px each. Per-frame SM-side traffic at 8×:
+
+  | | now | merged |
+  |---|---|---|
+  | warp: accumulator RMW + taps | 32 + 8 | 32 + 8 |
+  | real sample: accumulator RMW + source read | 32 + 4 | (folded in) + 4 |
+  | **total** | **76 B/px** | **44 B/px** |
+
+  **~42% off, and it is SM work — exactly the resource §9.7 identifies as the one that
+  contends with iRacing.** It is the same insight as §9.1 applied once more: the
+  accumulator RMW is the expensive part, so touch it once per frame rather than once
+  per contribution.
+
+  **The open question is bit-exactness, and it needs deciding before building.** The
+  real sample currently reads WGC's texture through a `_UNORM` view and linearises in
+  the shader; the warp reads the owned `_SRGB` copies. Merging means the real sample
+  takes the `_SRGB` path too, so real samples would differ subtly between
+  interpolation-on and interpolation-off. The one-sample-equals-still-capture
+  equivalence itself is safe (one sample has no predecessor, so no warp dispatch runs
+  and `CSAccumulate` still handles it), but "the same shot reproduces differently with
+  interpolation toggled" is a reproducibility claim worth making deliberately rather
+  than by accident.
+
+- **A half-resolution warp — smaller than it sounds.** An earlier draft of this section
+  said it would "quarter the remaining texture traffic". **That was wrong.** After
+  §9.1 the warp pass is ~40 B/px, of which 32 is the accumulator RMW and only ~8 is
+  taps (the 2·(factor−1) fetches are highly cache-local, so DRAM sees each source
+  texture about once). Halving resolution touches only the tap half, so it is worth
+  ~15% of the pass, not 75% — and it costs the synthetic/real symmetry §9.2 restored.
+  Low value; do the merge above first.
+
+- **Throttling `MinimumUpdateIntervalSettings`** (main design note §10, open question 4)
+  is the opposite lever: consume fewer frames on purpose so the ones we do consume are
+  never dropped. It does not touch the GPU at all.
+
+- **Not worth trying without new evidence:** group shape (§9.6), factor reduction and
+  NVOFA perf level (§9.7), and anything else that reshapes the kernel or moves work
+  between GPU units rather than reducing SM work.

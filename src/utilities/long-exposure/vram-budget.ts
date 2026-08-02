@@ -40,12 +40,18 @@ export const ACCUMULATOR_BYTES_PER_PIXEL = 16;
 export const WORKING_BYTES_PER_PIXEL = 4 + 8 + 8;
 
 // Extra surfaces the optical-flow interpolation path allocates, per render pixel:
-// the retained previous frame in full colour (RGBA8, 4 B) plus two ping-ponged luma
-// planes (R8, 1 B each). The flow fields themselves are excluded on purpose — at the
-// negotiated 4x4 grid they are two R16G16 buffers over a sixteenth of the pixels,
-// i.e. 4/16 = 0.25 B/px, which rounds away against the 5 B/px above and would only
-// make the estimate falsely precise.
-export const INTERPOLATION_BYTES_PER_PIXEL = 4 + 1 + 1;
+// TWO ping-ponged retained frames in full colour (RGBA8, 4 B each) plus two
+// ping-ponged luma planes (R8, 1 B each). The flow fields themselves are excluded on
+// purpose — at the negotiated 4x4 grid they are two R16G16 buffers over a sixteenth
+// of the pixels, i.e. 4/16 = 0.25 B/px, which rounds away against the 10 B/px above
+// and would only make the estimate falsely precise.
+//
+// The colour retain used to be a single surface holding just the previous frame. The
+// warp now reads BOTH frames through our own textures, because only a texture we
+// create ourselves can be _TYPELESS and therefore carry the _UNORM_SRGB view that
+// makes the hardware filter in linear light. The number of full-res COPIES per frame
+// is unchanged at one — this costs a surface, not bandwidth.
+export const INTERPOLATION_BYTES_PER_PIXEL = 4 + 4 + 1 + 1;
 
 export interface LongExposureVramEstimate {
 	// Bytes for the accumulators alone — the allocation we control and are
