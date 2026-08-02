@@ -1,6 +1,8 @@
 # Long exposure — frame interpolation, and the "unnatural blending" problem
 
-Status: **not started.** This is a handoff brief for the next session.
+Status: **implemented and hardware-verified on the GPU path; NOT yet verified
+against a live iRacing replay.** See §6 for exactly what was measured and what is
+still owed.
 Prerequisite reading: `docs/design/long-exposure.md`.
 Feature branch: `feat/long-exposure-replay` (commits `d7c5cc0`, `70a89ca`).
 
@@ -237,3 +239,137 @@ telemetry-side evidence says duplicates do not occur in this pipeline.
 3. Implement highlight expansion (H1) and compare. (~half a day)
 4. Only if a ladder of separable copies remains: measure per-sample displacement.
 5. Only if that is > ~1 px: evaluate NvOFFRUC, then build the D3D11 NVOFA path.
+
+**Step 5 was taken (the user chose interpolation over H1 explicitly). H1–H3 remain
+untested and are still the cheaper candidates for "unnatural" — interpolation fixes
+H4 only.** If the output still reads as flat and energy-less after this, that is H1
+(clipped highlights) and it is a dozen lines of HLSL.
+
+---
+
+## 6. As built, 2026-08-02 — verified facts, do not re-derive
+
+### 6.1 Licensing: the headers are MIT, and we vendor nothing
+
+`nvOpticalFlowCommon.h`, `nvOpticalFlowD3D11.h` and the `NvOFBase` sample sources
+each carry a **per-file MIT grant** that opens *"This copyright notice applies to
+this header file only"* and then grants use/copy/modify/publish/distribute/sublicense
+without restriction. That grant is independent of `LicenseAgreement.pdf` (the NVIDIA
+DesignWorks SDK EULA), whose relevant clauses are 1(b)/1(c) (may modify and
+distribute *sample source* in object form), 4(b) (no distribution of the SDK as such)
+and 4(e) (must not subject the SDK to an open-source licence).
+
+**Decision: hand-write the Rust FFI, vendor nothing.** `native/wgc-capture/src/longexp/nvof.rs`
+transcribes the ABI from the MIT headers and cites them. No SDK file is copied into
+this repo and none is shipped, so the EULA's distribution requirements and its
+4(e) anti-copyleft clause never meet our MIT licence at all. It also avoids a
+`bindgen` build dependency. `nvofapi64.dll` is resolved at runtime from the user's
+NVIDIA driver.
+
+**`NvOFFRUC` is rejected**, and this is not close. Its header is EULA-governed, not
+MIT; **no `NvOFFRUC` binary ships with the driver, and none is in the SDK download**
+(searched `System32`, `DriverStore\FileRepository`, and both `NVIDIA Corporation`
+program directories — nothing); and its error enum contains
+`NvOFFRUC_ERR_OPENCV_NOT_AVAILABLE`, i.e. it wants an OpenCV runtime too. Adopting it
+would mean shipping a redistributable plus OpenCV, which breaks the
+nothing-for-the-user-to-install constraint that ruled this whole approach in.
+
+### 6.2 Corrections to §3.0 above
+
+- **`NV_OF_API_VERSION` is 5.0 (`0x50`), not 2.0.** §3.0 recorded 2.0 from an older
+  public header. SDK 5.0.7 defines MAJOR 5 / MINOR 0, and a current driver rejects a
+  version it does not implement. `NvOFGetMaxSupportedApiVersion` is used to negotiate
+  and we decline rather than guess an older struct layout.
+- **The flow fixed-point scale is S10.5, i.e. divide raw `int16` by 32.0.** From
+  `NV_OF_FLOW_VECTOR`'s own comment. Pinned by tests on both sides
+  (`nvof.rs::FLOW_FIXED_POINT_SCALE` and the HLSL `#define`, asserted equal).
+- **`NV_OF_BUFFER_FORMAT_ABGR8` maps to `DXGI_FORMAT_B8G8R8A8_UNORM`** — BGRA, the
+  opposite order to our RGBA8 capture. So a conversion pass is unavoidable, and we
+  feed **GRAYSCALE8** (`R8_UNORM` luma) instead: format-correct, a quarter of the
+  bandwidth into the engine, and what a block-matching flow accelerator reduces
+  colour to anyway.
+
+### 6.3 What the driver actually negotiated (RTX 4090, driver 32.0.15.9636)
+
+`longExposureInterpolationInfo()` at both 2560×1440 and 5120×2880 returns:
+
+```
+{ available: true, gridSize: 4, bidirectional: true,
+  inputFormat: "grayscale8", apiVersion: "5.0" }
+```
+
+`bidirectional: true` matters — it is what makes the forward/backward consistency
+check possible, and therefore occlusion handling rather than edge smearing.
+
+### 6.4 Measured cost and sample throughput
+
+Exercised end to end (WGC frame → luma → `NvOFExecute` → warp → accumulate →
+resolve) against a real animating window at **1266×753**, 3 s exposures:
+
+| factor | real samples | synthetic | mean ms/frame | max ms/frame |
+|---|---|---|---|---|
+| 1 | 143 | 0 | 0.51 | 3.49 |
+| 2 | 124 | 123 | 0.97 | 31.30 |
+| 4 | 121 | 360 | 0.95 | 31.28 |
+| 8 | 143 | 994 | 0.90 | 32.08 |
+| 1 (repeat) | 142 | 0 | 0.55 | 2.51 |
+
+Reading these honestly:
+
+- **Real-sample throughput is not systematically harmed.** The spread (121–143) is
+  run-to-run noise in the source window's own presentation, not interpolation cost:
+  factor 8 — by far the most work — matched the factor-1 baseline exactly, so the
+  ordering is not monotonic in cost.
+- **Per-frame cost roughly doubles, from ~0.5 ms to ~0.95 ms.**
+- **`maxFrameMs` ≈ 31 ms is one-time setup, not steady state.** It is essentially
+  identical at factors 2, 4 and 8; if it were per-sample work it would scale with the
+  factor. It is the first frame, where the NVOFA session, its textures and their
+  registrations are created.
+- Synthetic counts are exactly `(factor - 1) × (real - 1)` — one gap fewer than
+  frames, because the first frame has no predecessor. 143 real at factor 8 → 994. ✓
+
+**Extrapolation to iRacing's 5120×2880 is ~15× the pixels, i.e. roughly +6 ms per
+frame against a ~25 ms budget at the measured 39 fps.** That fits, but it is an
+extrapolation from a 0.95 Mpx measurement and is exactly the thing §3.4 warned would
+stop being comfortable. It must be confirmed on a real replay (§6.6).
+
+### 6.5 What it looks like
+
+At 1266×753 over a 3 s exposure of three objects sweeping at different speeds past
+static verticals:
+
+- factor 1: the streaks contain a clearly visible **ladder of discrete copies**.
+- factor 4: substantially smoothed; the ladder is mostly gone.
+- factor 8: **continuous streak, ladder eliminated.**
+- At every factor the static content (window chrome, the fixed posts) stays sharp
+  and unsmeared — which is the forward/backward consistency check working. A warp
+  without it smears static edges next to moving ones.
+
+### 6.6 Still owed
+
+**This has not been run against a live iRacing replay.** Specifically unverified:
+per-frame cost at 5120×2880, whether real-sample throughput holds at that size, and
+whether the result actually reads as more natural on a car rather than on a CSS
+animation. The instrumentation to answer the first two ships in the sidecar
+(`sampling.achieved` vs `sampling.synthesized`, `interpolation.meanFrameMs`) and in
+the capture log — shoot the same moment twice, interpolation off then on, and compare
+`achieved`.
+
+### 6.7 Design decisions worth not re-litigating
+
+- **Warp and accumulate are fused into one pass** (`CSWarpAccumulate`), not the
+  separate warp-then-accumulate of §3.2. A synthetic sample therefore never writes a
+  full-resolution intermediate texture, which is most of why the measured cost came
+  in under the §3.4 estimate.
+- **Where flow is untrustworthy the shader falls back to a cross-dissolve of the
+  unwarped frames.** That is precisely the image produced with interpolation off, so
+  the worst case of a bad flow field is the status quo rather than a new artefact.
+  This is the property that makes shipping it safe.
+- **Synthetic weights are `lerp(prev_weight, cur_weight, t)`.** Because the weighting
+  curve is parameterised by position rather than sample index (design note §5), that
+  lerp *is* the curve evaluated at the interpolated position. No new plumbing.
+- **A duplicate frame does not update the retained previous frame.** It carries no new
+  motion, so the next genuine frame interpolates across the whole stalled gap.
+- **`Interpolation`'s field order is load-bearing**: every `NvOfBuffer` must
+  unregister before the `NvOpticalFlow` session is destroyed and `nvofapi64.dll` is
+  unloaded, and Rust drops fields in declaration order. `flow` is last, deliberately.

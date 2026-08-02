@@ -7,6 +7,7 @@ import {
 } from '../../utilities/long-exposure/shot-recipe';
 import { ReplayController, type ReplayState } from './replay-control';
 import {
+	buildInterpolationReport,
 	executeRecipe,
 	type CaptureSessionDeps,
 	type NativeSessionApi,
@@ -112,9 +113,14 @@ function makeHarness(options: HarnessOptions = {}) {
 	let gateOpen = false;
 	const nativeCalls: string[] = [];
 
+	// What the recipe asked the native side for, so a test can assert the factor was
+	// actually threaded rather than merely accepted by the type checker.
+	const begunWith: Array<number | undefined> = [];
+
 	const defaultNative: NativeSessionApi = {
-		longExposureBegin: () => {
+		longExposureBegin: (_hwnd, interpolationFactor) => {
 			nativeCalls.push('begin');
+			begunWith.push(interpolationFactor);
 			return 7;
 		},
 		longExposureSetSample: () => {
@@ -190,7 +196,7 @@ function makeHarness(options: HarnessOptions = {}) {
 		signal: options.signal,
 	};
 
-	return { deps, events, nativeCalls, state, replay };
+	return { deps, events, nativeCalls, begunWith, state, replay };
 }
 
 // Every outcome must show the cursor going back to the anchor. This helper is used
@@ -409,6 +415,210 @@ describe('executeRecipe — pre-flight refusals move nothing', () => {
 		const outcome = await executeRecipe(recipe(), harness.deps);
 		expect(outcome.failure).toBe('invalid-recipe');
 		expect(outcome.message).toMatch(/not showing a replay/);
+	});
+});
+
+// Frame interpolation is an OPTIONAL accelerator. The contract these tests pin down
+// is that it can only ever add in-betweens — it can never change whether a shot
+// works, silently claim it happened, or hide that it did not.
+describe('frame interpolation', () => {
+	function nativeWithInterpolation(
+		status: {
+			enabled: boolean;
+			factor: number;
+			reason: string | null;
+			gridSize: number;
+			bidirectional: boolean;
+		} | null,
+		synthesized = 0
+	): Partial<NativeSessionApi> {
+		return {
+			longExposureFinish: () => ({
+				data: Buffer.alloc(640 * 360 * 8),
+				width: 640,
+				height: 360,
+				accepted: 12,
+				synthesized,
+				rejected: 0,
+				backend: 'd3d11-compute',
+				meanFrameMs: 4.5,
+				maxFrameMs: 9.25,
+				interpolation: status,
+				samples: [],
+				error: null,
+			}),
+		};
+	}
+
+	it('passes the recipe factor through to the native session', async () => {
+		const harness = makeHarness();
+		await executeRecipe(recipe({ interpolationFactor: 4 }), harness.deps);
+		expect(harness.begunWith).toEqual([4]);
+	});
+
+	it('defaults to off, so nothing changes for a recipe that never asked', async () => {
+		const harness = makeHarness();
+		await executeRecipe(recipe(), harness.deps);
+		expect(harness.begunWith).toEqual([1]);
+	});
+
+	it('reports what the hardware actually delivered', async () => {
+		const harness = makeHarness({
+			nativeOverrides: nativeWithInterpolation(
+				{
+					enabled: true,
+					factor: 4,
+					reason: null,
+					gridSize: 4,
+					bidirectional: true,
+				},
+				36
+			),
+		});
+		const outcome = await executeRecipe(
+			recipe({ interpolationFactor: 4 }),
+			harness.deps
+		);
+
+		expect(outcome.ok).toBe(true);
+		expect(outcome.interpolation).toMatchObject({
+			requestedFactor: 4,
+			enabled: true,
+			achievedFactor: 4,
+			bidirectional: true,
+			realSamples: 12,
+			syntheticSamples: 36,
+		});
+		// No warning when it worked.
+		expect(outcome.warnings.join(' ')).not.toMatch(/interpolation/i);
+	});
+
+	// The case that must never look like success: asked for, hardware said no.
+	it('still captures, and warns, when the hardware cannot interpolate', async () => {
+		const harness = makeHarness({
+			nativeOverrides: nativeWithInterpolation({
+				enabled: false,
+				factor: 1,
+				reason: 'nvofapi64.dll could not be loaded (no NVIDIA driver?)',
+				gridSize: 0,
+				bidirectional: false,
+			}),
+		});
+		const outcome = await executeRecipe(
+			recipe({ interpolationFactor: 8 }),
+			harness.deps
+		);
+
+		// The shot succeeds. That is the whole point of failing soft.
+		expect(outcome.ok).toBe(true);
+		expect(outcome.image).not.toBeNull();
+		expect(outcome.interpolation).toMatchObject({
+			requestedFactor: 8,
+			enabled: false,
+			// Never claim the requested factor when it was declined.
+			achievedFactor: 1,
+			syntheticSamples: 0,
+		});
+		expect(outcome.warnings.join(' ')).toMatch(
+			/interpolation was requested but is not available/i
+		);
+		expect(outcome.warnings.join(' ')).toMatch(/nvofapi64/);
+		expectAnchorRestored(harness.events);
+	});
+
+	// An addon predating the feature reports nothing at all.
+	it('treats an addon that reports no interpolation as interpolation-off', async () => {
+		const harness = makeHarness({
+			nativeOverrides: nativeWithInterpolation(null),
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.interpolation).toMatchObject({
+			enabled: false,
+			achievedFactor: 1,
+		});
+		// Nothing was requested, so nothing to warn about.
+		expect(outcome.warnings.join(' ')).not.toMatch(/interpolation/i);
+	});
+
+	it('carries the per-frame cost through, so a slowdown is visible', async () => {
+		const harness = makeHarness({
+			nativeOverrides: nativeWithInterpolation(
+				{
+					enabled: true,
+					factor: 2,
+					reason: null,
+					gridSize: 4,
+					bidirectional: true,
+				},
+				12
+			),
+		});
+		const outcome = await executeRecipe(
+			recipe({ interpolationFactor: 2 }),
+			harness.deps
+		);
+		expect(outcome.interpolation?.meanFrameMs).toBe(4.5);
+		expect(outcome.interpolation?.maxFrameMs).toBe(9.25);
+	});
+});
+
+describe('buildInterpolationReport', () => {
+	it('never claims a factor the hardware declined', () => {
+		const report = buildInterpolationReport({
+			requestedFactor: 8,
+			status: {
+				enabled: false,
+				factor: 8,
+				reason: 'pre-Turing GPU',
+				gridSize: 0,
+				bidirectional: false,
+			},
+			realSamples: 100,
+			syntheticSamples: 0,
+			meanFrameMs: null,
+			maxFrameMs: null,
+		});
+		expect(report.requestedFactor).toBe(8);
+		expect(report.enabled).toBe(false);
+		expect(report.achievedFactor).toBe(1);
+		expect(report.reason).toBe('pre-Turing GPU');
+	});
+
+	it('treats a missing status as off rather than throwing', () => {
+		const report = buildInterpolationReport({
+			requestedFactor: 4,
+			status: undefined,
+			realSamples: 50,
+			syntheticSamples: 0,
+			meanFrameMs: null,
+			maxFrameMs: null,
+		});
+		expect(report.enabled).toBe(false);
+		expect(report.achievedFactor).toBe(1);
+		expect(report.reason).toBeNull();
+	});
+
+	it('keeps real and synthetic counts separate', () => {
+		const report = buildInterpolationReport({
+			requestedFactor: 4,
+			status: {
+				enabled: true,
+				factor: 4,
+				reason: null,
+				gridSize: 4,
+				bidirectional: true,
+			},
+			realSamples: 200,
+			syntheticSamples: 597,
+			meanFrameMs: 6.1,
+			maxFrameMs: 20,
+		});
+		// The two must never be merged: comparing realSamples across interpolation
+		// on/off at the same settings is the only way to see whether synthetic
+		// samples were bought with real ones.
+		expect(report.realSamples).toBe(200);
+		expect(report.syntheticSamples).toBe(597);
 	});
 });
 

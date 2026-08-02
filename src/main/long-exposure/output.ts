@@ -34,6 +34,7 @@ import {
 	type ResolvedPlan,
 } from '../../utilities/long-exposure/shot-recipe';
 import type { SampleStats } from '../../utilities/long-exposure/sample-stats';
+import type { LongExposureInterpolationReport } from './capture-session';
 import { createLogger } from '../../utilities/logger';
 
 const log = createLogger('long-exposure/output');
@@ -56,6 +57,10 @@ export interface WriteLongExposureOptions {
 	plan: ResolvedPlan;
 	stats: SampleStats;
 	backend: string | null;
+	// What optical-flow interpolation actually did, straight from the capture.
+	// Optional so callers that do not have it (older tests, non-capture writers) keep
+	// working; the sidecar simply records null.
+	interpolation?: LongExposureInterpolationReport | null;
 	screenshotDir: string;
 	cacheDir: string;
 	// irsdk shapes are untyped upstream.
@@ -216,11 +221,25 @@ export async function writeLongExposure(
 	}
 
 	// --- sidecar ----------------------------------------------------------
+	const interpolation = options.interpolation ?? null;
 	const sidecar = buildSidecar({
 		recipe,
 		plan,
 		stats,
 		backend,
+		interpolation: interpolation
+			? {
+					requestedFactor: interpolation.requestedFactor,
+					enabled: interpolation.enabled,
+					achievedFactor: interpolation.achievedFactor,
+					reason: interpolation.reason,
+					gridSize: interpolation.gridSize,
+					bidirectional: interpolation.bidirectional,
+					meanFrameMs: interpolation.meanFrameMs,
+					maxFrameMs: interpolation.maxFrameMs,
+				}
+			: null,
+		synthesizedSamples: interpolation?.syntheticSamples ?? 0,
 		imageWidth: image.width,
 		imageHeight: image.height,
 		toolName: options.toolName,

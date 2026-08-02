@@ -26,6 +26,7 @@
 
 mod backend;
 mod d3d11;
+mod nvof;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, Ordering};
@@ -50,7 +51,7 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
-use backend::{AccumulateBackend, ResolveParams, ResolvedImage, Tonemap};
+use backend::{AccumulateBackend, InterpolationStatus, ResolveParams, ResolvedImage, Tonemap};
 use d3d11::D3d11Backend;
 
 /// v1 accumulates into exactly one sink. The backend and the router both support N
@@ -93,8 +94,24 @@ struct SessionShared {
     replay_frame: AtomicI64,
 
     finish_requested: AtomicBool,
+    /// REAL captured frames accumulated. Deliberately never merged with
+    /// `synthesized`: the specific risk of interpolation is that the extra GPU work
+    /// slows frame consumption below iRacing's present rate, so we manufacture
+    /// synthetic samples at the cost of real ones. A combined total would hide
+    /// exactly that. Compare this number with interpolation on vs off.
     accepted: AtomicU32,
+    /// Interpolated in-between frames accumulated. 0 when interpolation is off.
+    synthesized: AtomicU32,
     rejected: AtomicU32,
+    /// Wall time spent inside the frame handler, for the same reason: it is the
+    /// direct measure of whether we can still keep up with the sim.
+    frame_time_total_ns: AtomicU64,
+    frame_time_max_ns: AtomicU64,
+
+    /// 1 = off. Read once, when the first frame establishes the frame size.
+    interpolation_factor: AtomicU32,
+    /// Filled in once the backend has reported what it could negotiate.
+    interpolation: Mutex<Option<InterpolationStatus>>,
     /// Set once the handler has processed at least one frame — proves the capture
     /// is genuinely live rather than merely started.
     saw_frame: AtomicBool,
@@ -189,6 +206,7 @@ impl Accumulator {
 
         let width = frame.width();
         let height = frame.height();
+        let texture = frame.as_raw_texture().clone();
 
         if !self.sink_ready {
             backend
@@ -198,9 +216,17 @@ impl Accumulator {
             if let Ok(mut dims) = self.shared.frame_dims.lock() {
                 *dims = Some((width, height));
             }
-        }
 
-        let texture = frame.as_raw_texture().clone();
+            // Interpolation is set up from the FIRST REAL FRAME, so its width, height
+            // and pixel format come from what WGC is actually delivering rather than
+            // from what we asked for. It cannot fail the session: an unsupported GPU
+            // reports a reason and the capture proceeds without it.
+            let factor = self.shared.interpolation_factor.load(Ordering::SeqCst);
+            let status = backend.enable_interpolation(factor, &texture);
+            if let Ok(mut slot) = self.shared.interpolation.lock() {
+                *slot = Some(status);
+            }
+        }
         let digest = backend
             .digest(&texture)
             .map_err(|e| format!("digest failed: {e}"))?;
@@ -216,12 +242,18 @@ impl Accumulator {
         let is_duplicate = self.last_digest == Some(digest);
         if is_duplicate {
             self.shared.rejected.fetch_add(1, Ordering::Relaxed);
+            backend.note_rejected_frame();
         } else {
             let weight = f32::from_bits(self.shared.weight_bits.load(Ordering::Relaxed));
-            backend
-                .accumulate(PRIMARY_SINK, &texture, weight)
+            let outcome = backend
+                .accumulate_sample(PRIMARY_SINK, &texture, weight)
                 .map_err(|e| format!("accumulate failed: {e}"))?;
-            self.shared.accepted.fetch_add(1, Ordering::Relaxed);
+            self.shared
+                .accepted
+                .fetch_add(outcome.real, Ordering::Relaxed);
+            self.shared
+                .synthesized
+                .fetch_add(outcome.synthetic, Ordering::Relaxed);
             self.last_digest = Some(digest);
         }
 
@@ -292,7 +324,20 @@ impl GraphicsCaptureApiHandler for Accumulator {
             return Ok(());
         }
 
-        if let Err(message) = self.handle_frame(frame) {
+        // Timed because interpolation's whole risk is that it makes this slower than
+        // iRacing presents, at which point we drop real samples to manufacture
+        // synthetic ones — a net loss. Measuring is how that stays visible.
+        let started = std::time::Instant::now();
+        let result = self.handle_frame(frame);
+        let elapsed = started.elapsed().as_nanos() as u64;
+        self.shared
+            .frame_time_total_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.shared
+            .frame_time_max_ns
+            .fetch_max(elapsed, Ordering::Relaxed);
+
+        if let Err(message) = result {
             // Record and keep going: a single failed frame must not lose a capture
             // that is otherwise ten seconds into a sixteen-second exposure.
             record_error(&self.shared, message);
@@ -411,11 +456,32 @@ pub struct LongExposureSample {
     pub accepted: bool,
 }
 
+/// What frame interpolation actually did, reported alongside every capture.
+///
+/// `enabled: false` with a `reason` is normal and expected on non-NVIDIA hardware.
+#[napi(object)]
+pub struct LongExposureInterpolationReport {
+    pub enabled: bool,
+    pub factor: u32,
+    pub reason: Option<String>,
+    pub grid_size: u32,
+    pub bidirectional: bool,
+}
+
 #[napi(object)]
 pub struct LongExposureStats {
     pub accepted: u32,
+    /// Interpolated in-between frames. Kept separate from `accepted` on purpose —
+    /// see the note on `SessionShared::accepted`.
+    pub synthesized: u32,
     pub rejected: u32,
     pub saw_frame: bool,
+    /// Mean and worst wall time spent consuming one frame, in milliseconds. The
+    /// budget is one iRacing present (~25 ms at the measured 39 fps at 5K); crossing
+    /// it means we are the bottleneck rather than the sim.
+    pub mean_frame_ms: f64,
+    pub max_frame_ms: f64,
+    pub interpolation: Option<LongExposureInterpolationReport>,
     /// Dimensions WGC is actually delivering, once the first frame has arrived.
     /// The caller resized the window, but DPI and client-area geometry mean the
     /// delivered size is WGC's to report, not ours to assume — the resolve output
@@ -433,10 +499,44 @@ pub struct LongExposureResult {
     pub width: u32,
     pub height: u32,
     pub accepted: u32,
+    pub synthesized: u32,
     pub rejected: u32,
     pub backend: String,
+    pub mean_frame_ms: f64,
+    pub max_frame_ms: f64,
+    pub interpolation: Option<LongExposureInterpolationReport>,
     pub samples: Vec<LongExposureSample>,
     pub error: Option<String>,
+}
+
+/// Shared by `stats` and `finish` so the two can never disagree.
+fn interpolation_report(shared: &SessionShared) -> Option<LongExposureInterpolationReport> {
+    shared
+        .interpolation
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .map(|status| LongExposureInterpolationReport {
+            enabled: status.enabled,
+            factor: status.factor,
+            reason: status.reason,
+            grid_size: status.grid_size,
+            bidirectional: status.bidirectional,
+        })
+}
+
+/// Mean and max frame-handler wall time, in ms. `frames` is the number of frames the
+/// handler actually ran for — accepted plus rejected, since both were processed.
+fn frame_timings(shared: &SessionShared) -> (f64, f64) {
+    let frames = shared.accepted.load(Ordering::Relaxed) + shared.rejected.load(Ordering::Relaxed);
+    let total_ns = shared.frame_time_total_ns.load(Ordering::Relaxed) as f64;
+    let max_ns = shared.frame_time_max_ns.load(Ordering::Relaxed) as f64;
+    let mean_ms = if frames == 0 {
+        0.0
+    } else {
+        total_ns / frames as f64 / 1.0e6
+    };
+    (mean_ms, max_ns / 1.0e6)
 }
 
 /// Whether a long-exposure session can run at all. WGC support is checked by the
@@ -486,14 +586,67 @@ pub fn long_exposure_device_info() -> napi::Result<LongExposureDeviceInfo> {
     })
 }
 
+/// Whether NVIDIA's hardware optical-flow accelerator can drive frame interpolation
+/// on this machine, and what it negotiated.
+///
+/// NVOFA is Turing-and-newer NVIDIA only. It is an OPTIONAL accelerator: everything
+/// here fails soft to interpolation-off, and none of it may gate the base
+/// long-exposure feature. `available: false` with a `reason` is a normal, expected
+/// outcome on AMD, Intel, pre-Turing NVIDIA, and hybrid laptops where WGC's device
+/// landed on the iGPU.
+#[napi(object)]
+pub struct LongExposureInterpolationInfo {
+    pub available: bool,
+    pub reason: Option<String>,
+    /// One flow vector per `grid_size` x `grid_size` pixels (1, 2 or 4).
+    pub grid_size: u32,
+    /// True when the driver gave us backward flow too — that is what makes the
+    /// forward/backward consistency check, and so occlusion handling, possible.
+    pub bidirectional: bool,
+    pub input_format: String,
+    pub api_version: String,
+}
+
+#[napi(catch_unwind)]
+pub fn long_exposure_interpolation_info(
+    width: u32,
+    height: u32,
+) -> napi::Result<LongExposureInterpolationInfo> {
+    // Probed on a device created exactly the way the capture session's is, because
+    // NVOFA binds to a specific adapter and "which GPU did WGC land on" is the whole
+    // question on a hybrid machine.
+    let (device, context) = windows_capture::d3d11::create_d3d_device()
+        .map_err(|e| napi::Error::from_reason(format!("device creation failed: {e}")))?;
+    let support = nvof::probe(&device, &context, width.max(1), height.max(1));
+    Ok(LongExposureInterpolationInfo {
+        available: support.available,
+        reason: support.reason,
+        grid_size: support.grid_size,
+        bidirectional: support.bidirectional,
+        input_format: support.input_format.to_string(),
+        api_version: support.api_version,
+    })
+}
+
 /// Start accumulating frames of `hwnd`. Returns a session handle. The gate starts
 /// CLOSED — call `long_exposure_open_gate` when the replay reaches the window start.
+/// `interpolation_factor`: 1 disables interpolation entirely (the default and the
+/// only behaviour before this existed); 2, 4 or 8 request that many samples per
+/// captured frame, of which factor-1 are synthesised. Requesting it on hardware that
+/// cannot do it is not an error — the session reports `interpolation.enabled: false`
+/// with a reason and captures exactly as it would have.
 #[napi(catch_unwind)]
-pub fn long_exposure_begin(hwnd: f64) -> napi::Result<u32> {
+pub fn long_exposure_begin(hwnd: f64, interpolation_factor: Option<u32>) -> napi::Result<u32> {
     let shared = Arc::new(SessionShared::default());
     shared.gate_open.store(false, Ordering::SeqCst);
     shared.weight_bits.store(1.0f32.to_bits(), Ordering::SeqCst);
     shared.u_bits.store(0.0f32.to_bits(), Ordering::SeqCst);
+    // Clamped rather than rejected: an out-of-range factor from a stale recipe should
+    // degrade, not fail a shot.
+    shared.interpolation_factor.store(
+        interpolation_factor.unwrap_or(1).clamp(1, 8),
+        Ordering::SeqCst,
+    );
 
     let backend_slot = Arc::new(BackendSlot::new());
     let (outcome_tx, outcome_rx) = mpsc::channel::<SessionOutcome>();
@@ -590,10 +743,15 @@ pub fn long_exposure_stats(session: u32) -> napi::Result<LongExposureStats> {
             .ok()
             .and_then(|g| *g)
             .unwrap_or((0, 0));
+        let (mean_frame_ms, max_frame_ms) = frame_timings(&entry.shared);
         Ok(LongExposureStats {
             accepted: entry.shared.accepted.load(Ordering::Relaxed),
+            synthesized: entry.shared.synthesized.load(Ordering::Relaxed),
             rejected: entry.shared.rejected.load(Ordering::Relaxed),
             saw_frame: entry.shared.saw_frame.load(Ordering::Relaxed),
+            mean_frame_ms,
+            max_frame_ms,
+            interpolation: interpolation_report(&entry.shared),
             frame_width,
             frame_height,
             error: entry.shared.last_error.lock().ok().and_then(|g| g.clone()),
@@ -705,13 +863,18 @@ pub fn long_exposure_finish(
         None => (None, 0, 0),
     };
 
+    let (mean_frame_ms, max_frame_ms) = frame_timings(&entry.shared);
     Ok(LongExposureResult {
         data,
         width,
         height,
         accepted: entry.shared.accepted.load(Ordering::SeqCst),
+        synthesized: entry.shared.synthesized.load(Ordering::SeqCst),
         rejected: entry.shared.rejected.load(Ordering::SeqCst),
         backend,
+        mean_frame_ms,
+        max_frame_ms,
+        interpolation: interpolation_report(&entry.shared),
         samples,
         error,
     })

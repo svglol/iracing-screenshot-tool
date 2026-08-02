@@ -144,6 +144,14 @@ const schema = {
 		default: 1,
 		enum: [1, 2],
 	},
+	// Optical-flow frame interpolation factor. 1 = off. Needs NVIDIA Turing-or-newer
+	// hardware; on anything else the shot is simply taken without it, so persisting a
+	// value here is safe even if the user later changes GPU.
+	longExposureInterpolation: {
+		type: 'number',
+		default: 1,
+		enum: [1, 2, 4, 8],
+	},
 	longExposureWeighting: {
 		type: 'string',
 		default: 'box',

@@ -33,7 +33,25 @@ export interface LongExposureAvailability {
 	// iGPU, and NVIDIA-only features being unable to bind.
 	adapter: string | null;
 	isNvidia: boolean | null;
+	// Whether NVIDIA's hardware optical-flow accelerator can drive frame
+	// interpolation here. SEPARATE from `available` on purpose: interpolation is an
+	// optional accelerator on top of the base feature, so this being false must
+	// never disable long exposure. NVOFA needs Turing-or-newer NVIDIA, and cannot
+	// bind at all when WGC's device landed on a hybrid machine's iGPU — which is
+	// exactly why `adapter` is reported beside it.
+	interpolation: {
+		available: boolean;
+		reason: string | null;
+		gridSize: number;
+		bidirectional: boolean;
+	} | null;
 }
+
+// Frame size the interpolation probe runs at. NVOFA has a maximum supported input
+// size, so probing at a plausible worst case (4K at 2x supersample) means the UI
+// never offers interpolation that a real capture would then decline.
+const INTERPOLATION_PROBE_WIDTH = 7680;
+const INTERPOLATION_PROBE_HEIGHT = 4320;
 
 // undefined = not probed yet. The probe result is cached for the session: neither
 // the addon's presence nor the driver's shader support changes while we run.
@@ -52,6 +70,7 @@ export function getLongExposureAvailability(): LongExposureAvailability {
 			reason: 'the native capture addon does not provide long exposure',
 			adapter: null,
 			isNvidia: null,
+			interpolation: null,
 		};
 		log.warn('Long exposure unavailable', { reason: cached.reason });
 		return cached;
@@ -73,10 +92,49 @@ export function getLongExposureAvailability(): LongExposureAvailability {
 		});
 	}
 
+	// Probed independently of the compute backend, and never allowed to affect it: a
+	// throw here is caught and becomes "interpolation unavailable", not "long
+	// exposure unavailable". An addon predating the feature omits the method
+	// entirely, which is the same outcome.
+	let interpolation: LongExposureAvailability['interpolation'] = null;
+	try {
+		const info = addon.longExposureInterpolationInfo?.(
+			INTERPOLATION_PROBE_WIDTH,
+			INTERPOLATION_PROBE_HEIGHT
+		);
+		if (info) {
+			interpolation = {
+				available: info.available,
+				reason: info.reason ?? null,
+				gridSize: info.gridSize,
+				bidirectional: info.bidirectional,
+			};
+		}
+	} catch (error) {
+		interpolation = {
+			available: false,
+			reason: (error as Error)?.message || String(error),
+			gridSize: 0,
+			bidirectional: false,
+		};
+	}
+
 	try {
 		const backend = addon.longExposureProbe();
-		cached = { available: true, backend, reason: null, adapter, isNvidia };
-		log.info('Long exposure available', { backend, adapter, isNvidia });
+		cached = {
+			available: true,
+			backend,
+			reason: null,
+			adapter,
+			isNvidia,
+			interpolation,
+		};
+		log.info('Long exposure available', {
+			backend,
+			adapter,
+			isNvidia,
+			interpolation,
+		});
 	} catch (error) {
 		const message = (error as Error)?.message || String(error);
 		cached = {
@@ -85,6 +143,7 @@ export function getLongExposureAvailability(): LongExposureAvailability {
 			reason: message,
 			adapter,
 			isNvidia,
+			interpolation,
 		};
 		log.warn('Long exposure unavailable', { reason: message, adapter });
 	}

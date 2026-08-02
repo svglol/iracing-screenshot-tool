@@ -44,23 +44,50 @@ export interface NativeLongExposureSample {
 	accepted: boolean;
 }
 
+// What NVIDIA's hardware optical-flow accelerator did for a capture. Optional
+// throughout: an addon build predating interpolation omits it entirely, and a
+// non-NVIDIA machine reports `enabled: false` with a reason. Neither is an error.
+export interface NativeLongExposureInterpolation {
+	enabled: boolean;
+	factor: number;
+	reason: string | null;
+	// One flow vector per gridSize × gridSize pixels.
+	gridSize: number;
+	// Whether backward flow was available too, which is what enables the
+	// forward/backward consistency check and so occlusion handling.
+	bidirectional: boolean;
+}
+
 export interface NativeLongExposureResult {
 	// Tightly packed 16-bit RGBA, little-endian. null when the resolve produced
 	// nothing (no accumulated samples, or a GPU fault — see `error`).
 	data: Buffer | null;
 	width: number;
 	height: number;
+	// REAL captured frames. Never merged with `synthesized`: the risk of
+	// interpolation is that its GPU cost slows frame consumption below iRacing's
+	// present rate, buying synthetic samples with real ones. Comparing this number
+	// across interpolation on/off at identical settings is how that stays visible.
 	accepted: number;
+	synthesized?: number;
 	rejected: number;
 	backend: string;
+	// Wall time per consumed frame. The budget is one iRacing present.
+	meanFrameMs?: number;
+	maxFrameMs?: number;
+	interpolation?: NativeLongExposureInterpolation | null;
 	samples: NativeLongExposureSample[];
 	error: string | null;
 }
 
 export interface NativeLongExposureStats {
 	accepted: number;
+	synthesized?: number;
 	rejected: number;
 	sawFrame: boolean;
+	meanFrameMs?: number;
+	maxFrameMs?: number;
+	interpolation?: NativeLongExposureInterpolation | null;
 	// Dimensions WGC is actually delivering, once the first frame has arrived (0
 	// before that). The caller resized the window, but DPI and client-area geometry
 	// mean the delivered size is WGC's to report, not ours to assume.
@@ -77,7 +104,9 @@ export interface WgcLongExposureAddon {
 	// run them. Cheap and side-effect-free — no device, no GPU work.
 	longExposureProbe(): string;
 	// Open a live capture of the window. The accumulation gate starts CLOSED.
-	longExposureBegin(hwnd: number): number;
+	// `interpolationFactor` is optional and defaults to 1 (off) — an addon build
+	// predating interpolation simply ignores the extra argument.
+	longExposureBegin(hwnd: number, interpolationFactor?: number): number;
 	longExposureSetSample(
 		session: number,
 		weight: number,
@@ -104,6 +133,20 @@ export interface WgcLongExposureAddon {
 		vendorId: number;
 		isNvidia: boolean;
 		dedicatedVideoMemory: number;
+	};
+	// Whether NVIDIA's optical-flow hardware can drive interpolation at this frame
+	// size, and what it negotiated. Optional for the same reason as the above: an
+	// older addon reports nothing and interpolation stays off.
+	longExposureInterpolationInfo?(
+		width: number,
+		height: number
+	): {
+		available: boolean;
+		reason: string | null;
+		gridSize: number;
+		bidirectional: boolean;
+		inputFormat: string;
+		apiVersion: string;
 	};
 }
 
@@ -229,9 +272,7 @@ export function isWgcAvailable(): boolean {
 // machine below can be exercised without a real .node or a live window. NEVER
 // called by production code; it exists solely so wgc-capture.test.ts can drive
 // captureIracingWindowNative's lastNativeFailureReason transitions deterministically.
-export function __setWgcApiForTests(
-	api: WgcAddon | null | undefined
-): void {
+export function __setWgcApiForTests(api: WgcAddon | null | undefined): void {
 	wgcApi = api;
 }
 

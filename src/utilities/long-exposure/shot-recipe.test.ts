@@ -29,6 +29,40 @@ describe('createDefaultRecipe', () => {
 		expect(base().outputFormat).toBe('png16');
 		expect(base().variantId).toBeNull();
 	});
+
+	// Interpolation is hardware-specific and costs per-frame time that could
+	// otherwise buy real samples, so the base feature must not opt into it.
+	it('defaults frame interpolation to off', () => {
+		expect(base().interpolationFactor).toBe(1);
+	});
+});
+
+describe('normalizeRecipe — frame interpolation', () => {
+	it('accepts every factor on the ladder', () => {
+		for (const factor of [1, 2, 4, 8] as const) {
+			expect(
+				normalizeRecipe({ interpolationFactor: factor }, base())
+					.interpolationFactor
+			).toBe(factor);
+		}
+	});
+
+	// A sidecar written by a future build, or a hand-edited recipe, must degrade to a
+	// valid value rather than reaching the GPU. Off is the safe direction: it is what
+	// the shot would have done before interpolation existed.
+	it('falls back to the default for a factor off the ladder', () => {
+		for (const bogus of [0, 3, 16, -2, NaN, 'four', null, undefined]) {
+			expect(
+				normalizeRecipe({ interpolationFactor: bogus as never }, base())
+					.interpolationFactor
+			).toBe(1);
+		}
+	});
+
+	it('inherits a non-default factor from the defaults when absent', () => {
+		const defaults = { ...base(), interpolationFactor: 4 as const };
+		expect(normalizeRecipe({}, defaults).interpolationFactor).toBe(4);
+	});
 });
 
 describe('normalizeRecipe', () => {

@@ -37,6 +37,17 @@ export type Tonemapper = (typeof TONEMAPPERS)[number];
 export const SUPERSAMPLE_FACTORS = [1, 2] as const;
 export type SupersampleFactor = (typeof SUPERSAMPLE_FACTORS)[number];
 
+// Optical-flow frame interpolation. 1 is off; 2/4/8 synthesise that many samples per
+// captured frame (factor-1 of them invented), to close the gap between consecutive
+// real samples and turn a ladder of discrete ghosts into a continuous streak.
+//
+// This is an OPTIONAL ACCELERATOR. It needs NVIDIA Turing-or-newer hardware and
+// fails soft to 1 everywhere else, so it is a preference rather than a requirement —
+// a recipe carrying factor 4 still executes correctly on an AMD card, just without
+// the in-betweens. Nothing about the base feature is gated on it.
+export const INTERPOLATION_FACTORS = [1, 2, 4, 8] as const;
+export type InterpolationFactor = (typeof INTERPOLATION_FACTORS)[number];
+
 // png16 is the 16-bit master. png/jpeg/webp mirror the existing still-capture
 // formats for users who only want the 8-bit result.
 export const LONG_EXPOSURE_FORMATS = ['png16', 'png', 'jpeg', 'webp'] as const;
@@ -64,6 +75,10 @@ export interface LongExposureRecipe {
 	width: number;
 	height: number;
 	supersample: SupersampleFactor;
+
+	// Requested optical-flow interpolation factor. A REQUEST, not a guarantee: the
+	// achieved factor is reported back from the capture and written to the sidecar.
+	interpolationFactor: InterpolationFactor;
 
 	weighting: WeightingCurve;
 	tonemap: Tonemapper;
@@ -105,6 +120,9 @@ export function createDefaultRecipe(opts: {
 		width: opts.width,
 		height: opts.height,
 		supersample: 1,
+		// Off by default. It is hardware-specific, it costs per-frame time that could
+		// otherwise buy real samples, and the base feature must stand on its own.
+		interpolationFactor: 1,
 		weighting: 'box',
 		tonemap: 'none',
 		exposureCompensation: 0,
@@ -194,6 +212,11 @@ export function normalizeRecipe(
 		)
 			? (Number(input.supersample) as SupersampleFactor)
 			: defaults.supersample,
+		interpolationFactor: (
+			INTERPOLATION_FACTORS as readonly number[]
+		).includes(Number(input.interpolationFactor))
+			? (Number(input.interpolationFactor) as InterpolationFactor)
+			: (defaults.interpolationFactor ?? 1),
 		weighting: isWeightingCurve(input.weighting)
 			? input.weighting
 			: defaults.weighting,

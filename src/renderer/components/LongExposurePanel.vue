@@ -145,6 +145,57 @@
 				keep it for static ones.
 			</o-notification>
 
+			<!-- Optical-flow interpolation. Shown only where the hardware can
+			     actually do it: offering a control that silently does nothing is
+			     worse than not offering it. The base feature is never gated on
+			     this. -->
+			<o-field v-if="interpolationSupported" label="Frame interpolation">
+				<o-select v-model="interpolation" expanded :disabled="busy">
+					<option :value="1">Off</option>
+					<option :value="2">2× (one in-between)</option>
+					<option :value="4">4× (three in-betweens)</option>
+					<option :value="8">8× (seven in-betweens)</option>
+				</o-select>
+			</o-field>
+
+			<!-- The honest trade. Interpolation adds GPU work to every captured
+			     frame, and our budget is one iRacing present. If we get slower than
+			     the sim presents, we start dropping REAL samples to manufacture
+			     synthetic ones — a net loss. The sidecar records both counts so it
+			     can be checked rather than assumed. -->
+			<o-notification
+				v-if="
+					interpolationSupported && interpolation > 1 && !disableTooltips
+				"
+				class="sidebar-tooltip"
+				variant="warning"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Interpolation invents frames between the real ones to smooth the
+				streak. It costs GPU time per frame, so check the saved shot's real
+				sample count against the same shot with it off — if that number
+				drops, it is buying invented samples with real ones.
+			</o-notification>
+
+			<!-- Asked for on hardware that can't do it: say so rather than showing
+			     a control that quietly does nothing. -->
+			<o-notification
+				v-if="
+					!interpolationSupported &&
+					interpolationReason &&
+					!disableTooltips
+				"
+				class="sidebar-tooltip"
+				variant="info"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Frame interpolation needs an NVIDIA Turing or newer GPU
+				{{ adapter ? `(this capture runs on ${adapter})` : '' }}. Everything
+				else about long exposure works as normal.
+			</o-notification>
+
 			<o-field label="Tonemap">
 				<o-select v-model="tonemap" expanded :disabled="busy">
 					<option value="none">None</option>
@@ -303,6 +354,11 @@ export default defineComponent({
 			available: false,
 			unavailableReason: null as string | null,
 			backend: null as string | null,
+			// Optical-flow interpolation support, reported independently of the
+			// compute backend. Null until the first poll answers.
+			interpolationSupported: false,
+			interpolationReason: null as string | null,
+			adapter: null as string | null,
 			inReplay: false,
 			liveAnchor: null as number | null,
 			replayFrameNumEnd: null as number | null,
@@ -315,6 +371,7 @@ export default defineComponent({
 			playbackSpeed: config.get('longExposurePlaybackSpeed'),
 			targetSamples: String(config.get('longExposureTargetSamples')),
 			supersample: config.get('longExposureSupersample') === 2,
+			interpolation: config.get('longExposureInterpolation'),
 			weighting: config.get('longExposureWeighting'),
 			tonemap: config.get('longExposureTonemap'),
 			exposureCompensation: String(
@@ -395,6 +452,11 @@ export default defineComponent({
 						? parseInt(this.targetSamples, 10) || 240
 						: null,
 				supersample: this.supersample ? 2 : 1,
+				// Sent as 1 unless the hardware actually supports it, so a value
+				// persisted on a previous GPU cannot silently ride along.
+				interpolationFactor: this.interpolationSupported
+					? this.interpolation
+					: 1,
 				weighting: this.weighting,
 				tonemap: this.tonemap,
 				exposureCompensation: parseFloat(this.exposureCompensation) || 0,
@@ -420,6 +482,12 @@ export default defineComponent({
 		},
 		supersample(value) {
 			config.set('longExposureSupersample', value ? 2 : 1);
+			void this.refreshPreview();
+		},
+		interpolation(value) {
+			config.set('longExposureInterpolation', Number(value));
+			// Affects VRAM, not the sample-count prediction, so refresh the preview
+			// to keep the pre-flight honest.
 			void this.refreshPreview();
 		},
 		weighting(value) {
@@ -474,6 +542,12 @@ export default defineComponent({
 				this.available = status.available;
 				this.unavailableReason = status.reason;
 				this.backend = status.backend;
+				this.adapter = status.adapter ?? null;
+				// Absent (older addon) is treated exactly like unsupported: the
+				// control stays hidden and shots are taken without interpolation.
+				this.interpolationSupported =
+					status.interpolation?.available === true;
+				this.interpolationReason = status.interpolation?.reason ?? null;
 				this.inReplay = status.inReplay;
 				this.liveAnchor = status.anchorFrame;
 				this.replayFrameNumEnd = status.replayFrameNumEnd;

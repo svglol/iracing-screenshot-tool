@@ -61,6 +61,32 @@ pub struct ResolvedImage {
     pub height: u32,
 }
 
+/// What one offered frame actually contributed to the exposure.
+///
+/// `real` and `synthetic` are counted separately and never merged, because the whole
+/// risk of frame interpolation is that manufacturing synthetic samples slows frame
+/// consumption below iRacing's present rate and thereby costs us REAL ones. A single
+/// blended total would hide exactly the regression worth watching for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SampleOutcome {
+    /// 1 when the captured frame itself was accumulated, 0 when it was rejected.
+    pub real: u32,
+    /// Interpolated in-between frames accumulated alongside it (0 when off).
+    pub synthetic: u32,
+}
+
+/// Whether hardware frame interpolation is live, and what it negotiated.
+#[derive(Clone, Debug, Default)]
+pub struct InterpolationStatus {
+    pub enabled: bool,
+    /// 1 = off. 2/4/8 emit factor-1 synthetic frames per captured frame.
+    pub factor: u32,
+    /// Why it is not enabled. `None` when it is, or when it was never asked for.
+    pub reason: Option<String>,
+    pub grid_size: u32,
+    pub bidirectional: bool,
+}
+
 #[derive(Debug)]
 pub struct BackendError(pub String);
 
@@ -105,6 +131,52 @@ pub trait AccumulateBackend {
         source: &ID3D11Texture2D,
         weight: f32,
     ) -> Result<(), BackendError>;
+
+    /// Ask for hardware frame interpolation at `factor` (1 disables it).
+    ///
+    /// Returns the resulting status rather than an error, and NEVER fails the
+    /// session: interpolation is an optional accelerator layered on top of a feature
+    /// that must keep working without it. A backend with no such hardware — or a
+    /// machine whose GPU is not NVIDIA Turing-or-newer — reports `enabled: false`
+    /// with a reason and the capture proceeds exactly as before.
+    /// `source` is a real captured frame: the backend takes width, height AND pixel
+    /// format from it rather than being told, so the retained copy can never
+    /// disagree with what WGC is actually delivering.
+    fn enable_interpolation(
+        &mut self,
+        _factor: u32,
+        _source: &ID3D11Texture2D,
+    ) -> InterpolationStatus {
+        InterpolationStatus {
+            enabled: false,
+            factor: 1,
+            reason: Some("this backend has no frame interpolation".to_string()),
+            grid_size: 0,
+            bidirectional: false,
+        }
+    }
+
+    /// Offer one captured frame: accumulate it, plus any synthetic frames between it
+    /// and the previously accumulated one.
+    ///
+    /// The default is the honest no-interpolation behaviour, so a backend that does
+    /// not override this is automatically correct.
+    fn accumulate_sample(
+        &mut self,
+        sink_id: &str,
+        source: &ID3D11Texture2D,
+        weight: f32,
+    ) -> Result<SampleOutcome, BackendError> {
+        self.accumulate(sink_id, source, weight)?;
+        Ok(SampleOutcome {
+            real: 1,
+            synthetic: 0,
+        })
+    }
+
+    /// Called after a frame is REJECTED as a duplicate, so a backend retaining a
+    /// previous frame can decide what to do about it. Default: nothing.
+    fn note_rejected_frame(&mut self) {}
 
     /// Normalise by accumulated weight, apply exposure, tonemap, box-downsample the
     /// supersample, encode to 16-bit sRGB and read back.

@@ -992,6 +992,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			plan: outcome.plan,
 			stats: outcome.stats,
 			backend: outcome.backend,
+			interpolation: outcome.interpolation,
 			screenshotDir: path.resolve(config.get('screenshotFolder')),
 			cacheDir: path.join(app.getPath('userData'), 'Cache'),
 			sessionInfo: iracing.sessionInfo,
@@ -1008,6 +1009,18 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			file: written.masterPath,
 			sampling: describeSampleStats(outcome.stats),
 			backend: outcome.backend,
+			// Real vs synthetic side by side, plus per-frame cost. Two shots at
+			// identical settings — one with interpolation, one without — are all it
+			// takes to see whether the in-betweens cost real samples.
+			interpolation: outcome.interpolation
+				? {
+						requested: outcome.interpolation.requestedFactor,
+						achieved: outcome.interpolation.achievedFactor,
+						real: outcome.interpolation.realSamples,
+						synthetic: outcome.interpolation.syntheticSamples,
+						meanFrameMs: outcome.interpolation.meanFrameMs,
+					}
+				: null,
 		});
 
 		// Same gallery notification the still path uses, so a long exposure appears
@@ -1032,6 +1045,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			stats: outcome.stats,
 			plan: outcome.plan,
 			backend: outcome.backend,
+			interpolation: outcome.interpolation,
 			// Echo the recipe back with the resolved anchor so a re-shoot reuses the
 			// SAME moment rather than re-reading a cursor the user may have moved.
 			recipe,

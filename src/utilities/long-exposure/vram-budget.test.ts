@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GiB, type VramInfo } from '../vram-prediction';
 import {
 	ACCUMULATOR_BYTES_PER_PIXEL,
+	INTERPOLATION_BYTES_PER_PIXEL,
 	assessLongExposureVram,
 	estimateLongExposureVram,
 } from './vram-budget';
@@ -93,6 +94,69 @@ describe('estimateLongExposureVram', () => {
 				sinkCount: 0,
 			}).accumulatorBytes
 		).toBe(100 * 100 * ACCUMULATOR_BYTES_PER_PIXEL);
+	});
+});
+
+describe('estimateLongExposureVram — frame interpolation surfaces', () => {
+	it('allocates nothing extra when interpolation is off', () => {
+		for (const interpolationFactor of [undefined, 1]) {
+			const estimate = estimateLongExposureVram({
+				renderWidth: 1920,
+				renderHeight: 1080,
+				sinkCount: 1,
+				interpolationFactor,
+			});
+			expect(estimate.interpolationBytes).toBe(0);
+		}
+	});
+
+	it('adds the retained frame and both luma planes when it is on', () => {
+		const estimate = estimateLongExposureVram({
+			renderWidth: 5120,
+			renderHeight: 2880,
+			sinkCount: 1,
+			interpolationFactor: 4,
+		});
+		expect(estimate.interpolationBytes).toBe(
+			5120 * 2880 * INTERPOLATION_BYTES_PER_PIXEL
+		);
+		expect(estimate.ourTotalBytes).toBe(
+			estimate.accumulatorBytes +
+				estimate.workingBytes +
+				estimate.interpolationBytes
+		);
+	});
+
+	// The warp reads two retained frames and writes straight into the accumulator, so
+	// there is no per-synthetic-sample buffer. Factor 8 costs exactly what factor 2
+	// does — worth pinning, because assuming otherwise would over-refuse big shots.
+	it('costs the same at every factor above 1', () => {
+		const at = (interpolationFactor: number) =>
+			estimateLongExposureVram({
+				renderWidth: 2560,
+				renderHeight: 1440,
+				sinkCount: 1,
+				interpolationFactor,
+			}).interpolationBytes;
+		expect(at(2)).toBe(at(4));
+		expect(at(4)).toBe(at(8));
+		expect(at(2)).toBeGreaterThan(0);
+	});
+
+	// The interpolation surfaces are ours and deterministic, exactly like the
+	// accumulators, so they belong inside the number we are willing to hard-refuse on.
+	it('counts toward the hard-refuse total', () => {
+		const common = {
+			renderWidth: 7680,
+			renderHeight: 4320,
+			sinkCount: 1,
+			info: info(8, 1),
+		};
+		const off = assessLongExposureVram({ ...common, interpolationFactor: 1 });
+		const on = assessLongExposureVram({ ...common, interpolationFactor: 4 });
+		expect(on.estimate.ourTotalBytes).toBeGreaterThan(
+			off.estimate.ourTotalBytes
+		);
 	});
 });
 

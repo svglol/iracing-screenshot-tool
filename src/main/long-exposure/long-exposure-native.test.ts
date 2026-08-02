@@ -31,11 +31,20 @@ function fakeAddon(
 		vendorId: number;
 		isNvidia: boolean;
 		dedicatedVideoMemory: number;
+	},
+	interpolationInfo?: () => {
+		available: boolean;
+		reason: string | null;
+		gridSize: number;
+		bidirectional: boolean;
+		inputFormat: string;
+		apiVersion: string;
 	}
 ) {
 	return {
 		longExposureProbe: probe,
 		longExposureDeviceInfo: deviceInfo,
+		longExposureInterpolationInfo: interpolationInfo,
 		longExposureBegin: vi.fn(),
 		longExposureSetSample: vi.fn(),
 		longExposureSetGate: vi.fn(),
@@ -59,8 +68,82 @@ describe('getLongExposureAvailability', () => {
 			reason: null,
 			adapter: null,
 			isNvidia: null,
+			// An addon without the interpolation probe reports nothing rather than
+			// claiming either answer.
+			interpolation: null,
 		});
 		expect(isLongExposureAvailable()).toBe(true);
+	});
+
+	// Interpolation is an OPTIONAL accelerator layered on the compute backend. These
+	// three cases are the whole contract: it can be present, absent with a reason, or
+	// throw — and none of them may change `available`.
+	it('reports interpolation support alongside, without gating the backend', () => {
+		getLongExposureAddon.mockReturnValue(
+			fakeAddon(
+				() => 'd3d11-compute',
+				undefined,
+				() => ({
+					available: true,
+					reason: null,
+					gridSize: 4,
+					bidirectional: true,
+					inputFormat: 'grayscale8',
+					apiVersion: '5.0',
+				})
+			)
+		);
+		const availability = getLongExposureAvailability();
+		expect(availability.available).toBe(true);
+		expect(availability.interpolation).toEqual({
+			available: true,
+			reason: null,
+			gridSize: 4,
+			bidirectional: true,
+		});
+	});
+
+	it('keeps long exposure available when interpolation is not supported', () => {
+		getLongExposureAddon.mockReturnValue(
+			fakeAddon(
+				() => 'd3d11-compute',
+				undefined,
+				() => ({
+					available: false,
+					reason: 'nvofapi64.dll could not be loaded (no NVIDIA driver?)',
+					gridSize: 0,
+					bidirectional: false,
+					inputFormat: 'none',
+					apiVersion: '',
+				})
+			)
+		);
+		const availability = getLongExposureAvailability();
+		// The point of the whole design: an AMD box still gets long exposure.
+		expect(availability.available).toBe(true);
+		expect(availability.backend).toBe('d3d11-compute');
+		expect(availability.interpolation?.available).toBe(false);
+		expect(availability.interpolation?.reason).toMatch(/nvofapi64/);
+	});
+
+	it('treats a throwing interpolation probe as interpolation-off, not backend-off', () => {
+		getLongExposureAddon.mockReturnValue(
+			fakeAddon(
+				() => 'd3d11-compute',
+				undefined,
+				() => {
+					throw new Error('driver exploded');
+				}
+			)
+		);
+		const availability = getLongExposureAvailability();
+		expect(availability.available).toBe(true);
+		expect(availability.interpolation).toEqual({
+			available: false,
+			reason: 'driver exploded',
+			gridSize: 0,
+			bidirectional: false,
+		});
 	});
 
 	// An older .node that predates the feature must degrade to "unavailable" with a

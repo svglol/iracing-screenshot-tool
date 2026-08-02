@@ -39,13 +39,25 @@ export const ACCUMULATOR_BYTES_PER_PIXEL = 16;
 // the resolve target (RGBA16), and one staging texture for readback (RGBA16).
 export const WORKING_BYTES_PER_PIXEL = 4 + 8 + 8;
 
+// Extra surfaces the optical-flow interpolation path allocates, per render pixel:
+// the retained previous frame in full colour (RGBA8, 4 B) plus two ping-ponged luma
+// planes (R8, 1 B each). The flow fields themselves are excluded on purpose — at the
+// negotiated 4x4 grid they are two R16G16 buffers over a sixteenth of the pixels,
+// i.e. 4/16 = 0.25 B/px, which rounds away against the 5 B/px above and would only
+// make the estimate falsely precise.
+export const INTERPOLATION_BYTES_PER_PIXEL = 4 + 1 + 1;
+
 export interface LongExposureVramEstimate {
 	// Bytes for the accumulators alone — the allocation we control and are
 	// therefore willing to hard-refuse on.
 	accumulatorBytes: number;
 	// Source/resolve/staging surfaces.
 	workingBytes: number;
-	// Accumulators + working set.
+	// Retained previous frame + luma planes, when interpolation is requested. 0 when
+	// it is off. Counted against OUR allocation because, like the accumulators, it is
+	// deterministic and entirely ours.
+	interpolationBytes: number;
+	// Accumulators + working set + interpolation surfaces.
 	ourTotalBytes: number;
 	// Extra VRAM iRacing itself is predicted to allocate when its window grows to
 	// the render size (existing resize predictor).
@@ -61,6 +73,11 @@ export function estimateLongExposureVram(opts: {
 	// iRacing's current window size, for the resize delta. Null = unknown, in which
 	// case the existing predictor conservatively returns 0.
 	baseline?: Dimensions | null;
+	// Requested optical-flow interpolation factor; 1 (or absent) allocates nothing.
+	// Counted whenever it is REQUESTED rather than only when it succeeds, because the
+	// pre-flight runs before we know whether the hardware will accept it — and
+	// over-reserving is the safe direction.
+	interpolationFactor?: number;
 }): LongExposureVramEstimate {
 	const { renderWidth, renderHeight, sinkCount, baseline } = opts;
 	const pixels = Math.max(0, renderWidth) * Math.max(0, renderHeight);
@@ -68,17 +85,26 @@ export function estimateLongExposureVram(opts: {
 
 	const accumulatorBytes = pixels * ACCUMULATOR_BYTES_PER_PIXEL * sinks;
 	const workingBytes = pixels * WORKING_BYTES_PER_PIXEL;
+	// Cost is per SESSION, not per synthetic sample: the warp reads the two retained
+	// frames and writes straight into the accumulator, so factor 8 allocates exactly
+	// as much as factor 2.
+	const interpolationBytes =
+		(opts.interpolationFactor ?? 1) > 1
+			? pixels * INTERPOLATION_BYTES_PER_PIXEL
+			: 0;
 	const simResizeBytes = predictAddedVramBytes(
 		{ width: renderWidth, height: renderHeight },
 		baseline
 	);
 
+	const ourTotalBytes = accumulatorBytes + workingBytes + interpolationBytes;
 	return {
 		accumulatorBytes,
 		workingBytes,
-		ourTotalBytes: accumulatorBytes + workingBytes,
+		interpolationBytes,
+		ourTotalBytes,
 		simResizeBytes,
-		combinedBytes: accumulatorBytes + workingBytes + simResizeBytes,
+		combinedBytes: ourTotalBytes + simResizeBytes,
 	};
 }
 
@@ -100,6 +126,7 @@ export function assessLongExposureVram(opts: {
 	renderHeight: number;
 	sinkCount: number;
 	baseline?: Dimensions | null;
+	interpolationFactor?: number;
 }): LongExposureVramAssessment {
 	const estimate = estimateLongExposureVram(opts);
 

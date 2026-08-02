@@ -27,6 +27,11 @@ windows = { version = "0.62.2", features = [
     # capture thread is unblocked on finish, even when the target stopped presenting.
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
+    # LoadLibraryW / GetProcAddress / FreeLibrary, for resolving nvofapi64.dll at
+    # runtime (src/longexp/nvof.rs). That DLL ships with the NVIDIA display driver,
+    # so this is a soft, optional dependency discovered on the user's machine — NOT
+    # a build-time or bundled one, and its absence must only disable interpolation.
+    "Win32_System_LibraryLoader",
 ] }
 
 [build-dependencies]

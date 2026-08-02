@@ -44,7 +44,12 @@ export interface LongExposureSidecar {
 
 	sampling: {
 		predicted: number;
+		// REAL captured frames. `recipe.interpolationFactor` records what was asked
+		// for, `interpolation` below records what happened — so this number stays
+		// comparable across shots with interpolation on and off, which is the whole
+		// point of keeping it separate from `synthesized`.
 		achieved: number;
+		synthesized: number;
 		duplicatesRejected: number;
 		stalledPresents: number;
 		dropouts: number;
@@ -53,6 +58,22 @@ export interface LongExposureSidecar {
 		medianGapSeconds: number;
 		maxGapSeconds: number;
 	};
+
+	// What optical-flow interpolation actually did. Null when the addon predates the
+	// feature; `enabled: false` with a reason on hardware that cannot do it.
+	interpolation: {
+		requestedFactor: number;
+		enabled: boolean;
+		achievedFactor: number;
+		reason: string | null;
+		gridSize: number;
+		bidirectional: boolean;
+		// Per-frame consumption cost. The budget is one iRacing present, so this is
+		// what tells a later reader whether a low sample count was interpolation's
+		// fault.
+		meanFrameMs: number | null;
+		maxFrameMs: number | null;
+	} | null;
 
 	image: {
 		width: number;
@@ -128,6 +149,11 @@ export function buildSidecar(opts: {
 	plan: ResolvedPlan;
 	stats: SampleStats;
 	backend: string | null;
+	interpolation?: LongExposureSidecar['interpolation'];
+	// MEASURED count of synthesised in-betweens, not derived from the factor. They
+	// can differ: a frame whose flow estimation failed contributes its real sample
+	// and no synthetic ones, and the sidecar should record what happened.
+	synthesizedSamples?: number;
 	imageWidth: number;
 	imageHeight: number;
 	toolName: string;
@@ -160,6 +186,7 @@ export function buildSidecar(opts: {
 		sampling: {
 			predicted: plan.predictedSamples,
 			achieved: stats.accepted,
+			synthesized: Math.max(0, Math.round(opts.synthesizedSamples ?? 0)),
 			duplicatesRejected: stats.duplicatesRejected,
 			stalledPresents: stats.stalledPresents,
 			dropouts: stats.dropouts,
@@ -167,6 +194,7 @@ export function buildSidecar(opts: {
 			medianGapSeconds: Number(stats.medianGapSeconds.toFixed(6)),
 			maxGapSeconds: Number(stats.maxGapSeconds.toFixed(6)),
 		},
+		interpolation: opts.interpolation ?? null,
 		image: {
 			width: opts.imageWidth,
 			height: opts.imageHeight,

@@ -81,6 +81,28 @@ export interface LongExposureImage {
 	height: number;
 }
 
+// What optical-flow interpolation actually did, as opposed to what was requested.
+//
+// Reported on every capture, including when it was never asked for, so the sidecar
+// records the truth about how a given image was made. `enabled: false` with a reason
+// is a normal outcome on non-NVIDIA hardware, not a failure.
+export interface LongExposureInterpolationReport {
+	requestedFactor: number;
+	enabled: boolean;
+	achievedFactor: number;
+	reason: string | null;
+	gridSize: number;
+	bidirectional: boolean;
+	// Real captured frames vs synthesised in-betweens. Kept apart deliberately: if
+	// interpolation's GPU cost slows frame consumption below iRacing's present rate,
+	// synthetic samples are being bought with real ones — and only these two numbers
+	// side by side make that visible.
+	realSamples: number;
+	syntheticSamples: number;
+	meanFrameMs: number | null;
+	maxFrameMs: number | null;
+}
+
 export interface LongExposureOutcome {
 	ok: boolean;
 	failure: LongExposureFailure | null;
@@ -90,6 +112,7 @@ export interface LongExposureOutcome {
 	plan: ResolvedPlan | null;
 	stats: SampleStats | null;
 	backend: string | null;
+	interpolation: LongExposureInterpolationReport | null;
 	// How anchor restoration went. Populated on EVERY outcome, including failures —
 	// the user needs to know where their cursor ended up regardless.
 	restore: {
@@ -100,8 +123,18 @@ export interface LongExposureOutcome {
 	};
 }
 
+// Shape the native addon reports interpolation in. Optional throughout so an addon
+// build predating the feature type-checks and behaves as interpolation-off.
+export interface NativeInterpolationStatus {
+	enabled: boolean;
+	factor: number;
+	reason: string | null;
+	gridSize: number;
+	bidirectional: boolean;
+}
+
 export interface NativeSessionApi {
-	longExposureBegin(hwnd: number): number;
+	longExposureBegin(hwnd: number, interpolationFactor?: number): number;
 	longExposureSetSample(
 		session: number,
 		weight: number,
@@ -112,8 +145,12 @@ export interface NativeSessionApi {
 	longExposureSetGate(session: number, open: boolean): void;
 	longExposureStats(session: number): {
 		accepted: number;
+		synthesized?: number;
 		rejected: number;
 		sawFrame: boolean;
+		meanFrameMs?: number;
+		maxFrameMs?: number;
+		interpolation?: NativeInterpolationStatus | null;
 		frameWidth: number;
 		frameHeight: number;
 		error: string | null;
@@ -131,8 +168,12 @@ export interface NativeSessionApi {
 		width: number;
 		height: number;
 		accepted: number;
+		synthesized?: number;
 		rejected: number;
 		backend: string;
+		meanFrameMs?: number;
+		maxFrameMs?: number;
+		interpolation?: NativeInterpolationStatus | null;
 		samples: Array<{
 			u: number;
 			sessionTime: number;
@@ -209,6 +250,7 @@ function failure(
 		plan: null,
 		stats: null,
 		backend: null,
+		interpolation: null,
 		restore: {
 			attempted: false,
 			landedExactly: false,
@@ -216,6 +258,34 @@ function failure(
 			error: null,
 		},
 		...extra,
+	};
+}
+
+// Fold the requested factor together with what the hardware actually delivered.
+// Exported for tests: the "requested 4, got 1 because AMD" path is exactly the one
+// that must not silently look like success.
+export function buildInterpolationReport(opts: {
+	requestedFactor: number;
+	status: NativeInterpolationStatus | null | undefined;
+	realSamples: number;
+	syntheticSamples: number;
+	meanFrameMs: number | null;
+	maxFrameMs: number | null;
+}): LongExposureInterpolationReport {
+	const { requestedFactor, status } = opts;
+	const enabled = status?.enabled === true;
+	return {
+		requestedFactor,
+		enabled,
+		// Never claim the requested factor when the hardware declined it.
+		achievedFactor: enabled ? (status?.factor ?? 1) : 1,
+		reason: status?.reason ?? null,
+		gridSize: status?.gridSize ?? 0,
+		bidirectional: status?.bidirectional === true,
+		realSamples: opts.realSamples,
+		syntheticSamples: opts.syntheticSamples,
+		meanFrameMs: opts.meanFrameMs,
+		maxFrameMs: opts.maxFrameMs,
 	};
 }
 
@@ -265,6 +335,7 @@ export async function executeRecipe(
 		renderHeight: plan.renderHeight,
 		sinkCount: 1,
 		baseline: deps.baselineDims(),
+		interpolationFactor: recipe.interpolationFactor,
 	});
 	if (vram.refuse) {
 		return failure('insufficient-vram', vram.refusalMessage as string, {
@@ -408,6 +479,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		plan,
 		stats: null,
 		backend: deps.backendName,
+		interpolation: null,
 		restore: {
 			attempted: false,
 			landedExactly: false,
@@ -454,7 +526,10 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		windowStartTime + (frame - sink.startFrame) / REPLAY_FRAMES_PER_SECOND;
 
 	// --- 3. Open the GPU session (gate closed) -------------------------------
-	const session = native.longExposureBegin(hwnd);
+	// The interpolation factor is a REQUEST. The native side sets it up from the
+	// first real frame and reports back what it could actually negotiate; hardware
+	// that cannot do it captures exactly as it would have.
+	const session = native.longExposureBegin(hwnd, recipe.interpolationFactor);
 	claimSession(session);
 
 	// --- 4. Roll, and accumulate until the anchor ----------------------------
@@ -642,6 +717,15 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	}));
 	const stats = summarizeSamples(samples);
 
+	const interpolation = buildInterpolationReport({
+		requestedFactor: recipe.interpolationFactor,
+		status: result.interpolation,
+		realSamples: result.accepted,
+		syntheticSamples: result.synthesized ?? 0,
+		meanFrameMs: result.meanFrameMs ?? null,
+		maxFrameMs: result.maxFrameMs ?? null,
+	});
+
 	if (!result.data || result.width < 1 || result.height < 1) {
 		return {
 			...base(),
@@ -649,16 +733,48 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			message: result.error || 'The GPU did not return an image.',
 			stats,
 			backend: result.backend || deps.backendName,
+			interpolation,
 		};
 	}
 
+	// Logged with real and synthetic side by side, and with the per-frame cost, so
+	// comparing two shots at identical settings answers the only question that
+	// matters about interpolation: did it cost us real samples?
 	log.info('Long exposure resolved', {
 		accepted: result.accepted,
+		synthesized: result.synthesized ?? 0,
 		rejected: result.rejected,
 		evenness: Number(stats.evenness.toFixed(3)),
 		dimensions: { width: result.width, height: result.height },
 		backend: result.backend,
+		interpolation: {
+			requested: interpolation.requestedFactor,
+			enabled: interpolation.enabled,
+			achieved: interpolation.achievedFactor,
+			reason: interpolation.reason,
+		},
+		frameMs: {
+			mean:
+				interpolation.meanFrameMs === null
+					? null
+					: Number(interpolation.meanFrameMs.toFixed(2)),
+			max:
+				interpolation.maxFrameMs === null
+					? null
+					: Number(interpolation.maxFrameMs.toFixed(2)),
+		},
 	});
+
+	const interpolationWarnings: string[] = [];
+	// Asked for it, did not get it. Say so — silently producing the un-interpolated
+	// image would leave the user thinking this is what interpolation looks like.
+	if (recipe.interpolationFactor > 1 && !interpolation.enabled) {
+		interpolationWarnings.push(
+			`Frame interpolation was requested but is not available on this machine, so the shot was taken without it${
+				interpolation.reason ? ` (${interpolation.reason})` : ''
+			}.`
+		);
+	}
 
 	return {
 		...base(),
@@ -666,8 +782,13 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		image: { data: result.data, width: result.width, height: result.height },
 		stats,
 		backend: result.backend || deps.backendName,
+		interpolation,
 		// A resolve-stage error that still produced an image is a warning, not a
 		// failure — the shot exists and the user should judge it.
-		warnings: result.error ? [...warnings, result.error] : warnings,
+		warnings: [
+			...warnings,
+			...interpolationWarnings,
+			...(result.error ? [result.error] : []),
+		],
 	};
 }
