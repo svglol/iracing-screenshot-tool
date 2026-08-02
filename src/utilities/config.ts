@@ -167,6 +167,12 @@ const schema = {
 		type: 'number',
 		default: 0,
 	},
+	// Highlight recovery in stops, applied to near-clipped values BEFORE
+	// accumulation. 0 = off (and exactly identity). Needs no particular hardware.
+	longExposureHighlightRecovery: {
+		type: 'number',
+		default: 0,
+	},
 	// png16 is the 16-bit master (written by our own encoder — sharp reduces 16-bit
 	// to 8 before encoding). The others produce an 8-bit file only.
 	longExposureFormat: {

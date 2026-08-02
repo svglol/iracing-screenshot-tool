@@ -215,6 +215,35 @@
 				/>
 			</o-field>
 
+			<!-- Applied BEFORE accumulation, unlike exposure compensation which is
+			     applied after. That ordering is the entire point: it is what makes a
+			     bright light deposit energy faster than a dull one, the way a sensor
+			     does. Needs no particular GPU. -->
+			<o-field label="Highlight recovery (stops)">
+				<o-input
+					v-model="highlightRecovery"
+					type="number"
+					step="0.5"
+					min="0"
+					max="8"
+					:disabled="busy"
+				/>
+			</o-field>
+
+			<o-notification
+				v-if="Number(highlightRecovery) === 0 && !disableTooltips"
+				class="sidebar-tooltip"
+				variant="info"
+				aria-close-label="Close message"
+				size="small"
+			>
+				iRacing hands us an image whose highlights are already clipped, so a
+				headlight and a white wall arrive equally bright and a light that
+				sweeps past leaves a dull grey trail. Raising this expands
+				near-clipped values before they are averaged, so bright sources burn
+				in faster — the way they do on film. Try 3–5 stops.
+			</o-notification>
+
 			<o-field label="Output">
 				<o-select v-model="outputFormat" expanded :disabled="busy">
 					<option value="png16">16-bit PNG master + preview</option>
@@ -377,6 +406,9 @@ export default defineComponent({
 			exposureCompensation: String(
 				config.get('longExposureExposureCompensation')
 			),
+			highlightRecovery: String(
+				config.get('longExposureHighlightRecovery')
+			),
 			outputFormat: config.get('longExposureFormat'),
 
 			// Set once a shot has been taken, so adjusting parameters and shooting
@@ -460,6 +492,7 @@ export default defineComponent({
 				weighting: this.weighting,
 				tonemap: this.tonemap,
 				exposureCompensation: parseFloat(this.exposureCompensation) || 0,
+				highlightRecovery: parseFloat(this.highlightRecovery) || 0,
 				outputFormat: this.outputFormat,
 			};
 		},
@@ -500,6 +533,12 @@ export default defineComponent({
 			const n = parseFloat(value);
 			if (Number.isFinite(n)) {
 				config.set('longExposureExposureCompensation', n);
+			}
+		},
+		highlightRecovery(value) {
+			const n = parseFloat(value);
+			if (Number.isFinite(n)) {
+				config.set('longExposureHighlightRecovery', n);
 			}
 		},
 		outputFormat(value) {

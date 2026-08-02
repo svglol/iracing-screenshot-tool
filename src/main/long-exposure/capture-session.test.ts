@@ -116,11 +116,13 @@ function makeHarness(options: HarnessOptions = {}) {
 	// What the recipe asked the native side for, so a test can assert the factor was
 	// actually threaded rather than merely accepted by the type checker.
 	const begunWith: Array<number | undefined> = [];
+	const highlightBegunWith: Array<number | undefined> = [];
 
 	const defaultNative: NativeSessionApi = {
-		longExposureBegin: (_hwnd, interpolationFactor) => {
+		longExposureBegin: (_hwnd, interpolationFactor, highlightRecoveryStops) => {
 			nativeCalls.push('begin');
 			begunWith.push(interpolationFactor);
+			highlightBegunWith.push(highlightRecoveryStops);
 			return 7;
 		},
 		longExposureSetSample: () => {
@@ -196,7 +198,15 @@ function makeHarness(options: HarnessOptions = {}) {
 		signal: options.signal,
 	};
 
-	return { deps, events, nativeCalls, begunWith, state, replay };
+	return {
+		deps,
+		events,
+		nativeCalls,
+		begunWith,
+		highlightBegunWith,
+		state,
+		replay,
+	};
 }
 
 // Every outcome must show the cursor going back to the anchor. This helper is used
@@ -560,6 +570,35 @@ describe('frame interpolation', () => {
 		);
 		expect(outcome.interpolation?.meanFrameMs).toBe(4.5);
 		expect(outcome.interpolation?.maxFrameMs).toBe(9.25);
+	});
+});
+
+// Highlight recovery is deliberately NOT hardware-conditional: it is a shader
+// constant, so unlike interpolation what is asked for is always what happens. These
+// tests pin that it is threaded, and that off stays off.
+describe('highlight recovery', () => {
+	it('passes the recipe value through to the native session', async () => {
+		const harness = makeHarness();
+		await executeRecipe(recipe({ highlightRecovery: 4.5 }), harness.deps);
+		expect(harness.highlightBegunWith).toEqual([4.5]);
+	});
+
+	it('defaults to 0, so an untouched recipe changes nothing', async () => {
+		const harness = makeHarness();
+		await executeRecipe(recipe(), harness.deps);
+		expect(harness.highlightBegunWith).toEqual([0]);
+	});
+
+	// It needs no particular GPU, so unlike interpolation it must never produce a
+	// "not available on this machine" warning.
+	it('never warns about hardware support', async () => {
+		const harness = makeHarness();
+		const outcome = await executeRecipe(
+			recipe({ highlightRecovery: 8 }),
+			harness.deps
+		);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warnings.join(' ')).not.toMatch(/highlight/i);
 	});
 });
 

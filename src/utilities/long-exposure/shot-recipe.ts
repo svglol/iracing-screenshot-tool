@@ -48,6 +48,11 @@ export type SupersampleFactor = (typeof SUPERSAMPLE_FACTORS)[number];
 export const INTERPOLATION_FACTORS = [1, 2, 4, 8] as const;
 export type InterpolationFactor = (typeof INTERPOLATION_FACTORS)[number];
 
+// Highlight recovery is expressed in STOPS, like exposure compensation, so it reads
+// as a photographic control rather than an arbitrary multiplier. 0 is off; 8 stops is
+// a 256x gain at full clip, past anything useful.
+export const MAX_HIGHLIGHT_RECOVERY_STOPS = 8;
+
 // png16 is the 16-bit master. png/jpeg/webp mirror the existing still-capture
 // formats for users who only want the 8-bit result.
 export const LONG_EXPOSURE_FORMATS = ['png16', 'png', 'jpeg', 'webp'] as const;
@@ -79,6 +84,20 @@ export interface LongExposureRecipe {
 	// Requested optical-flow interpolation factor. A REQUEST, not a guarantee: the
 	// achieved factor is reported back from the capture and written to the sidecar.
 	interpolationFactor: InterpolationFactor;
+
+	// Highlight recovery, in stops of gain applied to near-clipped values BEFORE
+	// accumulation. 0 = off, and off is bit-for-bit identity.
+	//
+	// iRacing hands us display-referred SDR that has already been tonemapped, so a
+	// headlight and a white wall both arrive clamped at 1.0. Averaging that and
+	// tonemapping again is the wrong order — by Jensen's inequality it is provably
+	// too dark, and the error scales with how much the pixel varied — which is why a
+	// bright light sweeping through 1% of the exposure reads as a grey smudge rather
+	// than a bright trail. This puts the nonlinearity back where a sensor has it.
+	//
+	// Unlike interpolation this needs no particular hardware: it is a shader constant
+	// and behaves identically on every GPU.
+	highlightRecovery: number;
 
 	weighting: WeightingCurve;
 	tonemap: Tonemapper;
@@ -123,6 +142,10 @@ export function createDefaultRecipe(opts: {
 		// Off by default. It is hardware-specific, it costs per-frame time that could
 		// otherwise buy real samples, and the base feature must stand on its own.
 		interpolationFactor: 1,
+		// Also off by default, for a different reason: a sidecar written before this
+		// existed has no such field, so a non-zero default would silently make old
+		// recipes reproduce differently. Reproducibility outranks a better first look.
+		highlightRecovery: 0,
 		weighting: 'box',
 		tonemap: 'none',
 		exposureCompensation: 0,
@@ -217,6 +240,12 @@ export function normalizeRecipe(
 		).includes(Number(input.interpolationFactor))
 			? (Number(input.interpolationFactor) as InterpolationFactor)
 			: (defaults.interpolationFactor ?? 1),
+		highlightRecovery: Number.isFinite(Number(input.highlightRecovery))
+			? Math.min(
+					MAX_HIGHLIGHT_RECOVERY_STOPS,
+					Math.max(0, Number(input.highlightRecovery))
+				)
+			: (defaults.highlightRecovery ?? 0),
 		weighting: isWeightingCurve(input.weighting)
 			? input.weighting
 			: defaults.weighting,

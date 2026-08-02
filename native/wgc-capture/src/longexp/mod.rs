@@ -110,6 +110,8 @@ struct SessionShared {
 
     /// 1 = off. Read once, when the first frame establishes the frame size.
     interpolation_factor: AtomicU32,
+    /// f32 bits of the highlight-recovery strength, in stops. 0 = off.
+    highlight_recovery_bits: AtomicU32,
     /// Filled in once the backend has reported what it could negotiate.
     interpolation: Mutex<Option<InterpolationStatus>>,
     /// Set once the handler has processed at least one frame — proves the capture
@@ -216,6 +218,12 @@ impl Accumulator {
             if let Ok(mut dims) = self.shared.frame_dims.lock() {
                 *dims = Some((width, height));
             }
+
+            // Highlight recovery is a pure shader constant, so it only has to be set
+            // before the first accumulate.
+            backend.set_highlight_recovery(f32::from_bits(
+                self.shared.highlight_recovery_bits.load(Ordering::SeqCst),
+            ));
 
             // Interpolation is set up from the FIRST REAL FRAME, so its width, height
             // and pixel format come from what WGC is actually delivering rather than
@@ -635,8 +643,16 @@ pub fn long_exposure_interpolation_info(
 /// captured frame, of which factor-1 are synthesised. Requesting it on hardware that
 /// cannot do it is not an error — the session reports `interpolation.enabled: false`
 /// with a reason and captures exactly as it would have.
+///
+/// `highlight_recovery_stops`: gain applied to near-clipped values before
+/// accumulation, in stops. 0 (the default) is off and is exactly identity. Unlike
+/// interpolation this needs no special hardware and behaves identically on every GPU.
 #[napi(catch_unwind)]
-pub fn long_exposure_begin(hwnd: f64, interpolation_factor: Option<u32>) -> napi::Result<u32> {
+pub fn long_exposure_begin(
+    hwnd: f64,
+    interpolation_factor: Option<u32>,
+    highlight_recovery_stops: Option<f64>,
+) -> napi::Result<u32> {
     let shared = Arc::new(SessionShared::default());
     shared.gate_open.store(false, Ordering::SeqCst);
     shared.weight_bits.store(1.0f32.to_bits(), Ordering::SeqCst);
@@ -645,6 +661,10 @@ pub fn long_exposure_begin(hwnd: f64, interpolation_factor: Option<u32>) -> napi
     // degrade, not fail a shot.
     shared.interpolation_factor.store(
         interpolation_factor.unwrap_or(1).clamp(1, 8),
+        Ordering::SeqCst,
+    );
+    shared.highlight_recovery_bits.store(
+        (highlight_recovery_stops.unwrap_or(0.0) as f32).to_bits(),
         Ordering::SeqCst,
     );
 

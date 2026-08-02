@@ -240,10 +240,8 @@ telemetry-side evidence says duplicates do not occur in this pipeline.
 4. Only if a ladder of separable copies remains: measure per-sample displacement.
 5. Only if that is > ~1 px: evaluate NvOFFRUC, then build the D3D11 NVOFA path.
 
-**Step 5 was taken (the user chose interpolation over H1 explicitly). H1–H3 remain
-untested and are still the cheaper candidates for "unnatural" — interpolation fixes
-H4 only.** If the output still reads as flat and energy-less after this, that is H1
-(clipped highlights) and it is a dozen lines of HLSL.
+**Step 5 was taken first (interpolation, chosen explicitly over H1). H1 was then
+implemented too — see §7. H2 and H3 remain untested and cost nothing to try.**
 
 ---
 
@@ -373,3 +371,99 @@ the capture log — shoot the same moment twice, interpolation off then on, and 
 - **`Interpolation`'s field order is load-bearing**: every `NvOfBuffer` must
   unregister before the `NvOpticalFlow` session is destroyed and `nvofapi64.dll` is
   unloaded, and Rust drops fields in declaration order. `flow` is last, deliberately.
+
+---
+
+## 7. Highlight recovery (H1), implemented 2026-08-02
+
+### 7.1 The defect is an ordering error, not a missing feature
+
+A sensor **integrates unbounded energy, then saturates once**. We do the opposite:
+iRacing hands us `tonemap(E)` — already compressed and clipped — we average that, and
+we tonemap again. Tonemapping is concave, so by Jensen's inequality
+
+```
+mean(tonemap(E))  <=  tonemap(mean(E))
+```
+
+**our result is provably too dark, and the size of the error is exactly how much the
+pixel varied during the exposure.** Zero for static background. Maximal for a swept
+specular highlight. That single line explains why the streaks looked flat while the
+rest of the frame looked fine, and it is a better account of "unnatural" than sample
+density ever was.
+
+Clipping is the infinitely-compressive extreme of this: a headlight at 100× the
+midtone and a white wall both arrive as exactly `1.0`, so a light occupying 1% of the
+exposure contributes `0.01` instead of dominating.
+
+### 7.2 The fix: move the nonlinearity, don't add a brightness knob
+
+`expand_highlights()` in `shaders.hlsl` approximately inverts the display curve
+**before** accumulation, so the nonlinearity sits where a sensor puts it:
+
+```
+peak  = max(r, g, b)                       // per-CHANNEL clipping detector
+t     = (peak - 0.75) / (1 - 0.75)
+scale = 1 + (gain - 1) * t^2
+rgb  *= scale                              // scalar gain -> hue preserved
+```
+
+Four decisions worth not re-litigating:
+
+- **Driven by `max(r,g,b)`, not luma.** Clipping happens per channel: a saturated red
+  tail light (`r=1, g=b=0.2`) has clipped even though its luma is ~0.35, and a
+  luma-driven test misses it entirely.
+- **Scalar gain, so hue and saturation survive.** A red light gets brighter rather
+  than turning white on the way up; desaturating hot highlights toward white is ACES's
+  job at resolve, and doing it here too would double-apply it.
+- **Continuous at the knee** (`t=0` ⇒ `scale=1`). A step there would ring around every
+  highlight — far more obviously wrong than the problem being fixed.
+- **`gain == 1` is an early-out and therefore EXACTLY identity.** The
+  one-sample-equals-still-capture equivalence (38,640/38,640 channel samples) depends
+  on it, and `exp2(0)` is exactly `1.0`.
+- **Applied in `CSWarpAccumulate` too.** If only real samples were expanded, the
+  streak would pulse in brightness between real and synthetic contributions.
+
+### 7.3 Why it does not blow out the sky
+
+This is the property that makes a blind expansion safe. A persistent bright surface is
+present in *every* sample, so it averages to ~`gain` and ACES compresses it straight
+back to white. A transient highlight averages to `gain ×` its small duty cycle and
+lands genuinely bright. **The correction is self-limiting on anything that does not
+move**, which is why no spatial "is this a light or a wall?" heuristic was needed.
+
+Confirmed visually: at 5 stops the browser chrome, favicons and background in the test
+capture are indistinguishable from the 0-stop version, while the moving lamps go from
+invisible to hot white cores.
+
+### 7.4 Measured, same rig and scene as §6
+
+Interpolation off, ACES at resolve, so this isolates the highlight change:
+
+| stops | mean R | max R | stdev R |
+|---|---|---|---|
+| 0 | 11146 | 59521 | 9995 |
+| 3 | 23710 | 65535 | 25084 |
+| 5 | 26127 | 65535 | 28368 |
+
+The **stdev nearly tripling** is the tell: highlights are separating from midtones
+rather than the whole frame getting uniformly brighter, which is exactly the intent.
+3 stops looks balanced; 5 is strong for that scene. Hence a control, not a constant.
+
+### 7.5 Deliberately NOT done: HDR capture
+
+`ColorFormat::Rgba16F` exists in `windows-capture` (`= 10`, `R16G16B16A16_FLOAT`) and
+WGC composites HDR windows to scRGB where highlights genuinely exceed 1.0 — that would
+be exact rather than a guess. **Rejected because it only works when the user's display
+AND iRacing are both in HDR**, and the tool must not behave differently depending on
+one machine's configuration. Highlight recovery is a shader constant: identical on
+every GPU, every display, HDR or not. If HDR is ever revisited it must be an addition
+that degrades to this, never a replacement for it.
+
+### 7.6 Defaults
+
+**Off (0 stops).** Not because it is unhelpful — it is probably the single biggest
+perceptual improvement in the feature — but because a sidecar written before this
+existed carries no such field, so a non-zero default would silently make old recipes
+reproduce differently. Reproducibility outranks a better-looking first shot. The panel
+explains the setting instead.

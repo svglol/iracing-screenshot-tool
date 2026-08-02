@@ -132,6 +132,19 @@ pub trait AccumulateBackend {
         weight: f32,
     ) -> Result<(), BackendError>;
 
+    /// Set highlight recovery, in STOPS of gain applied at full clip. 0 disables it.
+    ///
+    /// iRacing hands us display-referred SDR that has already been tonemapped and
+    /// clipped, so a headlight and a white wall both arrive as 1.0 and a light that
+    /// sweeps through 1% of the exposure contributes 0.01 instead of dominating it.
+    /// This approximately inverts the display curve BEFORE accumulation, putting the
+    /// nonlinearity where a sensor puts it. It cannot recover the true value — that
+    /// was destroyed before we saw the frame — so it is a controllable guess.
+    ///
+    /// 0 stops must remain bit-for-bit identity: the one-sample-equals-still-capture
+    /// equivalence depends on it.
+    fn set_highlight_recovery(&mut self, _stops: f32) {}
+
     /// Ask for hardware frame interpolation at `factor` (1 disables it).
     ///
     /// Returns the resulting status rather than an error, and NEVER fails the

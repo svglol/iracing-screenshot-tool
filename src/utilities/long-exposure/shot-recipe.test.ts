@@ -5,6 +5,7 @@ import {
 	resolvePlan,
 	validatePlan,
 	variantSuffix,
+	MAX_HIGHLIGHT_RECOVERY_STOPS,
 	type LongExposureRecipe,
 } from './shot-recipe';
 
@@ -34,6 +35,56 @@ describe('createDefaultRecipe', () => {
 	// otherwise buy real samples, so the base feature must not opt into it.
 	it('defaults frame interpolation to off', () => {
 		expect(base().interpolationFactor).toBe(1);
+	});
+
+	// A sidecar written before highlight recovery existed carries no such field, so a
+	// non-zero default would make old recipes reproduce differently. Reproducibility
+	// outranks a better-looking first shot.
+	it('defaults highlight recovery to off', () => {
+		expect(base().highlightRecovery).toBe(0);
+	});
+});
+
+describe('normalizeRecipe — highlight recovery', () => {
+	it('keeps a value inside the stop range', () => {
+		for (const stops of [0, 0.5, 3, 5.25, 8]) {
+			expect(
+				normalizeRecipe({ highlightRecovery: stops }, base())
+					.highlightRecovery
+			).toBe(stops);
+		}
+	});
+
+	// Negative gain would DARKEN highlights, which is the opposite of the point and
+	// would look like a bug rather than a setting.
+	it('clamps out-of-range values rather than passing them to the GPU', () => {
+		expect(
+			normalizeRecipe({ highlightRecovery: -4 }, base()).highlightRecovery
+		).toBe(0);
+		expect(
+			normalizeRecipe({ highlightRecovery: 999 }, base()).highlightRecovery
+		).toBe(MAX_HIGHLIGHT_RECOVERY_STOPS);
+	});
+
+	it('falls back to the default for a non-numeric value', () => {
+		for (const bogus of [NaN, 'lots', null, undefined, {}]) {
+			expect(
+				normalizeRecipe(
+					{ highlightRecovery: bogus as never },
+					base()
+				).highlightRecovery
+			).toBe(0);
+		}
+	});
+
+	// The important compatibility property: an old sidecar has no such key, so it must
+	// normalise to off and therefore reproduce byte-identically.
+	it('normalises a pre-feature recipe to off', () => {
+		const old = { ...base() } as Record<string, unknown>;
+		delete old.highlightRecovery;
+		expect(
+			normalizeRecipe(old as never, base()).highlightRecovery
+		).toBe(0);
 	});
 });
 

@@ -63,9 +63,9 @@ SamplerState               gLinear    : register(s0);
 
 cbuffer AccumulateParams : register(b0)
 {
-    uint2 gSize;     // render (== accumulator) dimensions
-    float gWeight;   // this sample's weight, from the sink's weighting curve
-    float gPadA;
+    uint2 gSize;          // render (== accumulator) dimensions
+    float gWeight;        // this sample's weight, from the sink's weighting curve
+    float gHighlightGain; // linear gain at full clip; 1.0 == recovery off
 };
 
 cbuffer ResolveParams : register(b1)
@@ -86,7 +86,10 @@ cbuffer WarpParams : register(b2)
     uint  gFlowGrid;      // 1, 2 or 4 pixels per flow vector
     uint  gHasBwd;        // 1 when the driver gave us a backward field too
     float gConsistencyPx; // fwd/bwd disagreement, in px, at which trust hits zero
-    float3 gPadW;
+    float gWarpHighlightGain; // same as gHighlightGain; synthetic samples must be
+                              // treated identically to real ones or the streak
+                              // would pulse in brightness between the two
+    float2 gPadW;
 };
 
 // Flow vectors are S10.5 fixed point: sign, 10 integer bits, 5 fractional bits
@@ -123,6 +126,68 @@ float3 linear_to_srgb(float3 c)
     return float3(linear_to_srgb1(c.r), linear_to_srgb1(c.g), linear_to_srgb1(c.b));
 }
 
+// --- Highlight recovery ----------------------------------------------------
+//
+// THE PROBLEM. A sensor integrates unbounded photon energy and saturates ONCE, at
+// the end. We do the opposite: iRacing hands us display-referred SDR that has
+// already been tonemapped and clipped, we average that, and we tonemap again. Since
+// tonemapping is concave, Jensen's inequality gives
+//
+//     mean(tonemap(E))  <=  tonemap(mean(E))
+//
+// so our result is provably too dark, and the size of the error is exactly how much
+// the pixel varied during the exposure — zero for static background, maximal for a
+// swept specular highlight. Clipping is the infinitely-compressive extreme: a
+// headlight at 100x the midtone and a white wall both arrive as exactly 1.0, so a
+// light occupying 1% of the exposure contributes 0.01 instead of dominating. That is
+// why our streaks read as flat grey smudges rather than bright trails.
+//
+// THE FIX. Approximately invert the display curve BEFORE integrating, so the
+// nonlinearity sits where a sensor puts it. This cannot recover the true value — it
+// was destroyed before we saw the frame — so it is a guess, but a controllable one,
+// and it is what VFX motion blur does for the same reason.
+//
+// WHY IT DOES NOT BLOW OUT THE SKY. The expansion is applied to persistent bright
+// surfaces too, but they are present in EVERY sample, so they average to ~gain and
+// the ACES pass at resolve compresses them straight back to white. A transient
+// highlight averages to gain x (its small duty cycle) and lands genuinely bright.
+// The correction is therefore self-limiting on anything that does not move.
+
+// Where expansion begins. Below this, values pass through untouched, so midtones
+// and shadows are bit-for-bit unaffected.
+#define HIGHLIGHT_KNEE  0.75f
+// Shoulder shape. 2.0 ramps gently off the knee rather than kinking.
+#define HIGHLIGHT_POWER 2.0f
+
+float3 expand_highlights(float3 linearRGB, float gain)
+{
+    // gain == 1 is OFF and must be EXACTLY identity. A one-sample box exposure with
+    // recovery off is bit-for-bit the existing still capture (38,640/38,640 channel
+    // samples verified), and that equivalence is worth keeping.
+    if (gain <= 1.0f)
+    {
+        return linearRGB;
+    }
+
+    // Driven by the MAX channel rather than luma, because clipping happens per
+    // channel: a saturated red tail light (r=1, g=b=0.2) has clipped even though its
+    // luma is only ~0.35, and a luma-driven test would miss it completely.
+    float peak = max(linearRGB.r, max(linearRGB.g, linearRGB.b));
+    if (peak <= HIGHLIGHT_KNEE)
+    {
+        return linearRGB;
+    }
+
+    float t = saturate((peak - HIGHLIGHT_KNEE) / (1.0f - HIGHLIGHT_KNEE));
+    // Continuous at the knee (t = 0 gives scale 1), reaching `gain` at full clip.
+    float scale = 1.0f + (gain - 1.0f) * pow(t, HIGHLIGHT_POWER);
+
+    // A SCALAR gain, so hue and saturation survive: a red light gets brighter rather
+    // than turning white on the way up. Desaturating hot highlights toward white is
+    // ACES's job at resolve, and doing it here as well would double-apply it.
+    return linearRGB * scale;
+}
+
 // --- Pass 0: clear ---------------------------------------------------------
 
 [numthreads(TILE, TILE, 1)]
@@ -145,7 +210,9 @@ void CSAccumulate(uint3 tid : SV_DispatchThreadID)
         return;
     }
 
-    float3 linearRGB = srgb_to_linear(gSource[tid.xy].rgb);
+    float3 linearRGB = expand_highlights(
+        srgb_to_linear(gSource[tid.xy].rgb),
+        gHighlightGain);
 
     // Each thread owns a unique element, so this needs no atomics.
     uint idx = tid.y * gSize.x + tid.x;
@@ -301,9 +368,13 @@ void CSWarpAccumulate(uint3 tid : SV_DispatchThreadID)
     float3 plain = lerp(gPrev[tid.xy].rgb, gSource[tid.xy].rgb, gT);
     float3 blended = lerp(plain, warped, trust);
 
+    // Expanded AFTER blending, so a synthesised frame is treated exactly like the
+    // real frame it stands in for: the sim would have rendered — and clipped — it the
+    // same way. Both warp taps carry the highlight (that is what the warp is for), so
+    // the blend of two highlights stays above the knee.
     uint idx = tid.y * gWarpSize.x + tid.x;
     float4 acc = gAccum[idx];
-    acc.rgb += srgb_to_linear(blended) * gWarpWeight;
+    acc.rgb += expand_highlights(srgb_to_linear(blended), gWarpHighlightGain) * gWarpWeight;
     acc.a   += gWarpWeight;
     gAccum[idx] = acc;
 }

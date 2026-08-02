@@ -134,7 +134,11 @@ export interface NativeInterpolationStatus {
 }
 
 export interface NativeSessionApi {
-	longExposureBegin(hwnd: number, interpolationFactor?: number): number;
+	longExposureBegin(
+		hwnd: number,
+		interpolationFactor?: number,
+		highlightRecoveryStops?: number
+	): number;
 	longExposureSetSample(
 		session: number,
 		weight: number,
@@ -529,7 +533,14 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	// The interpolation factor is a REQUEST. The native side sets it up from the
 	// first real frame and reports back what it could actually negotiate; hardware
 	// that cannot do it captures exactly as it would have.
-	const session = native.longExposureBegin(hwnd, recipe.interpolationFactor);
+	// Highlight recovery, unlike interpolation, is not a request — it is a shader
+	// constant that behaves identically on every GPU, so what is asked for is always
+	// what happens.
+	const session = native.longExposureBegin(
+		hwnd,
+		recipe.interpolationFactor,
+		recipe.highlightRecovery
+	);
 	claimSession(session);
 
 	// --- 4. Roll, and accumulate until the anchor ----------------------------

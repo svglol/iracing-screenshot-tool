@@ -141,6 +141,11 @@ pub struct D3d11Backend {
     interpolation: Option<Interpolation>,
     interpolation_status: InterpolationStatus,
 
+    /// Linear gain the highlight-recovery curve reaches at full clip. 1.0 = off,
+    /// which is the default and is exactly identity — see `expand_highlights` in
+    /// shaders.hlsl for why this exists at all.
+    highlight_gain: f32,
+
     // 2 x u32 digest lanes, plus a staging buffer to read them back.
     digest_buffer: ID3D11Buffer,
     digest_uav: ID3D11UnorderedAccessView,
@@ -161,7 +166,9 @@ pub struct D3d11Backend {
 struct AccumulateCb {
     size: [u32; 2],
     weight: f32,
-    _pad: f32,
+    /// Linear gain applied at full clip by the highlight-recovery curve. Exactly
+    /// 1.0 means off, and off is bit-for-bit identity.
+    highlight_gain: f32,
 }
 
 #[repr(C)]
@@ -186,7 +193,8 @@ struct WarpCb {
     flow_grid: u32,
     has_bwd: u32,
     consistency_px: f32,
-    _pad: [f32; 3],
+    highlight_gain: f32,
+    _pad: [f32; 2],
 }
 
 fn compile(entry: &str) -> Result<ID3DBlob, BackendError> {
@@ -296,6 +304,7 @@ impl D3d11Backend {
                 grid_size: 0,
                 bidirectional: false,
             },
+            highlight_gain: 1.0,
             digest_buffer,
             digest_uav,
             digest_staging,
@@ -595,7 +604,8 @@ impl D3d11Backend {
             flow_grid: interp.config.grid_size,
             has_bwd: u32::from(interp.flow_bwd_srv.is_some()),
             consistency_px: FLOW_CONSISTENCY_PX,
-            _pad: [0.0; 3],
+            highlight_gain: self.highlight_gain,
+            _pad: [0.0; 2],
         };
         write_constant_buffer(&self.context, &self.cb_warp, &data)?;
 
@@ -637,7 +647,7 @@ impl D3d11Backend {
         let data = AccumulateCb {
             size: [width, height],
             weight,
-            _pad: 0.0,
+            highlight_gain: self.highlight_gain,
         };
         write_constant_buffer(&self.context, &self.cb_accumulate, &data)
     }
@@ -850,6 +860,20 @@ impl AccumulateBackend for D3d11Backend {
 
         let srv = self.source_srv(source)?;
         self.accumulate_with_srv(width, height, &uav, &srv, weight)
+    }
+
+    fn set_highlight_recovery(&mut self, stops: f32) {
+        // Expressed in stops so it reads like every other photographic control, and
+        // so 0 is unambiguously "off". Clamped rather than rejected: a stale recipe
+        // should degrade, not fail a shot. 8 stops is a 256x gain at full clip, well
+        // past anything useful.
+        let stops = if stops.is_finite() {
+            stops.clamp(0.0, 8.0)
+        } else {
+            0.0
+        };
+        // exp2(0) is exactly 1.0, so "off" stays exactly identity.
+        self.highlight_gain = stops.exp2();
     }
 
     fn enable_interpolation(
@@ -1357,6 +1381,129 @@ mod tests {
         }
     }
 
+    /// A Rust mirror of `expand_highlights` from shaders.hlsl, so the curve's
+    /// properties can be asserted without a GPU. Kept deliberately literal.
+    fn expand_highlights(rgb: [f32; 3], gain: f32) -> [f32; 3] {
+        const KNEE: f32 = 0.75;
+        const POWER: f32 = 2.0;
+        if gain <= 1.0 {
+            return rgb;
+        }
+        let peak = rgb[0].max(rgb[1]).max(rgb[2]);
+        if peak <= KNEE {
+            return rgb;
+        }
+        let t = ((peak - KNEE) / (1.0 - KNEE)).clamp(0.0, 1.0);
+        let scale = 1.0 + (gain - 1.0) * t.powf(POWER);
+        [rgb[0] * scale, rgb[1] * scale, rgb[2] * scale]
+    }
+
+    /// The property the whole feature rests on: OFF must be exactly identity, because
+    /// a one-sample box exposure with recovery off is bit-for-bit the existing still
+    /// capture and that equivalence is verified on hardware.
+    #[test]
+    fn highlight_recovery_off_is_exactly_identity() {
+        for gain in [0.0f32, 1.0] {
+            for value in [0.0f32, 0.5, 0.74, 0.75, 0.9, 1.0] {
+                let rgb = [value, value * 0.5, value * 0.25];
+                assert_eq!(expand_highlights(rgb, gain), rgb, "value {value}");
+            }
+        }
+        // exp2(0) is exactly 1.0, so "0 stops" reaches the identity branch.
+        assert_eq!(0.0f32.exp2(), 1.0);
+    }
+
+    #[test]
+    fn highlight_recovery_leaves_midtones_and_shadows_untouched() {
+        let gain = 32.0;
+        for value in [0.0f32, 0.1, 0.4, 0.6, 0.75] {
+            let rgb = [value, value, value];
+            assert_eq!(
+                expand_highlights(rgb, gain),
+                rgb,
+                "below the knee, {value} must pass through"
+            );
+        }
+    }
+
+    /// Continuity at the knee. A jump here would show up as a hard edge ringing
+    /// around every highlight — far more obviously wrong than the problem it fixes.
+    #[test]
+    fn highlight_recovery_is_continuous_at_the_knee() {
+        let gain = 64.0;
+        let below = expand_highlights([0.7499, 0.7499, 0.7499], gain)[0];
+        let above = expand_highlights([0.7501, 0.7501, 0.7501], gain)[0];
+        assert!(
+            (above - below).abs() < 1e-3,
+            "discontinuity at the knee: {below} -> {above}"
+        );
+    }
+
+    #[test]
+    fn highlight_recovery_reaches_the_requested_gain_at_full_clip() {
+        for stops in [1.0f32, 3.0, 5.0] {
+            let gain = stops.exp2();
+            let out = expand_highlights([1.0, 1.0, 1.0], gain);
+            assert!((out[0] - gain).abs() < 1e-3, "{stops} stops -> {}", out[0]);
+        }
+    }
+
+    /// Driven by the MAX channel, not luma. A saturated red tail light has clipped
+    /// even though its luma is low, and a luma-driven test would miss it entirely.
+    #[test]
+    fn highlight_recovery_detects_a_clipped_single_channel() {
+        let gain = 32.0;
+        let red = [1.0f32, 0.2, 0.2];
+        let out = expand_highlights(red, gain);
+        assert!(out[0] > 1.0, "a clipped red channel must be expanded");
+        // Scalar gain, so the ratios — and therefore the hue — survive.
+        assert!((out[1] / out[0] - red[1] / red[0]).abs() < 1e-5);
+        assert!((out[2] / out[0] - red[2] / red[0]).abs() < 1e-5);
+    }
+
+    /// The behaviour that makes this worth doing at all: over an exposure, a
+    /// TRANSIENT highlight gains enormously while a PERSISTENT bright surface gains
+    /// the same factor uniformly — so the tonemapper puts the surface back where it
+    /// was, and only the moving light actually brightens.
+    #[test]
+    fn highlight_recovery_lifts_transient_highlights_relative_to_persistent_ones() {
+        let gain = 32.0f32;
+        let samples = 100;
+
+        // A headlight passing through one pixel for 1% of the exposure.
+        let transient: f32 = (0..samples)
+            .map(|i| {
+                let v = if i == 0 { 1.0 } else { 0.05 };
+                expand_highlights([v, v, v], gain)[0]
+            })
+            .sum::<f32>()
+            / samples as f32;
+
+        // The same pixel with a static white wall in it for the whole exposure.
+        let persistent: f32 = (0..samples)
+            .map(|_| expand_highlights([1.0, 1.0, 1.0], gain)[0])
+            .sum::<f32>()
+            / samples as f32;
+
+        // Without recovery the headlight would average (1.0 + 99*0.05)/100 = 0.0595
+        // — a dim grey smudge, which is exactly the reported defect.
+        let unrecovered: f32 = (0..samples)
+            .map(|i| if i == 0 { 1.0f32 } else { 0.05 })
+            .sum::<f32>()
+            / samples as f32;
+
+        assert!(
+            transient > unrecovered * 5.0,
+            "recovery must substantially brighten a transient highlight: \
+             {unrecovered} -> {transient}"
+        );
+        // The wall lands at the full gain, which ACES compresses back to white; the
+        // headlight lands well below it. The gap is what keeps the sky from blowing
+        // out while the streak still gains.
+        assert!(persistent > transient);
+        assert!((persistent - gain).abs() < 1e-3);
+    }
+
     /// HLSL packs `cbuffer WarpParams` into three 16-byte registers. The Rust mirror
     /// must agree exactly or every warp reads garbage parameters.
     #[test]
@@ -1371,7 +1518,8 @@ mod tests {
             flow_grid: 0,
             has_bwd: 0,
             consistency_px: 0.0,
-            _pad: [0.0; 3],
+            highlight_gain: 1.0,
+            _pad: [0.0; 2],
         };
         let base = &cb as *const _ as usize;
         let offset = |f: *const _| f as usize - base;
@@ -1384,8 +1532,24 @@ mod tests {
         assert_eq!(offset(&cb.weight as *const _ as *const u8), 20);
         assert_eq!(offset(&cb.flow_grid as *const _ as *const u8), 24);
         assert_eq!(offset(&cb.has_bwd as *const _ as *const u8), 28);
-        // Register 2: float gConsistencyPx, float3 gPadW.
+        // Register 2: float gConsistencyPx, float gWarpHighlightGain, float2 gPadW.
         assert_eq!(offset(&cb.consistency_px as *const _ as *const u8), 32);
+        assert_eq!(offset(&cb.highlight_gain as *const _ as *const u8), 36);
+    }
+
+    /// `cbuffer AccumulateParams` is one 16-byte register: uint2 + float + float.
+    #[test]
+    fn accumulate_constant_buffer_matches_the_hlsl_packing() {
+        assert_eq!(std::mem::size_of::<AccumulateCb>(), 16);
+        let cb = AccumulateCb {
+            size: [0; 2],
+            weight: 0.0,
+            highlight_gain: 1.0,
+        };
+        let base = &cb as *const _ as usize;
+        assert_eq!(&cb.size as *const _ as usize - base, 0);
+        assert_eq!(&cb.weight as *const _ as usize - base, 8);
+        assert_eq!(&cb.highlight_gain as *const _ as usize - base, 12);
     }
 
     /// Synthetic sample positions must be strictly inside (0, 1) — a sample AT 0 or 1

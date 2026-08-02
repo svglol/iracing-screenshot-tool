@@ -40,6 +40,10 @@ export interface LongExposureSidecar {
 		weighting: string;
 		tonemap: string;
 		exposureCompensationEv: number;
+		// Stops of gain applied to near-clipped values before accumulation. 0 = off,
+		// which is exactly identity — so a sidecar reading 0 describes the same
+		// pipeline that existed before highlight recovery did.
+		highlightRecoveryStops: number;
 	};
 
 	sampling: {
@@ -182,6 +186,7 @@ export function buildSidecar(opts: {
 			weighting: recipe.weighting,
 			tonemap: recipe.tonemap,
 			exposureCompensationEv: recipe.exposureCompensation,
+			highlightRecoveryStops: recipe.highlightRecovery,
 		},
 		sampling: {
 			predicted: plan.predictedSamples,

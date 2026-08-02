@@ -104,9 +104,13 @@ export interface WgcLongExposureAddon {
 	// run them. Cheap and side-effect-free — no device, no GPU work.
 	longExposureProbe(): string;
 	// Open a live capture of the window. The accumulation gate starts CLOSED.
-	// `interpolationFactor` is optional and defaults to 1 (off) — an addon build
-	// predating interpolation simply ignores the extra argument.
-	longExposureBegin(hwnd: number, interpolationFactor?: number): number;
+	// `interpolationFactor` (1 = off) and `highlightRecoveryStops` (0 = off) are both
+	// optional — an addon build predating them simply ignores the extra arguments.
+	longExposureBegin(
+		hwnd: number,
+		interpolationFactor?: number,
+		highlightRecoveryStops?: number
+	): number;
 	longExposureSetSample(
 		session: number,
 		weight: number,

@@ -72,6 +72,27 @@ describe('buildSidecar', () => {
 		expect(sidecar().sidecarVersion).toBe(SIDECAR_VERSION);
 	});
 
+	// Highlight recovery changes the accumulated values themselves, so a sidecar that
+	// omitted it would not actually reproduce the shot.
+	it('records the highlight recovery the shot was taken with', () => {
+		expect(sidecar().exposure.highlightRecoveryStops).toBe(0);
+		const recovered = normalizeRecipe({ highlightRecovery: 4 }, recipe);
+		expect(
+			buildSidecar({
+				recipe: recovered,
+				plan,
+				stats,
+				backend: null,
+				imageWidth: 1920,
+				imageHeight: 1080,
+				toolName: 't',
+				toolVersion: '1',
+				capturedAt: 'now',
+				context,
+			}).exposure.highlightRecoveryStops
+		).toBe(4);
+	});
+
 	// The sidecar is the record of how an image was actually made, so it has to
 	// distinguish "interpolation was on" from "interpolation was asked for".
 	it('records interpolation as null when there is nothing to report', () => {
