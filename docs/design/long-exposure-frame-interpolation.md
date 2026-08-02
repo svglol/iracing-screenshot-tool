@@ -5,13 +5,13 @@ The §9 warp optimisation landed a measured **2.63× on per-frame consumption** 
 5120×2880 (§9.3) — real but **not sufficient**: 8× still reaches only ~47% of the
 interpolation-off sample count.
 
-**Before touching this path again, read §9.5–§9.8.** A bench that runs the same kernel
+**Before touching this path again, read §9.4–§9.7.** A bench that runs the same kernel
 without iRacing shows 8× at 5120×2880 keeping up comfortably when it has the GPU to
 itself, so the remaining field gap is **contention with iRacing's own rendering**, not
 an inefficient kernel. Three obvious follow-ups have since been measured and are all
-dead — group shape (§9.6, zero effect), dropping 8× to 4× (§9.7, saves nothing), and
-`NV_OF_PERF_LEVEL_FAST` (§9.7, faster on the bench and ~35% SLOWER on a replay).
-§9.8 records the metric to use and the noise floor, because most of those questions
+dead — group shape (§9.6, zero effect), dropping 8× to 4× (§9.5, saves nothing), and
+`NV_OF_PERF_LEVEL_FAST` (§9.5, faster on the bench and ~35% SLOWER on a replay).
+§9.7 records the metric to use and the noise floor, because most of those questions
 cannot be answered from sample counts at all.
 Prerequisite reading: `docs/design/long-exposure.md`.
 Feature branch: `feat/long-exposure-replay` (commits `d7c5cc0`, `70a89ca`).
@@ -540,7 +540,8 @@ Two related corrections shipped with it:
   shot 17's "4.7 ms mean" over 12 samples was mostly that one frame.
 - **Two guardrails**, in `capture-session.ts` and `shot-recipe.ts`. After a shot,
   `diagnoseInterpolationShortfall` warns when real samples came in below
-  `SAMPLE_SHORTFALL_RATIO` (0.6) of prediction, naming the remedy. Before a shot,
+  `SAMPLE_SHORTFALL_RATIO` (0.6 when written; **raised to 0.8**, see §9.8) of
+  prediction, naming the remedy. Before a shot,
   `validatePlan` warns when the planned `interpolationLoad` (render Mpx × factor)
   reaches one this machine has already been seen to choke on.
 
@@ -580,11 +581,14 @@ looks perfect while three frames in four are being dropped. Judge affordability 
 ## 9. Making the warp path cheaper — implemented 2026-08-02
 
 ~91 ms for seven passes was ~13 ms each, i.e. roughly 46 GB/s effective on a card that
-does ~1000 GB/s. **The path was latency-bound, not fundamentally too much work**, so
-there was real headroom before "5K at 8× is impossible" became the honest answer.
+does ~1000 GB/s. That looked like a latency-bound path with an order of magnitude of
+headroom in it. **It was not** — §9.4 shows the 46 GB/s was our share of a GPU that
+iRacing is also using, not a kernel running at 5% of peak. The two changes below are
+still worth what they cost, but read §9.4 before believing the framing above.
 
-Both changes below are built and unit-tested. **Neither is yet measured against a live
-iRacing replay** — see §9.3 for exactly what that owes and how to read the result.
+§9.1 and §9.2 are the changes; §9.3–§9.7 are what measuring them actually established,
+including three follow-ups that are now dead; §9.8 is a guardrail §9.1 broke and this
+work fixed; §9.9 is what is left.
 
 ### 9.1 One accumulator read-modify-write per frame, not per synthetic sample — DONE
 
@@ -688,20 +692,19 @@ and we now consume in 34.6 ms, so we still miss roughly one frame in three. 8× 
 
 It is tempting to compute an effective bandwidth from this (~1.3 GB in ~28 ms ≈
 46 GB/s, on a card that does ~1000 GB/s) and conclude the kernel is desperately
-inefficient. **That inference is wrong, and §9.5 is the measurement that shows why: we
+inefficient. **That inference is wrong, and §9.4 is the measurement that shows why: we
 do not have the card to ourselves.** iRacing is rendering 5120×2880 frames throughout.
 
-Two consequences that are NOT cosmetic:
+Two consequences that were NOT cosmetic — **both since fixed, see §9.8:**
 
-- **`SAMPLE_SHORTFALL_RATIO` (0.6) is now mis-calibrated.** Shot 25's ratio of 0.636
-  clears it, so `diagnoseInterpolationShortfall` stays SILENT on a shot that lost more
-  than half its real samples against the off baseline. The threshold was calibrated
-  against a bimodal field sample (1.08 unaffected vs 0.27 lossy); this change created
-  the middle case it was never fitted to.
+- **`SAMPLE_SHORTFALL_RATIO` (0.6) was mis-calibrated by this change.** Shot 25's ratio
+  of 0.636 cleared it, so `diagnoseInterpolationShortfall` stayed SILENT on a shot that
+  lost more than half its real samples against the off baseline. The threshold was
+  calibrated against a bimodal field sample (1.08 unaffected vs 0.27 lossy); §9.1
+  created the middle case it was never fitted to.
 - **`longExposureLossyInterpolationLoad` stayed 0** for the same reason — neither shot
-  dipped under 0.6, so the machine learned nothing and the pre-shot warning is silent
-  at this configuration too. The reset itself was correct and is done; the learning
-  rule just no longer fires where it should.
+  dipped under 0.6, so the machine learned nothing and the pre-shot warning was silent
+  at this configuration too.
 
 **Already verified on hardware, so do NOT spend a replay session re-deriving it:** the
 colour path is correct end to end. Capturing a uniformly-grey, continuously-presenting
@@ -721,7 +724,7 @@ What that test deliberately does NOT tell you is anything about throughput: at 6
 nothing was ever going to be dropped. It is a correctness check, and the sample-count
 question in the list above is still open.
 
-### 9.5 The bench that reframed all of this — GPU contention, not a slow kernel
+### 9.4 The bench that reframed all of this — GPU contention, not a slow kernel
 
 A benchmark harness was built to measure the warp path **without a replay session**: a
 window that presents continuously at a chosen physical size, captured for a fixed
@@ -758,7 +761,7 @@ bandwidth" is our share of a contended card, not evidence of an inefficient kern
 Under contention, time scales with work issued. That is also why §9.1's traffic cut
 translated almost proportionally into wall clock.
 
-### 9.7 Where the remaining cost actually is: NVOFA, not the warp
+### 9.5 Where the remaining cost actually is: NVOFA, not the warp
 
 The bench swept the whole ladder at 7680×4320, alone on the GPU:
 
@@ -811,34 +814,6 @@ all.
 There is no intermediate rung to retry: `NV_OF_PERF_LEVEL` is only SLOW(5) /
 MEDIUM(10) / FAST(20).
 
-### 9.8 How to measure this at all — the metric, and the noise floor
-
-Five interpolation-off shots at identical settings produced **13, 15, 13, 11, 12** real
-samples: mean 12.75, **sd 1.71, i.e. ±13%**. A single-pair A/B on raw sample count
-therefore cannot resolve anything smaller than roughly a 30% effect, which is why
-"7 vs 5" between two 8× shots is *not* by itself evidence of anything.
-
-**Use `sampling.medianGapSeconds`, converted to wall clock (× the playback divisor).**
-Every one of those same five shots reported a median gap of **0.00144 s to three
-significant figures** — it is an average over the frames within a shot rather than a
-count of them, so it is dramatically more stable, and it is a direct per-frame cost in
-ms rather than a proxy. The whole §9 story reads cleanly in it and is ambiguous without
-it:
-
-| | ms/frame |
-|---|---|
-| interpolation off | 23.0 (= iRacing's present interval; we are not the bottleneck) |
-| 8×, pre-§9 | 77.9 / 79.5 / 91.0 |
-| 8×, post-§9 `MEDIUM` | **34.6** |
-| 8×, post-§9 `FAST` | 46.6 |
-
-`meanFrameMs` remains useless for this (§8.3), and `achievedRatio` is the right
-*affordability gate* but too noisy to compare two builds with.
-
-**Consequence for §9.4: dropping 8× to 4× saves NOTHING.** The bench says so directly.
-That was a plausible prediction from the traffic model and it is simply wrong, because
-after §9.1 the factor barely enters the cost. Do not spend a replay session on it.
-
 ### 9.6 Group-shape tuning: measured, and it does NOTHING. Do not repeat it.
 
 An earlier draft of this section proposed occupancy and coalescing as the top
@@ -865,19 +840,83 @@ pattern only costs when the data is scattered, not when the traversal order is.
 The variants were built and then **reverted**: a knob that buys nothing should not ship.
 `CSWarpAccumulate` uses `TILE` (8×8) like every other kernel.
 
-### 9.4 What is left
+### 9.7 How to measure this at all — the metric, and the noise floor
 
-Given §9.5, the honest ordering has changed. **The kernel is close to as good as it
+Five interpolation-off shots at identical settings produced **13, 15, 13, 11, 12** real
+samples: mean 12.75, **sd 1.71, i.e. ±13%**. A single-pair A/B on raw sample count
+therefore cannot resolve anything smaller than roughly a 30% effect, which is why
+"7 vs 5" between two 8× shots is *not* by itself evidence of anything.
+
+**Use `sampling.medianGapSeconds`, converted to wall clock (× the playback divisor).**
+Every one of those same five shots reported a median gap of **0.00144 s to three
+significant figures** — it is an average over the frames within a shot rather than a
+count of them, so it is dramatically more stable, and it is a direct per-frame cost in
+ms rather than a proxy. The whole §9 story reads cleanly in it and is ambiguous without
+it:
+
+| | ms/frame |
+|---|---|
+| interpolation off | 23.0 (= iRacing's present interval; we are not the bottleneck) |
+| 8×, pre-§9 | 77.9 / 79.5 / 91.0 |
+| 8×, post-§9 `MEDIUM` | **34.6** |
+| 8×, post-§9 `FAST` | 46.6 |
+
+`meanFrameMs` remains useless for this (§8.3), and `achievedRatio` is the right
+*affordability gate* but too noisy to compare two builds with.
+
+**Consequence for §9.9: dropping 8× to 4× saves NOTHING.** The bench says so directly.
+That was a plausible prediction from the traffic model and it is simply wrong, because
+after §9.1 the factor barely enters the cost. Do not spend a replay session on it.
+
+### 9.8 The guardrail, recalibrated — and de-duplicated
+
+§9.3 flagged that §9.1 had quietly broken the shortfall warning. Fixed.
+
+**`SAMPLE_SHORTFALL_RATIO` raised 0.6 → 0.8.** The original was fitted to a bimodal
+field sample — unaffected captures at ~1.08, badly affected ones at ~0.27 — so the
+middle was never tested. §9.1 put a shot right in it: 0.636, which is 7 real samples
+against an interpolation-off baseline of 15, i.e. more than half of them lost, passing
+in silence. That is the worst failure mode this warning has, because the image comes out
+looking merely under-blurred rather than obviously broken, so the user has no reason to
+suspect the setting rather than the scene.
+
+Recalibrated against every 5120×2880 shot to date:
+
+| | achievedRatio |
+|---|---|
+| unaffected (off, or on and keeping up) | 1.00, 1.08, 1.09, 1.30, 1.36 |
+| affected (real samples lost) | 0.27, 0.36, 0.46, 0.64 |
+
+The classes separate cleanly in **(0.64, 1.00)**. 0.8 sits in that gap and deliberately
+nearer the affected side — 26% above the worst affected shot, 20% below the worst
+unaffected one — so the bias stays toward missing a marginal case rather than crying
+wolf, which is the policy the original comment set out. Against the ±13% run-to-run
+spread measured in §9.7, 0.8 is ~2.4 standard deviations below the unaffected mean.
+
+**And the number was in two places.** `index.ts` re-typed `0.6` to decide when to LEARN
+this machine's interpolation load limit. Raising only the constant would have left the
+pre-shot guardrail learning on different evidence than the post-shot warning fires on —
+a divergence nothing would have caught, since each looks correct in isolation. `index.ts`
+now imports `SAMPLE_SHORTFALL_RATIO`, and a test pins the boundary on both sides of it.
+
+**Consequence worth expecting:** on this machine, a 5120×2880 shot at 8× now both warns
+*and* records its load (117.965), so subsequent shots at that configuration also get the
+pre-flight warning. That is the guardrail working as designed — it was simply never
+reaching its own trigger before.
+
+### 9.9 What is left
+
+Given §9.4, the honest ordering has changed. **The kernel is close to as good as it
 gets for the work it does; the remaining field gap is contention plus the sheer volume
 of work that 8× at 5K with 2× supersample asks for.**
 
-**Three of the obvious candidates have now been measured and are dead. Read §9.6–§9.8
+**Three of the obvious candidates have now been measured and are dead. Read §9.4–§9.7
 before proposing anything here:**
 
 1. ~~Group shape / occupancy~~ — **zero effect**, four variants within 1% (§9.6).
 2. ~~Drop 8× to 4×~~ — **saves nothing**; after §9.1 the factor barely enters the cost
-   (§9.7).
-3. ~~`NV_OF_PERF_LEVEL_FAST`~~ — **1.33× on the bench, ~35% SLOWER on a replay** (§9.7).
+   (§9.5).
+3. ~~`NV_OF_PERF_LEVEL_FAST`~~ — **1.33× on the bench, ~35% SLOWER on a replay** (§9.5).
 
 **What is left that is actually supported by measurement:**
 
@@ -885,7 +924,7 @@ before proposing anything here:**
    pixels at the direct cost of samples, and it quarters the interpolation cost as well.
    2560×1440 is documented as completely unaffected at any factor. This is a settings
    answer needing no code, and it is now the leading candidate by some distance.
-2. Reduce **SM** work — that is the resource that contends with iRacing (§9.7). The
+2. Reduce **SM** work — that is the resource that contends with iRacing (§9.5). The
    remaining SM-side costs are the luma pass, the retained copy, and the real sample's
    own accumulate.
 
@@ -902,7 +941,7 @@ If more is wanted from the code, in value order:
   | real sample: accumulator RMW + source read | 32 + 4 | (folded in) + 4 |
   | **total** | **76 B/px** | **44 B/px** |
 
-  **~42% off, and it is SM work — exactly the resource §9.7 identifies as the one that
+  **~42% off, and it is SM work — exactly the resource §9.5 identifies as the one that
   contends with iRacing.** It is the same insight as §9.1 applied once more: the
   accumulator RMW is the expensive part, so touch it once per frame rather than once
   per contribution.
@@ -930,5 +969,7 @@ If more is wanted from the code, in value order:
   never dropped. It does not touch the GPU at all.
 
 - **Not worth trying without new evidence:** group shape (§9.6), factor reduction and
-  NVOFA perf level (§9.7), and anything else that reshapes the kernel or moves work
+  NVOFA perf level (§9.5), and anything else that reshapes the kernel or moves work
   between GPU units rather than reducing SM work.
+
+---

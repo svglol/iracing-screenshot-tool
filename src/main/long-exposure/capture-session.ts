@@ -326,11 +326,30 @@ export function buildInterpolationReport(opts: {
 // Below this share of the predicted real-sample count, a capture is treated as
 // having failed to keep up with the sim rather than merely having been unlucky.
 //
-// Calibrated against field data: an unaffected 5120x2880 capture landed at 1.08 of
-// prediction while the same shot with 8x interpolation landed at 0.27. The predictor
-// itself is only accurate to ~6%, and sample counts bounce around run to run, so the
-// threshold sits far below either to avoid crying wolf.
-export const SAMPLE_SHORTFALL_RATIO = 0.6;
+// RAISED 0.6 -> 0.8 after the warp optimisation (frame-interpolation note §9). The
+// original value was fitted to a BIMODAL field sample — unaffected captures at ~1.08,
+// badly affected ones at ~0.27 — so anything in between was untested. §9.1 created
+// exactly that middle case: a shot landing at 0.636 while still losing half its real
+// samples against the interpolation-off baseline, which the old threshold passed in
+// silence. Silence there is the worst outcome, because the resulting image looks
+// merely under-blurred rather than obviously broken.
+//
+// Recalibrated against every 5120x2880 shot taken to date:
+//
+//   unaffected (interpolation off, or on and keeping up):  1.00, 1.08, 1.09, 1.30, 1.36
+//   affected   (real samples lost to interpolation):       0.27, 0.36, 0.46, 0.64
+//
+// The classes separate cleanly in (0.64, 1.00) and 0.8 sits in that gap, deliberately
+// nearer the affected side: 26% above the worst affected shot but 20% below the worst
+// unaffected one, so the bias stays toward missing a marginal case rather than crying
+// wolf. Five interpolation-off shots at identical settings varied by +/-13% in sample
+// count (13, 15, 13, 11, 12), which puts 0.8 about 2.4 standard deviations below the
+// unaffected mean.
+//
+// Note this is not only a warning threshold: `index.ts` uses it to decide when to LEARN
+// this machine's interpolation load limit, so the pre-shot guardrail and the post-shot
+// diagnosis fire on the same evidence. Import it; do not re-type the number.
+export const SAMPLE_SHORTFALL_RATIO = 0.8;
 
 // Whether a capture lost real samples to interpolation, and what to do about it.
 // Exported for tests: "requested 8x, got a third of the samples" is precisely the

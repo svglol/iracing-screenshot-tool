@@ -10,6 +10,7 @@ import {
 	buildInterpolationReport,
 	diagnoseInterpolationShortfall,
 	executeRecipe,
+	SAMPLE_SHORTFALL_RATIO,
 	type CaptureSessionDeps,
 	type LongExposureInterpolationReport,
 	type NativeSessionApi,
@@ -809,10 +810,46 @@ describe('diagnoseInterpolationShortfall', () => {
 	});
 
 	// Sample counts bounce run to run and the predictor is only good to ~6%, so a
-	// modest shortfall must not cry wolf.
+	// modest shortfall must not cry wolf. Five interpolation-off shots at identical
+	// 5120x2880 settings varied +/-13% in sample count, and the WORST unaffected shot
+	// landed at exactly 1.00 of prediction — so the tolerated band has to reach
+	// meaningfully below 1.0.
 	it('tolerates a modest shortfall', () => {
 		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: 0.75 }), {
+			diagnoseInterpolationShortfall(report({ achievedRatio: 0.9 }), {
+				supersample: 1,
+			})
+		).toBeNull();
+	});
+
+	// THE REGRESSION THIS THRESHOLD EXISTS FOR. Shot 25 at 5120x2880 landed at 0.636
+	// of prediction — 7 real samples against an interpolation-off baseline of 15, so
+	// it lost more than half of them — and the original 0.6 threshold passed it in
+	// silence. That is the worst possible outcome here, because the image comes out
+	// looking merely under-blurred rather than obviously broken, so the user has no
+	// reason to suspect the setting rather than the scene.
+	it('flags the mid-range shortfall the original threshold let through', () => {
+		const message = diagnoseInterpolationShortfall(
+			report({ realSamples: 7, achievedRatio: 0.636 }),
+			{ supersample: 2 }
+		);
+		expect(message).toMatch(/could not keep up/i);
+		expect(message).toMatch(/7 real frames/);
+	});
+
+	// The two consumers of this constant — the post-shot warning here and the
+	// load-limit learning in index.ts — must fire on identical evidence. index.ts used
+	// to re-type the number and was left behind when it changed.
+	it('draws the line where SAMPLE_SHORTFALL_RATIO says, on both sides', () => {
+		const justUnder = SAMPLE_SHORTFALL_RATIO - 0.001;
+		const justOver = SAMPLE_SHORTFALL_RATIO + 0.001;
+		expect(
+			diagnoseInterpolationShortfall(report({ achievedRatio: justUnder }), {
+				supersample: 1,
+			})
+		).toMatch(/could not keep up/i);
+		expect(
+			diagnoseInterpolationShortfall(report({ achievedRatio: justOver }), {
 				supersample: 1,
 			})
 		).toBeNull();

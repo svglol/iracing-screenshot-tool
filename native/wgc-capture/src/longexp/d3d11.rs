@@ -384,7 +384,7 @@ impl D3d11Backend {
         })?;
 
         // MEDIUM, and FAST HAS BEEN TRIED AND REJECTED ON HARDWARE — do not "optimise"
-        // this again without reading §9.7 of the frame-interpolation note.
+        // this again without reading §9.5 of the frame-interpolation note.
         //
         // The reasoning that makes FAST look attractive is sound as far as it goes:
         // once the synthetic loop was folded into one dispatch (§9.1), factors 2, 4 and

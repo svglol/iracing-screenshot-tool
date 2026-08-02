@@ -46,7 +46,10 @@ import {
 	ReplayController,
 	readReplayState,
 } from './long-exposure/replay-control';
-import { executeRecipe } from './long-exposure/capture-session';
+import {
+	executeRecipe,
+	SAMPLE_SHORTFALL_RATIO,
+} from './long-exposure/capture-session';
 import { writeLongExposure } from './long-exposure/output';
 import {
 	createDefaultRecipe,
@@ -1010,11 +1013,16 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		// Learn this machine's own interpolation limit from what actually happened.
 		// Recording the SMALLEST load that has ever fallen short means the pre-flight
 		// warning tightens as evidence accumulates and never fires without any.
+		//
+		// Uses the SAME threshold the post-shot diagnosis does, and imports it rather
+		// than repeating the number: these two must agree, and this copy was a literal
+		// 0.6 that got left behind when the constant was retuned — so the machine would
+		// have learned its limit on different evidence than the user is warned about.
 		const interp = outcome.interpolation;
 		if (
 			interp?.enabled &&
 			interp.achievedRatio !== null &&
-			interp.achievedRatio < 0.6
+			interp.achievedRatio < SAMPLE_SHORTFALL_RATIO
 		) {
 			const known = config.get('longExposureLossyInterpolationLoad') || 0;
 			if (known === 0 || interp.load < known) {
