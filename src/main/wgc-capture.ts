@@ -97,6 +97,14 @@ export interface WgcLongExposureAddon {
 		timeoutMs: number
 	): NativeLongExposureResult;
 	longExposureAbort(session: number, timeoutMs: number): void;
+	// Which physical GPU the capture/accumulate device landed on. Optional: an
+	// addon build predating this reports nothing rather than failing to load.
+	longExposureDeviceInfo?(): {
+		adapter: string;
+		vendorId: number;
+		isNvidia: boolean;
+		dedicatedVideoMemory: number;
+	};
 }
 
 interface WgcAddon {

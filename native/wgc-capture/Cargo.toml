@@ -21,6 +21,7 @@ windows = { version = "0.62.2", features = [
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D_Fxc",
     "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     # GetCurrentThreadId / PostThreadMessageW: how the accumulation session's
     # capture thread is unblocked on finish, even when the target stopped presenting.

@@ -26,6 +26,13 @@ export interface LongExposureAvailability {
 	backend: string | null;
 	// Why it is unavailable, for the UI and the diagnostics log. null when available.
 	reason: string | null;
+	// Which physical GPU the capture/accumulate device landed on, when the addon
+	// can report it. WGC creates its device against the DEFAULT adapter, which on a
+	// hybrid machine need not be the card iRacing renders on — so this turns two
+	// otherwise-baffling problems into one log line: compute silently running on an
+	// iGPU, and NVIDIA-only features being unable to bind.
+	adapter: string | null;
+	isNvidia: boolean | null;
 }
 
 // undefined = not probed yet. The probe result is cached for the session: neither
@@ -43,19 +50,43 @@ export function getLongExposureAvailability(): LongExposureAvailability {
 			available: false,
 			backend: null,
 			reason: 'the native capture addon does not provide long exposure',
+			adapter: null,
+			isNvidia: null,
 		};
 		log.warn('Long exposure unavailable', { reason: cached.reason });
 		return cached;
 	}
 
+	// Best-effort and independent of the probe: knowing which GPU we are on is
+	// useful even when the kernels fail to build.
+	let adapter: string | null = null;
+	let isNvidia: boolean | null = null;
+	try {
+		const info = addon.longExposureDeviceInfo?.();
+		if (info) {
+			adapter = info.adapter;
+			isNvidia = info.isNvidia;
+		}
+	} catch (error) {
+		log.debug('Could not query the capture adapter', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
+
 	try {
 		const backend = addon.longExposureProbe();
-		cached = { available: true, backend, reason: null };
-		log.info('Long exposure available', { backend });
+		cached = { available: true, backend, reason: null, adapter, isNvidia };
+		log.info('Long exposure available', { backend, adapter, isNvidia });
 	} catch (error) {
 		const message = (error as Error)?.message || String(error);
-		cached = { available: false, backend: null, reason: message };
-		log.warn('Long exposure unavailable', { reason: message });
+		cached = {
+			available: false,
+			backend: null,
+			reason: message,
+			adapter,
+			isNvidia,
+		};
+		log.warn('Long exposure unavailable', { reason: message, adapter });
 	}
 	return cached;
 }

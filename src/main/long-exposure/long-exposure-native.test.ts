@@ -24,9 +24,18 @@ import {
 	isLongExposureAvailable,
 } from './long-exposure-native';
 
-function fakeAddon(probe: () => string) {
+function fakeAddon(
+	probe: () => string,
+	deviceInfo?: () => {
+		adapter: string;
+		vendorId: number;
+		isNvidia: boolean;
+		dedicatedVideoMemory: number;
+	}
+) {
 	return {
 		longExposureProbe: probe,
+		longExposureDeviceInfo: deviceInfo,
 		longExposureBegin: vi.fn(),
 		longExposureSetSample: vi.fn(),
 		longExposureSetGate: vi.fn(),
@@ -48,6 +57,8 @@ describe('getLongExposureAvailability', () => {
 			available: true,
 			backend: 'd3d11-compute',
 			reason: null,
+			adapter: null,
+			isNvidia: null,
 		});
 		expect(isLongExposureAvailable()).toBe(true);
 	});
@@ -119,6 +130,69 @@ describe('getLongExposureAvailability', () => {
 		getLongExposureAvailability();
 
 		expect(probe).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('adapter reporting', () => {
+	// WGC creates its device against the DEFAULT adapter, which on a hybrid machine
+	// need not be the card iRacing renders on — so the adapter is worth surfacing
+	// even when everything works.
+	it('reports the adapter the capture device landed on', () => {
+		getLongExposureAddon.mockReturnValue(
+			fakeAddon(
+				() => 'd3d11-compute',
+				() => ({
+					adapter: 'NVIDIA GeForce RTX 4090',
+					vendorId: 0x10de,
+					isNvidia: true,
+					dedicatedVideoMemory: 23_600_000_000,
+				})
+			)
+		);
+		const availability = getLongExposureAvailability();
+		expect(availability.adapter).toBe('NVIDIA GeForce RTX 4090');
+		expect(availability.isNvidia).toBe(true);
+	});
+
+	// An addon build predating device reporting must still work.
+	it('degrades to null when the addon cannot report an adapter', () => {
+		getLongExposureAddon.mockReturnValue(fakeAddon(() => 'd3d11-compute'));
+		expect(getLongExposureAvailability().adapter).toBeNull();
+	});
+
+	// Knowing which GPU we are on is useful even when the kernels fail to build.
+	it('still reports the adapter when the probe fails', () => {
+		getLongExposureAddon.mockReturnValue(
+			fakeAddon(
+				() => {
+					throw new Error('kernels unavailable');
+				},
+				() => ({
+					adapter: 'AMD Radeon(TM) Graphics',
+					vendorId: 0x1002,
+					isNvidia: false,
+					dedicatedVideoMemory: 536_870_912,
+				})
+			)
+		);
+		const availability = getLongExposureAvailability();
+		expect(availability.available).toBe(false);
+		expect(availability.adapter).toBe('AMD Radeon(TM) Graphics');
+		expect(availability.isNvidia).toBe(false);
+	});
+
+	it('survives an addon whose device query throws', () => {
+		getLongExposureAddon.mockReturnValue(
+			fakeAddon(
+				() => 'd3d11-compute',
+				() => {
+					throw new Error('no device');
+				}
+			)
+		);
+		const availability = getLongExposureAvailability();
+		expect(availability.available).toBe(true);
+		expect(availability.adapter).toBeNull();
 	});
 });
 

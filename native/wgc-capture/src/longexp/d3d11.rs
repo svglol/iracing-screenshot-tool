@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 
-use windows::core::PCSTR;
+use windows::core::{Interface, PCSTR};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
 use windows::Win32::Graphics::Direct3D::{
     ID3DBlob, D3D_SRV_DIMENSION_BUFFEREX, D3D_SRV_DIMENSION_TEXTURE2D,
@@ -661,6 +661,42 @@ fn create_structured_srv(
     let mut srv: Option<ID3D11ShaderResourceView> = None;
     unsafe { device.CreateShaderResourceView(buffer, Some(&desc), Some(&mut srv))? };
     srv.ok_or_else(|| BackendError("CreateShaderResourceView(structured) returned null".into()))
+}
+
+/// Which physical adapter a D3D11 device actually landed on.
+///
+/// This matters more than it looks. `windows-capture` creates its device with a
+/// NULL adapter, i.e. whatever DXGI considers default — and on a hybrid machine
+/// (an AMD or Intel iGPU alongside a discrete NVIDIA card) that is NOT necessarily
+/// the card iRacing renders on. Two consequences:
+///   * our accumulate/resolve compute would run on the weaker GPU, and
+///   * NVIDIA's optical-flow hardware cannot bind to a non-NVIDIA device at all,
+///     so any future frame-interpolation path is dead before it starts.
+/// Reporting it is the difference between diagnosing that in seconds and chasing
+/// it for an afternoon.
+pub struct AdapterInfo {
+    pub description: String,
+    pub vendor_id: u32,
+    pub dedicated_video_memory: u64,
+}
+
+pub fn describe_device_adapter(device: &ID3D11Device) -> Result<AdapterInfo, BackendError> {
+    use windows::Win32::Graphics::Dxgi::{IDXGIAdapter, IDXGIDevice};
+    // SAFETY: every D3D11 device implements IDXGIDevice; the QI is checked.
+    let dxgi_device: IDXGIDevice = device.cast()?;
+    let adapter: IDXGIAdapter = unsafe { dxgi_device.GetAdapter()? };
+    let desc = unsafe { adapter.GetDesc()? };
+
+    let end = desc
+        .Description
+        .iter()
+        .position(|&c| c == 0)
+        .unwrap_or(desc.Description.len());
+    Ok(AdapterInfo {
+        description: String::from_utf16_lossy(&desc.Description[..end]),
+        vendor_id: desc.VendorId,
+        dedicated_video_memory: desc.DedicatedVideoMemory as u64,
+    })
 }
 
 /// Cheap, side-effect-free capability probe: compile every kernel and throw the

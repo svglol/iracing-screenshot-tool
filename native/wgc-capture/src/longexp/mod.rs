@@ -455,6 +455,37 @@ pub fn long_exposure_probe() -> napi::Result<String> {
     }
 }
 
+/// Which GPU the capture/accumulate path actually runs on.
+///
+/// `windows-capture` creates its D3D11 device against the DEFAULT adapter, which on
+/// a hybrid machine need not be the card iRacing renders on. Surfacing it early
+/// turns two otherwise-baffling problems into one log line: compute silently
+/// running on an iGPU, and NVIDIA-only features (optical flow) being unable to bind.
+#[napi(object)]
+pub struct LongExposureDeviceInfo {
+    pub adapter: String,
+    /// PCI vendor id: 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel.
+    pub vendor_id: u32,
+    pub is_nvidia: bool,
+    pub dedicated_video_memory: f64,
+}
+
+#[napi(catch_unwind)]
+pub fn long_exposure_device_info() -> napi::Result<LongExposureDeviceInfo> {
+    // Created exactly the way the capture session's device is, so this reports the
+    // adapter we genuinely use rather than a best guess.
+    let (device, _context) = windows_capture::d3d11::create_d3d_device()
+        .map_err(|e| napi::Error::from_reason(format!("device creation failed: {e}")))?;
+    let info = d3d11::describe_device_adapter(&device)
+        .map_err(|e| napi::Error::from_reason(format!("adapter query failed: {e}")))?;
+    Ok(LongExposureDeviceInfo {
+        adapter: info.description,
+        vendor_id: info.vendor_id,
+        is_nvidia: info.vendor_id == 0x10DE,
+        dedicated_video_memory: info.dedicated_video_memory as f64,
+    })
+}
+
 /// Start accumulating frames of `hwnd`. Returns a session handle. The gate starts
 /// CLOSED — call `long_exposure_open_gate` when the replay reaches the window start.
 #[napi(catch_unwind)]
