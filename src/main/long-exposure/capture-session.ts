@@ -805,9 +805,16 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		return {
 			...base(),
 			failure: 'no-samples',
-			message: preResolve.sawFrame
-				? 'No frames were accumulated. iRacing may have stopped rendering during the exposure.'
-				: 'iRacing did not present any frames to capture.',
+			// A sub-replay-frame window can legitimately catch no presents at all:
+			// 1/1000 at 1/16 playback is ~16 ms of wall clock, about one rendered
+			// frame, so landing between two of them is a coin toss rather than a
+			// malfunction. Blaming iRacing for that would send the user hunting a
+			// fault that isn't there.
+			message: !preResolve.sawFrame
+				? 'iRacing did not present any frames to capture.'
+				: plan.isSubFrameWindow
+					? `This shutter is shorter than one replay frame, and iRacing did not render a frame inside it. Try a slower playback speed, or the next slower shutter.`
+					: 'No frames were accumulated. iRacing may have stopped rendering during the exposure.',
 		};
 	}
 

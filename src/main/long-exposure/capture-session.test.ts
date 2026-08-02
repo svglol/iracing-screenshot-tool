@@ -440,6 +440,35 @@ describe('executeRecipe — the restore guarantee holds on every failure path', 
 		});
 		const outcome = await executeRecipe(recipe(), harness.deps);
 		expect(outcome.failure).toBe('no-samples');
+		expect(outcome.message).toContain('stopped rendering');
+		expectAnchorRestored(harness.events);
+	});
+
+	// A window shorter than one replay frame is ~16 ms of wall clock at 1/16
+	// playback — about one rendered frame — so catching none of them is a coin
+	// toss, not a malfunction. Saying "iRacing may have stopped rendering" would
+	// send the user hunting a fault that is not there.
+	it('explains an empty sub-frame window instead of blaming iRacing', async () => {
+		const harness = makeHarness({
+			framesPerPoll: 1 / 16,
+			nativeOverrides: {
+				longExposureStats: () => ({
+					accepted: 0,
+					rejected: 0,
+					sawFrame: true,
+					frameWidth: 640,
+					frameHeight: 360,
+					error: null,
+				}),
+			},
+		});
+		const outcome = await executeRecipe(
+			recipe({ shutter: '1/1000', playbackSpeed: 16 }),
+			harness.deps
+		);
+		expect(outcome.failure).toBe('no-samples');
+		expect(outcome.message).toContain('shorter than one replay frame');
+		expect(outcome.message).not.toContain('stopped rendering');
 		expectAnchorRestored(harness.events);
 	});
 
