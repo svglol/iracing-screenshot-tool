@@ -18,7 +18,15 @@ import type { SampleStats } from './sample-stats';
 
 // Bumped only when the sidecar shape changes incompatibly, so a future reader can
 // tell what it is looking at.
-export const SIDECAR_VERSION = 1;
+//
+// 2 — sub-replay-frame exposure windows. `exposure.effectiveMs` can now be shorter
+//     than one replay frame (16.67 ms), and `sampling.achievedWindowSeconds` says
+//     what the shot actually covered. THE MEANING OF v1 CHANGED for the fast half
+//     of the ladder: a v1 sidecar reading `shutter: '1/250'` with
+//     `effectiveMs: 16.67` recorded a shot that was asked for 1/250 and given
+//     1/60. Re-executing that recipe on this build honours the 1/250 it asked for,
+//     so the image will differ — deliberately, and the two sidecars say why.
+export const SIDECAR_VERSION = 2;
 
 export interface LongExposureSidecar {
 	sidecarVersion: number;
@@ -61,6 +69,11 @@ export interface LongExposureSidecar {
 		evenness: number;
 		medianGapSeconds: number;
 		maxGapSeconds: number;
+		// Sim time from the first accepted sample to the last — the window the shot
+		// ACHIEVED, next to the one `exposure.effectiveMs` planned. Since sub-frame
+		// windows the planned start is estimated within a replay frame, so this is
+		// what makes a re-shoot comparable rather than assumed (design note §9).
+		achievedWindowSeconds: number;
 	};
 
 	// What optical-flow interpolation actually did. Null when the addon predates the
@@ -207,6 +220,7 @@ export function buildSidecar(opts: {
 			evenness: Number(stats.evenness.toFixed(4)),
 			medianGapSeconds: Number(stats.medianGapSeconds.toFixed(6)),
 			maxGapSeconds: Number(stats.maxGapSeconds.toFixed(6)),
+			achievedWindowSeconds: Number(stats.windowSeconds.toFixed(6)),
 		},
 		interpolation: opts.interpolation ?? null,
 		image: {

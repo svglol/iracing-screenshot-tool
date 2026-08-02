@@ -70,10 +70,8 @@ describe('normalizeRecipe — highlight recovery', () => {
 	it('falls back to the default for a non-numeric value', () => {
 		for (const bogus of [NaN, 'lots', null, undefined, {}]) {
 			expect(
-				normalizeRecipe(
-					{ highlightRecovery: bogus as never },
-					base()
-				).highlightRecovery
+				normalizeRecipe({ highlightRecovery: bogus as never }, base())
+					.highlightRecovery
 			).toBe(0);
 		}
 	});
@@ -83,9 +81,7 @@ describe('normalizeRecipe — highlight recovery', () => {
 	it('normalises a pre-feature recipe to off', () => {
 		const old = { ...base() } as Record<string, unknown>;
 		delete old.highlightRecovery;
-		expect(
-			normalizeRecipe(old as never, base()).highlightRecovery
-		).toBe(0);
+		expect(normalizeRecipe(old as never, base()).highlightRecovery).toBe(0);
 	});
 });
 
@@ -242,21 +238,95 @@ describe('resolvePlan', () => {
 		expect(plan.renderHeight).toBe(2160);
 	});
 
-	it('marks sub-frame shutters as single-frame captures', () => {
+	// The warning keys on how many samples will land, not on how many replay frames
+	// the window spans — since sub-frame windows, a one-frame span can hold plenty
+	// of samples, and a 1-sample result is the CORRECT answer for a fast enough
+	// shutter rather than a quantisation failure.
+	it('flags a capture that will collect a single sample', () => {
+		// 1/1000 at 1/16 playback is 1.0 ms of sim time: one rendered frame.
 		expect(
-			resolvePlan(normalizeRecipe({ shutter: '1/1000' }, base()))
-				.isSingleFrame
+			resolvePlan(
+				normalizeRecipe({ shutter: '1/1000', playbackSpeed: 16 }, base()),
+				{ renderFps: 60 }
+			).isSingleSample
 		).toBe(true);
+		// 1/125 at the same speed spans the same single replay frame but collects
+		// about eight samples — real blur, and it used to be warned about anyway.
+		const fast = resolvePlan(
+			normalizeRecipe({ shutter: '1/125', playbackSpeed: 16 }, base()),
+			{ renderFps: 60 }
+		);
+		expect(fast.windowFrames).toBe(1);
+		expect(fast.isSingleSample).toBe(false);
 		expect(
-			resolvePlan(normalizeRecipe({ shutter: '1/8' }, base())).isSingleFrame
+			resolvePlan(normalizeRecipe({ shutter: '1/8' }, base())).isSingleSample
 		).toBe(false);
 	});
 
 	it('reports the exposure the frame quantisation actually produces', () => {
-		// 1/8 s is 7.5 replay frames, quantised to 8.
+		// 1/8 s is 7.5 replay frames, quantised to 8. Exposures of a whole replay
+		// frame or longer still quantise exactly as they always did.
 		const plan = resolvePlan(normalizeRecipe({ shutter: '1/8' }, base()));
 		expect(plan.windowFrames).toBe(8);
 		expect(plan.effectiveExposureSeconds).toBeCloseTo(8 / 60);
+		expect(plan.isSubFrameWindow).toBe(false);
+	});
+
+	// THE defect. All five of these used to produce a byte-identical plan, so
+	// asking for 1/1000 silently delivered 16x the intended blur.
+	it('gives every sub-frame shutter its own window', () => {
+		const stops = ['1/1000', '1/500', '1/250', '1/125', '1/60'];
+		const plans = stops.map((shutter) =>
+			resolvePlan(normalizeRecipe({ shutter }, base()))
+		);
+		const exposures = plans.map((plan) => plan.effectiveExposureSeconds);
+		expect(new Set(exposures).size).toBe(stops.length);
+		// Every stop is longer than the one before it...
+		for (let i = 1; i < exposures.length; i += 1) {
+			expect(exposures[i]).toBeGreaterThan(exposures[i - 1]);
+		}
+		// ...and where the ladder is a true doubling, so is the window. (1/125 to
+		// 1/60 is not: the ladder's labels are photographic, and 125/60 is 2.08.)
+		for (let i = 1; i < 4; i += 1) {
+			expect(exposures[i] / exposures[i - 1]).toBeCloseTo(2, 6);
+		}
+		// The seek and the safety net are unchanged: one replay frame, every time.
+		for (const plan of plans) {
+			expect(plan.windowFrames).toBe(1);
+			expect(plan.startFrame).toBe(4999);
+		}
+		expect(plans.map((plan) => plan.isSubFrameWindow)).toEqual([
+			true,
+			true,
+			true,
+			true,
+			// 1/60 IS one replay frame, so it is not a sub-frame window.
+			false,
+		]);
+	});
+
+	// The sidecar's effectiveExposureSeconds is a re-execution contract, not a
+	// label (design note §6) — a sub-frame value has to survive the round trip.
+	it('re-resolves a sub-frame plan identically', () => {
+		const recipe = normalizeRecipe({ shutter: '1/250' }, base());
+		const first = resolvePlan(recipe, { renderFps: 60 });
+		const round = resolvePlan(
+			normalizeRecipe(JSON.parse(JSON.stringify(recipe)), base()),
+			{ renderFps: 60 }
+		);
+		expect(round).toEqual(first);
+		expect(first.effectiveExposureSeconds).toBeCloseTo(1 / 250, 10);
+	});
+
+	// A free-form exposure below one replay frame is now honoured too, not just the
+	// ladder stops.
+	it('honours a free-form sub-frame exposureMs', () => {
+		const plan = resolvePlan(
+			normalizeRecipe({ shutter: null, exposureMs: 5 }, base())
+		);
+		expect(plan.effectiveExposureSeconds).toBeCloseTo(0.005, 10);
+		expect(plan.isSubFrameWindow).toBe(true);
+		expect(plan.windowFrames).toBe(1);
 	});
 });
 

@@ -7,6 +7,7 @@ import {
 	planPrimarySink,
 	routeFrame,
 	sinkFrameSpan,
+	sinkStartTime,
 	sinksOpenAt,
 } from './accumulator-sinks';
 
@@ -14,11 +15,15 @@ import {
 // so the tests use the same continuous units the capture path does.
 const frameTimeOf = (frame: number) => frame / REPLAY_FRAMES_PER_SECOND;
 
+// Exposure in seconds for a whole number of replay frames — the shape every
+// pre-sub-frame window had.
+const frames = (n: number) => n / REPLAY_FRAMES_PER_SECOND;
+
 describe('planPrimarySink', () => {
 	it('builds a trailing window that TERMINATES on the anchor', () => {
 		const sink = planPrimarySink({
 			anchorFrame: 1000,
-			windowFrames: 8,
+			exposureSeconds: frames(8),
 			weighting: 'box',
 			label: '1/8',
 		});
@@ -29,15 +34,53 @@ describe('planPrimarySink', () => {
 		expect(sinkFrameSpan(sink)).toBe(8);
 	});
 
-	it('collapses to a zero-length window for a single-frame exposure', () => {
+	it('spans one replay frame for a one-frame exposure', () => {
 		const sink = planPrimarySink({
 			anchorFrame: 500,
-			windowFrames: 1,
+			exposureSeconds: frames(1),
 			weighting: 'box',
 			label: '1/60',
 		});
 		expect(sink.startFrame).toBe(499);
 		expect(sink.endFrame).toBe(500);
+	});
+
+	// The defect this whole feature exists to remove: 1/1000 … 1/125 used to
+	// quantise to a one-frame window and deliver 1/60, i.e. 16x the asked-for blur.
+	it('keeps a sub-frame exposure sub-frame', () => {
+		const sink = planPrimarySink({
+			anchorFrame: 1000,
+			exposureSeconds: 1 / 250,
+			weighting: 'box',
+			label: '1/250',
+		});
+		// Still seeks back one whole frame — that is the frame it starts inside.
+		expect(sink.startFrame).toBe(999);
+		expect(sink.endFrame).toBe(1000);
+		expect(sink.exposureSeconds).toBeCloseTo(1 / 250, 10);
+		// ... but the window it actually exposes for is a quarter of that frame.
+		expect(sinkStartTime(sink, frameTimeOf)).toBeCloseTo(
+			frameTimeOf(1000) - 1 / 250,
+			10
+		);
+	});
+
+	// For a whole-frame window the continuous start lands exactly on the frame
+	// boundary, so nothing about an existing capture moves.
+	it('puts a whole-frame window start exactly on its start frame', () => {
+		for (const n of [1, 2, 4, 8, 15, 30, 60]) {
+			const sink = planPrimarySink({
+				anchorFrame: 1000,
+				exposureSeconds: frames(n),
+				weighting: 'box',
+				label: `${n}f`,
+			});
+			expect(sink.startFrame).toBe(1000 - n);
+			expect(sinkStartTime(sink, frameTimeOf)).toBeCloseTo(
+				frameTimeOf(1000 - n),
+				10
+			);
+		}
 	});
 });
 
@@ -69,6 +112,25 @@ describe('planBracketSinks (v2 seam)', () => {
 		}
 		expect(sinks[0].id).toBe('1/8');
 		expect(sinks[sinks.length - 1].id).toBe('1/1000');
+	});
+
+	// Before sub-frame windows the fast five (1/1000 … 1/60) all produced the same
+	// one-frame window, so bracketing them was five copies of one image — which is
+	// why the bracketing brief prescribed deduping by window length. Every stop is
+	// now genuinely distinct, and there is nothing to dedupe.
+	it('gives every stop on the ladder a distinct window', () => {
+		const sinks = planBracketSinks({
+			anchorFrame: 2000,
+			shutterKey: '1',
+			weighting: 'box',
+		});
+		expect(sinks.length).toBe(11);
+		const windows = sinks.map((sink) => sink.exposureSeconds);
+		expect(new Set(windows).size).toBe(sinks.length);
+		// Strictly decreasing: every faster stop is a strict tail subset.
+		for (let i = 1; i < windows.length; i += 1) {
+			expect(windows[i]).toBeLessThan(windows[i - 1]);
+		}
 	});
 
 	// A faster shutter is literally the tail subset of the slower one's samples.
@@ -111,7 +173,7 @@ describe('earliestStartFrame', () => {
 	it('handles a single sink', () => {
 		const sink = planPrimarySink({
 			anchorFrame: 100,
-			windowFrames: 10,
+			exposureSeconds: frames(10),
 			weighting: 'box',
 			label: '1/6',
 		});
@@ -126,15 +188,64 @@ describe('sinksOpenAt', () => {
 		weighting: 'box',
 	});
 
-	it('offers a frame only to sinks whose range has opened', () => {
-		// 1/15 is 4 frames, so it opens at 996; 1/1000 is 1 frame, opening at 999.
-		expect(sinksOpenAt(sinks, 995).map((s) => s.id)).toEqual([]);
-		expect(sinksOpenAt(sinks, 996).map((s) => s.id)).toEqual(['1/15']);
-		expect(sinksOpenAt(sinks, 1000).length).toBe(sinks.length);
+	// Offer at the START of a replay frame, which is where a whole-frame window
+	// opens. No tick estimate, so the boundary test is binary.
+	const at = (frame: number) =>
+		sinksOpenAt(sinks, {
+			replayFrameNum: frame,
+			sessionTime: frameTimeOf(frame),
+			frameTimeOf,
+		});
+
+	it('offers a frame only to sinks whose window has opened', () => {
+		// 1/15 is 4 frames, so it opens at 996; the fast stops open inside 999.
+		expect(at(995).map((s) => s.id)).toEqual([]);
+		expect(at(996).map((s) => s.id)).toEqual(['1/15']);
+		expect(at(1000).length).toBe(sinks.length);
 	});
 
 	it('closes every sink past the anchor', () => {
-		expect(sinksOpenAt(sinks, 1001)).toEqual([]);
+		expect(at(1001)).toEqual([]);
+	});
+
+	// The point of the change: within the LAST replay frame the fast stops open at
+	// different moments instead of all opening at once.
+	it('opens sub-frame stops partway through the last replay frame', () => {
+		const anchorTime = frameTimeOf(1000);
+		const openAt = (secondsBeforeAnchor: number) =>
+			sinksOpenAt(sinks, {
+				replayFrameNum: 999,
+				sessionTime: anchorTime - secondsBeforeAnchor,
+				frameTimeOf,
+			}).map((s) => s.id);
+
+		// 12 ms back: inside 1/60 (16.7 ms), outside 1/125 (8 ms) and faster.
+		expect(openAt(0.012)).toContain('1/60');
+		expect(openAt(0.012)).not.toContain('1/125');
+		// 6 ms back: 1/125 is in, 1/250 (4 ms) is not.
+		expect(openAt(0.006)).toContain('1/125');
+		expect(openAt(0.006)).not.toContain('1/250');
+		// 0.5 ms back: even 1/1000 is in.
+		expect(openAt(0.0005)).toContain('1/1000');
+	});
+
+	// A bad sub-frame time estimate must not be able to reach back beyond the frame
+	// the seek landed on. That bound is the reason startFrame stays integral.
+	it('never opens before the sink start frame, whatever the time says', () => {
+		const sink = planPrimarySink({
+			anchorFrame: 1000,
+			exposureSeconds: 1 / 250,
+			weighting: 'box',
+			label: '1/250',
+		});
+		expect(
+			sinksOpenAt([sink], {
+				replayFrameNum: 998,
+				// A wildly late time estimate that claims we are inside the window.
+				sessionTime: frameTimeOf(1000),
+				frameTimeOf,
+			})
+		).toEqual([]);
 	});
 });
 
@@ -175,14 +286,18 @@ describe('routeFrame', () => {
 		const byId = new Map(contributions.map((c) => [c.sinkId, c]));
 		// 1/15 spans 996..1000, so frame 999 is 3/4 through it.
 		expect(byId.get('1/15')?.u).toBeCloseTo(0.75);
-		// 1/1000 spans 999..1000, so frame 999 is at its very start.
-		expect(byId.get('1/1000')?.u).toBeCloseTo(0);
+		// 1/60 is exactly one replay frame, so frame 999 is at its very start.
+		expect(byId.get('1/60')?.u).toBeCloseTo(0);
+		// 1/1000 is NOT open yet: its window is the last millisecond before the
+		// anchor, and the start of frame 999 is 16.7 ms out. It used to open here,
+		// which is precisely how 1/1000 came to deliver 1/60.
+		expect(byId.has('1/1000')).toBe(false);
 	});
 
 	it('applies the sink own weighting curve', () => {
 		const sink = planPrimarySink({
 			anchorFrame: 1000,
-			windowFrames: 60,
+			exposureSeconds: frames(60),
 			weighting: 'ease',
 			label: '1"',
 		});
@@ -199,7 +314,7 @@ describe('routeFrame', () => {
 	it('routes nothing before the window opens or after the anchor', () => {
 		const sink = planPrimarySink({
 			anchorFrame: 1000,
-			windowFrames: 10,
+			exposureSeconds: frames(10),
 			weighting: 'box',
 			label: '1/6',
 		});
@@ -228,7 +343,7 @@ describe('routeFrame', () => {
 	it('is invariant to sample count for the same window', () => {
 		const sink = planPrimarySink({
 			anchorFrame: 1000,
-			windowFrames: 60,
+			exposureSeconds: frames(60),
 			weighting: 'linear',
 			label: '1"',
 		});
@@ -255,5 +370,134 @@ describe('routeFrame', () => {
 		expect(fine[0]).toBeCloseTo(coarse[0]);
 		expect(fine[10]).toBeCloseTo(coarse[5]);
 		expect(fine[20]).toBeCloseTo(coarse[10]);
+	});
+
+	// A sub-frame window is a real window, so a tapered curve has to sweep its full
+	// range inside a single replay frame rather than reporting one flat position.
+	it('normalises u across a sub-frame window, not across the replay frame', () => {
+		const sink = planPrimarySink({
+			anchorFrame: 1000,
+			exposureSeconds: 1 / 250,
+			weighting: 'linear',
+			label: '1/250',
+		});
+		const anchorTime = frameTimeOf(1000);
+		const uAt = (secondsBeforeAnchor: number) =>
+			routeFrame({
+				sinks: [sink],
+				replayFrameNum: secondsBeforeAnchor > 0 ? 999 : 1000,
+				sessionTime: anchorTime - secondsBeforeAnchor,
+				frameTimeOf,
+			})[0]?.u;
+
+		expect(uAt(1 / 250)).toBeCloseTo(0, 6);
+		expect(uAt(1 / 500)).toBeCloseTo(0.5, 6);
+		expect(uAt(0)).toBeCloseTo(1, 6);
+	});
+});
+
+// The control loop pushes one weight per tick, and that weight governs every frame
+// iRacing presents until the next push. So a tick covers a SPAN of sim time — ~1 ms
+// at 1/16 playback, a quarter of a 1/250 exposure. Weighting the straddling tick by
+// its covered fraction is what stops the fast stops stair-stepping.
+describe('routeFrame — fractional boundary weight', () => {
+	const sink = planPrimarySink({
+		anchorFrame: 1000,
+		exposureSeconds: 1 / 250,
+		weighting: 'box',
+		label: '1/250',
+	});
+	const windowStart = frameTimeOf(1000) - 1 / 250;
+	// One control tick of sim time at 1/16 playback.
+	const tickSeconds = 0.016 / 16;
+
+	const weightAtOffset = (offsetFromWindowStart: number) =>
+		routeFrame({
+			sinks: [sink],
+			replayFrameNum: 999,
+			sessionTime: windowStart + offsetFromWindowStart,
+			frameTimeOf,
+			tickSeconds,
+		})[0];
+
+	it('gives a fully-inside tick full weight', () => {
+		expect(weightAtOffset(tickSeconds * 2)?.coverage).toBe(1);
+		expect(weightAtOffset(tickSeconds * 2)?.weight).toBeCloseTo(1);
+	});
+
+	it('scales the tick that straddles the window start by its covered fraction', () => {
+		// A tick starting a quarter-tick BEFORE the window covers three quarters.
+		const straddling = weightAtOffset(-tickSeconds * 0.25);
+		expect(straddling?.coverage).toBeCloseTo(0.75);
+		expect(straddling?.weight).toBeCloseTo(0.75);
+	});
+
+	it('closes the gate for a tick entirely before the window', () => {
+		expect(weightAtOffset(-tickSeconds * 1.5)).toBeUndefined();
+	});
+
+	// The straddling tick's weight and the taper multiply rather than replace each
+	// other — coverage is about how much of the tick counted, the curve is about
+	// where in the window it sat.
+	it('multiplies coverage with the weighting curve', () => {
+		const tapered = planPrimarySink({
+			anchorFrame: 1000,
+			exposureSeconds: 1 / 250,
+			weighting: 'linear',
+			label: '1/250',
+		});
+		const [contribution] = routeFrame({
+			sinks: [tapered],
+			replayFrameNum: 999,
+			sessionTime: windowStart - tickSeconds * 0.5,
+			frameTimeOf,
+			tickSeconds,
+		});
+		expect(contribution.coverage).toBeCloseTo(0.5);
+		expect(contribution.weight).toBeCloseTo(
+			weightAt('linear', contribution.u) * 0.5
+		);
+	});
+
+	// Termination is frame-indexed on the anchor and this change does not touch it:
+	// the last tick of the exposure is never scaled down.
+	it('leaves the anchor end alone', () => {
+		const [contribution] = routeFrame({
+			sinks: [sink],
+			replayFrameNum: 1000,
+			sessionTime: frameTimeOf(1000),
+			frameTimeOf,
+			tickSeconds,
+		});
+		expect(contribution.coverage).toBe(1);
+		expect(contribution.weight).toBeCloseTo(1);
+	});
+
+	// The safety net has to survive the early-opening that coverage introduces:
+	// a whole-frame window's first tick lands on its start frame, never before it.
+	it('does not let coverage open a whole-frame window a frame early', () => {
+		const wholeFrame = planPrimarySink({
+			anchorFrame: 1000,
+			exposureSeconds: frames(8),
+			weighting: 'box',
+			label: '1/8',
+		});
+		expect(
+			routeFrame({
+				sinks: [wholeFrame],
+				replayFrameNum: 991,
+				sessionTime: frameTimeOf(992) - tickSeconds * 0.5,
+				frameTimeOf,
+				tickSeconds,
+			})
+		).toEqual([]);
+		const [first] = routeFrame({
+			sinks: [wholeFrame],
+			replayFrameNum: 992,
+			sessionTime: frameTimeOf(992),
+			frameTimeOf,
+			tickSeconds,
+		});
+		expect(first.coverage).toBe(1);
 	});
 });

@@ -44,6 +44,10 @@ function recipe(
 
 interface HarnessOptions {
 	// Frames per poll while "playing". 0 means the transport never advances.
+	// FRACTIONAL values model slow motion honestly: at 1/16 playback a replay frame
+	// lasts 267 ms of wall clock, so ~16 control ticks share one frame number and
+	// the sub-frame interpolation is what distinguishes them. That is the only
+	// regime in which a sub-replay-frame window means anything.
 	framesPerPoll?: number;
 	startFrame?: number;
 	nativeOverrides?: Partial<NativeSessionApi>;
@@ -81,12 +85,17 @@ function makeHarness(options: HarnessOptions = {}) {
 		frameRate: 60,
 	};
 
+	// Continuous cursor position. ReplayFrameNum is integral, so a fractional
+	// advance rate has to accumulate somewhere the floor can be taken from.
+	let framePosition = startFrame;
+
 	// Simulated transport: reading telemetry advances the cursor while "playing",
 	// which is how the accumulation loop makes progress.
 	const replay = new ReplayController({
 		readState: () => {
 			if (playing) {
-				state.replayFrameNum += framesPerPoll;
+				framePosition += framesPerPoll;
+				state.replayFrameNum = Math.floor(framePosition);
 				state.replaySessionTime =
 					(state.replaySessionTime as number) + framesPerPoll / 60;
 			}
@@ -104,6 +113,7 @@ function makeHarness(options: HarnessOptions = {}) {
 			} else {
 				state.replayFrameNum += restoreLands ? frame : 0;
 			}
+			framePosition = state.replayFrameNum;
 		},
 		delay: async (ms) => {
 			clock += ms;
@@ -116,23 +126,38 @@ function makeHarness(options: HarnessOptions = {}) {
 	let gateOpen = false;
 	const nativeCalls: string[] = [];
 
+	// Every sample that actually landed, as the addon would see it. The window is
+	// only observable through these — a test that looks at counts alone cannot tell
+	// a shorter window from a slower render.
+	const pushes: Array<{
+		weight: number;
+		u: number;
+		frameNum: number;
+		sessionTime: number;
+	}> = [];
+
 	// What the recipe asked the native side for, so a test can assert the factor was
 	// actually threaded rather than merely accepted by the type checker.
 	const begunWith: Array<number | undefined> = [];
 	const highlightBegunWith: Array<number | undefined> = [];
 
 	const defaultNative: NativeSessionApi = {
-		longExposureBegin: (_hwnd, interpolationFactor, highlightRecoveryStops) => {
+		longExposureBegin: (
+			_hwnd,
+			interpolationFactor,
+			highlightRecoveryStops
+		) => {
 			nativeCalls.push('begin');
 			begunWith.push(interpolationFactor);
 			highlightBegunWith.push(highlightRecoveryStops);
 			return 7;
 		},
-		longExposureSetSample: () => {
+		longExposureSetSample: (_session, weight, u, frameNum, sessionTime) => {
 			// A frame only lands while the gate is open — mirroring the addon, where
 			// the gate is what stops pre-roll and post-anchor frames joining.
 			if (gateOpen) {
 				accepted += 1;
+				pushes.push({ weight, u, frameNum, sessionTime });
 			}
 		},
 		longExposureSetGate: (_session, open) => {
@@ -207,6 +232,7 @@ function makeHarness(options: HarnessOptions = {}) {
 		nativeCalls,
 		begunWith,
 		highlightBegunWith,
+		pushes,
 		state,
 		replay,
 	};
@@ -274,6 +300,105 @@ describe('executeRecipe — happy path', () => {
 		const harness = makeHarness({ startFrame: 9000 });
 		await executeRecipe(recipe(), harness.deps);
 		expectAnchorRestored(harness.events);
+	});
+});
+
+// The tape stores positions at 60 Hz, but iRacing renders ~10 distinct
+// interpolated frames between each pair — so a window shorter than one replay
+// frame is capturable, and the fast half of the shutter ladder stops resolving to
+// 1/60. This is the same thing the hardware check looks for (streak length halving
+// per stop), measured here as the sim-time span the samples actually cover.
+describe('executeRecipe — sub-replay-frame exposure windows', () => {
+	// 1/16 of a replay frame per tick is what 1/16 playback looks like: ~16 control
+	// ticks share one frame number, distinguished only by sub-frame interpolation.
+	const SLOW_MOTION = { framesPerPoll: 1 / 16 };
+
+	async function shoot(shutter: string) {
+		const harness = makeHarness(SLOW_MOTION);
+		const outcome = await executeRecipe(
+			recipe({ shutter, playbackSpeed: 16 }),
+			harness.deps
+		);
+		const times = harness.pushes.map((push) => push.sessionTime);
+		return {
+			outcome,
+			pushes: harness.pushes,
+			// The sim time the exposure actually covered — the streak length.
+			span: times.length ? times[times.length - 1] - times[0] : 0,
+		};
+	}
+
+	it('halves the exposed window for each faster stop', async () => {
+		const slow = await shoot('1/60');
+		const mid = await shoot('1/125');
+		const fast = await shoot('1/250');
+
+		expect(slow.outcome.ok).toBe(true);
+		expect(mid.outcome.ok).toBe(true);
+		expect(fast.outcome.ok).toBe(true);
+		// 1/60 is one whole replay frame, unchanged by any of this.
+		expect(slow.span).toBeCloseTo(1 / 60, 5);
+
+		// Each stop covers its nominal window, plus at most the one control tick the
+		// gate opens early so the boundary weight has something to scale. At 1/16
+		// playback a 16 ms tick is 1 ms of sim time.
+		const TICK_SECONDS = 0.001;
+		for (const [shot, nominal] of [
+			[mid, 1 / 125],
+			[fast, 1 / 250],
+		] as const) {
+			expect(shot.span).toBeGreaterThanOrEqual(nominal);
+			expect(shot.span).toBeLessThanOrEqual(nominal + TICK_SECONDS * 1.5);
+			// ...and that early tick is scaled by how much of it fell inside, so the
+			// weighted window is the nominal one rather than a tick too long.
+			expect(shot.pushes[0].weight).toBeLessThan(1);
+		}
+
+		// Fewer samples, and that is the correct result rather than a shortfall:
+		// a shorter shutter collects less of the same stream.
+		expect(mid.pushes.length).toBeLessThan(slow.pushes.length);
+		expect(fast.pushes.length).toBeLessThan(mid.pushes.length);
+	});
+
+	// Before this, all five of these produced a byte-identical plan and therefore
+	// the same image out of five differently-named files.
+	it('no longer delivers 1/60 when asked for 1/1000', async () => {
+		const slow = await shoot('1/60');
+		const fastest = await shoot('1/1000');
+		expect(fastest.span).toBeLessThan(slow.span / 8);
+	});
+
+	// Every sample has to sit inside the window it claims, and the window has to
+	// end on the anchor. Only the START moved.
+	it('accumulates only the tail of the last replay frame, ending on the anchor', async () => {
+		const { pushes } = await shoot('1/250');
+		expect(pushes.length).toBeGreaterThan(1);
+
+		const anchorTime = pushes[pushes.length - 1].sessionTime;
+		expect(pushes[pushes.length - 1].frameNum).toBe(ANCHOR);
+		for (const push of pushes) {
+			// Inside the window, allowing the one control tick the boundary weight
+			// covers rather than excludes.
+			expect(anchorTime - push.sessionTime).toBeLessThanOrEqual(
+				1 / 250 + 0.002
+			);
+			expect(push.frameNum).toBeGreaterThanOrEqual(ANCHOR - 1);
+			expect(push.weight).toBeGreaterThan(0);
+			expect(push.weight).toBeLessThanOrEqual(1);
+		}
+		// u sweeps the whole window, so a tapered curve works inside one replay
+		// frame instead of reporting a single flat position.
+		expect(pushes[pushes.length - 1].u).toBeCloseTo(1, 2);
+		expect(pushes[0].u).toBeLessThan(0.3);
+	});
+
+	// The frame-indexed safety net is what bounds a bad sub-frame time estimate to
+	// one replay frame, so nothing may be accumulated before the seek target.
+	it('never accumulates before the frame it seeked to', async () => {
+		const { pushes } = await shoot('1/1000');
+		for (const push of pushes) {
+			expect(push.frameNum).toBeGreaterThanOrEqual(ANCHOR - 1);
+		}
 	});
 });
 

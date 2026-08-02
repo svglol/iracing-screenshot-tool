@@ -18,15 +18,16 @@
 // Pure — no Node, Electron, GPU or SDK deps.
 
 import {
-	exposureSecondsForFrames,
 	findShutterStop,
-	framesForExposure,
+	isSubFrameExposure,
 	isWeightingCurve,
 	nearestPlaybackDivisor,
 	predictSampleCount,
 	predictWallClockSeconds,
+	resolveExposureSeconds,
 	solvePlaybackDivisor,
 	scaleRenderFpsForResize,
+	windowFramesForExposure,
 	type PlaybackDivisor,
 	type WeightingCurve,
 } from './exposure-math';
@@ -277,10 +278,17 @@ export function normalizeRecipe(
 // Deriving this in one pure place means the UI preview and the actual capture can
 // never disagree about what a recipe means.
 export interface ResolvedPlan {
-	// Exposure window length in replay frames, and what that quantises the
-	// requested exposure to.
+	// Replay frames the window spans on the tape — the SEEK span, and the bound on
+	// the frame-indexed safety net. Not the exposure: a sub-frame shutter spans one
+	// frame while exposing for a fraction of it.
 	windowFrames: number;
+	// What the requested exposure actually resolves to. Whole-frame quantised at or
+	// above one replay frame; exact below it, where the window starts partway
+	// through frame `startFrame`.
 	effectiveExposureSeconds: number;
+	// True when the window is shorter than one replay frame, so its start is
+	// continuous rather than landing on a frame boundary.
+	isSubFrameWindow: boolean;
 	// Where the replay must be seeked to.
 	startFrame: number;
 	anchorFrame: number;
@@ -292,9 +300,15 @@ export interface ResolvedPlan {
 	// Render dimensions (target × supersample) iRacing's window is resized to.
 	renderWidth: number;
 	renderHeight: number;
-	// True when the exposure collapses to a single replay frame — no blur, and the
+	// True when the exposure is predicted to collect ONE sample — no blur, and the
 	// capture degenerates to the existing still path.
-	isSingleFrame: boolean;
+	//
+	// Keyed on predicted samples, not on window frames: since sub-frame windows
+	// landed, a 1/125 shot spans one replay frame but collects ~5-9 samples WITH
+	// blur, so "shorter than one replay frame" stopped meaning "no motion blur".
+	// A 1/1000 that really does resolve to one sample is the correct result for a
+	// 1/1000 shutter, not a failure — but the user should still be told.
+	isSingleSample: boolean;
 }
 
 export function resolvePlan(
@@ -307,9 +321,10 @@ export function resolvePlan(
 		currentWindowPixels?: number | null;
 	} = {}
 ): ResolvedPlan {
-	const exposureSeconds = recipe.exposureMs / 1000;
-	const windowFrames = framesForExposure(exposureSeconds);
-	const effectiveExposureSeconds = exposureSecondsForFrames(windowFrames);
+	const effectiveExposureSeconds = resolveExposureSeconds(
+		recipe.exposureMs / 1000
+	);
+	const windowFrames = windowFramesForExposure(effectiveExposureSeconds);
 	const renderWidth = recipe.width * recipe.supersample;
 	const renderHeight = recipe.height * recipe.supersample;
 	const renderFps = scaleRenderFpsForResize({
@@ -326,24 +341,27 @@ export function resolvePlan(
 			targetSamples: recipe.targetSamples ?? 1,
 		});
 
+	const predictedSamples = predictSampleCount({
+		exposureSeconds: effectiveExposureSeconds,
+		renderFps,
+		playbackDivisor,
+	});
+
 	return {
 		windowFrames,
 		effectiveExposureSeconds,
+		isSubFrameWindow: isSubFrameExposure(effectiveExposureSeconds),
 		startFrame: recipe.anchorFrame - windowFrames,
 		anchorFrame: recipe.anchorFrame,
 		playbackDivisor,
-		predictedSamples: predictSampleCount({
-			exposureSeconds: effectiveExposureSeconds,
-			renderFps,
-			playbackDivisor,
-		}),
+		predictedSamples,
 		predictedWallClockSeconds: predictWallClockSeconds({
 			exposureSeconds: effectiveExposureSeconds,
 			playbackDivisor,
 		}),
 		renderWidth,
 		renderHeight,
-		isSingleFrame: windowFrames <= 1,
+		isSingleSample: predictedSamples <= 1,
 	};
 }
 
@@ -362,7 +380,9 @@ export function interpolationLoad(opts: {
 	interpolationFactor: number;
 }): number {
 	const megapixels = (opts.renderWidth * opts.renderHeight) / 1e6;
-	return Number((megapixels * Math.max(1, opts.interpolationFactor)).toFixed(3));
+	return Number(
+		(megapixels * Math.max(1, opts.interpolationFactor)).toFixed(3)
+	);
 }
 
 // Validate a plan against live replay bounds. Split from resolvePlan so the UI can
@@ -412,9 +432,9 @@ export function validatePlan(opts: {
 		);
 	}
 
-	if (plan.isSingleFrame) {
+	if (plan.isSingleSample) {
 		warnings.push(
-			'This shutter is shorter than one replay frame, so the result is a single sample with no motion blur.'
+			'This shutter is short enough that only one frame will land inside it, so the result has no motion blur. A slower playback speed or a slower shutter buys samples.'
 		);
 	}
 

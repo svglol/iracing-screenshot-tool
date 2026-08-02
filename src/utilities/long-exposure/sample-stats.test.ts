@@ -81,7 +81,28 @@ describe('summarizeSamples', () => {
 		expect(stats.evenness).toBeCloseTo(0.25);
 	});
 
-	// A single-sample exposure (1/1000 ... 1/60) has no gaps to be uneven about.
+	// The sim time the exposure ACHIEVED. Since sub-replay-frame windows the planned
+	// start is estimated within a replay frame, so this is what makes two shots of
+	// the same recipe comparable rather than merely assumed to match.
+	it('measures the window the samples actually covered', () => {
+		expect(summarizeSamples(evenLog(30)).windowSeconds).toBeCloseTo(
+			29 / 60,
+			9
+		);
+		// A sub-frame window: 5 samples 1 ms apart is a 4 ms exposure, not 1/60.
+		expect(summarizeSamples(evenLog(5, 0.001)).windowSeconds).toBeCloseTo(
+			0.004,
+			9
+		);
+	});
+
+	it('reports no window for a single sample', () => {
+		expect(summarizeSamples(evenLog(1)).windowSeconds).toBe(0);
+		expect(summarizeSamples([]).windowSeconds).toBe(0);
+	});
+
+	// A one-sample exposure has no gaps to be uneven about — which is the correct
+	// result for a shutter fast enough that one rendered frame fills it.
 	it('treats a single sample as evenly sampled by definition', () => {
 		const stats = summarizeSamples(evenLog(1));
 		expect(stats.accepted).toBe(1);

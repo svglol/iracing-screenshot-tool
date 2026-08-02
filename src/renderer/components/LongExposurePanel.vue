@@ -92,11 +92,13 @@
 					{{ formatDuration(plan.predictedWallClockSeconds) }}
 				</span>
 				<br />
+				<!-- A sub-replay-frame exposure spans one frame but only exposes for
+				     part of it, so a frame count alone would misdescribe the fast half
+				     of the ladder. Show the window it actually opens for. -->
 				<span class="sidebar-target-hint__render">
 					frames {{ plan.startFrame }} → {{ plan.anchorFrame }} ({{
-						plan.windowFrames
-					}}
-					replay frames)
+						windowLabel
+					}})
 				</span>
 			</p>
 
@@ -353,6 +355,10 @@ const AVAILABILITY_POLL_MS = 1000;
 // imported so the renderer doesn't pull main-process modules into its bundle.
 interface CapturePlan {
 	windowFrames: number;
+	effectiveExposureSeconds: number;
+	// True when the shutter is faster than one replay frame, so the window opens
+	// partway through frame `startFrame` rather than on its boundary.
+	isSubFrameWindow: boolean;
 	startFrame: number;
 	anchorFrame: number;
 	playbackDivisor: number;
@@ -451,6 +457,16 @@ export default defineComponent({
 			return this.plan.playbackDivisor === 1
 				? '1x'
 				: `1/${this.plan.playbackDivisor}`;
+		},
+		// What the window actually opens for. A shutter faster than one replay frame
+		// exposes for part of a single frame, so reporting "1 replay frame" there
+		// would describe the seek rather than the exposure.
+		windowLabel(): string {
+			if (!this.plan) return '';
+			if (this.plan.isSubFrameWindow) {
+				return `${(this.plan.effectiveExposureSeconds * 1000).toFixed(1)} ms within one replay frame`;
+			}
+			return `${this.plan.windowFrames} replay frames`;
 		},
 		progressLabel(): string {
 			if (!this.progress) return 'Working…';

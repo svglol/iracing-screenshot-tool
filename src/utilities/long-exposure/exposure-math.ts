@@ -87,10 +87,10 @@ function isFiniteNumber(value: unknown): value is number {
 	return typeof value === 'number' && Number.isFinite(value);
 }
 
-// Exposure window length in REPLAY FRAMES. Always at least 1: a shutter faster
-// than one replay frame (1/1000 … 1/60) collapses to a single-frame window, which
-// is the existing still-capture path with no blur — matching JRT's 1/1000 = 1
-// sample rung.
+// Exposure window length in REPLAY FRAMES, rounded to the nearest whole frame.
+// Always at least 1. This is the QUANTISER for exposures of one replay frame or
+// longer; below one frame it saturates at 1 and `resolveExposureSeconds` takes
+// over — see the sub-frame section below.
 export function framesForExposure(exposureSeconds: number): number {
 	if (!isFiniteNumber(exposureSeconds) || exposureSeconds <= 0) {
 		return 1;
@@ -106,6 +106,77 @@ export function exposureSecondsForFrames(frames: number): number {
 		return 1 / REPLAY_FRAMES_PER_SECOND;
 	}
 	return Math.round(frames) / REPLAY_FRAMES_PER_SECOND;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-replay-frame exposure windows
+//
+// The tape stores POSITIONS at 60 Hz, but iRacing renders ~10 distinct
+// interpolated frames between each pair of them (measured — see
+// long-exposure-frame-interpolation.md §1). So an exposure shorter than one replay
+// frame is perfectly capturable: seek to `anchor − 1`, play, and accumulate only
+// the tail subset of the rendered frames.
+//
+// Before this existed, `framesForExposure` was the only quantiser and 1/1000,
+// 1/500, 1/250 and 1/125 all collapsed onto 1/60 — asking for 1/1000 silently
+// delivered 16x the intended blur. Five stops, one image.
+//
+// Deliberately NOT changed: exposures of one frame or longer still quantise to
+// whole frames exactly as before, so every existing recipe resolves to the same
+// window it always did (1/8 remains 8 frames = 0.133 s, 6.7% slower than its
+// label). The machinery below would remove that too; doing so would silently
+// change what every stored recipe means, which is a separate decision.
+// ---------------------------------------------------------------------------
+
+// Tolerance, in replay frames, for float round-trips. `(1/60)*1000/1000` is not
+// exactly `1/60`, and `(8/60)*60` is not exactly 8 — without this a 1/60 request
+// would classify as sub-frame and an 8-frame window would ceil to 9.
+const FRAME_EPSILON = 1e-9;
+
+// What a requested exposure actually resolves to.
+//
+//   >= one replay frame  quantised to whole frames, exactly as before.
+//   <  one replay frame  passed through UNQUANTISED — a continuous window that
+//                        ends on the anchor and starts partway into the frame
+//                        before it.
+//
+// This value is a reproducibility contract, not a label: it goes in the sidecar
+// and a re-execution must land on the same window (design note §6).
+export function resolveExposureSeconds(exposureSeconds: number): number {
+	if (!isFiniteNumber(exposureSeconds) || exposureSeconds <= 0) {
+		return 1 / REPLAY_FRAMES_PER_SECOND;
+	}
+	if (exposureSeconds * REPLAY_FRAMES_PER_SECOND < 1 - FRAME_EPSILON) {
+		return exposureSeconds;
+	}
+	return exposureSecondsForFrames(framesForExposure(exposureSeconds));
+}
+
+// How many whole replay frames a resolved exposure needs on the tape.
+//
+// CEIL, not round: this is what the seek targets and what the frame-indexed safety
+// net opens on, so it must reach back far enough to contain the whole continuous
+// window. A sub-frame exposure still needs one full frame — that is the frame it
+// starts partway through. For a whole-frame exposure this returns exactly the
+// frame count that produced it, so the seek is unchanged.
+export function windowFramesForExposure(exposureSeconds: number): number {
+	if (!isFiniteNumber(exposureSeconds) || exposureSeconds <= 0) {
+		return 1;
+	}
+	return Math.max(
+		1,
+		Math.ceil(exposureSeconds * REPLAY_FRAMES_PER_SECOND - FRAME_EPSILON)
+	);
+}
+
+// Whether an exposure is shorter than one replay frame — i.e. whether it needs the
+// continuous window start rather than being fully described by its frame span.
+export function isSubFrameExposure(exposureSeconds: number): boolean {
+	return (
+		isFiniteNumber(exposureSeconds) &&
+		exposureSeconds > 0 &&
+		exposureSeconds * REPLAY_FRAMES_PER_SECOND < 1 - FRAME_EPSILON
+	);
 }
 
 // Clamp a live FrameRate telemetry reading into a range that produces sane
@@ -356,4 +427,38 @@ export function windowPosition(opts: {
 		return 1;
 	}
 	return Math.min(1, Math.max(0, (sessionTime - windowStartTime) / span));
+}
+
+// Fraction of one control tick that lies INSIDE the window, at the window start.
+//
+// The gate and weight we push govern every frame iRacing presents until the next
+// push, so a tick's weight covers a sim-time INTERVAL, not an instant. That
+// interval is ~1 ms of sim time at P=16 (16 ms of wall clock at 1/16 speed), which
+// against a 4 ms 1/250 exposure is 25% of the whole window. A binary in/out test
+// would therefore quantise the window start to whole ticks and stair-step the fast
+// stops; scaling the straddling tick's weight by its covered fraction turns that
+// into a smooth ramp, for one multiply. Standard antialiasing.
+//
+// ONLY the start is antialiased. Termination stays frame-indexed on the anchor
+// (design note §4), so the tick that ends the exposure is never scaled.
+//
+// Because resolve normalises by accumulated weight, getting this slightly wrong
+// changes blur length, never brightness — it fails graceful in both directions.
+export function startBoundaryCoverage(opts: {
+	// Sim time at the START of the interval this tick's weight governs.
+	sessionTime: number;
+	// How much sim time it governs. Non-positive/unknown falls back to a binary
+	// test on the sample's own time.
+	tickSeconds: number;
+	windowStartTime: number;
+}): number {
+	const { sessionTime, tickSeconds, windowStartTime } = opts;
+	if (!isFiniteNumber(sessionTime) || !isFiniteNumber(windowStartTime)) {
+		return 1;
+	}
+	if (!isFiniteNumber(tickSeconds) || tickSeconds <= 0) {
+		return sessionTime >= windowStartTime ? 1 : 0;
+	}
+	const covered = sessionTime + tickSeconds - windowStartTime;
+	return Math.min(1, Math.max(0, covered / tickSeconds));
 }

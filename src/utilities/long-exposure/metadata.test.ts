@@ -199,6 +199,34 @@ describe('buildSidecar', () => {
 		expect(result.exposure.startFrame).toBe(4992);
 	});
 
+	// Sub-frame window starts are estimated within a replay frame, so the planned
+	// exposure alone no longer tells a re-shoot whether it matched. The achieved
+	// window sits next to it (design note §9).
+	it('records the window the samples actually covered', () => {
+		expect(sidecar().sampling.achievedWindowSeconds).toBeCloseTo(59 / 60, 5);
+	});
+
+	// A shot at 1/250 used to write effectiveMs 16.67 — the honest report of a
+	// window it never asked for. It now writes the window it was given.
+	it('writes a sub-frame effective exposure for a fast shutter', () => {
+		const fast = normalizeRecipe({ shutter: '1/250' }, recipe);
+		const result = buildSidecar({
+			recipe: fast,
+			plan: resolvePlan(fast, { renderFps: 60 }),
+			stats,
+			backend: 'd3d11-compute',
+			imageWidth: 1920,
+			imageHeight: 1080,
+			toolName: 'iRacing Screenshot Tool',
+			toolVersion: '3.2.0',
+			capturedAt: '2026-08-02T12:00:00.000Z',
+			context,
+		});
+		expect(result.exposure.effectiveMs).toBeCloseTo(4, 6);
+		expect(result.exposure.windowFrames).toBe(1);
+		expect(result.exposure.startFrame).toBe(4999);
+	});
+
 	it('describes the playback speed the way the user chose it', () => {
 		expect(sidecar().exposure.playbackSpeed).toBe('1/8');
 		const realtime = normalizeRecipe({ playbackSpeed: 1 }, recipe);

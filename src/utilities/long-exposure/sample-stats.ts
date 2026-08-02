@@ -53,6 +53,15 @@ export interface SampleStats {
 	evenness: number;
 	// Gaps beyond DROP_GAP_FACTOR × median — i.e. probable dropped frames.
 	dropouts: number;
+	// Sim time from the first accepted sample to the last: the window the exposure
+	// ACHIEVED, as opposed to the one it planned.
+	//
+	// Worth recording since sub-replay-frame windows landed. The window start is
+	// now estimated within a replay frame from wall clock, so two captures of the
+	// same recipe can differ slightly in exposure DURATION rather than only in
+	// sample jitter (design note §9). This is the number that lets a re-shoot be
+	// compared instead of assumed.
+	windowSeconds: number;
 }
 
 // A gap this many times the median counts as a dropout rather than jitter.
@@ -98,8 +107,15 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 		}
 	}
 
+	const span =
+		accepted.length > 1
+			? accepted[accepted.length - 1].sessionTime - accepted[0].sessionTime
+			: 0;
+	const windowSeconds = Number.isFinite(span) && span > 0 ? span : 0;
+
 	// Fewer than two accepted samples means there are no gaps to be uneven about.
-	// A single-sample exposure (1/1000 … 1/60) is evenly sampled by definition.
+	// A one-sample exposure — the correct result for a fast enough shutter — is
+	// evenly sampled by definition.
 	if (gaps.length === 0) {
 		return {
 			accepted: accepted.length,
@@ -109,6 +125,7 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 			maxGapSeconds: 0,
 			evenness: 1,
 			dropouts: 0,
+			windowSeconds,
 		};
 	}
 
@@ -127,6 +144,7 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 		maxGapSeconds,
 		evenness: maxGapSeconds > 0 ? medianGapSeconds / maxGapSeconds : 1,
 		dropouts,
+		windowSeconds,
 	};
 }
 

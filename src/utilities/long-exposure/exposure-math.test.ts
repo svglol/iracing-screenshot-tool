@@ -9,18 +9,22 @@ import {
 	exposureSecondsForFrames,
 	findShutterStop,
 	framesForExposure,
+	isSubFrameExposure,
 	isWeightingCurve,
 	nearestPlaybackDivisor,
 	MIN_USABLE_RENDER_FPS,
 	predictSampleCount,
 	predictWallClockSeconds,
 	replayFrameWallMs,
+	resolveExposureSeconds,
 	scaleRenderFpsForResize,
+	startBoundaryCoverage,
 	subFramePosition,
 	shutterStopsAtOrFaster,
 	solvePlaybackDivisor,
 	usableRenderFps,
 	weightAt,
+	windowFramesForExposure,
 	windowPosition,
 } from './exposure-math';
 
@@ -108,8 +112,8 @@ describe('framesForExposure', () => {
 		expect(framesForExposure(0.125)).toBe(8);
 	});
 
-	// A shutter faster than one replay frame collapses to a single sample — no
-	// blur — which is JRT's 1/1000 = 1 sample rung.
+	// framesForExposure is the WHOLE-FRAME quantiser; below one frame it saturates
+	// and resolveExposureSeconds takes over.
 	it('never returns fewer than one frame', () => {
 		expect(framesForExposure(1 / 1000)).toBe(1);
 		expect(framesForExposure(1 / 60)).toBe(1);
@@ -124,6 +128,73 @@ describe('framesForExposure', () => {
 		expect(exposureSecondsForFrames(framesForExposure(0.125))).toBeCloseTo(
 			8 / 60
 		);
+	});
+});
+
+describe('resolveExposureSeconds', () => {
+	// The fast half of the ladder used to quantise onto 1/60, so asking for 1/1000
+	// delivered 16x the intended blur. Below one replay frame the request now
+	// passes through exactly — iRacing renders ~10 interpolated frames per replay
+	// frame, so the window is capturable.
+	it('passes a sub-frame exposure through unquantised', () => {
+		expect(resolveExposureSeconds(1 / 1000)).toBeCloseTo(0.001, 10);
+		expect(resolveExposureSeconds(1 / 250)).toBeCloseTo(0.004, 10);
+		expect(resolveExposureSeconds(0.005)).toBeCloseTo(0.005, 10);
+	});
+
+	// Unchanged, deliberately: quantising these differently would silently change
+	// what every stored recipe means.
+	it('still quantises a whole-frame exposure to whole frames', () => {
+		expect(resolveExposureSeconds(0.125)).toBeCloseTo(8 / 60, 12);
+		expect(resolveExposureSeconds(0.25)).toBeCloseTo(15 / 60, 12);
+		expect(resolveExposureSeconds(1)).toBe(1);
+	});
+
+	// 1/60 s does not survive a millisecond round trip exactly ((1/60)*1000/1000 is
+	// a hair under 1/60), and it must not fall into the sub-frame branch on that.
+	it('treats one replay frame as a whole frame despite float noise', () => {
+		const throughMs = ((1 / 60) * 1000) / 1000;
+		expect(resolveExposureSeconds(throughMs)).toBe(1 / 60);
+	});
+
+	it('falls back to one frame for a nonsense exposure', () => {
+		expect(resolveExposureSeconds(0)).toBe(1 / 60);
+		expect(resolveExposureSeconds(-1)).toBe(1 / 60);
+		expect(resolveExposureSeconds(NaN)).toBe(1 / 60);
+	});
+});
+
+describe('windowFramesForExposure', () => {
+	// CEIL, because this is the seek target and the frame-indexed safety net: it
+	// has to reach back far enough to contain the whole continuous window.
+	it('gives a sub-frame window one whole frame to start inside', () => {
+		expect(windowFramesForExposure(1 / 1000)).toBe(1);
+		expect(windowFramesForExposure(1 / 125)).toBe(1);
+		expect(windowFramesForExposure(1 / 60)).toBe(1);
+	});
+
+	// The seek must not move for exposures that have not changed — (8/60)*60 is
+	// 8.000000000000002 in float, and a naive ceil would send it back nine frames.
+	it('does not overshoot a whole-frame window', () => {
+		for (const frames of [1, 2, 4, 8, 15, 30, 60]) {
+			expect(windowFramesForExposure(frames / 60)).toBe(frames);
+		}
+	});
+
+	it('rounds a fractional multi-frame window up', () => {
+		expect(windowFramesForExposure(1.5 / 60)).toBe(2);
+		expect(windowFramesForExposure(8.2 / 60)).toBe(9);
+	});
+});
+
+describe('isSubFrameExposure', () => {
+	it('is true only below one replay frame', () => {
+		expect(isSubFrameExposure(1 / 1000)).toBe(true);
+		expect(isSubFrameExposure(1 / 125)).toBe(true);
+		expect(isSubFrameExposure(1 / 60)).toBe(false);
+		expect(isSubFrameExposure(((1 / 60) * 1000) / 1000)).toBe(false);
+		expect(isSubFrameExposure(0.125)).toBe(false);
+		expect(isSubFrameExposure(0)).toBe(false);
 	});
 });
 
@@ -533,5 +604,71 @@ describe('windowPosition', () => {
 				windowEndTime: 11,
 			})
 		).toBe(1);
+	});
+});
+
+describe('startBoundaryCoverage', () => {
+	// One control tick at 1/16 playback: 16 ms of wall clock, 1 ms of sim time.
+	const tickSeconds = 0.001;
+
+	it('is 1 for a tick wholly inside the window', () => {
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10.5,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBe(1);
+	});
+
+	it('is 0 for a tick that ends before the window opens', () => {
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10 - tickSeconds * 2,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBe(0);
+	});
+
+	// The whole point: a tick straddling the start contributes the fraction of
+	// itself that fell inside, instead of all or nothing. Against a 4 ms 1/250
+	// exposure a whole tick is 25%, which would otherwise stair-step.
+	it('scales the straddling tick by its covered fraction', () => {
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10 - tickSeconds * 0.25,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBeCloseTo(0.75);
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10 - tickSeconds * 0.75,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBeCloseTo(0.25);
+	});
+
+	// Without a usable tick estimate there is nothing to antialias with, so it
+	// degrades to the binary test rather than guessing.
+	it('falls back to a binary test with no tick estimate', () => {
+		for (const bad of [0, -1, NaN]) {
+			expect(
+				startBoundaryCoverage({
+					sessionTime: 10,
+					tickSeconds: bad,
+					windowStartTime: 10,
+				})
+			).toBe(1);
+			expect(
+				startBoundaryCoverage({
+					sessionTime: 9.999,
+					tickSeconds: bad,
+					windowStartTime: 10,
+				})
+			).toBe(0);
+		}
 	});
 });
