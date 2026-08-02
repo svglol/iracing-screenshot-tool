@@ -91,21 +91,42 @@ predicted VRAM. The panel already shows a predicted-samples line; extend that.
 
 ## 3. Three things that will bite you
 
-### 3.1 The fused warp kernel becomes a pessimisation at N > 1
+### 3.1 The fused warp kernel redoes the warp per sink — but do NOT split it
 
-`CSWarpAccumulate` fuses "warp to time t" with "accumulate into the sink", which was a
-genuine win at one sink (no full-resolution intermediate is ever written — it is why
-the measured interpolation cost came in under the estimate).
+**REVISED 2026-08-02. The fix this section originally prescribed would now undo a
+change that has already landed. Read this version, not the git history.**
 
-**With N sinks that fusion redoes the entire warp N times.** The warped image is
-identical for every sink; only the weight differs. At 8 stops and factor 4 that is
-`3 × 8 = 24` full warp dispatches per captured frame instead of 3.
+The problem is real and unchanged: `CSWarpAccumulate` fuses "warp" with "accumulate
+into the sink", so **with N sinks that fusion redoes the entire warp N times.** The
+warped image is identical for every sink; only the weight differs.
 
-Fix: keep both paths. `N == 1` uses the existing fused kernel; `N > 1` splits into
-`CSWarp` → one scratch texture, then N cheap `CSAccumulate` passes against it. Budget
-one extra full-res RGBA (or RGBA16F) scratch surface for that.
+What changed is the shape of the kernel. Since
+`long-exposure-frame-interpolation.md` §9.1, one dispatch computes *all* `factor - 1`
+synthetic samples, sums them weighted in registers, and does a **single** accumulator
+read-modify-write. So per captured frame per sink it is now 1 dispatch, not
+`factor - 1` of them — at 8 stops and factor 4 that is 8 dispatches, not the 24 this
+section originally predicted.
 
-**Do not discover this by measuring a slow capture — it is structural.**
+**The originally proposed fix — `CSWarp` into a scratch texture, then N cheap
+`CSAccumulate` passes — is now actively wrong.** After §9.1 the synthetic samples never
+exist simultaneously; they are summed in registers and discarded. Materialising them
+would mean writing `factor - 1` full-resolution intermediates (7 surfaces at factor 8)
+and reading them back N times, which is precisely the traffic §9.1 removed. It would
+be slower at N = 1 *and* at N > 1.
+
+The right shape instead: **keep the fused kernel and give it N accumulator UAVs.** One
+dispatch warps once and does N read-modify-writes, one per sink, from values already in
+registers. Each sink needs its own `(prevWeight, curWeight)` pair, so `WarpParams`
+grows an array of them rather than the two scalars it carries today. The accumulator
+traffic is irreducible — every sink has its own accumulator and must be written — but
+the warp sampling stops multiplying, which is the whole win.
+
+**Constraint that sizes the design:** D3D11 feature level 11_0 guarantees 8 UAV slots
+to a compute shader. That caps a single dispatch at 8 sinks, which happens to fit: §3.3
+dedupes 11 stops down to 7. More than 8 sinks would need the dispatch run twice over
+disjoint sink subsets, re-warping once per batch rather than once per sink.
+
+**Do not discover any of this by measuring a slow capture — it is structural.**
 
 ### 3.2 Sink ids are filename-hostile
 
@@ -148,8 +169,10 @@ existing hard-refuse path (§7 of the main design note) does its job.
   per captured frame** regardless of sink count — only the warp/accumulate multiplies —
   so NVOFA cost does not scale with the bracket set.
 - **Interpolation VRAM** (`INTERPOLATION_BYTES_PER_PIXEL`) is per-session, not per
-  sink, and `estimateLongExposureVram` already treats it that way. Adding the §3.1
-  scratch surface means adding to that constant, not to the per-sink one.
+  sink, and `estimateLongExposureVram` already treats it that way. It is now `4+4+1+1`
+  rather than `4+1+1`: the warp reads both frames through owned `_TYPELESS` copies so
+  they can carry `_UNORM_SRGB` views. Under the revised §3.1 there is **no scratch
+  surface to add** — the multi-sink kernel writes straight to the accumulators.
 
 ---
 
@@ -172,7 +195,9 @@ existing hard-refuse path (§7 of the main design note) does its job.
    changes the VRAM maths everything else is sized against.)
 2. Native: multi-sink create / per-sink weights / multi-image finish.
 3. Capture session: plan N, route N, `sinkCount: sinks.length`.
-4. Split the warp kernel for `N > 1`. (§3.1)
+4. Give the warp kernel N accumulator UAVs. (§3.1 — and read its 2026-08-02 revision
+   first: do NOT split it into warp-then-accumulate, which is what the original text
+   said and would now be a regression.)
 5. Output: N files, with id sanitising. (§3.2)
 6. UI toggle + predicted stop list and VRAM.
 7. Measure: one bracketed capture should cost the same wall-clock as one unbracketed
