@@ -537,9 +537,73 @@ Two related corrections shipped with it:
   everywhere else — and the warning stays silent until this machine has produced
   evidence of its own.
 
-### 8.4 Still not measured
+### 8.4 Measured after the fix — the bottleneck moved, it did not go away
 
-Whether the digest fix makes 5120×2880 + 8× viable **is not known**. Removing the sync
-stops the CPU stalling, but it does not reduce GPU work; if the GPU genuinely needs
-more than 25.6 ms per frame, the queue simply backs up instead. Re-shoot the shot
-19/20 pair and compare `sampling.achieved`.
+Four shots of the same anchor at 5120×2880, ss2, 1/60, 1/16 playback:
+
+| shot | build | interp | pred | **real** | mean ms | median gap |
+|---|---|---|---|---|---|---|
+| 22 | old | off | 11 | 12 | 1.63 | 0.00156 |
+| 21 | old | 8× | 11 | 3 | 28.73 | 0.00497 |
+| 23 | **new** | off | 11 | 13 | **0.04** | 0.00144 |
+| 24 | **new** | 8× | 11 | **4** | **0.71** | 0.00569 |
+
+**The CPU cost is gone and the sample loss remains.** 28.73 → 0.71 ms, yet real samples
+only moved 3 → 4. A median gap of 0.0057 s of sim time at 1/16 playback is ~91 ms of
+wall clock per accepted frame, against iRacing presenting every ~25.6 ms — so we are
+still catching roughly one frame in four, and nothing CPU-side is waiting.
+
+Conclusion: **at 5120×2880 the interpolation path is GPU-bound.** Seven full-resolution
+warp passes at 14.7 Mpx, each doing a read-modify-write of a 236 MB fp32 accumulator,
+is more work than fits in the budget. At 2560×1440 the same settings are completely
+unaffected (12–13 real, identical to interpolation off).
+
+**Corollary worth internalising: `meanFrameMs` is now actively misleading.** 0.71 ms
+looks perfect while three frames in four are being dropped. Judge affordability from
+`achievedRatio` only.
+
+---
+
+## 9. Next: make the warp path cheaper (not started)
+
+~91 ms for seven passes is ~13 ms each, i.e. roughly 46 GB/s effective on a card that
+does ~1000 GB/s. **The path is latency-bound, not fundamentally too much work**, so
+there is real headroom before "5K at 8× is impossible" is the honest answer.
+
+Two changes, in value order:
+
+### 9.1 One accumulator read-modify-write per frame, not per synthetic sample
+
+`CSWarpAccumulate` currently runs once per synthetic sample, and each run reads AND
+writes the whole accumulator: at 14.75 Mpx that is 236 MB in + 236 MB out, about
+**80% of the pass's traffic**, repeated `factor - 1` times.
+
+Fold the loop inside the kernel: one dispatch that computes all `factor - 1` warped
+samples, sums them (weighted) in registers, and does a **single** accumulator
+read-modify-write. Texture sampling is unchanged; accumulator traffic drops by
+`factor - 1`. Expect roughly 3× on the whole pass at factor 8.
+
+This also makes factor 8 nearly as cheap as factor 2, which changes the guardrail's
+shape — re-measure the learned load afterwards.
+
+Note this interacts with the bracketing brief §3.1, which wants the warp SPLIT from
+the accumulate for N sinks. Both are the same insight from opposite ends: the warp is
+per-frame, the accumulate is per-sink. Do them together if bracketing lands first.
+
+### 9.2 Let the hardware do sRGB→linear
+
+Bind the source and retained frames through an `R8G8B8A8_UNORM_SRGB` SRV. The texture
+unit then decodes sRGB **as part of bilinear filtering**, which:
+
+- removes three `pow()` per pixel per pass (plus the one in `expand_highlights`), and
+- **fixes a documented correctness compromise** — §7 notes that hardware bilinear
+  currently blends sRGB-ENCODED values and we linearise afterwards. With an `_SRGB`
+  view the blend happens in linear space, which is what it should always have been.
+
+Faster and more correct in the same change.
+
+**Constraint:** an `_SRGB` view requires the resource to have been created `TYPELESS`.
+WGC's frame-pool textures are created `R8G8B8A8_UNORM`, so this needs the owned
+ping-pong copies (which the interpolation path already keeps for `prev`) to be
+`R8G8B8A8_TYPELESS` with two views. That is one extra full-res copy per frame at most,
+and the path already does one.
