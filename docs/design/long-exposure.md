@@ -227,6 +227,14 @@ Exposures at or below one replay frame (1/1000 … 1/60) resolve to `N = 1` and 
 served by a single-sample capture at P = 1, i.e. exactly the existing WGC still path
 with no motion blur — matching JRT's 1/1000 = 1 sample rung.
 
+**This is a limitation of our planner, NOT of the replay format, and it makes five
+shutter stops inert.** The tape stores positions at 60 Hz but iRacing renders ~10
+distinct interpolated frames between each pair (§1 of the frame-interpolation note), so
+a sub-replay-frame exposure is capturable: seek to `anchor − 1`, play, and accumulate
+only the tail subset. As it stands, asking for 1/1000 silently delivers 1/60 — 16× the
+intended blur. See `long-exposure-subframe-windows.md`, which also covers the two stated
+invariants that fix would bend (§4's wall-clock rule and §9's bit-exact window bounds).
+
 ### Accumulation precision — fp32, and here is the proof
 
 The brief allows fp16 "if you can show it's sufficient". It isn't:
