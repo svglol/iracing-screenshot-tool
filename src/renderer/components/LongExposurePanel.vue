@@ -44,17 +44,6 @@
 				}}
 			</o-notification>
 
-			<o-notification
-				v-else-if="!inReplay"
-				class="sidebar-tooltip"
-				variant="info"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Open a replay and scrub to the moment you want. The exposure ends
-				<strong>on</strong> that frame.
-			</o-notification>
-
 			<!-- Long exposure accumulates on the GPU via the native WGC path, which is
 		     independent of the still-capture backend. Worth saying out loud, because
 		     a ReShade user reasonably expects their stills setting to apply here. -->
@@ -105,7 +94,9 @@
 			     settings will actually produce, and how long the user will wait for
 			     it. Slow-motion playback trades patience for sample count, so that
 			     cost should never be a surprise. -->
-				<p v-if="plan" class="sidebar-target-hint">
+				<!-- Also gated on being in a replay: without a cursor the plan
+			     resolves against frame 0 and this would read "frames -8 → 0". -->
+				<p v-if="plan && inReplay" class="sidebar-target-hint">
 					<span class="sidebar-target-hint__value">
 						~{{ plan.predictedSamples }} samples
 					</span>
@@ -297,28 +288,37 @@
 			     message, and refusing before the press beats refusing after it. The
 			     button is deliberately NOT disabled on one — main is the authority
 			     on whether a shot can run, and a preview that is briefly stale must
-			     never be able to lock the user out of their own capture. -->
-				<o-notification
-					v-for="(problem, index) in previewErrors"
-					:key="'pe-' + index"
-					class="sidebar-tooltip"
-					variant="danger"
-					aria-close-label="Close message"
-					size="small"
-				>
-					{{ problem }}
-				</o-notification>
+			     never be able to lock the user out of their own capture.
 
-				<o-notification
-					v-for="(warning, index) in previewWarnings"
-					:key="'pw-' + index"
-					class="sidebar-tooltip"
-					variant="warning"
-					aria-close-label="Close message"
-					size="small"
-				>
-					{{ warning }}
-				</o-notification>
+			     Gated on being in a replay. Outside one there is no cursor to
+			     anchor on, so the preview resolves against frame 0 and validatePlan
+			     correctly reports that the window reaches past the start of the
+			     tape — a true statement about a shot nobody is taking, and the
+			     wrong thing to put on screen when the real answer is simply that no
+			     replay is open. -->
+				<template v-if="inReplay">
+					<o-notification
+						v-for="(problem, index) in previewErrors"
+						:key="'pe-' + index"
+						class="sidebar-tooltip"
+						variant="danger"
+						aria-close-label="Close message"
+						size="small"
+					>
+						{{ problem }}
+					</o-notification>
+
+					<o-notification
+						v-for="(warning, index) in previewWarnings"
+						:key="'pw-' + index"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						{{ warning }}
+					</o-notification>
+				</template>
 
 				<o-button
 					variant="primary"
