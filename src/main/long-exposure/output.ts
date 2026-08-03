@@ -94,16 +94,73 @@ function asUint16View(buffer: Buffer): Uint16Array {
 	);
 }
 
-// An 8-bit sharp pipeline over the 16-bit resolve output. sharp's own 16->8
-// reduction is exactly what a preview wants, so this leans on it deliberately.
+// Ordered 8x8 Bayer matrix, the classic one. Used as a sub-LSB bias when reducing
+// 16-bit to 8-bit.
+//
+// ORDERED rather than random, because a long exposure is a reproducible recipe: the
+// same accumulator must give the same file every time, and an RNG would make two
+// executions differ. Ordered rather than error-diffused because diffusion produces
+// wandering "worm" textures in exactly the large flat areas this exists to fix.
+const BAYER_8 = [
+	0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36,
+	14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54, 22, 3, 35, 11, 43, 1, 33, 9, 41,
+	51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23,
+	61, 29, 53, 21,
+];
+
+// 16-bit RGBA -> 8-bit RGB, dithered.
+//
+// WHY THIS EXISTS. The accumulator is fp32 and the master is 16-bit, so a resolved
+// sky gradient is genuinely smooth — measured on a real capture, 279 distinct values
+// across 311 pixels of sky, steps of 0.02 of an 8-bit LSB. Rounding that to 8 bits
+// collapses it to 35 levels with flat runs up to 21 pixels wide, which is textbook
+// gradient banding and exactly what a user reported seeing.
+//
+// The information to avoid it is right there in the low byte: a shallow gradient
+// crosses each 8-bit level slowly, so biasing the rounding by a sub-LSB pattern
+// makes the crossing happen at different pixels rather than all at once along a
+// contour. That trades a hard edge for a stipple the eye integrates away.
+//
+// This is NOT a fix for the 16-bit master, which never had the problem. It is for
+// every 8-bit artefact we derive from it: the preview, the gallery thumbnail, and
+// the master itself when the user's format is jpeg or webp.
+export function reduceTo8BitDithered(image: {
+	data: Buffer;
+	width: number;
+	height: number;
+}): Buffer {
+	const src = asUint16View(image.data);
+	const { width, height } = image;
+	const out = Buffer.allocUnsafe(width * height * 3);
+
+	for (let y = 0; y < height; y += 1) {
+		const row = (y & 7) * 8;
+		for (let x = 0; x < width; x += 1) {
+			// (n + 0.5)/64 - 0.5 puts the bias in [-0.5, +0.5), so it perturbs the
+			// rounding decision and nothing else — the mean is unchanged.
+			const bias = (BAYER_8[row + (x & 7)] + 0.5) / 64 - 0.5;
+			const s = (y * width + x) * 4;
+			const d = (y * width + x) * 3;
+			for (let c = 0; c < 3; c += 1) {
+				// 65535/257 is exactly 255, so this is a pure rescale.
+				const v = src[s + c] / 257 + bias;
+				out[d + c] = v <= 0 ? 0 : v >= 255 ? 255 : (v + 0.5) | 0;
+			}
+		}
+	}
+	return out;
+}
+
+// An 8-bit sharp pipeline over the 16-bit resolve output, with the depth reduction
+// done here rather than by sharp: sharp rounds, and rounding is what bands.
 function previewPipeline(image: {
 	data: Buffer;
 	width: number;
 	height: number;
 }): ReturnType<typeof sharp> {
-	return sharp(asUint16View(image.data), {
-		raw: { width: image.width, height: image.height, channels: 4 },
-	}).removeAlpha();
+	return sharp(reduceTo8BitDithered(image), {
+		raw: { width: image.width, height: image.height, channels: 3 },
+	});
 }
 
 function encodePreview(

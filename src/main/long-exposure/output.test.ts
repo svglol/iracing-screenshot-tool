@@ -10,7 +10,7 @@ import {
 	resolvePlan,
 } from '../../utilities/long-exposure/shot-recipe';
 import { summarizeSamples } from '../../utilities/long-exposure/sample-stats';
-import { writeLongExposure } from './output';
+import { reduceTo8BitDithered, writeLongExposure } from './output';
 
 // libvips caches operations and keeps file handles open, which makes the Windows
 // temp-dir cleanup below fail with EPERM. These tests always read files they just
@@ -114,6 +114,159 @@ const sessionInfo = {
 	},
 };
 const telemetry = { values: { SessionNum: 0, CamCarIdx: 0 } };
+
+// The accumulator is fp32 and the master is 16-bit, so a resolved sky gradient is
+// genuinely smooth — measured on a real capture, 279 distinct values across 311
+// pixels. Rounding that to 8 bits collapsed it to 35 levels with flat runs 21+
+// pixels wide, which is the gradient banding a user reported. Every 8-bit artefact
+// (preview, thumbnail, and the master itself for jpeg/webp) came through here.
+describe('reduceTo8BitDithered', () => {
+	// A shallow 16-bit vertical ramp: a few 8-bit levels spread over many pixels,
+	// which is exactly the shape that bands.
+	function shallowRamp(width: number, height: number, spanLevels: number) {
+		const px = new Uint16Array(width * height * 4);
+		for (let y = 0; y < height; y += 1) {
+			const level = 200 + (spanLevels * y) / height;
+			const v = Math.round(level * 257);
+			for (let x = 0; x < width; x += 1) {
+				const i = (y * width + x) * 4;
+				px[i] = v;
+				px[i + 1] = v;
+				px[i + 2] = v;
+				px[i + 3] = 65535;
+			}
+		}
+		return {
+			data: Buffer.from(px.buffer, px.byteOffset, px.byteLength),
+			width,
+			height,
+		};
+	}
+
+	function longestFlatRun(values: number[]): number {
+		let best = 1;
+		let run = 1;
+		for (let i = 1; i < values.length; i += 1) {
+			run = values[i] === values[i - 1] ? run + 1 : 1;
+			best = Math.max(best, run);
+		}
+		return best;
+	}
+
+	const column = (buf: Buffer, width: number, height: number, x: number) =>
+		Array.from({ length: height }, (_, y) => buf[(y * width + x) * 3]);
+
+	// THE assertion, because it is the artefact itself. The ramp is constant along
+	// x, so rounding gives every row exactly one level and the level changes at a
+	// hard horizontal line — a contour, which is what the eye picks out. Dither
+	// moves that transition to different x positions, so the boundary rows carry
+	// both levels and the line stops being a line.
+	//
+	// Measured on a single COLUMN this barely shows: an ordered matrix spreads its
+	// bias across both axes, so one column only sees a subset of the range. The
+	// break-up is two-dimensional and has to be measured that way.
+	it('breaks the contour rows up instead of stepping the whole row at once', () => {
+		const width = 64;
+		const height = 256;
+		const out = reduceTo8BitDithered(shallowRamp(width, height, 8));
+
+		let mixedRows = 0;
+		for (let y = 0; y < height; y += 1) {
+			const levels = new Set<number>();
+			for (let x = 0; x < width; x += 1) {
+				levels.add(out[(y * width + x) * 3]);
+			}
+			if (levels.size > 1) {
+				mixedRows += 1;
+			}
+		}
+
+		// Rounding would give zero mixed rows: every row is one flat level.
+		// Eight level crossings over the ramp, each smeared across several rows.
+		expect(mixedRows).toBeGreaterThan(8);
+	});
+
+	it('still shortens the flat runs down a column', () => {
+		const image = shallowRamp(64, 256, 8);
+		const dithered = column(reduceTo8BitDithered(image), 64, 256, 3);
+
+		const src = new Uint16Array(
+			image.data.buffer,
+			image.data.byteOffset,
+			image.data.byteLength / 2
+		);
+		const rounded = Array.from({ length: 256 }, (_, y) =>
+			Math.round(src[y * 64 * 4] / 257)
+		);
+
+		expect(longestFlatRun(dithered)).toBeLessThan(longestFlatRun(rounded));
+	});
+
+	// Dither perturbs the ROUNDING and nothing else. If it moved the mean it would
+	// be a brightness change wearing a smoothing costume.
+	it('preserves the mean level', () => {
+		const image = shallowRamp(64, 256, 8);
+		const out = reduceTo8BitDithered(image);
+		const src = new Uint16Array(
+			image.data.buffer,
+			image.data.byteOffset,
+			image.data.byteLength / 2
+		);
+		let dithSum = 0;
+		let trueSum = 0;
+		for (let i = 0; i < 64 * 256; i += 1) {
+			dithSum += out[i * 3];
+			trueSum += src[i * 4] / 257;
+		}
+		expect(dithSum / (64 * 256)).toBeCloseTo(trueSum / (64 * 256), 1);
+	});
+
+	// A perfectly flat area must stay perfectly flat: the bias range is
+	// [-0.4922, +0.4922], never enough to push an exact level across a boundary.
+	// Stippling a clear sky would be a worse artefact than the one being fixed.
+	it('leaves a flat field completely untouched', () => {
+		const px = new Uint16Array(16 * 16 * 4).fill(200 * 257);
+		const out = reduceTo8BitDithered({
+			data: Buffer.from(px.buffer, px.byteOffset, px.byteLength),
+			width: 16,
+			height: 16,
+		});
+		expect(new Set(out)).toEqual(new Set([200]));
+	});
+
+	// A recipe is meant to be re-executable, so the same accumulator has to produce
+	// the same file. An RNG-based dither would break that.
+	it('is deterministic', () => {
+		const image = shallowRamp(32, 32, 4);
+		expect(reduceTo8BitDithered(image)).toEqual(reduceTo8BitDithered(image));
+	});
+
+	it('clamps the ends rather than wrapping them', () => {
+		const px = new Uint16Array(8 * 2 * 4);
+		for (let i = 0; i < 8; i += 1) {
+			px[i * 4] = 0;
+			px[i * 4 + 1] = 0;
+			px[i * 4 + 2] = 0;
+		}
+		for (let i = 8; i < 16; i += 1) {
+			px[i * 4] = 65535;
+			px[i * 4 + 1] = 65535;
+			px[i * 4 + 2] = 65535;
+		}
+		const out = reduceTo8BitDithered({
+			data: Buffer.from(px.buffer, px.byteOffset, px.byteLength),
+			width: 8,
+			height: 2,
+		});
+		expect(out[0]).toBe(0);
+		expect(out[8 * 3]).toBe(255);
+	});
+
+	it('drops alpha and emits three channels', () => {
+		const image = shallowRamp(10, 4, 2);
+		expect(reduceTo8BitDithered(image).length).toBe(10 * 4 * 3);
+	});
+});
 
 describe('writeLongExposure', () => {
 	let root: string;

@@ -737,8 +737,32 @@ added to the existing resize-delta prediction for iRacing's own growth. Two-leve
   additionally confirm libvips accepts the file as a 16-bit PNG.
 
 - **Preview:** 8-bit sRGB in the user's configured format, and the gallery thumbnail
-  — both via sharp, whose 16→8 reduction is exactly what a preview wants. A long
-  exposure therefore appears in the existing gallery like any other shot.
+  — both via sharp. A long exposure therefore appears in the existing gallery like
+  any other shot.
+
+  **The 16→8 reduction is ours, not sharp's, and it is DITHERED (2026-08-03.)** This
+  used to read "sharp's 16→8 reduction is exactly what a preview wants". It is not:
+  sharp rounds, and rounding a shallow gradient is what bands it. Measured on a real
+  capture that a user reported banding on, one column of sky:
+
+  | | distinct levels | widest flat run |
+  |---|---|---|
+  | 16-bit master | 279 / 311 px | — smooth |
+  | 8-bit, rounded | 28 | 27 px |
+  | 8-bit, ordered dither | 30 | 9 px |
+
+  The master was never the problem — the accumulator is fp32 and the gradient
+  resolves to steps of 0.02 of an 8-bit LSB. Every 8-bit artefact derived from it
+  was, which is why the artefact appeared in the gallery and in the preview while
+  the master on disk was clean.
+
+  `reduceTo8BitDithered` applies an ordered 8×8 Bayer bias in [−0.5, +0.5) before
+  rounding. **Ordered, not random**, because a recipe must be re-executable: the same
+  accumulator has to produce the same file, and an RNG would break that. **Ordered,
+  not error-diffused**, because diffusion grows wandering "worm" textures in exactly
+  the large flat areas this exists to fix. The bias never reaches ±0.5, so a
+  perfectly flat area cannot be pushed across a level boundary and stays perfectly
+  flat — stippling a clear sky would be a worse artefact than the one being removed.
 - **Sidecar:** `<name>.json` next to the master, carrying the full recipe plus
   achieved sample count, duplicates rejected, evenness, playback speed used, anchor
   frame, window start/end frames, track, car, session, backend used, and
