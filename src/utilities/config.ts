@@ -198,8 +198,12 @@ const schema = {
 	},
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ConfigShape {
+	// `any` on purpose: this is electron-store's own accessor, which is keyed by
+	// string across a schema of mixed types, and every call site narrows it. The
+	// directive has to sit on THIS line — one line higher it suppresses nothing and
+	// eslint --fix removes it as unused.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	get(key: string): any;
 	set(key: string, value: unknown): void;
 	onDidChange?(

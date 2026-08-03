@@ -1045,11 +1045,14 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			const known = config.get('longExposureLossyInterpolationLoad') || 0;
 			if (known === 0 || interp.load < known) {
 				config.set('longExposureLossyInterpolationLoad', interp.load);
-				log.info('Recorded a new interpolation load limit for this machine', {
-					load: interp.load,
-					achievedRatio: interp.achievedRatio,
-					previous: known || null,
-				});
+				log.info(
+					'Recorded a new interpolation load limit for this machine',
+					{
+						load: interp.load,
+						achievedRatio: interp.achievedRatio,
+						previous: known || null,
+					}
+				);
 			}
 		}
 
