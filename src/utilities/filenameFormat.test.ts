@@ -105,18 +105,26 @@ describe('resolveFilenameFormat', () => {
 
 		it('strips ASCII control chars / NUL / tab / newline', () => {
 			expect(
-				resolveFilenameFormat('{track}', trackSession('M\x00o\x1Fn\tz\na'), {
-					values: {},
-				})
+				resolveFilenameFormat(
+					'{track}',
+					trackSession('M\x00o\x1Fn\tz\na'),
+					{
+						values: {},
+					}
+				)
 			).toBe('Monza');
 		});
 
 		it('prefixes Windows reserved device names', () => {
 			expect(
-				resolveFilenameFormat('{track}', trackSession('CON'), { values: {} })
+				resolveFilenameFormat('{track}', trackSession('CON'), {
+					values: {},
+				})
 			).toBe('_CON');
 			expect(
-				resolveFilenameFormat('{track}', trackSession('NUL'), { values: {} })
+				resolveFilenameFormat('{track}', trackSession('NUL'), {
+					values: {},
+				})
 			).toBe('_NUL');
 		});
 

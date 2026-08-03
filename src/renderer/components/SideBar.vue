@@ -478,6 +478,46 @@ export default {
 			);
 		},
 	},
+	// Persist each config-backed field only when IT actually changes
+	// (cq-renderer-settings-ui#2). The old updated() hook re-ran all six blocking
+	// sendSync 'config:set' writes on EVERY reactive change (VRAM poll,
+	// takingScreenshot latch, notifications) — a write storm on idle re-renders.
+	// The config.get(...)!==value guard also stops mounted()'s config→field copy
+	// and the reshade onDidChange round-trip from writing the same value back.
+	watch: {
+		crop(value) {
+			if (config.get('crop') !== value) {
+				config.set('crop', value);
+			}
+		},
+		keepAspectRatio(value) {
+			if (config.get('keepAspectRatio') !== value) {
+				config.set('keepAspectRatio', value);
+			}
+		},
+		reshade(value) {
+			if (config.get('reshade') !== value) {
+				config.set('reshade', value);
+			}
+		},
+		resolution(value) {
+			if (config.get('resolution') !== value) {
+				config.set('resolution', value);
+			}
+		},
+		customWidth(value) {
+			const n = parseInt(value);
+			if (!isNaN(n) && config.get('customWidth') !== n) {
+				config.set('customWidth', n);
+			}
+		},
+		customHeight(value) {
+			const n = parseInt(value);
+			if (!isNaN(n) && config.get('customHeight') !== n) {
+				config.set('customHeight', n);
+			}
+		},
+	},
 	created() {
 		ipcRenderer.send('request-iracing-status', '');
 
@@ -596,46 +636,6 @@ export default {
 			this.vramTimer = null;
 		}
 		this.stopIracingStatusPoll();
-	},
-	// Persist each config-backed field only when IT actually changes
-	// (cq-renderer-settings-ui#2). The old updated() hook re-ran all six blocking
-	// sendSync 'config:set' writes on EVERY reactive change (VRAM poll,
-	// takingScreenshot latch, notifications) — a write storm on idle re-renders.
-	// The config.get(...)!==value guard also stops mounted()'s config→field copy
-	// and the reshade onDidChange round-trip from writing the same value back.
-	watch: {
-		crop(value) {
-			if (config.get('crop') !== value) {
-				config.set('crop', value);
-			}
-		},
-		keepAspectRatio(value) {
-			if (config.get('keepAspectRatio') !== value) {
-				config.set('keepAspectRatio', value);
-			}
-		},
-		reshade(value) {
-			if (config.get('reshade') !== value) {
-				config.set('reshade', value);
-			}
-		},
-		resolution(value) {
-			if (config.get('resolution') !== value) {
-				config.set('resolution', value);
-			}
-		},
-		customWidth(value) {
-			const n = parseInt(value);
-			if (!isNaN(n) && config.get('customWidth') !== n) {
-				config.set('customWidth', n);
-			}
-		},
-		customHeight(value) {
-			const n = parseInt(value);
-			if (!isNaN(n) && config.get('customHeight') !== n) {
-				config.set('customHeight', n);
-			}
-		},
 	},
 	methods: {
 		// Mark iRacing connected and fire the one-time on-connect refreshes.

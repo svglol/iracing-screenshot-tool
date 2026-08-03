@@ -99,9 +99,7 @@ class IRacingBridge extends EventEmitter {
 						const sessionData = this.sdk.getSessionData();
 						const telemetry = this.sdk.getTelemetry();
 
-						this.sessionInfo = sessionData
-							? { data: sessionData }
-							: null;
+						this.sessionInfo = sessionData ? { data: sessionData } : null;
 						this.telemetry = telemetry
 							? flattenTelemetry(telemetry)
 							: null;

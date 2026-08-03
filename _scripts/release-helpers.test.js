@@ -17,15 +17,14 @@ describe('resolveRemotes', () => {
 		);
 	});
 
-	test("throws when no origin exists and none requested", () => {
+	test('throws when no origin exists and none requested', () => {
 		expect(() => resolveRemotes([], ['fork'])).toThrow(/No 'origin'/);
 	});
 
 	test('de-dups requested remotes preserving order', () => {
-		expect(resolveRemotes(['fork', 'fork', 'origin'], ['origin', 'fork'])).toEqual([
-			'fork',
-			'origin',
-		]);
+		expect(
+			resolveRemotes(['fork', 'fork', 'origin'], ['origin', 'fork'])
+		).toEqual(['fork', 'origin']);
 	});
 });
 
