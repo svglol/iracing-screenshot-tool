@@ -258,6 +258,10 @@ import {
 	largestSafeResolution,
 	formatVramGiB,
 } from '../../utilities/vram-prediction';
+import {
+	applyAspectRatio,
+	getResolutionDimensions,
+} from '../../utilities/capture-resolution';
 import { useOruga } from '@oruga-ui/oruga-next';
 import LongExposurePanel from './LongExposurePanel.vue';
 const { ipcRenderer } = require('electron');
@@ -308,29 +312,11 @@ const ScreenshotErrorContent = defineComponent({
 	},
 });
 
-function getResolutionDimensions(label: string): {
-	width: number;
-	height: number;
-} {
-	switch (label) {
-		case '1080p':
-			return { width: 1920, height: 1080 };
-		case '2k':
-			return { width: 2560, height: 1440 };
-		case '4k':
-			return { width: 3840, height: 2160 };
-		case '5k':
-			return { width: 5120, height: 2880 };
-		case '6k':
-			return { width: 6400, height: 3600 };
-		case '7k':
-			return { width: 7168, height: 4032 };
-		case '8k':
-			return { width: 7680, height: 4320 };
-		default:
-			return { width: 1920, height: 1080 };
-	}
-}
+// getResolutionDimensions and applyAspectRatio now live in
+// utilities/capture-resolution, because the MAIN process needs them too: long
+// exposure has its recipe filled in there, and while this mapping was local to
+// this component main had no way to ask what '8k' meant — so it fell back to the
+// baseline window size and silently ignored the Resolution control above.
 
 export default {
 	components: { LongExposurePanel },
@@ -695,15 +681,16 @@ export default {
 		// warned resolution.
 		applyAspectRatio(base) {
 			if (!base) return base;
-			if (!this.keepAspectRatio) return base;
-			const sw = parseInt(config.get('defaultScreenWidth'), 10);
-			const sh = parseInt(config.get('defaultScreenHeight'), 10);
-			if (!sw || !sh) return base;
-			const adjustedHeight = Math.round((base.width * sh) / sw);
-			if (!Number.isFinite(adjustedHeight) || adjustedHeight <= 0) {
-				return base;
-			}
-			return { width: base.width, height: adjustedHeight };
+			// The shared implementation, so a still and a long exposure of the same
+			// Resolution cannot come out different sizes.
+			return applyAspectRatio(
+				base,
+				{
+					width: config.get('defaultScreenWidth'),
+					height: config.get('defaultScreenHeight'),
+				},
+				this.keepAspectRatio
+			);
 		},
 		// Pull the latest VRAM reading from main (koffi FFI). Best-effort: on
 		// error we keep the previous reading so a transient failure doesn't wipe

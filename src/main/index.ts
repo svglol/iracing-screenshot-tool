@@ -60,6 +60,7 @@ import {
 	validatePlan,
 	type LongExposureRecipe,
 } from '../utilities/long-exposure/shot-recipe';
+import { resolveCaptureDimensions } from '../utilities/capture-resolution';
 import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
 import sharp from 'sharp';
 import { DEFAULT_FORMAT } from '../utilities/filenameFormat';
@@ -863,12 +864,30 @@ const replayController = new ReplayController({
 // must derive it identically — if they drift, the panel previews a shot that is not
 // the shot it takes.
 function longExposureDefaults(live: ReplayState | null): LongExposureRecipe {
+	// THE RESOLUTION SETTING, not the baseline window size.
+	//
+	// These used to be `width || 1920, height || 1080` — the module-level vars
+	// holding `defaultScreenWidth`/`defaultScreenHeight`, i.e. the size iRacing's
+	// window sits at when we are not capturing. That is a different thing that
+	// merely looks like one, and it meant long exposure silently ignored the
+	// Resolution control the still path obeys: '8k' with a 1680x945 window produced
+	// 1680x945 long exposures, with nothing on screen to explain it. The window size
+	// still matters here, but only as the aspect-ratio reference — which is exactly
+	// the role it plays for stills.
+	const dims = resolveCaptureDimensions({
+		resolution: config.get('resolution'),
+		customWidth: config.get('customWidth'),
+		customHeight: config.get('customHeight'),
+		screen: { width, height },
+		keepAspectRatio: config.get('keepAspectRatio') === true,
+	}) ?? { width: 1920, height: 1080 };
+
 	return {
 		...createDefaultRecipe({
 			anchorFrame: live?.replayFrameNum ?? 0,
 			sessionNum: live?.replaySessionNum ?? 0,
-			width: width || 1920,
-			height: height || 1080,
+			width: dims.width,
+			height: dims.height,
 			outputDir: path.resolve(config.get('screenshotFolder')),
 		}),
 		// A long exposure saves the way a screenshot saves: one format setting, in

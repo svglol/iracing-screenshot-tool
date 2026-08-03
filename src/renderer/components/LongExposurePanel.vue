@@ -119,6 +119,23 @@
 							windowLabel
 						}})
 					</span>
+					<!-- The render size follows the Resolution control above, and until
+				     2026-08-03 it silently did not — so it is worth showing rather
+				     than assuming. It is also the dominant cost in everything else on
+				     this line: pixels are bought at the direct cost of samples, and
+				     with supersample on the rendered size is not the saved size. -->
+					<br />
+					<span class="sidebar-target-hint__render">
+						renders {{ plan.renderWidth }}×{{ plan.renderHeight }}
+						<template
+							v-if="
+								plan.renderWidth !== outputWidth ||
+								plan.renderHeight !== outputHeight
+							"
+						>
+							→ saves {{ outputWidth }}×{{ outputHeight }}
+						</template>
+					</span>
 					<!-- The format select is gone: a long exposure saves in whatever
 				     Settings says. Naming the result here keeps that discoverable
 				     without another control, and makes the one non-obvious part of
@@ -472,6 +489,9 @@ interface CapturePlan {
 	anchorFrame: number;
 	playbackDivisor: number;
 	passes: number;
+	// iRacing is resized to these; the saved image is this divided by supersample.
+	renderWidth: number;
+	renderHeight: number;
 	// PER PASS. What the user waits for, and what they get, are the totals below.
 	predictedSamples: number;
 	predictedWallClockSeconds: number;
@@ -576,6 +596,23 @@ export default defineComponent({
 			return this.plan.playbackDivisor === 1
 				? '1x'
 				: `1/${this.plan.playbackDivisor}`;
+		},
+		// The SAVED size. Supersampling renders large and box-downsamples at resolve,
+		// so the rendered size is not what lands on disk — and it is the rendered one
+		// that costs VRAM and frame time.
+		outputWidth(): number {
+			if (!this.plan) return 0;
+			return Math.max(
+				1,
+				Math.floor(this.plan.renderWidth / (this.supersample ? 2 : 1))
+			);
+		},
+		outputHeight(): number {
+			if (!this.plan) return 0;
+			return Math.max(
+				1,
+				Math.floor(this.plan.renderHeight / (this.supersample ? 2 : 1))
+			);
 		},
 		// What the window actually opens for. A shutter faster than one replay frame
 		// exposes for part of a single frame, so reporting "1 replay frame" there
