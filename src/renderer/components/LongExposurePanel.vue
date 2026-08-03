@@ -119,22 +119,13 @@
 							windowLabel
 						}})
 					</span>
-					<!-- The render size follows the Resolution control above, and until
+					<!-- The capture size follows the Resolution control above, and until
 				     2026-08-03 it silently did not — so it is worth showing rather
 				     than assuming. It is also the dominant cost in everything else on
-				     this line: pixels are bought at the direct cost of samples, and
-				     with supersample on the rendered size is not the saved size. -->
+				     this line: pixels are bought at the direct cost of samples. -->
 					<br />
 					<span class="sidebar-target-hint__render">
-						renders {{ plan.renderWidth }}×{{ plan.renderHeight }}
-						<template
-							v-if="
-								plan.renderWidth !== outputWidth ||
-								plan.renderHeight !== outputHeight
-							"
-						>
-							→ saves {{ outputWidth }}×{{ outputHeight }}
-						</template>
+						{{ plan.renderWidth }}×{{ plan.renderHeight }}
 					</span>
 					<!-- The format select is gone: a long exposure saves in whatever
 				     Settings says. Naming the result here keeps that discoverable
@@ -152,8 +143,8 @@
 				     almost every shot, and leaving it all on screen buried the four
 				     controls that decide the picture. Folded, but NOT silent — the
 				     summary names anything currently set away from its default, because
-				     a hidden 2x supersample quietly halving the sample count is exactly
-				     the trap a disclosure like this sets. -->
+				     a forgotten 8 passes is an eightfold wait, and that is exactly the
+				     trap a disclosure like this sets. -->
 				<button
 					type="button"
 					class="long-exposure__advanced"
@@ -188,42 +179,14 @@
 						</o-select>
 					</o-field>
 
-					<o-field class="settings-toggle-row sidebar-toggle-row">
-						<o-switch
-							id="long-exposure-supersample-switch"
-							v-model="supersample"
-							:rounded="false"
-							:disabled="busy"
-							class="settings-light-switch"
-						/>
-						<label
-							for="long-exposure-supersample-switch"
-							class="settings-toggle-row__text"
-						>
-							<span class="label" style="margin-bottom: 0px"
-								>2× Supersample</span
-							>
-						</label>
-					</o-field>
-
-					<!-- The trade users won't guess: 2x supersample is 4x the pixels, which
-			     roughly halves iRacing's frame rate and therefore halves the sample
-			     count. Fewer samples means larger per-sample displacement, which shows
-			     up as a ladder of discrete ghosts on fast objects — a STRUCTURED
-			     artefact the eye reads as a defect. The aliasing supersampling removes
-			     is unstructured, and the motion blur already hides much of it. So on
-			     moving subjects, samples usually beat pixels. -->
-					<o-notification
-						v-if="supersample && !disableTooltips"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Supersampling roughly halves the sample count, which makes
-						fast objects break into visible ghosts. Turn it off for moving
-						subjects; keep it for static ones.
-					</o-notification>
+					<!-- The 2x Supersample switch was REMOVED 2026-08-03. It was 4x the
+			     pixels, which roughly halved iRacing's frame rate and therefore the
+			     sample count — and fewer samples on a moving subject means larger
+			     per-sample displacement, i.e. a ladder of discrete ghosts, a
+			     STRUCTURED artefact the eye reads as a defect. The aliasing it
+			     removed is unstructured and the motion blur already hides most of
+			     it, so it lost the trade it existed to make. Pick a higher
+			     Resolution instead; that control now works. -->
 
 					<!-- Optical-flow interpolation. Shown only where the hardware can
 			     actually do it: offering a control that silently does nothing is
@@ -489,7 +452,8 @@ interface CapturePlan {
 	anchorFrame: number;
 	playbackDivisor: number;
 	passes: number;
-	// iRacing is resized to these; the saved image is this divided by supersample.
+	// iRacing is resized to these, and this is also the saved size — since
+	// supersampling was removed there is no longer a difference between the two.
 	renderWidth: number;
 	renderHeight: number;
 	// PER PASS. What the user waits for, and what they get, are the totals below.
@@ -536,7 +500,6 @@ export default defineComponent({
 			shutter: config.get('longExposureShutter'),
 			playbackSpeed: config.get('longExposurePlaybackSpeed'),
 			targetSamples: String(config.get('longExposureTargetSamples')),
-			supersample: config.get('longExposureSupersample') === 2,
 			interpolation: config.get('longExposureInterpolation'),
 			passes: config.get('longExposurePasses'),
 			weighting: config.get('longExposureWeighting'),
@@ -597,23 +560,6 @@ export default defineComponent({
 				? '1x'
 				: `1/${this.plan.playbackDivisor}`;
 		},
-		// The SAVED size. Supersampling renders large and box-downsamples at resolve,
-		// so the rendered size is not what lands on disk — and it is the rendered one
-		// that costs VRAM and frame time.
-		outputWidth(): number {
-			if (!this.plan) return 0;
-			return Math.max(
-				1,
-				Math.floor(this.plan.renderWidth / (this.supersample ? 2 : 1))
-			);
-		},
-		outputHeight(): number {
-			if (!this.plan) return 0;
-			return Math.max(
-				1,
-				Math.floor(this.plan.renderHeight / (this.supersample ? 2 : 1))
-			);
-		},
 		// What the window actually opens for. A shutter faster than one replay frame
 		// exposes for part of a single frame, so reporting "1 replay frame" there
 		// would describe the seek rather than the exposure.
@@ -629,15 +575,12 @@ export default defineComponent({
 		//
 		// The point of the disclosure is that these have defaults that are right for
 		// almost every shot. The risk it introduces is that a value left set from a
-		// previous session — 2x supersample halves the sample count — becomes
-		// invisible. So the folded row names them rather than merely counting.
+		// previous session — 8 passes is an eightfold wait — becomes invisible. So
+		// the folded row names them rather than merely counting.
 		advancedModified(): string[] {
 			const active: string[] = [];
 			if (this.weighting !== 'box') {
 				active.push(this.weighting);
-			}
-			if (this.supersample) {
-				active.push('2× supersample');
 			}
 			if (this.interpolationSupported && Number(this.interpolation) > 1) {
 				active.push(`${this.interpolation}× interpolation`);
@@ -655,10 +598,10 @@ export default defineComponent({
 		},
 		// How many controls the fold is hiding. Interpolation is only rendered on
 		// hardware that can do it, so the count has to agree with what is actually
-		// in there. Weighting, supersample, passes, highlight recovery, and
-		// interpolation where it is offered.
+		// in there. Weighting, passes, highlight recovery, and interpolation where it
+		// is offered.
 		advancedCount(): number {
-			return this.interpolationSupported ? 5 : 4;
+			return this.interpolationSupported ? 4 : 3;
 		},
 		advancedSummary(): string {
 			if (this.advancedOpen) {
@@ -732,7 +675,6 @@ export default defineComponent({
 					this.playbackSpeed === 0
 						? parseInt(this.targetSamples, 10) || 240
 						: null,
-				supersample: this.supersample ? 2 : 1,
 				// Sent as 1 unless the hardware actually supports it, so a value
 				// persisted on a previous GPU cannot silently ride along.
 				interpolationFactor: this.interpolationSupported
@@ -767,10 +709,6 @@ export default defineComponent({
 			if (Number.isFinite(n)) {
 				config.set('longExposureTargetSamples', n);
 			}
-			void this.refreshPreview();
-		},
-		supersample(value) {
-			config.set('longExposureSupersample', value ? 2 : 1);
 			void this.refreshPreview();
 		},
 		interpolation(value) {

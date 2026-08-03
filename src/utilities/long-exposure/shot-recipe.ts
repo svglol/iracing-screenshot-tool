@@ -36,8 +36,25 @@ import {
 export const TONEMAPPERS = ['none', 'reinhard', 'aces'] as const;
 export type Tonemapper = (typeof TONEMAPPERS)[number];
 
-export const SUPERSAMPLE_FACTORS = [1, 2] as const;
-export type SupersampleFactor = (typeof SUPERSAMPLE_FACTORS)[number];
+// SUPERSAMPLE IS GONE (2026-08-03). It rendered at 2x the target on each axis and
+// box-downsampled in linear space at resolve, so it bought antialiasing — but it
+// bought it at 4x the accumulator memory, 4x the per-sample bandwidth, and roughly
+// HALF the sample count, and fewer samples on a moving subject means larger
+// per-sample displacement: a ladder of discrete ghosts, which is a structured
+// artefact the eye reads as a defect. The aliasing it removed is unstructured and
+// the motion blur already hides most of it, so on the moving subjects this feature
+// exists for it was a losing trade — the interpolation note §9.9 had already made
+// "turn supersampling off" its leading recommendation.
+//
+// What replaced it is simply picking a higher Resolution, which became possible to
+// do honestly once main could read that setting (see utilities/capture-resolution).
+// The difference that remains: 4k+2x produced an ANTIALIASED 4k, while 8k produces
+// a raw 8k. Downsample externally if that is what you were after.
+//
+// The native resolve still accepts a supersample factor and is passed 1, which is
+// exactly identity. Ripping it out of the shader would mean a rebuild and
+// re-verification of the most safety-critical pass in the feature, for no
+// user-visible gain.
 
 // Optical-flow frame interpolation. 1 is off; 2/4/8 synthesise that many samples per
 // captured frame (factor-1 of them invented), to close the gap between consecutive
@@ -119,9 +136,11 @@ export interface LongExposureRecipe {
 	// Desired sample count, or null when playbackSpeed is explicit.
 	targetSamples: number | null;
 
+	// The capture size, from the Resolution setting. iRacing's window is resized to
+	// exactly this and the saved image is exactly this — there is no longer a render
+	// size distinct from the output size.
 	width: number;
 	height: number;
-	supersample: SupersampleFactor;
 
 	// Requested optical-flow interpolation factor. A REQUEST, not a guarantee: the
 	// achieved factor is reported back from the capture and written to the sidecar.
@@ -215,7 +234,6 @@ export function createDefaultRecipe(opts: {
 		targetSamples: 240,
 		width: opts.width,
 		height: opts.height,
-		supersample: 1,
 		// Off by default. It is hardware-specific, it costs per-frame time that could
 		// otherwise buy real samples, and the base feature must stand on its own.
 		interpolationFactor: 1,
@@ -344,11 +362,13 @@ export function normalizeRecipe(
 			10000,
 			defaults.height
 		),
-		supersample: (SUPERSAMPLE_FACTORS as readonly number[]).includes(
-			Number(input.supersample)
-		)
-			? (Number(input.supersample) as SupersampleFactor)
-			: defaults.supersample,
+		// `input.supersample` is deliberately DROPPED rather than honoured. A v1-v3
+		// sidecar carrying 2 rendered at twice this size and saved at half of that,
+		// so it cannot be reproduced on this build at all — and quietly obeying it
+		// would resize the capture without anything on screen saying why. Re-executing
+		// such a recipe now yields `width` x `height` exactly, which is the sidecar's
+		// own image dimensions in the 1x case and double them in the 2x case. The
+		// version bump is what tells the reader that.
 		interpolationFactor: (
 			INTERPOLATION_FACTORS as readonly number[]
 		).includes(Number(input.interpolationFactor))
@@ -422,7 +442,11 @@ export interface ResolvedPlan {
 	// on a single-pass capture.
 	predictedTotalSamples: number;
 	predictedTotalWallClockSeconds: number;
-	// Render dimensions (target × supersample) iRacing's window is resized to.
+	// Dimensions iRacing's window is resized to, and the size of the saved image.
+	// Identical to the recipe's width/height since supersample was removed; kept as
+	// distinct fields because everything downstream — the VRAM pre-flight, the
+	// interpolation load, the resolve — is about what is RENDERED, and conflating the
+	// two is how a 2x supersample used to hide a 4x cost behind a 1x-looking number.
 	renderWidth: number;
 	renderHeight: number;
 	// True when the exposure is predicted to collect ONE sample — no blur, and the
@@ -450,8 +474,8 @@ export function resolvePlan(
 		recipe.exposureMs / 1000
 	);
 	const windowFrames = windowFramesForExposure(effectiveExposureSeconds);
-	const renderWidth = recipe.width * recipe.supersample;
-	const renderHeight = recipe.height * recipe.supersample;
+	const renderWidth = recipe.width;
+	const renderHeight = recipe.height;
 	const renderFps = scaleRenderFpsForResize({
 		reportedFps: conditions.renderFps,
 		currentPixels: conditions.currentWindowPixels,
@@ -639,10 +663,7 @@ export function validatePlan(opts: {
 		const limit = opts.lossyInterpolationLoad;
 		if (typeof limit === 'number' && limit > 0 && load >= limit) {
 			warnings.push(
-				`At this size, ${recipe.interpolationFactor}x interpolation has previously cost this machine real samples. ` +
-					(recipe.supersample > 1
-						? 'Turning off supersampling would fix it and buy samples directly.'
-						: 'Consider a lower factor or a smaller capture size.')
+				`At this size, ${recipe.interpolationFactor}x interpolation has previously cost this machine real samples. Consider a lower factor, a lower Resolution, or more passes instead.`
 			);
 		}
 	}

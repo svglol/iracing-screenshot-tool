@@ -13,7 +13,7 @@ import {
 import { summarizeSamples } from './sample-stats';
 
 const recipe = normalizeRecipe(
-	{ shutter: '1/8', playbackSpeed: 8, supersample: 2 },
+	{ shutter: '1/8', playbackSpeed: 8 },
 	createDefaultRecipe({
 		anchorFrame: 5000,
 		sessionNum: 3,
@@ -293,11 +293,14 @@ describe('buildSidecar', () => {
 		expect(sidecar().compute.backend).toBe('d3d11-compute');
 	});
 
-	it('records the render size and supersample alongside the output size', () => {
+	// Both sizes are still recorded even though supersampling made them the same
+	// again: a reader comparing them across sidecar versions is exactly how the
+	// v1-v3 shots, where they genuinely differed, stay legible.
+	it('records the render size alongside the output size', () => {
 		const result = sidecar();
 		expect(result.image.width).toBe(1920);
-		expect(result.image.supersample).toBe(2);
-		expect(result.image.renderWidth).toBe(3840);
+		expect(result.image.renderWidth).toBe(1920);
+		expect(result.image.renderHeight).toBe(result.image.height);
 		expect(result.image.bitDepth).toBe(16);
 	});
 

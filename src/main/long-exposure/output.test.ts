@@ -386,7 +386,7 @@ describe('writeLongExposure', () => {
 	});
 
 	it('writes a sidecar carrying the re-executable recipe', async () => {
-		const result = await write({ shutter: '1/4', supersample: 2 });
+		const result = await write({ shutter: '1/4' });
 		const sidecar = JSON.parse(fs.readFileSync(result.sidecarPath, 'utf8'));
 		expect(sidecar.recipe.shutter).toBe('1/4');
 		expect(sidecar.recipe.anchorFrame).toBe(6921);

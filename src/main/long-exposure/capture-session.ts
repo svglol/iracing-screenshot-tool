@@ -182,6 +182,10 @@ export interface NativeSessionApi {
 		session: number,
 		outWidth: number,
 		outHeight: number,
+		// Always 1 since supersampling was removed, which makes the resolve's box
+		// downsample a single tap — exactly identity. The parameter stays because
+		// removing it from the shader means rebuilding the addon and re-verifying the
+		// most safety-critical pass in the feature, for no user-visible gain.
 		supersample: number,
 		tonemap: number,
 		exposureMul: number,
@@ -375,8 +379,7 @@ export const SAMPLE_SHORTFALL_RATIO = 0.8;
 // case that must not pass silently, because the resulting image looks under-blurred
 // rather than obviously broken.
 export function diagnoseInterpolationShortfall(
-	report: LongExposureInterpolationReport,
-	opts: { supersample: number }
+	report: LongExposureInterpolationReport
 ): string | null {
 	if (!report.enabled || report.achievedRatio === null) {
 		return null;
@@ -385,15 +388,16 @@ export function diagnoseInterpolationShortfall(
 		return null;
 	}
 	const percent = Math.round(report.achievedRatio * 100);
-	const remedy =
-		opts.supersample > 1
-			? 'Turn off supersampling (which also buys samples directly) or lower the interpolation factor.'
-			: 'Lower the interpolation factor, or reduce the capture resolution.';
+	// The "turn off supersampling" remedy went with the setting. What is left are the
+	// two levers that still exist, plus the one that did not before: passes buy real
+	// samples with wall clock rather than with GPU time, which is precisely the
+	// resource this warning says ran out.
 	return (
 		`Frame interpolation at ${report.achievedFactor}x could not keep up: this shot ` +
 		`captured ${report.realSamples} real frames, about ${percent}% of the ${'~'}` +
 		`predicted count, so synthetic samples were bought with real ones and the ` +
-		`streak will look shorter and coarser than it should. ${remedy}`
+		`streak will look shorter and coarser than it should. Lower the interpolation ` +
+		`factor, reduce the capture resolution, or turn interpolation off and add passes.`
 	);
 }
 
@@ -1061,15 +1065,17 @@ async function resolveCapture(
 	// client-area geometry mean it can differ from what we asked the window to be.
 	const renderWidth = preResolve.frameWidth || plan.renderWidth;
 	const renderHeight = preResolve.frameHeight || plan.renderHeight;
-	const supersample = recipe.supersample;
-	const outWidth = Math.max(1, Math.floor(renderWidth / supersample));
-	const outHeight = Math.max(1, Math.floor(renderHeight / supersample));
+	// Since supersample was removed the saved image IS the rendered frame, whatever
+	// WGC delivered. The native resolve keeps its supersample parameter and is handed
+	// 1, which makes its box-downsample a single tap — exactly identity.
+	const outWidth = Math.max(1, renderWidth);
+	const outHeight = Math.max(1, renderHeight);
 
 	const result = native.longExposureFinish(
 		session,
 		outWidth,
 		outHeight,
-		supersample,
+		1,
 		TONEMAP_CODES[recipe.tonemap] ?? 0,
 		Math.pow(2, recipe.exposureCompensation),
 		RESOLVE_TIMEOUT_MS
@@ -1164,9 +1170,7 @@ async function resolveCapture(
 	}
 	// Got it, but it cost more than it gave. This is the failure that otherwise looks
 	// like "the blur just isn't very strong" rather than like a problem.
-	const shortfall = diagnoseInterpolationShortfall(interpolation, {
-		supersample: recipe.supersample,
-	});
+	const shortfall = diagnoseInterpolationShortfall(interpolation);
 	if (shortfall) {
 		interpolationWarnings.push(shortfall);
 	}

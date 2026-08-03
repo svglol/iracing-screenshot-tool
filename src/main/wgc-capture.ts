@@ -139,6 +139,10 @@ export interface WgcLongExposureAddon {
 		session: number,
 		outWidth: number,
 		outHeight: number,
+		// Always 1 since supersampling was removed, which makes the resolve's box
+		// downsample a single tap — exactly identity. The parameter stays because
+		// removing it from the shader means rebuilding the addon and re-verifying the
+		// most safety-critical pass in the feature, for no user-visible gain.
 		supersample: number,
 		tonemap: number,
 		exposureMul: number,

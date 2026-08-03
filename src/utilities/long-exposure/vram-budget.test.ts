@@ -43,23 +43,24 @@ describe('estimateLongExposureVram', () => {
 		expect(ten.accumulatorBytes).toBe(one.accumulatorBytes * 10);
 	});
 
-	it('costs 4x for a 2x supersample, since the render size is what is passed in', () => {
+	// Doubling each axis quadruples the cost. This used to be reachable via a 2x
+	// supersample and is now reachable by moving up the Resolution ladder, which is
+	// the same arithmetic with the trade made visible instead of hidden behind a
+	// switch.
+	it('costs 4x when each axis doubles', () => {
 		const plain = estimateLongExposureVram({
 			renderWidth: 3840,
 			renderHeight: 2160,
 			sinkCount: 1,
 		});
-		const supersampled = estimateLongExposureVram({
+		const doubled = estimateLongExposureVram({
 			renderWidth: 7680,
 			renderHeight: 4320,
 			sinkCount: 1,
 		});
-		expect(supersampled.accumulatorBytes).toBe(plain.accumulatorBytes * 4);
-		// 4K at 2x supersample is ~531 MB — the figure quoted in the design note.
-		expect(supersampled.accumulatorBytes / (1024 * 1024)).toBeCloseTo(
-			506.25,
-			1
-		);
+		expect(doubled.accumulatorBytes).toBe(plain.accumulatorBytes * 4);
+		// 7680x4320 is ~506 MB — the figure quoted in the design note.
+		expect(doubled.accumulatorBytes / (1024 * 1024)).toBeCloseTo(506.25, 1);
 	});
 
 	it('includes iRacing own predicted resize growth separately from ours', () => {

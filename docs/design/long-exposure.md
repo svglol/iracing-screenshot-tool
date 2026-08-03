@@ -230,6 +230,11 @@ taken before this change, where it was routinely true.
 
 ### Supersampling costs samples — and samples usually matter more
 
+**This is the measurement the 2026-08-03 removal of supersampling rests on; it is
+kept because the trade it describes is a property of PIXELS, not of the setting.
+Moving up the Resolution ladder buys the same cost, and the last paragraph is now
+the argument for staying lower rather than for a switch.**
+
 Measured on hardware: at 2560×1440 with 2× supersample (5120×2880 render) iRacing
 dropped from ~73 fps to ~39 fps, roughly halving the achieved sample count.
 
@@ -312,15 +317,35 @@ fp32 has a 24-bit mantissa; the same random-walk bound gives √4096 · 2⁻²�
 comfortably under one 16-bit output LSB (1.5 × 10⁻⁵).
 
 **Accumulator is `R32G32B32A32_FLOAT`. Non-negotiable.** The cost is 16 B/px:
-531 MB for 4K at 2× supersample, which is a rounding error next to what iRacing
-itself allocates at that window size.
+531 MB at 7680×4320, which is a rounding error next to what iRacing itself
+allocates at that window size.
 
 ### Supersample and resolution
 
-Capture resolution is independent of exposure (as in JRT). The optional 2×-per-axis
+Capture resolution is independent of exposure (as in JRT). ~~The optional 2×-per-axis
 supersample resizes iRacing's window to 2× the target on each axis and box-downsamples
 in the resolve pass. This is 4× the accumulator memory and 4× the per-sample
-bandwidth — it is the setting that actually costs VRAM, and it is pre-flighted (§7).
+bandwidth — it is the setting that actually costs VRAM, and it is pre-flighted (§7).~~
+
+**SUPERSAMPLE REMOVED 2026-08-03.** It lost the trade it existed to make. 4× the
+pixels roughly halves iRacing's frame rate and therefore the sample count, and fewer
+samples on a moving subject means larger per-sample displacement — a ladder of
+discrete ghosts, a *structured* artefact the eye reads as a defect. The aliasing it
+removed is unstructured and the motion blur already hides most of it. The
+interpolation note §9.9 had already made "turn supersampling off" its leading
+recommendation on measured grounds; this makes it the only behaviour.
+
+**The replacement is the Resolution setting**, which long exposure could not honour
+until the mapping moved out of `SideBar.vue` into `utilities/capture-resolution`
+(main had no way to read it, so it fell back to the baseline window size). Render
+size and output size are now the same number, and resolution remains what actually
+costs VRAM — still pre-flighted (§7).
+
+**What genuinely went with it:** 4k+2× produced an *antialiased* 4k, where 8k
+produces a raw 8k. Downsample externally if that is what you were after. The native
+resolve still takes a supersample factor and is handed 1, which is exactly identity;
+it stays because deleting it means rebuilding the addon and re-verifying the
+resolve for no user-visible gain.
 
 ---
 
@@ -600,7 +625,8 @@ interface LongExposureRecipe {
   exposureMs: number;
   playbackSpeed: 1|2|4|8|16 | null;   // null = derive from targetSamples
   targetSamples: number | null;
-  width: number; height: number; supersample: 1 | 2;
+  width: number; height: number;   // supersample REMOVED 2026-08-03, see §3
+  passes: number;                  // multi-pass accumulation, 1 = ordinary capture
   weighting: WeightingCurve;
   tonemap: 'none' | 'reinhard' | 'aces';   // no UI control — see below
   exposureCompensation: number; // EV      // no UI control — see below

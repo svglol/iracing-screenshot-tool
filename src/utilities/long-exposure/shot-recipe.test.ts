@@ -139,7 +139,6 @@ describe('normalizeRecipe — recovery does NOT touch the tonemap', () => {
 	it('leaves the tonemap off on the path the UI actually uses', () => {
 		const fromPanel: Partial<LongExposureRecipe> = {
 			shutter: '1/8',
-			supersample: 1,
 			interpolationFactor: 1,
 			weighting: 'box',
 			highlightRecovery: 3,
@@ -225,7 +224,6 @@ describe('normalizeRecipe', () => {
 				weighting: 'spiral' as never,
 				tonemap: 'filmic' as never,
 				outputFormat: 'tga' as never,
-				supersample: 7 as never,
 				width: 'wide' as never,
 			},
 			base()
@@ -233,7 +231,6 @@ describe('normalizeRecipe', () => {
 		expect(recipe.weighting).toBe('box');
 		expect(recipe.tonemap).toBe('none');
 		expect(recipe.outputFormat).toBe('png16');
-		expect(recipe.supersample).toBe(1);
 		expect(recipe.width).toBe(1920);
 	});
 
@@ -257,10 +254,7 @@ describe('normalizeRecipe', () => {
 	// A recipe must survive a JSON round trip, because "reproduce this shot" is
 	// meant to be a file copy (the metadata sidecar carries one).
 	it('round-trips through JSON unchanged', () => {
-		const recipe = normalizeRecipe(
-			{ shutter: '1/4', supersample: 2 },
-			base()
-		);
+		const recipe = normalizeRecipe({ shutter: '1/4' }, base());
 		expect(
 			normalizeRecipe(JSON.parse(JSON.stringify(recipe)), base())
 		).toEqual(recipe);
@@ -369,10 +363,20 @@ describe('resolvePlan', () => {
 		);
 	});
 
-	it('scales the render size by the supersample factor', () => {
-		const plan = resolvePlan(normalizeRecipe({ supersample: 2 }, base()));
-		expect(plan.renderWidth).toBe(3840);
-		expect(plan.renderHeight).toBe(2160);
+	// Supersampling is gone, so the rendered size IS the requested size. A v1-v3
+	// sidecar carrying supersample: 2 must not quietly resize the capture -- it
+	// cannot be reproduced on this build, and obeying it halfway would be worse
+	// than not obeying it at all.
+	it('renders at exactly the requested size, ignoring a stale supersample', () => {
+		const plan = resolvePlan(normalizeRecipe({}, base()));
+		expect(plan.renderWidth).toBe(1920);
+		expect(plan.renderHeight).toBe(1080);
+
+		const stale = resolvePlan(
+			normalizeRecipe({ supersample: 2 } as never, base())
+		);
+		expect(stale.renderWidth).toBe(1920);
+		expect(stale.renderHeight).toBe(1080);
 	});
 
 	// The warning keys on how many samples will land, not on how many replay frames
@@ -648,7 +652,6 @@ describe('validatePlan — interpolation load', () => {
 	it('says nothing when the machine has never fallen behind', () => {
 		const { recipe, plan } = planFor({
 			interpolationFactor: 8,
-			supersample: 2,
 		});
 		for (const lossyInterpolationLoad of [null, undefined, 0]) {
 			const { warnings } = validatePlan({
@@ -665,7 +668,6 @@ describe('validatePlan — interpolation load', () => {
 	it('warns once the planned load reaches a known-lossy one', () => {
 		const { recipe, plan } = planFor({
 			interpolationFactor: 8,
-			supersample: 2,
 		});
 		const load = interpolationLoad({
 			renderWidth: plan.renderWidth,
@@ -680,14 +682,13 @@ describe('validatePlan — interpolation load', () => {
 			lossyInterpolationLoad: load,
 		});
 		expect(warnings.join(' ')).toMatch(/cost this machine real samples/i);
-		// Supersample is the cheapest thing to give up and it buys samples twice.
-		expect(warnings.join(' ')).toMatch(/supersampling/i);
+		// The remedies that still exist, now that supersampling is not one of them.
+		expect(warnings.join(' ')).toMatch(/passes/i);
 	});
 
 	it('stays quiet for a lighter configuration than the known limit', () => {
 		const { recipe, plan } = planFor({
 			interpolationFactor: 2,
-			supersample: 1,
 		});
 		const { warnings } = validatePlan({
 			plan,
@@ -703,7 +704,6 @@ describe('validatePlan — interpolation load', () => {
 	it('never warns when interpolation is off', () => {
 		const { recipe, plan } = planFor({
 			interpolationFactor: 1,
-			supersample: 2,
 		});
 		const { warnings } = validatePlan({
 			plan,

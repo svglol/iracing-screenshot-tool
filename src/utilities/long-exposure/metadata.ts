@@ -35,7 +35,16 @@ import type { SampleStats } from './sample-stats';
 //     `sampling.maxGapSeconds` is now measured across the MERGED sample stream while
 //     `evenness` and `medianGapSeconds` stay WITHIN a pass; at one pass all three are
 //     what they always were.
-export const SIDECAR_VERSION = 3;
+//
+// 4 — supersampling removed, and THE MEANING OF v1-v3 CHANGED for any sidecar that
+//     used it. `image.supersample` is gone, and `image.renderWidth`/`renderHeight`
+//     now always equal `image.width`/`height` because the render size and the saved
+//     size are the same thing again. A v1-v3 sidecar reading `supersample: 2` with
+//     `width: 1920, renderWidth: 3840` recorded a shot rendered at 3840 and saved at
+//     1920; re-executing that recipe here renders AND saves at 1920, so the image
+//     will differ in both antialiasing and dimensions. That is deliberate, it cannot
+//     be reproduced on this build, and the two sidecars say why.
+export const SIDECAR_VERSION = 4;
 
 export interface LongExposureSidecar {
 	sidecarVersion: number;
@@ -132,7 +141,9 @@ export interface LongExposureSidecar {
 	image: {
 		width: number;
 		height: number;
-		supersample: number;
+		// Equal to width/height since supersampling was removed. Both are still
+		// recorded: a future reader comparing them across versions is exactly how the
+		// v1-v3 shots stay legible.
 		renderWidth: number;
 		renderHeight: number;
 		bitDepth: number;
@@ -259,7 +270,6 @@ export function buildSidecar(opts: {
 		image: {
 			width: opts.imageWidth,
 			height: opts.imageHeight,
-			supersample: recipe.supersample,
 			renderWidth: plan.renderWidth,
 			renderHeight: plan.renderHeight,
 			bitDepth: recipe.outputFormat === 'png16' ? 16 : 8,

@@ -153,11 +153,11 @@ const schema = {
 		type: 'number',
 		default: 240,
 	},
-	longExposureSupersample: {
-		type: 'number',
-		default: 1,
-		enum: [1, 2],
-	},
+	// NOTE: longExposureSupersample was REMOVED 2026-08-03. It rendered at 2x and
+	// box-downsampled at resolve, which bought antialiasing at 4x the VRAM and
+	// roughly half the sample count — a losing trade on the moving subjects this
+	// feature exists for. A stored value is simply ignored; picking a higher
+	// Resolution is the replacement.
 	// Optical-flow frame interpolation factor. 1 = off. Needs NVIDIA Turing-or-newer
 	// hardware; on anything else the shot is simply taken without it, so persisting a
 	// value here is safe even if the user later changes GPU.

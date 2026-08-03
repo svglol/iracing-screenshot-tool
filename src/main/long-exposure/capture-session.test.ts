@@ -811,7 +811,7 @@ describe('executeRecipe — pre-flight refusals move nothing', () => {
 	it('refuses when our own accumulators cannot fit in VRAM', async () => {
 		const harness = makeHarness({ freeVramGiB: 0.05 });
 		const outcome = await executeRecipe(
-			recipe({ width: 7680, height: 4320, supersample: 2 }),
+			recipe({ width: 7680, height: 4320 }),
 			harness.deps
 		);
 		expect(outcome.failure).toBe('insufficient-vram');
@@ -934,7 +934,7 @@ describe('frame interpolation', () => {
 			),
 		});
 		const outcome = await executeRecipe(
-			recipe({ interpolationFactor: 8, supersample: 2 }),
+			recipe({ interpolationFactor: 8 }),
 			harness.deps
 		);
 
@@ -942,7 +942,7 @@ describe('frame interpolation', () => {
 		expect(outcome.ok).toBe(true);
 		expect(outcome.image).not.toBeNull();
 		expect(outcome.warnings.join(' ')).toMatch(/could not keep up/i);
-		expect(outcome.warnings.join(' ')).toMatch(/supersampling/i);
+		expect(outcome.warnings.join(' ')).toMatch(/passes/i);
 		expect(outcome.interpolation?.achievedRatio).toBeLessThan(0.6);
 		expectAnchorRestored(harness.events);
 	});
@@ -1239,28 +1239,26 @@ describe('diagnoseInterpolationShortfall', () => {
 		}) as LongExposureInterpolationReport;
 
 	it('flags a capture that fell well short of its predicted real samples', () => {
-		const message = diagnoseInterpolationShortfall(report(), {
-			supersample: 2,
-		});
+		const message = diagnoseInterpolationShortfall(report());
 		expect(message).toMatch(/could not keep up/i);
 		expect(message).toMatch(/3 real frames/);
-		// Supersample on is the cheapest thing to give up, and it buys samples twice.
-		expect(message).toMatch(/supersampling/i);
 	});
 
-	it('suggests a lower factor when supersampling is already off', () => {
-		const message = diagnoseInterpolationShortfall(report(), {
-			supersample: 1,
-		});
+	// The remedy used to be conditional on supersampling, which no longer exists.
+	// What is left are the two levers that still do, plus passes -- which buy real
+	// samples with wall clock rather than with the GPU time this warning says ran out.
+	it('offers only remedies that still exist', () => {
+		const message = diagnoseInterpolationShortfall(report());
 		expect(message).toMatch(/lower the interpolation factor/i);
-		expect(message).not.toMatch(/supersampling/i);
+		expect(message).toMatch(/resolution/i);
+		expect(message).toMatch(/passes/i);
+		expect(message).not.toMatch(/supersampl/i);
 	});
 
 	it('stays silent when the capture kept up', () => {
 		expect(
 			diagnoseInterpolationShortfall(
-				report({ realSamples: 13, achievedRatio: 13 / 12 }),
-				{ supersample: 2 }
+				report({ realSamples: 13, achievedRatio: 13 / 12 })
 			)
 		).toBeNull();
 	});
@@ -1272,9 +1270,7 @@ describe('diagnoseInterpolationShortfall', () => {
 	// meaningfully below 1.0.
 	it('tolerates a modest shortfall', () => {
 		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: 0.9 }), {
-				supersample: 1,
-			})
+			diagnoseInterpolationShortfall(report({ achievedRatio: 0.9 }))
 		).toBeNull();
 	});
 
@@ -1286,8 +1282,7 @@ describe('diagnoseInterpolationShortfall', () => {
 	// reason to suspect the setting rather than the scene.
 	it('flags the mid-range shortfall the original threshold let through', () => {
 		const message = diagnoseInterpolationShortfall(
-			report({ realSamples: 7, achievedRatio: 0.636 }),
-			{ supersample: 2 }
+			report({ realSamples: 7, achievedRatio: 0.636 })
 		);
 		expect(message).toMatch(/could not keep up/i);
 		expect(message).toMatch(/7 real frames/);
@@ -1300,22 +1295,17 @@ describe('diagnoseInterpolationShortfall', () => {
 		const justUnder = SAMPLE_SHORTFALL_RATIO - 0.001;
 		const justOver = SAMPLE_SHORTFALL_RATIO + 0.001;
 		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: justUnder }), {
-				supersample: 1,
-			})
+			diagnoseInterpolationShortfall(report({ achievedRatio: justUnder }))
 		).toMatch(/could not keep up/i);
 		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: justOver }), {
-				supersample: 1,
-			})
+			diagnoseInterpolationShortfall(report({ achievedRatio: justOver }))
 		).toBeNull();
 	});
 
 	it('says nothing when interpolation never ran', () => {
 		expect(
 			diagnoseInterpolationShortfall(
-				report({ enabled: false, achievedFactor: 1, achievedRatio: 0.1 }),
-				{ supersample: 1 }
+				report({ enabled: false, achievedFactor: 1, achievedRatio: 0.1 })
 			)
 		).toBeNull();
 	});
@@ -1402,8 +1392,9 @@ describe('executeRecipe — reporting', () => {
 				},
 			},
 		});
-		await executeRecipe(recipe({ supersample: 2 }), harness.deps);
-		// 1280x720 delivered at 2x supersample resolves to 640x360.
-		expect(captured).toEqual([640, 360]);
+		await executeRecipe(recipe(), harness.deps);
+		// WGC delivered 1280x720 rather than the requested size, and since
+		// supersampling was removed the saved image IS the delivered frame.
+		expect(captured).toEqual([1280, 720]);
 	});
 });
