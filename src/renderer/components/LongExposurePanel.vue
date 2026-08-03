@@ -329,7 +329,7 @@
 					style="margin-top: 0.5rem"
 					@click="capture"
 				>
-					{{ busy ? progressLabel : 'Capture Long Exposure' }}
+					{{ busy ? progressLabel : 'Long Exposure' }}
 				</o-button>
 
 				<o-button
