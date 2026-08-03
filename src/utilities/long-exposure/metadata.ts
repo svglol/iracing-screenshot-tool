@@ -26,7 +26,16 @@ import type { SampleStats } from './sample-stats';
 //     `effectiveMs: 16.67` recorded a shot that was asked for 1/250 and given
 //     1/60. Re-executing that recipe on this build honours the 1/250 it asked for,
 //     so the image will differ — deliberately, and the two sidecars say why.
-export const SIDECAR_VERSION = 2;
+//
+// 3 — multi-pass accumulation. `recipe.passes` can now exceed 1, and when it does
+//     `sampling.predicted` and `sampling.achieved` both count EVERY pass while
+//     `exposure.*` still describes the single window all of them visited. A v1/v2
+//     sidecar has no `passes` field, which reads as 1 and is exactly what those
+//     captures did — so unlike the v1→v2 change, nothing about their meaning moved.
+//     `sampling.maxGapSeconds` is now measured across the MERGED sample stream while
+//     `evenness` and `medianGapSeconds` stay WITHIN a pass; at one pass all three are
+//     what they always were.
+export const SIDECAR_VERSION = 3;
 
 export interface LongExposureSidecar {
 	sidecarVersion: number;
@@ -45,6 +54,11 @@ export interface LongExposureSidecar {
 		startFrame: number;
 		anchorFrame: number;
 		playbackSpeed: string;
+		// How many times the window above was visited, summing into one accumulator.
+		// 1 is an ordinary capture. Duplicated from `recipe.passes` because this block
+		// is what a human reads to understand how the shot was made, and every other
+		// field here describes ONE visit.
+		passes: number;
 		weighting: string;
 		tonemap: string;
 		exposureCompensationEv: number;
@@ -66,6 +80,12 @@ export interface LongExposureSidecar {
 		stalledPresents: number;
 		dropouts: number;
 		// medianGap / maxGap in sim time. 1.0 = perfectly even.
+		//
+		// On a multi-pass shot these split: `evenness` and `medianGapSeconds` are
+		// computed WITHIN a pass (worst pass reported for evenness), because they
+		// describe whether one visit kept up with the sim; `maxGapSeconds` is measured
+		// across the MERGED sample stream, because the biggest hole in the combined
+		// sampling is what the image actually shows. See sample-stats.ts.
 		evenness: number;
 		medianGapSeconds: number;
 		maxGapSeconds: number;
@@ -213,13 +233,17 @@ export function buildSidecar(opts: {
 			anchorFrame: plan.anchorFrame,
 			playbackSpeed:
 				plan.playbackDivisor === 1 ? '1x' : `1/${plan.playbackDivisor}`,
+			passes: plan.passes,
 			weighting: recipe.weighting,
 			tonemap: recipe.tonemap,
 			exposureCompensationEv: recipe.exposureCompensation,
 			highlightRecoveryStops: recipe.highlightRecovery,
 		},
 		sampling: {
-			predicted: plan.predictedSamples,
+			// The TOTAL across every pass, because `achieved` below is cumulative too.
+			// Pairing a per-pass prediction with a cumulative count would make an
+			// 8-pass shot read as having beaten its prediction eightfold.
+			predicted: plan.predictedTotalSamples,
 			achieved: stats.accepted,
 			synthesized: Math.max(0, Math.round(opts.synthesizedSamples ?? 0)),
 			duplicatesRejected: stats.duplicatesRejected,

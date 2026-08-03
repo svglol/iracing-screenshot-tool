@@ -72,6 +72,39 @@ describe('buildSidecar', () => {
 		expect(sidecar().sidecarVersion).toBe(SIDECAR_VERSION);
 	});
 
+	// A multi-pass shot visits ONE window several times, so `exposure.*` still
+	// describes that single window while the sampling counts cover every visit.
+	// Pairing a per-pass prediction with a cumulative achieved count would make an
+	// 8-pass shot read as having beaten its prediction eightfold.
+	it('records the pass count and predicts against every pass', () => {
+		expect(sidecar().exposure.passes).toBe(1);
+		expect(sidecar().sampling.predicted).toBe(plan.predictedSamples);
+
+		const multi = normalizeRecipe({ passes: 4 }, recipe);
+		const multiPlan = resolvePlan(multi, { renderFps: 60 });
+		const built = buildSidecar({
+			recipe: multi,
+			plan: multiPlan,
+			stats,
+			backend: null,
+			imageWidth: 1920,
+			imageHeight: 1080,
+			toolName: 't',
+			toolVersion: '1',
+			capturedAt: 'now',
+			context,
+		});
+
+		expect(built.exposure.passes).toBe(4);
+		expect(built.recipe.passes).toBe(4);
+		// The window itself is unchanged — passes repeat it, they do not lengthen it.
+		expect(built.exposure.windowFrames).toBe(sidecar().exposure.windowFrames);
+		expect(built.exposure.effectiveMs).toBeCloseTo(
+			sidecar().exposure.effectiveMs
+		);
+		expect(built.sampling.predicted).toBe(multiPlan.predictedSamples * 4);
+	});
+
 	// Highlight recovery changes the accumulated values themselves, so a sidecar that
 	// omitted it would not actually reproduce the shot.
 	it('records the highlight recovery the shot was taken with', () => {
