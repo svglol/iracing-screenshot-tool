@@ -96,9 +96,11 @@ describe('summarizeSamples', () => {
 		);
 	});
 
-	// The native log caps at 8192 entries while the accepted counter does not, and a
-	// 10" exposure at 1/16 playback outruns it. Reporting the log's length would
-	// under-report the shot by thousands of samples.
+	// The native log is capped while the accepted counter is not, so reporting the
+	// log's length would under-report a shot that outran it by thousands of samples.
+	// These were the real numbers when the cap was 8192 and a 10" at 1/16 produced
+	// ~11,700; the cap is now 65536 and out of reach, but the counter stays
+	// authoritative and the truncation flag stays honest, which is what this pins.
 	it('takes the accepted count from the uncapped counter when given one', () => {
 		const stats = summarizeSamples(evenLog(8192, 0.001), {
 			acceptedTotal: 11700,

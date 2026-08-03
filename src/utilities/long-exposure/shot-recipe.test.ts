@@ -87,17 +87,19 @@ describe('normalizeRecipe — highlight recovery', () => {
 	});
 });
 
-// Highlight recovery expands near-clipped values BEFORE integrating, and the shader
-// says outright that it relies on a compressive pass at resolve to put persistent
-// bright surfaces back. Without one, a STATIC bright surface — a plain sky — is
-// present in every sample, averages to gain x itself, and clips flat: at 3 stops the
-// clip point is 0.797 linear, about 231/255 in sRGB, with the transfer slope
-// reaching ~8x just below it. That is a white patch with a hard edge, and banding in
-// the gradient leading up to it. Reported from a real capture.
-describe('normalizeRecipe — highlight recovery implies a tonemap', () => {
-	it('turns ACES on when recovery is used and no tonemap was named', () => {
+// Highlight recovery expands near-clipped values BEFORE integrating, and relies on
+// something at resolve putting persistent bright surfaces back. That used to be ACES,
+// forced on from normalizeRecipe. It is now `compress_highlights` in shaders.hlsl —
+// the exact inverse of the expansion, applied unconditionally at resolve — so the
+// pair is closed inside the shader and the recipe layer stays out of it.
+//
+// These tests exist to stop the coupling being reinstated: a second compressive curve
+// on top of the inverse is a look change nobody asked for, and it would undo the
+// round-trip property the shader change was made for.
+describe('normalizeRecipe — recovery does NOT touch the tonemap', () => {
+	it('leaves the tonemap off when recovery is used and none was named', () => {
 		expect(normalizeRecipe({ highlightRecovery: 3 }, base()).tonemap).toBe(
-			'aces'
+			'none'
 		);
 	});
 
@@ -108,22 +110,33 @@ describe('normalizeRecipe — highlight recovery implies a tonemap', () => {
 		expect(normalizeRecipe({}, base()).tonemap).toBe('none');
 	});
 
-	// The coupling only fills an ABSENT field. A stored recipe that names its
-	// tonemap reproduces exactly what it recorded — including, deliberately, the
-	// broken combination, because that is what reproduction means.
-	it('never overrides an explicit tonemap', () => {
-		expect(
-			normalizeRecipe({ highlightRecovery: 3, tonemap: 'none' }, base())
-				.tonemap
-		).toBe('none');
-		expect(
-			normalizeRecipe({ highlightRecovery: 3, tonemap: 'reinhard' }, base())
-				.tonemap
-		).toBe('reinhard');
+	it('still honours an explicit tonemap at any recovery setting', () => {
+		for (const stops of [0, 3]) {
+			expect(
+				normalizeRecipe(
+					{ highlightRecovery: stops, tonemap: 'reinhard' },
+					base()
+				).tonemap
+			).toBe('reinhard');
+			expect(
+				normalizeRecipe(
+					{ highlightRecovery: stops, tonemap: 'aces' },
+					base()
+				).tonemap
+			).toBe('aces');
+		}
+	});
+
+	// A sidecar written while the coupling was live carries tonemap: "aces"
+	// explicitly. Re-shooting it must still apply ACES — the recipe layer reproduces
+	// what it recorded, even though the shader beneath it has since changed.
+	it('reproduces a coupling-era sidecar as recorded', () => {
+		const eraSidecar = { highlightRecovery: 3, tonemap: 'aces' as const };
+		expect(normalizeRecipe(eraSidecar, base()).tonemap).toBe('aces');
 	});
 
 	// The panel omits tonemap entirely, so this is the path every shot takes.
-	it('couples on the path the UI actually uses', () => {
+	it('leaves the tonemap off on the path the UI actually uses', () => {
 		const fromPanel: Partial<LongExposureRecipe> = {
 			shutter: '1/8',
 			supersample: 1,
@@ -131,10 +144,10 @@ describe('normalizeRecipe — highlight recovery implies a tonemap', () => {
 			weighting: 'box',
 			highlightRecovery: 3,
 		};
-		expect(normalizeRecipe(fromPanel, base()).tonemap).toBe('aces');
+		expect(normalizeRecipe(fromPanel, base()).tonemap).toBe('none');
 	});
 
-	it('still round-trips through JSON once coupled', () => {
+	it('still round-trips through JSON', () => {
 		const recipe = normalizeRecipe({ highlightRecovery: 3 }, base());
 		expect(
 			normalizeRecipe(JSON.parse(JSON.stringify(recipe)), base())

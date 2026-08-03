@@ -58,10 +58,22 @@ use d3d11::D3d11Backend;
 /// (that is the bracketing seam); only the session's `create_sink` call is singular.
 const PRIMARY_SINK: &str = "primary";
 
-/// Cap on the per-sample diagnostic log handed back to JS. Enough for a 1-second
-/// exposure at 1/16 playback and 120 fps (1920 samples) with headroom, bounded so a
-/// runaway session cannot grow memory without limit.
-const MAX_SAMPLE_LOG: usize = 8192;
+/// Cap on the per-sample diagnostic log handed back to JS.
+///
+/// Sized so no EXPRESSIBLE recipe can reach it. The worst case the UI can build is
+/// the slowest stop at the slowest playback speed against the highest render rate we
+/// will believe: 10" x 16 x 360 fps (MAX_USABLE_RENDER_FPS) = 57,600 samples. The
+/// previous 8192 was sized for a 1-second exposure and the 2"/5"/10" stops outran it
+/// — a 10" at 1/16 and a routine 73 fps is ~11,700 samples, so the log held the first
+/// 71% of the shot and every metric derived from it (gaps, evenness, achieved window)
+/// silently described that prefix. Accumulation was never affected; the accepted
+/// COUNT comes from an uncapped counter and the accumulator is the shot.
+///
+/// Still a bound, not a removal: the exposure terminates on ReplayFrameNum, and if
+/// that safety net ever failed this caps a runaway session at ~3 minutes of 360 fps
+/// delivery. 65536 records is ~3 MB resident, and the log is a Vec that only grows to
+/// what a shot actually uses.
+const MAX_SAMPLE_LOG: usize = 65536;
 
 /// One accumulated (or rejected) frame, for the evenness / duplicate report.
 struct SampleRecord {

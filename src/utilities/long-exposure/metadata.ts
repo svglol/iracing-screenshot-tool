@@ -75,9 +75,12 @@ export interface LongExposureSidecar {
 		// what makes a re-shoot comparable rather than assumed (design note §9).
 		achievedWindowSeconds: number;
 		// True when the capture produced more samples than the native diagnostic log
-		// holds (8192), which a long exposure at a slow playback speed can. `achieved`
-		// is still exact — it comes from the uncapped counter — but the gap metrics
-		// and `achievedWindowSeconds` then describe the logged prefix.
+		// holds (MAX_SAMPLE_LOG, 65536). No recipe the UI can build reaches that, so
+		// this should now always be false; it stays in the sidecar because the reader
+		// cannot otherwise tell a prefix measurement from a whole one, and it was true
+		// on captures taken while the cap was 8192. `achieved` is exact either way —
+		// it comes from the uncapped counter — but the gap metrics and
+		// `achievedWindowSeconds` describe the logged prefix when this is set.
 		logTruncated: boolean;
 	};
 

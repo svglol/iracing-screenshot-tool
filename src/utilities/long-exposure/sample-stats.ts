@@ -65,12 +65,15 @@ export interface SampleStats {
 	// When `logTruncated` is set this covers the logged PREFIX, not the whole
 	// exposure — see below.
 	windowSeconds: number;
-	// The native sample log is capped (MAX_SAMPLE_LOG, 8192 entries) while the
-	// accepted counter is not, so a long enough exposure produces more samples than
-	// the log can hold: 10" at 1/16 playback and 73 fps is ~11,700. Accumulation is
-	// unaffected — the log is a diagnostic, the GPU accumulator is the shot — but
-	// every metric derived from the log then describes a prefix rather than the
-	// whole capture.
+	// The native sample log is capped (MAX_SAMPLE_LOG, 65536 entries) while the
+	// accepted counter is not, so an exposure long enough to outrun the log makes
+	// every metric derived from it describe a prefix rather than the whole capture.
+	// Accumulation is never affected — the log is a diagnostic, the GPU accumulator
+	// is the shot.
+	//
+	// The cap is now above the worst recipe the UI can express (10" at 1/16 against
+	// a 360 fps render rate = 57,600), so this should not fire. It fired routinely
+	// at the old 8192 cap: 10" at 1/16 and 73 fps is ~11,700 samples.
 	//
 	// `accepted` stays exact regardless, because it is taken from the counter.
 	// `windowSeconds`, the gaps and `evenness` are prefix measurements when this is

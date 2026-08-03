@@ -202,7 +202,11 @@ struct ResolveCb {
     supersample: u32,
     tonemap: u32,
     exposure_mul: f32,
-    _pad: [f32; 3],
+    /// The gain the accumulate pass expanded with, so resolve can invert it exactly.
+    /// Must equal `AccumulateCb::highlight_gain` — both are written from the single
+    /// `highlight_gain` field on the backend for that reason.
+    highlight_gain: f32,
+    _pad: [f32; 2],
 }
 
 /// Mirrors `cbuffer WarpParams : register(b2)`. HLSL packs this as three 16-byte
@@ -807,7 +811,12 @@ impl D3d11Backend {
             supersample: params.supersample.max(1),
             tonemap: params.tonemap as u32,
             exposure_mul: params.exposure_mul,
-            _pad: [0.0; 3],
+            // Read from the backend, NOT from ResolveParams. `set_highlight_recovery`
+            // is the one place the gain is decided, and resolve runs on the same
+            // backend instance that did every accumulate, so there is no second copy
+            // to keep in sync and no way for the two passes to disagree.
+            highlight_gain: self.highlight_gain,
+            _pad: [0.0; 2],
         };
         write_constant_buffer(&self.context, &self.cb_resolve, &data)
     }
@@ -1598,11 +1607,19 @@ mod tests {
         }
     }
 
+    const KNEE: f32 = 0.75;
+    const POWER: f32 = 2.0;
+    const SOLVE_STEPS: usize = 20;
+
+    /// A Rust mirror of `highlight_scale` from shaders.hlsl.
+    fn highlight_scale(peak: f32, gain: f32) -> f32 {
+        let t = ((peak - KNEE) / (1.0 - KNEE)).clamp(0.0, 1.0);
+        1.0 + (gain - 1.0) * t.powf(POWER)
+    }
+
     /// A Rust mirror of `expand_highlights` from shaders.hlsl, so the curve's
     /// properties can be asserted without a GPU. Kept deliberately literal.
     fn expand_highlights(rgb: [f32; 3], gain: f32) -> [f32; 3] {
-        const KNEE: f32 = 0.75;
-        const POWER: f32 = 2.0;
         if gain <= 1.0 {
             return rgb;
         }
@@ -1610,9 +1627,147 @@ mod tests {
         if peak <= KNEE {
             return rgb;
         }
-        let t = ((peak - KNEE) / (1.0 - KNEE)).clamp(0.0, 1.0);
-        let scale = 1.0 + (gain - 1.0) * t.powf(POWER);
+        let scale = highlight_scale(peak, gain);
         [rgb[0] * scale, rgb[1] * scale, rgb[2] * scale]
+    }
+
+    /// A Rust mirror of `compress_highlights` from shaders.hlsl — the resolve-side
+    /// inverse. Same bisection, same step count, so the properties asserted here are
+    /// the ones the shader actually has.
+    fn compress_highlights(rgb: [f32; 3], gain: f32) -> [f32; 3] {
+        if gain <= 1.0 {
+            return rgb;
+        }
+        let out_peak = rgb[0].max(rgb[1]).max(rgb[2]);
+        if out_peak <= KNEE {
+            return rgb;
+        }
+        let mut lo = KNEE;
+        let mut hi = 1.0f32;
+        for _ in 0..SOLVE_STEPS {
+            let mid = 0.5 * (lo + hi);
+            if mid * highlight_scale(mid, gain) < out_peak {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        let scale = 0.5 * (lo + hi) / out_peak;
+        [rgb[0] * scale, rgb[1] * scale, rgb[2] * scale]
+    }
+
+    /// THE property the resolve-side inverse exists for: a pixel that did not change
+    /// during the exposure comes back as EXACTLY itself, at every gain.
+    ///
+    /// This is what ACES could not do. Coupling recovery to ACES stopped the sky
+    /// blowing out, but it landed the sky somewhere else than where it started and
+    /// repainted the whole frame's look on the way. The regression it replaced —
+    /// flat white above 0.797 linear with banding under it — is pinned separately in
+    /// `a_static_surface_no_longer_clips_the_way_the_field_report_showed`.
+    #[test]
+    fn a_static_pixel_round_trips_through_expand_then_compress() {
+        for stops in [1.0f32, 2.0, 3.0, 5.0, 8.0] {
+            let gain = stops.exp2();
+            for value in [0.0f32, 0.2, 0.5, 0.75, 0.8, 0.9, 0.95, 1.0] {
+                let rgb = [value, value * 0.6, value * 0.3];
+                // A static pixel contributes the same expanded value to every sample,
+                // so the weighted mean IS that value — no averaging loop needed.
+                let out = compress_highlights(expand_highlights(rgb, gain), gain);
+                for c in 0..3 {
+                    assert!(
+                        (out[c] - rgb[c]).abs() < 1e-4,
+                        "{stops} stops, value {value}, channel {c}: \
+                         {} did not round-trip ({})",
+                        rgb[c],
+                        out[c]
+                    );
+                }
+            }
+        }
+    }
+
+    /// The field report, as an assertion. At 3 stops a static sky above 0.797 linear
+    /// used to be multiplied past 1.0 and clamp flat — a white patch with a hard edge
+    /// along that contour, banded below it because the transfer slope reached ~8x.
+    ///
+    /// The inverse has slope exactly 1 across the whole range, so the gradient
+    /// survives and the ordering never collapses.
+    #[test]
+    fn a_static_surface_no_longer_clips_the_way_the_field_report_showed() {
+        let gain = 3.0f32.exp2();
+        let mut previous = -1.0f32;
+        // Straight through the reported clip point at 0.797.
+        for step in 0..=40 {
+            let value = 0.75 + 0.25 * (step as f32 / 40.0);
+            let rgb = [value, value, value];
+            let out = compress_highlights(expand_highlights(rgb, gain), gain)[0];
+            assert!(
+                out <= 1.0 + 1e-4,
+                "static {value} still lands past clip at {out}"
+            );
+            // Strictly increasing — a flat run here IS the banding, and a run of 1.0
+            // is the hard-edged white patch.
+            assert!(
+                out > previous,
+                "static gradient collapsed: {previous} -> {out} at {value}"
+            );
+            previous = out;
+        }
+    }
+
+    /// The other half of the contract: undoing the expansion must NOT undo what the
+    /// expansion was for. A transient highlight's mean is diluted by its duty cycle,
+    /// so it sits below the knee and the compressor leaves it alone.
+    #[test]
+    fn compression_leaves_the_transient_highlight_it_was_meant_to_lift() {
+        let gain = 32.0f32;
+        let samples = 100;
+
+        // A headlight through one pixel for 1% of the exposure, on a dim background.
+        let recovered_mean: f32 = (0..samples)
+            .map(|i| {
+                let v = if i == 0 { 1.0 } else { 0.05 };
+                expand_highlights([v, v, v], gain)[0]
+            })
+            .sum::<f32>()
+            / samples as f32;
+        let resolved = compress_highlights([recovered_mean; 3], gain)[0];
+
+        let unrecovered: f32 = (0..samples)
+            .map(|i| if i == 0 { 1.0f32 } else { 0.05 })
+            .sum::<f32>()
+            / samples as f32;
+
+        assert!(
+            resolved > unrecovered * 3.0,
+            "the streak must survive the round trip: {unrecovered} -> {resolved}"
+        );
+        // And the static wall in the same frame comes back exactly where it started,
+        // so the streak gained RELATIVE to it — which is the whole point.
+        let wall = compress_highlights(expand_highlights([1.0; 3], gain), gain)[0];
+        assert!((wall - 1.0).abs() < 1e-4, "the wall moved to {wall}");
+    }
+
+    /// OFF must be exactly identity on the way back too, or a 0-stop capture would
+    /// stop being bit-for-bit the still-capture path.
+    #[test]
+    fn compression_off_is_exactly_identity() {
+        for gain in [0.0f32, 1.0] {
+            for value in [0.0f32, 0.5, 0.75, 0.9, 1.0, 8.0] {
+                let rgb = [value, value * 0.5, value * 0.25];
+                assert_eq!(compress_highlights(rgb, gain), rgb, "value {value}");
+            }
+        }
+    }
+
+    /// The bisection bracket is [knee, 1], so anything the search cannot reach lands
+    /// at the top of it. Unreachable from an 8-bit source, but float slop must not
+    /// produce a wrapped or negative pixel if it ever happens.
+    #[test]
+    fn compression_saturates_above_the_reachable_range() {
+        let gain = 8.0f32;
+        let out = compress_highlights([gain * 1.5, gain * 1.5, gain * 1.5], gain);
+        assert!(out[0] <= 1.0 + 1e-4 && out[0] > 0.9, "{}", out[0]);
     }
 
     /// The property the whole feature rests on: OFF must be exactly identity, because
@@ -1714,9 +1869,10 @@ mod tests {
             "recovery must substantially brighten a transient highlight: \
              {unrecovered} -> {transient}"
         );
-        // The wall lands at the full gain, which ACES compresses back to white; the
-        // headlight lands well below it. The gap is what keeps the sky from blowing
-        // out while the streak still gains.
+        // The wall lands at the full gain, which the resolve-side inverse maps back
+        // to exactly white; the headlight lands well below it and passes through
+        // untouched. The gap is what keeps the sky from blowing out while the streak
+        // still gains.
         assert!(persistent > transient);
         assert!((persistent - gain).abs() < 1e-3);
     }
@@ -1864,6 +2020,31 @@ mod tests {
         assert_eq!(&cb.size as *const _ as usize - base, 0);
         assert_eq!(&cb.weight as *const _ as usize - base, 8);
         assert_eq!(&cb.highlight_gain as *const _ as usize - base, 12);
+    }
+
+    /// `cbuffer ResolveParams` is two 16-byte registers. `gResolveHighlightGain` took
+    /// one of the three trailing pad floats when the inverse landed, so the size is
+    /// unchanged — which is exactly the case a layout test has to catch, since a
+    /// wrong offset here would silently feed the compressor someone else's number.
+    #[test]
+    fn resolve_constant_buffer_matches_the_hlsl_packing() {
+        assert_eq!(std::mem::size_of::<ResolveCb>(), 32);
+        let cb = ResolveCb {
+            out_size: [0; 2],
+            supersample: 1,
+            tonemap: 0,
+            exposure_mul: 1.0,
+            highlight_gain: 1.0,
+            _pad: [0.0; 2],
+        };
+        let base = &cb as *const _ as usize;
+        // Register 0: uint2 gOutSize, uint gSupersample, uint gTonemap.
+        assert_eq!(&cb.out_size as *const _ as usize - base, 0);
+        assert_eq!(&cb.supersample as *const _ as usize - base, 8);
+        assert_eq!(&cb.tonemap as *const _ as usize - base, 12);
+        // Register 1: float gExposureMul, float gResolveHighlightGain, float2 gPadR.
+        assert_eq!(&cb.exposure_mul as *const _ as usize - base, 16);
+        assert_eq!(&cb.highlight_gain as *const _ as usize - base, 20);
     }
 
     /// Synthetic sample positions must be strictly inside (0, 1) — a sample AT 0 or 1

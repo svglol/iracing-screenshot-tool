@@ -846,10 +846,13 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		presentedAt: sample.presentedAt,
 		accepted: sample.accepted,
 	}));
-	// The native log caps at 8192 entries; the accepted counter does not. A 10"
-	// exposure at 1/16 and 73 fps produces ~11,700 samples, so without handing the
-	// counter over the shot would report 8192 and an achieved window a second and a
-	// half short of the truth.
+	// The native log is capped (MAX_SAMPLE_LOG, 65536); the accepted counter is not.
+	// The cap is now above anything the UI can ask for — the worst expressible recipe
+	// is 10" at 1/16 and 360 fps, or 57,600 samples — but the counter is still what
+	// `accepted` is taken from, because it is the only number that stays exact if that
+	// ever stops being true. At the old 8192 it already was not: a 10" at 1/16 and a
+	// routine 73 fps produces ~11,700 samples and reported an achieved window a second
+	// and a half short of the truth.
 	const stats = summarizeSamples(samples, { acceptedTotal: result.accepted });
 
 	const interpolation = buildInterpolationReport({

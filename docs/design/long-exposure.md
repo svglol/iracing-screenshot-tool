@@ -211,14 +211,22 @@ once started and that a faster playback speed finishes sooner with fewer samples
 existed (1" at 1/16), so it is exactly the line past which a capture is longer than
 anything that used to be expressible.
 
-**These stops outrun the diagnostic sample log.** `MAX_SAMPLE_LOG` is 8192 entries;
-10" at 1/16 and 73 fps is ~11,700 samples. The accumulation is unaffected — the log
-is a diagnostic and the GPU accumulator is the shot — but every metric derived from
-the log then describes a prefix. The accepted count is therefore taken from the
-session's uncapped counter and stays exact, and the sidecar sets
-`sampling.logTruncated` so a reader knows the gap metrics and
-`achievedWindowSeconds` cover part of the exposure rather than all of it. Raising
-the cap is a native-side change and has not been done.
+**These stops used to outrun the diagnostic sample log, and the cap was raised for
+them.** `MAX_SAMPLE_LOG` was 8192 entries, sized back when a 1" exposure was the
+ceiling; 10" at 1/16 and 73 fps is ~11,700 samples, so the log held the first 71% of
+a shot and every metric derived from it silently described that prefix. It is now
+**65536**, chosen so no expressible recipe can reach it: the worst the UI can build
+is the slowest stop at the slowest speed against the highest render rate we will
+believe, 10" × 16 × 360 fps (`MAX_USABLE_RENDER_FPS`) = 57,600 samples. It remains a
+cap rather than an unbounded Vec, because the exposure terminating on
+`ReplayFrameNum` is the thing keeping a session finite and a diagnostic buffer should
+not be the component that fails if that ever breaks.
+
+The two safeguards built for the old cap stay, and both are still load-bearing: the
+accepted count is taken from the session's **uncapped counter** rather than from the
+log's length, and the sidecar still writes `sampling.logTruncated` so a reader can
+tell a prefix measurement from a whole one — which matters for reading captures
+taken before this change, where it was routinely true.
 
 ### Supersampling costs samples — and samples usually matter more
 
@@ -617,13 +625,17 @@ only failure mode: the two used to be able to come from different instants.
   paths, so **an old sidecar carrying either still reproduces exactly**. Nothing in
   the UI sets them, and their config keys are gone rather than orphaned — persisting
   a value no control can change back is how a setting becomes impossible to undo.
-- **`tonemap` is not free of the UI, though: `highlightRecovery > 0` sets it to
-  `aces` when the recipe does not name one.** Recovery expands near-clipped values
-  before integrating and depends on a compressive resolve to put static bright
-  surfaces back; with `tonemap: 'none'` a plain sky above ~0.797 linear clips flat
-  and the gradient below it bands. Removing the tonemap control took away the only
-  way to fix that by hand, so the pair is now kept together in `normalizeRecipe`.
-  See `long-exposure-frame-interpolation.md` §7.3.
+- **`tonemap` was briefly coupled to `highlightRecovery` and no longer is.** For a
+  few hours on 2026-08-03, `highlightRecovery > 0` forced `tonemap: 'aces'` when the
+  recipe did not name one, because recovery expands near-clipped values before
+  integrating and needs a compressive resolve to put static bright surfaces back —
+  and with `tonemap: 'none'` a plain sky above ~0.797 linear clipped flat with the
+  gradient below it banding. That was a recipe-layer patch on a shader-layer bug.
+  `compress_highlights` now inverts the expansion **exactly**, at resolve,
+  unconditionally, so the pair is closed inside the shader where it belongs and
+  `tonemap` is a pure look control again that defaults to off. A static pixel
+  round-trips to itself, which ACES never did. See
+  `long-exposure-frame-interpolation.md` §7.3.
 
 The panel deliberately omits these fields from the recipe it sends rather than
 sending a default, because an omitted field takes the value resolved in main. That
@@ -686,7 +698,7 @@ that dedups on the telemetry frame counter at slow motion is broken.
 ### Dropped frames and temporal evenness
 
 Every accepted sample records `(u, sessionTime, replayFrameNum, digest, timestamp)`
-into a capped log (8192 entries). From it we compute:
+into a capped log (`MAX_SAMPLE_LOG`, 65536 entries). From it we compute:
 
 - achieved sample count and duplicates rejected
 - median / max sim-time gap between consecutive accepted samples

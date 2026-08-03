@@ -460,17 +460,54 @@ flat — a white patch with a hard edge along that contour — while the slope r
 expansion is self-limiting only in the sense that *the second half of the pair*
 limits it; on its own it is a straightforward blow-out.
 
-`normalizeRecipe` now couples them: **highlight recovery implies ACES unless the
-recipe names a tonemap explicitly.** That is a recipe-layer fix, so it needed no
-shader change and no rebuild. An explicit tonemap still wins, so a sidecar reproduces
-what it recorded.
+`normalizeRecipe` coupled them as a stopgap: highlight recovery implied ACES unless
+the recipe named a tonemap explicitly. That was a recipe-layer fix, so it needed no
+shader change and no rebuild.
 
-**The better fix is a shader change and has not been made.** Compressing with the
-*inverse of the expansion* rather than with ACES would make a static pixel round-trip
-to exactly itself — self-limiting by construction rather than by a second curve that
-happens to be compressive — and would leave the rest of the image's look alone, which
-ACES does not. `expand_highlights` is monotonic and invertible (a cubic in `peak`);
-the cost is a resolve-side solve and a native rebuild.
+**SUPERSEDED 2026-08-03 — the shader change has now been made, and the coupling is
+gone.** `compress_highlights` in shaders.hlsl is the exact inverse of
+`expand_highlights` and runs unconditionally in `CSResolve`. The coupling was removed
+from `normalizeRecipe` in the same change; `tonemap` is a look control again and
+defaults to `none`.
+
+What the inverse buys that ACES could not:
+
+- **A static pixel round-trips to exactly itself.** Every sample of an unchanging
+  pixel is the same value `v`, so the weighted mean of `expand(v)` is `expand(v)`, and
+  `compress(expand(v)) == v`. Self-limiting *by construction* rather than by a second
+  curve that happens to be compressive. ACES stopped the blow-out but landed the sky
+  somewhere else than where it started.
+- **The rest of the image's look is untouched.** ACES repaints the whole frame to fix
+  a highlight problem; the inverse is identity below the knee, so midtones and shadows
+  are bit-for-bit unaffected exactly as the expansion left them.
+- **The transient highlight keeps everything the expansion bought it.** Its mean is
+  diluted by its duty cycle down below the knee, so it passes through the compressor
+  untouched while the static wall beside it is pulled back to 1.0. The *gap* is the
+  streak.
+
+**How it is solved.** `expand` multiplies by a scale that depends on the peak, so
+inverting it means solving `p · (1 + (gain−1)·((p−knee)/(1−knee))²) = outPeak` for
+`p` — a cubic. On `[knee, 1]` its derivative is `1 + a(3p−knee)(p−knee)` with both
+factors non-negative, so the curve is strictly increasing and the root is unique.
+20 bisection steps on that bracket pin it to 0.25/2²⁰ = 2.4e-7, two orders of
+magnitude finer than a 16-bit output step is worth, with no discriminant cases and an
+error bound you can read off the step count. Cardano would be exact and faster and is
+not worth the branchy edge cases in a pass that runs once per capture.
+
+**Order in `CSResolve` is load-bearing in both directions.** The compression runs
+*after* the supersample box-downsample, because the accumulator holds scene-referred
+values and an area average belongs in that space — compressing per tap would run the
+box filter through a concave curve and darken edges, the same mistake as downsampling
+after the tonemap. And it runs *before* `gExposureMul`, because EV is a look control
+applied on top of the finished image: multiplying first would push midtones over the
+knee and hand them to the compressor, so +1 EV on a 0.5 pixel would land at 0.797
+instead of 1.0.
+
+**What this changes for reproduction.** A sidecar written during the coupling's brief
+life records `tonemap: "aces"` explicitly, so re-shooting it still applies ACES — now
+on top of the inverse, which the original shot did not have. Those files will not
+re-shoot pixel-identical. That is the intended direction: the recorded look was a
+workaround for a shader bug that no longer exists.
 
 Confirmed visually: at 5 stops the browser chrome, favicons and background in the test
 capture are indistinguishable from the 0-stop version, while the moving lamps go from

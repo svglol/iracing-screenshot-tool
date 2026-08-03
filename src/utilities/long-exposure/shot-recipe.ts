@@ -253,33 +253,31 @@ export function normalizeRecipe(
 			)
 		: (defaults.highlightRecovery ?? 0);
 
-	// HIGHLIGHT RECOVERY IMPLIES A COMPRESSIVE RESOLVE, and this is where that pair
-	// is kept together.
+	// NO COUPLING HERE ANY MORE, and that is the fix rather than an omission.
 	//
-	// Recovery expands near-clipped values BEFORE integrating, on the explicit
-	// assumption that something at resolve puts persistent bright surfaces back —
-	// `expand_highlights` in shaders.hlsl says so in as many words. Without it the
-	// expansion is only half applied, and a STATIC bright surface is the case that
-	// breaks: it is present in every sample, so it averages to gain x itself instead
-	// of being diluted by a duty cycle.
+	// Recovery expands near-clipped values BEFORE integrating and relies on something
+	// at resolve putting persistent bright surfaces back. Between 2026-08-03 and the
+	// inverse-expansion shader change, that something was ACES, forced on from here
+	// whenever recovery was used and no tonemap was named. It worked — a static sky
+	// stopped clipping flat white at 0.797 linear — but it bought that by repainting
+	// the whole frame's look, and a static pixel still did not land back where it
+	// started.
 	//
-	// At 3 stops (gain 8, knee 0.75, squared shoulder) that puts the clip point at
-	// 0.797 linear — about 231/255 in sRGB. A plain sky above that is multiplied
-	// past 1.0 and lands flat white with a hard edge along the contour, and just
-	// below it the transfer slope reaches ~8x, so single 8-bit steps in a smooth
-	// gradient are magnified into visible bands. Both were reported from a real
-	// capture at 3 stops.
+	// `compress_highlights` in shaders.hlsl now inverts the expansion exactly, at
+	// resolve, unconditionally, so the pair is closed inside the shader where it
+	// belongs and a static pixel round-trips to itself. `tonemap` goes back to being
+	// a pure look control that defaults to off.
 	//
-	// An EXPLICIT tonemap still wins, so a sidecar written before this reproduces
-	// exactly what it recorded — including, deliberately, a broken combination.
-	// Only the absent case, which is every shot the panel builds, is coupled.
-	const explicitTonemap = (TONEMAPPERS as readonly string[]).includes(
+	// NOTE FOR REPRODUCTION: a sidecar written while the coupling was live records
+	// `tonemap: "aces"` explicitly, so re-shooting it still applies ACES — on top of
+	// the inverse, which the original shot did not have. It will not be pixel-identical
+	// to the file it came from. That is the intended direction: the recorded look was
+	// a workaround for a shader bug that no longer exists.
+	const tonemap: Tonemapper = (TONEMAPPERS as readonly string[]).includes(
 		input.tonemap as string
 	)
 		? (input.tonemap as Tonemapper)
-		: null;
-	const tonemap: Tonemapper =
-		explicitTonemap ?? (highlightRecovery > 0 ? 'aces' : defaults.tonemap);
+		: defaults.tonemap;
 
 	return {
 		anchorFrame: clampInt(

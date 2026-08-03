@@ -82,7 +82,11 @@ cbuffer ResolveParams : register(b1)
     uint  gSupersample; // 1 or 2
     uint  gTonemap;     // 0 none, 1 Reinhard, 2 ACES
     float gExposureMul; // 2^EV
-    float3 gPadR;
+    // Same value as gHighlightGain in b0, and it MUST be the same or the resolve
+    // would invert a curve the accumulate pass did not apply. Carried in a second
+    // cbuffer rather than shared because the two passes bind different registers.
+    float gResolveHighlightGain;
+    float2 gPadR;
 };
 
 cbuffer WarpParams : register(b2)
@@ -162,16 +166,44 @@ float3 linear_to_srgb(float3 c)
 // and it is what VFX motion blur does for the same reason.
 //
 // WHY IT DOES NOT BLOW OUT THE SKY. The expansion is applied to persistent bright
-// surfaces too, but they are present in EVERY sample, so they average to ~gain and
-// the ACES pass at resolve compresses them straight back to white. A transient
-// highlight averages to gain x (its small duty cycle) and lands genuinely bright.
-// The correction is therefore self-limiting on anything that does not move.
+// surfaces too, but they are present in EVERY sample, so they average to ~gain --
+// and `compress_highlights` at resolve, being the EXACT INVERSE of this curve, maps
+// that straight back to where it started. A transient highlight averages to
+// gain x (its small duty cycle), lands below the knee, and comes back untouched and
+// genuinely bright. The correction is therefore self-limiting on anything that does
+// not move, by construction rather than by luck.
+//
+// HISTORY, so this does not get "simplified" back. Until 2026-08-03 the compressive
+// half was ACES, on the reasoning that a tonemapper is compressive so it would do.
+// It does not: `tonemap` defaults to none, so most shots had NOTHING putting the
+// expansion back, and a plain sky at 3 stops blew to flat white with a hard edge
+// along the 0.797-linear contour and banded below it (the transfer slope reaches ~8x
+// just under the clip point, which magnifies single 8-bit input steps). Coupling
+// recovery to ACES was the stopgap; it fixed the blow-out but repainted the whole
+// image's look to buy it, and a static pixel still did not round-trip. The inverse
+// does both properly and leaves `tonemap` free to be a look control again.
 
 // Where expansion begins. Below this, values pass through untouched, so midtones
 // and shadows are bit-for-bit unaffected.
 #define HIGHLIGHT_KNEE  0.75f
 // Shoulder shape. 2.0 ramps gently off the knee rather than kinking.
 #define HIGHLIGHT_POWER 2.0f
+// Bisection steps used to invert the curve at resolve. The bracket is [knee, 1], so
+// 20 halvings pin the answer to 0.25 / 2^20 = 2.4e-7 -- two orders of magnitude
+// finer than a 16-bit output step is worth (~3.4e-5 in linear near the knee), and
+// the loop runs once per OUTPUT pixel in a pass that already runs once per capture.
+#define HIGHLIGHT_SOLVE_STEPS 20
+
+// The multiplier the expansion applies at a given peak. Factored out because
+// `compress_highlights` has to invert EXACTLY this expression -- if the two ever
+// drifted apart, the round-trip property below would quietly stop holding and the
+// only symptom would be a slightly wrong sky.
+float highlight_scale(float peak, float gain)
+{
+    float t = saturate((peak - HIGHLIGHT_KNEE) / (1.0f - HIGHLIGHT_KNEE));
+    // Continuous at the knee (t = 0 gives scale 1), reaching `gain` at full clip.
+    return 1.0f + (gain - 1.0f) * pow(t, HIGHLIGHT_POWER);
+}
 
 float3 expand_highlights(float3 linearRGB, float gain)
 {
@@ -192,14 +224,74 @@ float3 expand_highlights(float3 linearRGB, float gain)
         return linearRGB;
     }
 
-    float t = saturate((peak - HIGHLIGHT_KNEE) / (1.0f - HIGHLIGHT_KNEE));
-    // Continuous at the knee (t = 0 gives scale 1), reaching `gain` at full clip.
-    float scale = 1.0f + (gain - 1.0f) * pow(t, HIGHLIGHT_POWER);
-
     // A SCALAR gain, so hue and saturation survive: a red light gets brighter rather
     // than turning white on the way up. Desaturating hot highlights toward white is
     // ACES's job at resolve, and doing it here as well would double-apply it.
-    return linearRGB * scale;
+    return linearRGB * highlight_scale(peak, gain);
+}
+
+// The exact inverse of expand_highlights, applied ONCE to the finished average at
+// resolve. This is the second half of the pair described above.
+//
+// THE PROPERTY IT BUYS: a pixel that did not change during the exposure round-trips
+// to exactly itself. Every sample of a static pixel is the same value v, so the
+// weighted mean of expand(v) is expand(v), and compress(expand(v)) == v. The sky,
+// the barriers, the car bodywork -- anything that held still -- is returned
+// untouched, and the gain can be raised without a budget for what it will do to the
+// rest of the frame. A transient highlight's mean is diluted by its duty cycle down
+// below the knee, so it passes through this untouched and keeps everything the
+// expansion bought it.
+//
+// WHY IT IS SOLVED RATHER THAN EVALUATED. expand() multiplies by a scale that
+// depends on the peak, so inverting it means solving
+//
+//     p * (1 + (gain - 1) * ((p - knee) / (1 - knee))^2) = outPeak
+//
+// for p -- a cubic. Its derivative on [knee, 1] is 1 + a(3p - knee)(p - knee) with
+// both factors non-negative, so the curve is STRICTLY INCREASING there and the root
+// is unique: bisection cannot converge on the wrong one, needs no discriminant
+// cases, and has an error bound you can read off the step count. Cardano would be
+// exact and faster and is not worth the branchy edge cases at this cost.
+float3 compress_highlights(float3 linearRGB, float gain)
+{
+    // Same guard as the expansion, for the same reason: OFF must be EXACTLY identity
+    // so a one-sample box exposure stays bit-for-bit the still-capture path.
+    if (gain <= 1.0f)
+    {
+        return linearRGB;
+    }
+
+    float outPeak = max(linearRGB.r, max(linearRGB.g, linearRGB.b));
+    // Below the knee nothing was expanded, so nothing is compressed. This is also
+    // what makes the correction free for the entire midtone and shadow range.
+    if (outPeak <= HIGHLIGHT_KNEE)
+    {
+        return linearRGB;
+    }
+
+    // The source is 8-bit UNORM, so no input peak exceeds 1.0 and no expanded value
+    // exceeds `gain`; an average of them cannot either. An outPeak above `gain` is
+    // therefore unreachable, but if float slop ever produced one the search below
+    // simply saturates at 1.0, which is the right answer anyway.
+    float lo = HIGHLIGHT_KNEE;
+    float hi = 1.0f;
+    [unroll]
+    for (uint i = 0; i < HIGHLIGHT_SOLVE_STEPS; ++i)
+    {
+        float mid = 0.5f * (lo + hi);
+        if (mid * highlight_scale(mid, gain) < outPeak)
+        {
+            lo = mid;
+        }
+        else
+        {
+            hi = mid;
+        }
+    }
+
+    // Scalar, exactly as the expansion was, so the hue it preserved on the way up
+    // survives the way back down too.
+    return linearRGB * (0.5f * (lo + hi) / outPeak);
 }
 
 // --- Pass 0: clear ---------------------------------------------------------
@@ -498,7 +590,22 @@ void CSResolve(uint3 tid : SV_DispatchThreadID)
         }
     }
 
-    float3 linearRGB = (sum / max(float(taps), 1.0f)) * gExposureMul;
+    float3 linearRGB = sum / max(float(taps), 1.0f);
+
+    // Put the highlight expansion back. ORDER IS LOAD-BEARING, in both directions:
+    //
+    //   AFTER the box downsample, because the accumulator holds scene-referred-ish
+    //   values and an area average belongs in that space. Compressing per tap would
+    //   run the box filter through a concave curve and darken edges -- the same
+    //   mistake as downsampling after the tonemap, which the comment above rejects.
+    //
+    //   BEFORE gExposureMul, because EV is a look control the user dials on top of
+    //   the finished image, not part of the round trip. Multiplying first would push
+    //   midtones over the knee and hand them to the compressor, which would eat most
+    //   of the boost: +1 EV on a 0.5 pixel would land at 0.797, not 1.0.
+    linearRGB = compress_highlights(linearRGB, gResolveHighlightGain);
+
+    linearRGB *= gExposureMul;
 
     if (gTonemap == 1)
     {
