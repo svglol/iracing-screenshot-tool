@@ -166,6 +166,16 @@ const schema = {
 		default: 1,
 		enum: [1, 2, 4, 8],
 	},
+	// How many times the exposure window is visited, accumulating into one buffer.
+	// 1 = an ordinary capture. Costs N times the wall clock and buys roughly N times
+	// the real samples, so it pays for short shutters and is unaffordable for long
+	// ones — which is why it persists but the panel keeps quoting the total wait.
+	longExposurePasses: {
+		type: 'number',
+		default: 1,
+		minimum: 1,
+		maximum: 16,
+	},
 	longExposureWeighting: {
 		type: 'string',
 		default: 'box',

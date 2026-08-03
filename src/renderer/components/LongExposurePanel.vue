@@ -96,13 +96,19 @@
 			     cost should never be a surprise. -->
 				<!-- Also gated on being in a replay: without a cursor the plan
 			     resolves against frame 0 and this would read "frames -8 → 0". -->
+				<!-- TOTALS, always: quoting one pass of an eight-pass capture would
+			     understate the wait by eight, and the wait is the entire cost of
+			     that setting. Equal to the per-pass figures at one pass. -->
 				<p v-if="plan && inReplay" class="sidebar-target-hint">
 					<span class="sidebar-target-hint__value">
-						~{{ plan.predictedSamples }} samples
+						~{{ plan.predictedTotalSamples }} samples
 					</span>
 					<span class="sidebar-target-hint__render">
 						· at {{ speedLabel }} ·
-						{{ formatDuration(plan.predictedWallClockSeconds) }}
+						{{ formatDuration(plan.predictedTotalWallClockSeconds) }}
+						<template v-if="plan.passes > 1">
+							· {{ plan.passes }} passes
+						</template>
 					</span>
 					<br />
 					<!-- A sub-replay-frame exposure spans one frame but only exposes for
@@ -239,6 +245,58 @@
 						shot's real sample count against the same shot with it off —
 						if that number drops, it is buying invented samples with real
 						ones.
+					</o-notification>
+
+					<!-- Passes sit next to interpolation because they are ALTERNATIVES,
+			     not companions: both buy sample density, one with GPU time we may
+			     not have and one with wall clock we always do. Needs no particular
+			     hardware, so unlike interpolation it is always offered. -->
+					<o-field label="Passes">
+						<o-select v-model="passes" expanded :disabled="busy">
+							<option :value="1">1 (single pass)</option>
+							<option :value="2">2× — twice the wait</option>
+							<option :value="4">4× — four times the wait</option>
+							<option :value="8">8× — eight times the wait</option>
+						</o-select>
+					</o-field>
+
+					<!-- The trade is entirely time, and the panel already quotes the total
+			     above — so this explains the part a duration cannot: WHY repeating
+			     the same moment produces anything new, and why the picture does not
+			     come out brighter. -->
+					<o-notification
+						v-if="passes > 1 && !disableTooltips"
+						class="sidebar-tooltip"
+						variant="info"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Each pass replays the same moment and catches frames the
+						others missed, so the streak gets smoother rather than
+						brighter. Best on fast shutters, where a single pass collects
+						only a handful of samples.
+					</o-notification>
+
+					<!-- Both on is the worst of the trade: interpolation slows each pass
+			     enough to cost it real frames, so the same wait buys fewer real
+			     samples than passes alone would. validatePlan says this too — this
+			     is the same fact where the control is. -->
+					<o-notification
+						v-if="
+							passes > 1 &&
+							interpolationSupported &&
+							interpolation > 1 &&
+							!disableTooltips
+						"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Passes and interpolation compete for the same per-frame
+						budget. With both on, each pass captures fewer real frames —
+						turning interpolation off usually makes the better shot for
+						the same wait.
 					</o-notification>
 
 					<!-- Asked for on hardware that can't do it: say so rather than showing
@@ -413,8 +471,12 @@ interface CapturePlan {
 	startFrame: number;
 	anchorFrame: number;
 	playbackDivisor: number;
+	passes: number;
+	// PER PASS. What the user waits for, and what they get, are the totals below.
 	predictedSamples: number;
 	predictedWallClockSeconds: number;
+	predictedTotalSamples: number;
+	predictedTotalWallClockSeconds: number;
 }
 
 interface CaptureResult {
@@ -456,6 +518,7 @@ export default defineComponent({
 			targetSamples: String(config.get('longExposureTargetSamples')),
 			supersample: config.get('longExposureSupersample') === 2,
 			interpolation: config.get('longExposureInterpolation'),
+			passes: config.get('longExposurePasses'),
 			weighting: config.get('longExposureWeighting'),
 			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
 			// The format the capture will actually write, reported back by main from
@@ -468,7 +531,13 @@ export default defineComponent({
 			previewErrors: [] as string[],
 
 			capturing: false,
-			progress: null as { phase: string; accepted?: number } | null,
+			progress: null as {
+				phase: string;
+				accepted?: number;
+				// Zero-based, and only sent on a multi-pass capture.
+				pass?: number;
+				passes?: number;
+			} | null,
 			lastResult: null as CaptureResult | null,
 
 			plan: null as CapturePlan | null,
@@ -536,6 +605,11 @@ export default defineComponent({
 			if (this.interpolationSupported && Number(this.interpolation) > 1) {
 				active.push(`${this.interpolation}× interpolation`);
 			}
+			// Named rather than counted, and for the sharpest version of the reason
+			// this disclosure names anything: a forgotten 8 here is an eightfold wait.
+			if (Number(this.passes) > 1) {
+				active.push(`${this.passes} passes`);
+			}
 			const recovery = parseFloat(this.highlightRecovery);
 			if (Number.isFinite(recovery) && recovery !== 0) {
 				active.push(`${recovery} stop recovery`);
@@ -544,9 +618,10 @@ export default defineComponent({
 		},
 		// How many controls the fold is hiding. Interpolation is only rendered on
 		// hardware that can do it, so the count has to agree with what is actually
-		// in there.
+		// in there. Weighting, supersample, passes, highlight recovery, and
+		// interpolation where it is offered.
 		advancedCount(): number {
-			return this.interpolationSupported ? 4 : 3;
+			return this.interpolationSupported ? 5 : 4;
 		},
 		advancedSummary(): string {
 			if (this.advancedOpen) {
@@ -574,13 +649,23 @@ export default defineComponent({
 					return '';
 			}
 		},
+		// Multi-pass re-seeks between passes, so without the pass number the progress
+		// line would appear to restart part-way through and read as a fault.
+		passLabel(): string {
+			const total = this.progress?.passes ?? 0;
+			const current = this.progress?.pass;
+			if (total > 1 && typeof current === 'number') {
+				return ` (pass ${current + 1} of ${total})`;
+			}
+			return '';
+		},
 		progressLabel(): string {
 			if (!this.progress) return 'Working…';
 			switch (this.progress.phase) {
 				case 'seeking':
-					return 'Seeking…';
+					return `Seeking…${this.passLabel}`;
 				case 'accumulating':
-					return `Exposing… ${this.progress.accepted ?? 0} samples`;
+					return `Exposing… ${this.progress.accepted ?? 0} samples${this.passLabel}`;
 				case 'resolving':
 					return 'Developing…';
 				case 'restoring':
@@ -616,6 +701,10 @@ export default defineComponent({
 				interpolationFactor: this.interpolationSupported
 					? this.interpolation
 					: 1,
+				// Unlike interpolation this needs no particular hardware, so it is sent
+				// as chosen. An addon build too old to run passes degrades to one and
+				// says so in the outcome's warnings.
+				passes: Number(this.passes) || 1,
 				weighting: this.weighting,
 				highlightRecovery: parseFloat(this.highlightRecovery) || 0,
 				// outputFormat, exposureCompensation and tonemap are deliberately
@@ -651,6 +740,12 @@ export default defineComponent({
 			config.set('longExposureInterpolation', Number(value));
 			// Affects VRAM, not the sample-count prediction, so refresh the preview
 			// to keep the pre-flight honest.
+			void this.refreshPreview();
+		},
+		passes(value) {
+			config.set('longExposurePasses', Number(value));
+			// Multiplies the predicted wait and sample count, which is the whole cost
+			// of the setting — the preview must not keep quoting one pass.
 			void this.refreshPreview();
 		},
 		weighting(value) {
