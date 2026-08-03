@@ -177,6 +177,9 @@ Below one replay frame `T` is the requested exposure itself and `N` is only the
 | 1/4 | 0.25 | 15 | 15 | 30 | 60 | 120 | 240 | 4.0 s |
 | 0.5" | 0.5 | 30 | 30 | 60 | 120 | 240 | 480 | 8.0 s |
 | 1" | 1.0 | 60 | 60 | 120 | 240 | 480 | **960** | 16 s |
+| 2" | 2.0 | 120 | 120 | 240 | 480 | 960 | 1920 | 32 s |
+| 5" | 5.0 | 300 | 300 | 600 | 1200 | 2400 | 4800 | 80 s |
+| 10" | 10.0 | 600 | 600 | 1200 | 2400 | 4800 | **9600** | 160 s |
 
 (`R = 60`; double every count at 120 fps. Counts floor, and never below 1 — we
 always get the frame we stop on. The 1/125 row read 1/2/4/8/15 before sub-frame
@@ -192,6 +195,30 @@ Two consequences worth stating plainly: the samples are real interpolated poses
 from the sim, so contact patches, suspension travel and wheel rotation are correct
 rather than optical-flow-guessed; and because slow motion costs only wall-clock
 time, the "expensive" setting is patience, not memory.
+
+### The long end: 2", 5", 10"
+
+Added 2026-08-03, and they cost nothing but time. One fixed-size accumulator holds a
+10-second exposure exactly as it holds a 1/1000 one, so there is no memory reason to
+stop at 1" — the reason to stop is the user's patience, and 10" at 1/16 playback is
+**160 seconds of driven replay**.
+
+So `validatePlan`'s wall-clock warning has two registers rather than one. Past
+`LONG_CAPTURE_WARN_SECONDS` (10 s) it quotes the duration; past
+`LONG_CAPTURE_ESCALATE_SECONDS` (16 s) it also says the capture cannot be hurried
+once started and that a faster playback speed finishes sooner with fewer samples.
+16 s is not arbitrary — it was the ceiling of the entire feature before these stops
+existed (1" at 1/16), so it is exactly the line past which a capture is longer than
+anything that used to be expressible.
+
+**These stops outrun the diagnostic sample log.** `MAX_SAMPLE_LOG` is 8192 entries;
+10" at 1/16 and 73 fps is ~11,700 samples. The accumulation is unaffected — the log
+is a diagnostic and the GPU accumulator is the shot — but every metric derived from
+the log then describes a prefix. The accepted count is therefore taken from the
+session's uncapped counter and stays exact, and the sidecar sets
+`sampling.logTruncated` so a reader knows the gap metrics and
+`achievedWindowSeconds` cover part of the exposure rather than all of it. Raising
+the cap is a native-side change and has not been done.
 
 ### Supersampling costs samples — and samples usually matter more
 
@@ -553,13 +580,31 @@ interface LongExposureRecipe {
   targetSamples: number | null;
   width: number; height: number; supersample: 1 | 2;
   weighting: WeightingCurve;
-  tonemap: 'none' | 'reinhard' | 'aces';
-  exposureCompensation: number; // EV
-  outputFormat: 'png16' | 'png' | 'jpeg' | 'webp';
+  tonemap: 'none' | 'reinhard' | 'aces';   // no UI control — see below
+  exposureCompensation: number; // EV      // no UI control — see below
+  outputFormat: 'png16' | 'png' | 'jpeg' | 'webp';   // derived from Settings
   outputDir: string;
   variantId: string | null;     // unused in v1 — Spotter Pack writes here
 }
 ```
+
+**Three fields no longer have a UI control** (2026-08-03), and the distinction
+matters: they were removed from the PANEL, not from the recipe.
+
+- `outputFormat` is derived from the still-capture `outputFormat` setting, so there
+  is one format choice for stills and long exposures both.
+  `longExposureFormatForStillFormat` maps it: PNG means the 16-bit master (Settings
+  has no 16-bit option and should not grow a long-exposure-only one), jpeg and webp
+  map to themselves.
+- `tonemap` and `exposureCompensation` keep their recipe fields and their shader
+  paths, so **an old sidecar carrying either still reproduces exactly**. Nothing in
+  the UI sets them, and their config keys are gone rather than orphaned — persisting
+  a value no control can change back is how a setting becomes impossible to undo.
+
+The panel deliberately omits these fields from the recipe it sends rather than
+sending a default, because an omitted field takes the value resolved in main. That
+is what "follow Settings" has to mean: a value still sitting in the renderer must
+not be able to beat the setting.
 
 `executeRecipe(recipe, deps)` is the *only* entry point. The UI's job is to build a
 recipe; it has no other privileges. Consequences:

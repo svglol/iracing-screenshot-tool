@@ -60,7 +60,24 @@ export const SHUTTER_LADDER: readonly ShutterStop[] = [
 	// Past JRT's ceiling — reachable for us because slow motion costs wall-clock
 	// time, not memory (accumulators are fixed-size; see design note §5).
 	{ key: '1', label: '1"', seconds: 1, jrtSamples: 1024 },
+	// The long end. Memory does not grow with exposure — one fixed-size accumulator
+	// holds a 10-second shot exactly as it holds a 1/1000 one — so the only thing
+	// these cost is the user's patience, and they cost a LOT of it: 10" at 1/16
+	// playback is 160 s of real time. `validatePlan` escalates its wall-clock
+	// warning past LONG_CAPTURE_ESCALATE_SECONDS for precisely this reason.
+	//
+	// jrtSamples stays on the seconds x 1024 line the ladder already implies; JRT
+	// itself offers nothing this slow, and nothing in our pipeline reads it.
+	{ key: '2', label: '2"', seconds: 2, jrtSamples: 2048 },
+	{ key: '5', label: '5"', seconds: 5, jrtSamples: 5120 },
+	{ key: '10', label: '10"', seconds: 10, jrtSamples: 10240 },
 ] as const;
+
+// The longest exposure the ladder offers, in milliseconds. Free-form exposures are
+// clamped to it rather than to a separate number, so a hand-edited recipe cannot
+// ask for something the UI has no way to express.
+export const MAX_EXPOSURE_MS =
+	SHUTTER_LADDER[SHUTTER_LADDER.length - 1].seconds * 1000;
 
 export function findShutterStop(
 	key: string | null | undefined

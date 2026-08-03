@@ -21,6 +21,7 @@ import {
 	findShutterStop,
 	isSubFrameExposure,
 	isWeightingCurve,
+	MAX_EXPOSURE_MS,
 	nearestPlaybackDivisor,
 	predictSampleCount,
 	predictWallClockSeconds,
@@ -145,6 +146,30 @@ export const DEFAULT_SHUTTER = '1/8';
 // of a big exposure is time — and it should never be a surprise.
 export const LONG_CAPTURE_WARN_SECONDS = 10;
 
+// Above this, the same warning escalates: it says how to make it shorter, and warns
+// that the replay is driven for the whole duration.
+//
+// 16 s is not arbitrary — it was the ceiling of the entire feature until the 2"/5"/
+// 10" stops landed (1" at 1/16 playback). Anything past it is a capture longer than
+// anything that used to be expressible, and 10" at 1/16 is 160 s: long enough that a
+// user who did not read the number will assume the app has hung.
+export const LONG_CAPTURE_ESCALATE_SECONDS = 16;
+
+// Wall-clock durations in the form a waiting user thinks in. Seconds alone stops
+// being readable somewhere around two minutes ("about 160 seconds" is a number you
+// have to convert yourself).
+function describeDuration(seconds: number): string {
+	if (!Number.isFinite(seconds) || seconds <= 0) {
+		return '0 seconds';
+	}
+	if (seconds < 90) {
+		return `${Math.round(seconds)} seconds`;
+	}
+	const minutes = Math.floor(seconds / 60);
+	const rest = Math.round(seconds - minutes * 60);
+	return rest === 0 ? `${minutes} minutes` : `${minutes} min ${rest} s`;
+}
+
 // A recipe with everything except the anchor, session and output directory, which
 // only the caller can supply.
 export function createDefaultRecipe(opts: {
@@ -214,7 +239,7 @@ export function normalizeRecipe(
 		: clampInt(
 				input.exposureMs ?? defaults.exposureMs,
 				1,
-				5000,
+				MAX_EXPOSURE_MS,
 				defaults.exposureMs
 			);
 
@@ -472,9 +497,17 @@ export function validatePlan(opts: {
 		);
 	}
 
-	if (plan.predictedWallClockSeconds > LONG_CAPTURE_WARN_SECONDS) {
+	// One warning, two registers. A capture drives the user's replay for its whole
+	// duration and cannot be hurried, so past the point where it stops looking like
+	// a pause and starts looking like a hang, the warning says what to do about it
+	// rather than just quoting a number.
+	if (plan.predictedWallClockSeconds > LONG_CAPTURE_ESCALATE_SECONDS) {
 		warnings.push(
-			`This capture will take about ${Math.round(plan.predictedWallClockSeconds)} seconds of real time at 1/${plan.playbackDivisor} playback speed.`
+			`This capture runs the replay at 1/${plan.playbackDivisor} speed for about ${describeDuration(plan.predictedWallClockSeconds)} of real time, and cannot be hurried once started. A faster playback speed finishes sooner with fewer samples.`
+		);
+	} else if (plan.predictedWallClockSeconds > LONG_CAPTURE_WARN_SECONDS) {
+		warnings.push(
+			`This capture will take about ${describeDuration(plan.predictedWallClockSeconds)} of real time at 1/${plan.playbackDivisor} playback speed.`
 		);
 	}
 

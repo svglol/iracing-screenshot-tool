@@ -449,6 +449,44 @@ describe('validatePlan', () => {
 		).toMatch(/seconds of real time/);
 	});
 
+	// Past the point where a capture stops looking like a pause and starts looking
+	// like a hang, the warning has to say what to do about it. 16 s is where that
+	// line sits: it was the ceiling of the whole feature before 2"/5"/10" landed.
+	it('escalates the warning past the old ceiling', () => {
+		const mild = validate({ shutter: '1', playbackSpeed: 16 }).warnings.join(
+			' '
+		);
+		expect(mild).not.toMatch(/cannot be hurried/);
+
+		const loud = validate({ shutter: '5', playbackSpeed: 16 }).warnings.join(
+			' '
+		);
+		expect(loud).toMatch(/cannot be hurried/);
+		expect(loud).toMatch(/faster playback speed/);
+	});
+
+	// "about 160 seconds" is a number the reader has to convert themselves.
+	it('reports minutes once the wait passes a minute and a half', () => {
+		expect(
+			validate({ shutter: '10', playbackSpeed: 16 }).warnings.join(' ')
+		).toMatch(/2 min 40 s/);
+		// ...and stays in seconds below that.
+		expect(
+			validate({ shutter: '1', playbackSpeed: 16 }).warnings.join(' ')
+		).toMatch(/16 seconds/);
+	});
+
+	// A 10" exposure is 600 replay frames, so it needs ten seconds of tape behind
+	// the anchor. That is the existing bounds error, but the long stops are the
+	// first shutters that can realistically hit it.
+	it('refuses a long exposure that reaches past the start of the replay', () => {
+		const result = validate(
+			{ shutter: '10', anchorFrame: 120 },
+			{ replayFrameNumEnd: 100000, currentSessionNum: 2 }
+		);
+		expect(result.errors.join(' ')).toMatch(/600 replay frames/);
+	});
+
 	it('fails open when replay bounds are unknown', () => {
 		expect(
 			validate({}, { replayFrameNumEnd: null, currentSessionNum: null })

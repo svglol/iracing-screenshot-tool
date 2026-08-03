@@ -96,6 +96,39 @@ describe('summarizeSamples', () => {
 		);
 	});
 
+	// The native log caps at 8192 entries while the accepted counter does not, and a
+	// 10" exposure at 1/16 playback outruns it. Reporting the log's length would
+	// under-report the shot by thousands of samples.
+	it('takes the accepted count from the uncapped counter when given one', () => {
+		const stats = summarizeSamples(evenLog(8192, 0.001), {
+			acceptedTotal: 11700,
+		});
+		expect(stats.accepted).toBe(11700);
+		expect(stats.logTruncated).toBe(true);
+	});
+
+	it('does not claim truncation when the log holds everything', () => {
+		const stats = summarizeSamples(evenLog(30), { acceptedTotal: 30 });
+		expect(stats.accepted).toBe(30);
+		expect(stats.logTruncated).toBe(false);
+	});
+
+	it('falls back to counting the log when no counter is supplied', () => {
+		const stats = summarizeSamples(evenLog(30));
+		expect(stats.accepted).toBe(30);
+		expect(stats.logTruncated).toBe(false);
+	});
+
+	it('ignores a nonsensical counter rather than trusting it', () => {
+		for (const bogus of [NaN, -5, undefined, null]) {
+			const stats = summarizeSamples(evenLog(10), {
+				acceptedTotal: bogus as never,
+			});
+			expect(stats.accepted).toBe(10);
+			expect(stats.logTruncated).toBe(false);
+		}
+	});
+
 	it('reports no window for a single sample', () => {
 		expect(summarizeSamples(evenLog(1)).windowSeconds).toBe(0);
 		expect(summarizeSamples([]).windowSeconds).toBe(0);

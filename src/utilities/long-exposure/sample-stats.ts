@@ -61,7 +61,21 @@ export interface SampleStats {
 	// same recipe can differ slightly in exposure DURATION rather than only in
 	// sample jitter (design note §9). This is the number that lets a re-shoot be
 	// compared instead of assumed.
+	//
+	// When `logTruncated` is set this covers the logged PREFIX, not the whole
+	// exposure — see below.
 	windowSeconds: number;
+	// The native sample log is capped (MAX_SAMPLE_LOG, 8192 entries) while the
+	// accepted counter is not, so a long enough exposure produces more samples than
+	// the log can hold: 10" at 1/16 playback and 73 fps is ~11,700. Accumulation is
+	// unaffected — the log is a diagnostic, the GPU accumulator is the shot — but
+	// every metric derived from the log then describes a prefix rather than the
+	// whole capture.
+	//
+	// `accepted` stays exact regardless, because it is taken from the counter.
+	// `windowSeconds`, the gaps and `evenness` are prefix measurements when this is
+	// true, and saying so beats quietly reporting an 8.5 s window for a 10 s shot.
+	logTruncated: boolean;
 }
 
 // A gap this many times the median counts as a dropout rather than jitter.
@@ -79,10 +93,27 @@ function median(sorted: number[]): number {
 		: sorted[mid];
 }
 
-export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
+export function summarizeSamples(
+	log: SampleLogEntry[],
+	opts: {
+		// The native session's own accepted counter, which is not capped. Pass it
+		// whenever it is available: it is the only exact count once an exposure
+		// outruns the log.
+		acceptedTotal?: number | null;
+	} = {}
+): SampleStats {
 	const entries = Array.isArray(log) ? log : [];
 	const accepted = entries.filter((entry) => entry.accepted);
 	const rejected = entries.filter((entry) => !entry.accepted);
+
+	const counterTotal =
+		typeof opts.acceptedTotal === 'number' &&
+		Number.isFinite(opts.acceptedTotal) &&
+		opts.acceptedTotal >= 0
+			? Math.round(opts.acceptedTotal)
+			: null;
+	const acceptedCount = counterTotal ?? accepted.length;
+	const logTruncated = counterTotal !== null && counterTotal > accepted.length;
 
 	// A rejected duplicate whose presentation timestamp differs from the frame it
 	// duplicates means iRacing presented again without rendering anything new —
@@ -118,7 +149,7 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 	// evenly sampled by definition.
 	if (gaps.length === 0) {
 		return {
-			accepted: accepted.length,
+			accepted: acceptedCount,
 			duplicatesRejected: rejected.length,
 			stalledPresents,
 			medianGapSeconds: 0,
@@ -126,6 +157,7 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 			evenness: 1,
 			dropouts: 0,
 			windowSeconds,
+			logTruncated,
 		};
 	}
 
@@ -137,7 +169,7 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 	).length;
 
 	return {
-		accepted: accepted.length,
+		accepted: acceptedCount,
 		duplicatesRejected: rejected.length,
 		stalledPresents,
 		medianGapSeconds,
@@ -145,6 +177,7 @@ export function summarizeSamples(log: SampleLogEntry[]): SampleStats {
 		evenness: maxGapSeconds > 0 ? medianGapSeconds / maxGapSeconds : 1,
 		dropouts,
 		windowSeconds,
+		logTruncated,
 	};
 }
 

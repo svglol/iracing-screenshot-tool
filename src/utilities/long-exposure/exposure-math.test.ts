@@ -11,6 +11,7 @@ import {
 	framesForExposure,
 	isSubFrameExposure,
 	isWeightingCurve,
+	MAX_EXPOSURE_MS,
 	nearestPlaybackDivisor,
 	MIN_USABLE_RENDER_FPS,
 	predictSampleCount,
@@ -47,11 +48,18 @@ describe('SHUTTER_LADDER', () => {
 		]);
 	});
 
-	it('doubles the reference sample count at every stop', () => {
-		for (let i = 1; i < SHUTTER_LADDER.length; i += 1) {
-			expect(SHUTTER_LADDER[i].jrtSamples).toBe(
-				SHUTTER_LADDER[i - 1].jrtSamples * 2
-			);
+	// Doubling is a property of JRT's own ladder, which stops at 1". The long end
+	// (2"/5"/10") has no reference number to match, so it just tracks seconds.
+	it('doubles the reference sample count across the JRT range', () => {
+		const jrtRange = SHUTTER_LADDER.filter((stop) => stop.seconds <= 1);
+		for (let i = 1; i < jrtRange.length; i += 1) {
+			expect(jrtRange[i].jrtSamples).toBe(jrtRange[i - 1].jrtSamples * 2);
+		}
+	});
+
+	it('keeps the reference number on the seconds x 1024 line past that', () => {
+		for (const stop of SHUTTER_LADDER.filter((s) => s.seconds > 1)) {
+			expect(stop.jrtSamples).toBe(stop.seconds * 1024);
 		}
 	});
 
@@ -65,6 +73,23 @@ describe('SHUTTER_LADDER', () => {
 
 	it('goes past the reference ceiling with a 1-second stop', () => {
 		expect(findShutterStop('1')?.seconds).toBe(1);
+	});
+
+	// Memory does not grow with exposure — one fixed-size accumulator holds a
+	// 10-second shot exactly as it holds a 1/1000 one — so the long end costs only
+	// the user's patience. That is what makes these expressible at all.
+	it('offers the long exposures 2, 5 and 10 seconds', () => {
+		expect(findShutterStop('2')?.seconds).toBe(2);
+		expect(findShutterStop('5')?.seconds).toBe(5);
+		expect(findShutterStop('10')?.seconds).toBe(10);
+		expect(findShutterStop('10')?.label).toBe('10"');
+	});
+
+	it('caps free-form exposures at the slowest stop on the ladder', () => {
+		expect(MAX_EXPOSURE_MS).toBe(10000);
+		expect(MAX_EXPOSURE_MS).toBe(
+			SHUTTER_LADDER[SHUTTER_LADDER.length - 1].seconds * 1000
+		);
 	});
 });
 

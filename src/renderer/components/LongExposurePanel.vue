@@ -271,14 +271,6 @@
 						Everything else about long exposure works as normal.
 					</o-notification>
 
-					<o-field label="Tonemap">
-						<o-select v-model="tonemap" expanded :disabled="busy">
-							<option value="none">None</option>
-							<option value="reinhard">Reinhard</option>
-							<option value="aces">ACES</option>
-						</o-select>
-					</o-field>
-
 					<!-- Applied BEFORE accumulation. That ordering is the entire point: it
 			     is what makes a bright light deposit energy faster than a dull one,
 			     the way a sensor does. Needs no particular GPU.
@@ -456,7 +448,6 @@ export default defineComponent({
 			supersample: config.get('longExposureSupersample') === 2,
 			interpolation: config.get('longExposureInterpolation'),
 			weighting: config.get('longExposureWeighting'),
-			tonemap: config.get('longExposureTonemap'),
 			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
 			// The format the capture will actually write, reported back by main from
 			// the still-capture setting. Not a control — the panel does not own this
@@ -535,9 +526,6 @@ export default defineComponent({
 			if (this.interpolationSupported && Number(this.interpolation) > 1) {
 				active.push(`${this.interpolation}× interpolation`);
 			}
-			if (this.tonemap !== 'none') {
-				active.push(this.tonemap === 'aces' ? 'ACES' : 'Reinhard');
-			}
 			const recovery = parseFloat(this.highlightRecovery);
 			if (Number.isFinite(recovery) && recovery !== 0) {
 				active.push(`${recovery} stop recovery`);
@@ -548,7 +536,7 @@ export default defineComponent({
 		// hardware that can do it, so the count has to agree with what is actually
 		// in there.
 		advancedCount(): number {
-			return this.interpolationSupported ? 5 : 4;
+			return this.interpolationSupported ? 4 : 3;
 		},
 		advancedSummary(): string {
 			if (this.advancedOpen) {
@@ -624,13 +612,13 @@ export default defineComponent({
 					? this.interpolation
 					: 1,
 				weighting: this.weighting,
-				tonemap: this.tonemap,
 				highlightRecovery: parseFloat(this.highlightRecovery) || 0,
-				// outputFormat and exposureCompensation are deliberately absent. Main
-				// resolves the format from the still-capture setting so there is one
-				// place to set it, and an omitted field takes the default there —
-				// which is exactly what "follow Settings" has to mean. Sending them
-				// from here would let a stale panel value win over Settings.
+				// outputFormat, exposureCompensation and tonemap are deliberately
+				// absent. Main resolves the format from the still-capture setting so
+				// there is one place to set it, and an omitted field takes the default
+				// there — which is exactly what "follow Settings" has to mean. Sending
+				// them from here would let a stale panel value win over Settings, or
+				// keep applying a tonemap no control can turn off any more.
 			};
 		},
 	},
@@ -662,9 +650,6 @@ export default defineComponent({
 		},
 		weighting(value) {
 			config.set('longExposureWeighting', value);
-		},
-		tonemap(value) {
-			config.set('longExposureTonemap', value);
 		},
 		highlightRecovery(value) {
 			const n = parseFloat(value);

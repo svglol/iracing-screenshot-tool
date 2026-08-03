@@ -846,7 +846,11 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		presentedAt: sample.presentedAt,
 		accepted: sample.accepted,
 	}));
-	const stats = summarizeSamples(samples);
+	// The native log caps at 8192 entries; the accepted counter does not. A 10"
+	// exposure at 1/16 and 73 fps produces ~11,700 samples, so without handing the
+	// counter over the shot would report 8192 and an achieved window a second and a
+	// half short of the truth.
+	const stats = summarizeSamples(samples, { acceptedTotal: result.accepted });
 
 	const interpolation = buildInterpolationReport({
 		requestedFactor: recipe.interpolationFactor,

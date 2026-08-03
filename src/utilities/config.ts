@@ -171,18 +171,13 @@ const schema = {
 		default: 'box',
 		enum: ['box', 'linear', 'ease'],
 	},
-	longExposureTonemap: {
-		type: 'string',
-		default: 'none',
-		enum: ['none', 'reinhard', 'aces'],
-	},
-	// NOTE: there is deliberately no longExposureFormat or
-	// longExposureExposureCompensation key. The output format comes from
-	// `outputFormat` above — one format setting for stills and long exposures both,
-	// with PNG there meaning the 16-bit master. Exposure compensation is still a
-	// recipe field (an old sidecar carrying one still reproduces), but nothing in
-	// the UI sets it, so persisting it would only preserve a value no control can
-	// change back.
+	// NOTE: there is deliberately no longExposureFormat,
+	// longExposureExposureCompensation or longExposureTonemap key. The output format
+	// comes from `outputFormat` above — one format setting for stills and long
+	// exposures both, with PNG there meaning the 16-bit master. Exposure
+	// compensation and tonemap are still recipe fields (an old sidecar carrying
+	// either still reproduces exactly), but nothing in the UI sets them, so
+	// persisting them would only preserve a value no control can change back.
 	//
 	// Highlight recovery in stops, applied to near-clipped values BEFORE
 	// accumulation. 0 = off (and exactly identity). Needs no particular hardware.

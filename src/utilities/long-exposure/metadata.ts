@@ -74,6 +74,11 @@ export interface LongExposureSidecar {
 		// windows the planned start is estimated within a replay frame, so this is
 		// what makes a re-shoot comparable rather than assumed (design note §9).
 		achievedWindowSeconds: number;
+		// True when the capture produced more samples than the native diagnostic log
+		// holds (8192), which a long exposure at a slow playback speed can. `achieved`
+		// is still exact — it comes from the uncapped counter — but the gap metrics
+		// and `achievedWindowSeconds` then describe the logged prefix.
+		logTruncated: boolean;
 	};
 
 	// What optical-flow interpolation actually did. Null when the addon predates the
@@ -221,6 +226,7 @@ export function buildSidecar(opts: {
 			medianGapSeconds: Number(stats.medianGapSeconds.toFixed(6)),
 			maxGapSeconds: Number(stats.maxGapSeconds.toFixed(6)),
 			achievedWindowSeconds: Number(stats.windowSeconds.toFixed(6)),
+			logTruncated: stats.logTruncated === true,
 		},
 		interpolation: opts.interpolation ?? null,
 		image: {
