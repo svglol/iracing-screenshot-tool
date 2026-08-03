@@ -55,6 +55,21 @@ export type InterpolationFactor = (typeof INTERPOLATION_FACTORS)[number];
 // a 256x gain at full clip, past anything useful.
 export const MAX_HIGHLIGHT_RECOVERY_STOPS = 8;
 
+// Ceiling on multi-pass captures. Wall clock is passes x window x divisor, so this
+// is a patience bound rather than a technical one: 16 passes of a sub-frame window
+// at 1/16 is a few seconds, while 16 passes of a 10" exposure is over 40 minutes.
+// The planner's duration warning is what stops the second case being a surprise;
+// this only stops a malformed recipe asking for thousands.
+export const MAX_PASSES = 16;
+
+// Mirrors MAX_SAMPLE_LOG in native/wgc-capture/src/longexp/mod.rs. The native cap was
+// sized so no single-pass recipe could reach it (the worst expressible one is 10" x
+// 1/16 x 360 fps = 57,600), but passes multiply the sample stream, so a slow shutter
+// at several passes CAN now outrun it. Accumulation is never affected — the shot is
+// the GPU accumulator and the accepted count comes from an uncapped counter — but
+// every metric derived from the log then describes a prefix.
+export const NATIVE_SAMPLE_LOG_CAP = 65536;
+
 // png16 is the 16-bit master. png/jpeg/webp mirror the existing still-capture
 // formats for users who only want the 8-bit result.
 export const LONG_EXPOSURE_FORMATS = ['png16', 'png', 'jpeg', 'webp'] as const;
@@ -125,6 +140,17 @@ export interface LongExposureRecipe {
 	// Unlike interpolation this needs no particular hardware: it is a shader constant
 	// and behaves identically on every GPU.
 	highlightRecovery: number;
+
+	// How many times to visit the exposure window, accumulating into one buffer
+	// (`docs/design/long-exposure-multi-pass.md`). 1 is an ordinary capture.
+	//
+	// Each pass drops a different share of iRacing's presented frames, so N passes
+	// yield roughly N times the REAL samples — the only lever left on sample density
+	// for short windows, since the playback divisor caps at 16. Costs N times the
+	// wall clock, which is why it pays for sub-frame windows and is unaffordable for
+	// long ones. Exposure is unaffected: resolve normalises per pixel by accumulated
+	// weight, so more passes means a less noisy image, never a brighter one.
+	passes: number;
 
 	weighting: WeightingCurve;
 	tonemap: Tonemapper;
@@ -197,6 +223,10 @@ export function createDefaultRecipe(opts: {
 		// existed has no such field, so a non-zero default would silently make old
 		// recipes reproduce differently. Reproducibility outranks a better first look.
 		highlightRecovery: 0,
+		// One pass, for the same reproducibility reason as highlightRecovery: a sidecar
+		// written before multi-pass existed has no such field, and must not silently
+		// reproduce as something else.
+		passes: 1,
 		weighting: 'box',
 		tonemap: 'none',
 		exposureCompensation: 0,
@@ -325,6 +355,14 @@ export function normalizeRecipe(
 			? (Number(input.interpolationFactor) as InterpolationFactor)
 			: (defaults.interpolationFactor ?? 1),
 		highlightRecovery,
+		// Absent reads as 1, which is exactly what every sidecar written before
+		// multi-pass existed meant.
+		passes: clampInt(
+			input.passes ?? defaults.passes ?? 1,
+			1,
+			MAX_PASSES,
+			defaults.passes ?? 1
+		),
 		weighting: isWeightingCurve(input.weighting)
 			? input.weighting
 			: defaults.weighting,
@@ -368,9 +406,22 @@ export interface ResolvedPlan {
 	anchorFrame: number;
 	// Chosen slow-motion divisor (playback = 1/divisor).
 	playbackDivisor: PlaybackDivisor;
+	// How many times the window is visited. 1 is an ordinary capture.
+	passes: number;
 	// Predictions — the achieved count is always measured separately.
+	//
+	// PER PASS, both of them, and they must stay that way: `predictedSamples` is the
+	// affordability gate that decides whether one visit can keep up with the sim, and
+	// `predictedWallClockSeconds` sets the capture loop's per-pass timeout. Multiplying
+	// either by `passes` would make a multi-pass capture look affordable when a single
+	// pass is not, and would hand each pass N times the timeout it should have.
 	predictedSamples: number;
 	predictedWallClockSeconds: number;
+	// The same two multiplied by `passes` — what the USER experiences, and therefore
+	// what every duration warning and preview must quote. Equal to the per-pass values
+	// on a single-pass capture.
+	predictedTotalSamples: number;
+	predictedTotalWallClockSeconds: number;
 	// Render dimensions (target × supersample) iRacing's window is resized to.
 	renderWidth: number;
 	renderHeight: number;
@@ -421,6 +472,12 @@ export function resolvePlan(
 		playbackDivisor,
 	});
 
+	const passes = Math.max(1, Math.round(recipe.passes ?? 1));
+	const predictedWallClockSeconds = predictWallClockSeconds({
+		exposureSeconds: effectiveExposureSeconds,
+		playbackDivisor,
+	});
+
 	return {
 		windowFrames,
 		effectiveExposureSeconds,
@@ -428,11 +485,14 @@ export function resolvePlan(
 		startFrame: recipe.anchorFrame - windowFrames,
 		anchorFrame: recipe.anchorFrame,
 		playbackDivisor,
+		passes,
 		predictedSamples,
-		predictedWallClockSeconds: predictWallClockSeconds({
-			exposureSeconds: effectiveExposureSeconds,
-			playbackDivisor,
-		}),
+		predictedWallClockSeconds,
+		predictedTotalSamples: predictedSamples * passes,
+		// Excludes the per-pass seek and settle, which the single-pass estimate has
+		// always excluded too. It understates by roughly SEEK_SETTLE_MS per extra pass
+		// — sub-second against a warning threshold measured in seconds.
+		predictedTotalWallClockSeconds: predictedWallClockSeconds * passes,
 		renderWidth,
 		renderHeight,
 		isSingleSample: predictedSamples <= 1,
@@ -508,7 +568,19 @@ export function validatePlan(opts: {
 
 	if (plan.isSingleSample) {
 		warnings.push(
-			'This shutter is short enough that only one frame will land inside it, so the result has no motion blur. A slower playback speed or a slower shutter buys samples.'
+			plan.passes > 1
+				? `This shutter is short enough that only about one frame lands inside it per pass, so ${plan.passes} passes collect roughly ${plan.passes} samples. A slower playback speed or a slower shutter buys far more.`
+				: 'This shutter is short enough that only one frame will land inside it, so the result has no motion blur. A slower playback speed or a slower shutter buys samples.'
+		);
+	}
+
+	// Both are optional accelerators competing for the same per-frame budget, and
+	// running them together is the worst of the trade: interpolation roughly halves
+	// each pass's real-sample yield, so the wall clock buys synthetic samples where
+	// plain multi-pass would have bought real ones (frame-interpolation note §10.2).
+	if (plan.passes > 1 && recipe.interpolationFactor > 1) {
+		warnings.push(
+			`Multi-pass and ${recipe.interpolationFactor}x interpolation are both on. They compete: interpolation slows each pass enough to cost it real frames, so the same wait buys fewer real samples than passes alone would. Turning interpolation off is usually the better shot.`
 		);
 	}
 
@@ -525,13 +597,33 @@ export function validatePlan(opts: {
 	// duration and cannot be hurried, so past the point where it stops looking like
 	// a pause and starts looking like a hang, the warning says what to do about it
 	// rather than just quoting a number.
-	if (plan.predictedWallClockSeconds > LONG_CAPTURE_ESCALATE_SECONDS) {
+	//
+	// Quoted from the TOTAL, so N passes cannot be sold as the cost of one. That is
+	// what makes multi-pass safe to expose in the UI at all: its whole cost is time.
+	const passSuffix =
+		plan.passes > 1
+			? ` across ${plan.passes} passes over the same moment`
+			: '';
+	if (plan.predictedTotalWallClockSeconds > LONG_CAPTURE_ESCALATE_SECONDS) {
 		warnings.push(
-			`This capture runs the replay at 1/${plan.playbackDivisor} speed for about ${describeDuration(plan.predictedWallClockSeconds)} of real time, and cannot be hurried once started. A faster playback speed finishes sooner with fewer samples.`
+			`This capture runs the replay at 1/${plan.playbackDivisor} speed for about ${describeDuration(plan.predictedTotalWallClockSeconds)} of real time${passSuffix}, and cannot be hurried once started. ${
+				plan.passes > 1
+					? 'Fewer passes finish sooner with fewer samples.'
+					: 'A faster playback speed finishes sooner with fewer samples.'
+			}`
 		);
-	} else if (plan.predictedWallClockSeconds > LONG_CAPTURE_WARN_SECONDS) {
+	} else if (plan.predictedTotalWallClockSeconds > LONG_CAPTURE_WARN_SECONDS) {
 		warnings.push(
-			`This capture will take about ${describeDuration(plan.predictedWallClockSeconds)} of real time at 1/${plan.playbackDivisor} playback speed.`
+			`This capture will take about ${describeDuration(plan.predictedTotalWallClockSeconds)} of real time at 1/${plan.playbackDivisor} playback speed${passSuffix}.`
+		);
+	}
+
+	// Passes multiply the sample stream, so a combination the single-pass cap was
+	// sized to make impossible is reachable again. Says what is lost and what is not:
+	// the IMAGE is unaffected, only the diagnostics describe a prefix.
+	if (plan.predictedTotalSamples > NATIVE_SAMPLE_LOG_CAP) {
+		warnings.push(
+			`This capture is predicted to collect about ${Math.round(plan.predictedTotalSamples)} samples across ${plan.passes} passes, past the ${NATIVE_SAMPLE_LOG_CAP} the diagnostic log holds. The image is unaffected — only the evenness and gap figures will describe the first part of the capture.`
 		);
 	}
 

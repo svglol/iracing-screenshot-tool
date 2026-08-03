@@ -333,6 +333,42 @@ describe('resolvePlan', () => {
 		expect(plan.predictedSamples).toBeGreaterThan(900);
 	});
 
+	// Passes multiply what the user WAITS for and what they GET, but must not touch
+	// the per-pass figures: `predictedSamples` is the affordability gate for one
+	// visit, and `predictedWallClockSeconds` sets the capture loop's per-pass timeout.
+	it('multiplies the totals by passes and leaves the per-pass figures alone', () => {
+		const single = resolvePlan(
+			normalizeRecipe({ shutter: '1', playbackSpeed: 16 }, base()),
+			{ renderFps: 60 }
+		);
+		const quad = resolvePlan(
+			normalizeRecipe(
+				{ shutter: '1', playbackSpeed: 16, passes: 4 },
+				base()
+			),
+			{ renderFps: 60 }
+		);
+
+		expect(quad.passes).toBe(4);
+		expect(quad.predictedWallClockSeconds).toBeCloseTo(
+			single.predictedWallClockSeconds
+		);
+		expect(quad.predictedSamples).toBe(single.predictedSamples);
+		expect(quad.predictedTotalWallClockSeconds).toBeCloseTo(
+			single.predictedWallClockSeconds * 4
+		);
+		expect(quad.predictedTotalSamples).toBe(single.predictedSamples * 4);
+	});
+
+	it('reports totals equal to the per-pass figures on a single pass', () => {
+		const plan = resolvePlan(normalizeRecipe({}, base()), { renderFps: 60 });
+		expect(plan.passes).toBe(1);
+		expect(plan.predictedTotalSamples).toBe(plan.predictedSamples);
+		expect(plan.predictedTotalWallClockSeconds).toBeCloseTo(
+			plan.predictedWallClockSeconds
+		);
+	});
+
 	it('scales the render size by the supersample factor', () => {
 		const plan = resolvePlan(normalizeRecipe({ supersample: 2 }, base()));
 		expect(plan.renderWidth).toBe(3840);
@@ -515,6 +551,43 @@ describe('validatePlan', () => {
 		expect(
 			validate({ shutter: '1', playbackSpeed: 16 }).warnings.join(' ')
 		).toMatch(/seconds of real time/);
+	});
+
+	// The duration warning is the ONLY thing standing between a user and an unbidden
+	// two-minute replay drive, so it must quote the total. Quoting one pass of eight
+	// would understate the wait by eight and never escalate.
+	it('quotes the total wait, not one pass of it', () => {
+		const single = validate({ shutter: '1/8', playbackSpeed: 16 });
+		const many = validate({ shutter: '1/8', playbackSpeed: 16, passes: 16 });
+		expect(single.warnings.join(' ')).not.toMatch(/real time/);
+		expect(many.warnings.join(' ')).toMatch(/real time/);
+		expect(many.warnings.join(' ')).toMatch(/16 passes/);
+	});
+
+	// The native log cap was sized so no SINGLE-PASS recipe could reach it. Passes
+	// multiply the stream, so the impossible case is reachable again.
+	it('warns when passes push the sample stream past the diagnostic log', () => {
+		const many = validate({ shutter: '10', playbackSpeed: 16, passes: 16 });
+		expect(many.warnings.join(' ')).toMatch(/diagnostic log holds/);
+		// And says the shot itself survives, because that is the part that matters.
+		expect(many.warnings.join(' ')).toMatch(/image is unaffected/);
+		expect(
+			validate({ shutter: '10', playbackSpeed: 16 }).warnings.join(' ')
+		).not.toMatch(/diagnostic log holds/);
+	});
+
+	// Both on is the worst of the trade: interpolation slows each pass enough to cost
+	// it real frames, so the same wait buys fewer real samples than passes alone.
+	it('warns when passes and interpolation are both on', () => {
+		expect(
+			validate({ passes: 4, interpolationFactor: 8 }).warnings.join(' ')
+		).toMatch(/compete/);
+		expect(
+			validate({ passes: 4, interpolationFactor: 1 }).warnings.join(' ')
+		).not.toMatch(/compete/);
+		expect(
+			validate({ passes: 1, interpolationFactor: 8 }).warnings.join(' ')
+		).not.toMatch(/compete/);
 	});
 
 	// Past the point where a capture stops looking like a pause and starts looking
