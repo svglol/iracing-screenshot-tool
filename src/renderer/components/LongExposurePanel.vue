@@ -20,15 +20,12 @@
 				<font-awesome-icon icon="chevron-right" />
 			</span>
 			<span class="label" style="margin-bottom: 0">Long Exposure</span>
-			<!-- Collapsed, this is the only thing the panel can tell you, so it
-			     carries the state that decides whether opening it is worthwhile:
-			     unavailable, needs a replay, mid-capture, or what it would shoot. -->
-			<span v-if="collapsed" class="long-exposure__summary">{{
-				headerSummary
-			}}</span>
-			<span v-else-if="backend" class="long-exposure__backend">{{
-				backend
-			}}</span>
+			<!-- No status text on the right. It carried the compute backend when
+			     open ("d3d11-compute") and the panel state when folded ("needs a
+			     replay"), neither of which is something to read every time the
+			     sidebar is on screen: the backend is a diagnostic that belongs in the
+			     sidecar and the log, and the prerequisite already has a banner
+			     inside that says it in a sentence. -->
 		</button>
 
 		<div v-show="!collapsed" id="long-exposure-body">
@@ -56,6 +53,20 @@
 			>
 				Open a replay and scrub to the moment you want. The exposure ends
 				<strong>on</strong> that frame.
+			</o-notification>
+
+			<!-- Long exposure accumulates on the GPU via the native WGC path, which is
+		     independent of the still-capture backend. Worth saying out loud, because
+		     a ReShade user reasonably expects their stills setting to apply here. -->
+			<o-notification
+				v-if="available && reshade && !disableTooltips"
+				class="sidebar-tooltip"
+				variant="info"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Long exposure captures natively and does not use ReShade, so ReShade
+				effects will not appear in the result.
 			</o-notification>
 
 			<template v-if="available">
@@ -181,18 +192,29 @@
 						</label>
 					</o-field>
 
+					<!-- The trade users won't guess: 2x supersample is 4x the pixels, which
+			     roughly halves iRacing's frame rate and therefore halves the sample
+			     count. Fewer samples means larger per-sample displacement, which shows
+			     up as a ladder of discrete ghosts on fast objects — a STRUCTURED
+			     artefact the eye reads as a defect. The aliasing supersampling removes
+			     is unstructured, and the motion blur already hides much of it. So on
+			     moving subjects, samples usually beat pixels. -->
+					<o-notification
+						v-if="supersample && !disableTooltips"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Supersampling roughly halves the sample count, which makes
+						fast objects break into visible ghosts. Turn it off for moving
+						subjects; keep it for static ones.
+					</o-notification>
+
 					<!-- Optical-flow interpolation. Shown only where the hardware can
 			     actually do it: offering a control that silently does nothing is
 			     worse than not offering it. The base feature is never gated on
-			     this.
-
-			     The advisory tooltips that used to sit around these controls — the
-			     supersample/sample-count trade, what interpolation costs, why the
-			     control is missing on non-NVIDIA hardware — are gone. They were
-			     permanent banners explaining settings most users never touch. The
-			     reasoning survives in the design note and in these comments; the
-			     pre-flight warnings below the controls carry anything that is
-			     actually true of the shot about to be taken. -->
+			     this. -->
 					<o-field
 						v-if="interpolationSupported"
 						label="Frame interpolation"
@@ -204,6 +226,47 @@
 							<option :value="8">8× (seven in-betweens)</option>
 						</o-select>
 					</o-field>
+
+					<!-- The honest trade. Interpolation adds GPU work to every captured
+			     frame, and our budget is one iRacing present. If we get slower than
+			     the sim presents, we start dropping REAL samples to manufacture
+			     synthetic ones — a net loss. The sidecar records both counts so it
+			     can be checked rather than assumed. -->
+					<o-notification
+						v-if="
+							interpolationSupported &&
+							interpolation > 1 &&
+							!disableTooltips
+						"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Interpolation invents frames between the real ones to smooth
+						the streak. It costs GPU time per frame, so check the saved
+						shot's real sample count against the same shot with it off —
+						if that number drops, it is buying invented samples with real
+						ones.
+					</o-notification>
+
+					<!-- Asked for on hardware that can't do it: say so rather than showing
+			     a control that quietly does nothing. -->
+					<o-notification
+						v-if="
+							!interpolationSupported &&
+							interpolationReason &&
+							!disableTooltips
+						"
+						class="sidebar-tooltip"
+						variant="info"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Frame interpolation needs an NVIDIA Turing or newer GPU
+						{{ adapter ? `(this capture runs on ${adapter})` : '' }}.
+						Everything else about long exposure works as normal.
+					</o-notification>
 
 					<!-- Applied BEFORE accumulation. That ordering is the entire point: it
 			     is what makes a bright light deposit energy faster than a dull one,
@@ -368,25 +431,23 @@ interface CaptureResult {
 export default defineComponent({
 	name: 'LongExposurePanel',
 	props: {
-		// No longer consumed. Its only reader was the banner explaining that long
-		// exposure captures natively and ignores the ReShade setting, which went
-		// with the rest of the advisory tooltips. Still DECLARED because SideBar
-		// passes it: an undeclared prop would fall through and land in the DOM as a
-		// stray attribute. Dropping both is a two-line change, kept out of this one
-		// so it does not have to carry SideBar's unrelated reformatting.
+		// Whether the still-capture path is set to ReShade. Used ONLY to explain
+		// that long exposure ignores it — never to gate the feature.
 		reshade: { type: Boolean, default: false },
 	},
 	data() {
 		return {
 			available: false,
 			unavailableReason: null as string | null,
-			backend: null as string | null,
 			// Optical-flow interpolation support, reported independently of the
 			// compute backend. Null until the first poll answers.
 			interpolationSupported: false,
+			interpolationReason: null as string | null,
+			adapter: null as string | null,
 			inReplay: false,
 			liveAnchor: null as number | null,
 			externallyBusy: false,
+			disableTooltips: config.get('disableTooltips'),
 			collapsed: config.get('longExposureCollapsed') !== false,
 			advancedOpen: config.get('longExposureAdvancedOpen') === true,
 
@@ -512,16 +573,6 @@ export default defineComponent({
 				default:
 					return '';
 			}
-		},
-		// What the folded header says. Ordered by what would stop the user opening
-		// the panel at all: a machine that cannot do it, then a missing replay, then
-		// a capture already running, then what the current settings would shoot.
-		headerSummary(): string {
-			if (!this.available) return 'unavailable';
-			if (this.busy) return this.progressLabel;
-			if (!this.inReplay) return 'needs a replay';
-			if (!this.plan) return this.shutter;
-			return `${this.shutter} · ~${this.plan.predictedSamples} samples`;
 		},
 		progressLabel(): string {
 			if (!this.progress) return 'Working…';
@@ -664,11 +715,12 @@ export default defineComponent({
 				);
 				this.available = status.available;
 				this.unavailableReason = status.reason;
-				this.backend = status.backend;
+				this.adapter = status.adapter ?? null;
 				// Absent (older addon) is treated exactly like unsupported: the
 				// control stays hidden and shots are taken without interpolation.
 				this.interpolationSupported =
 					status.interpolation?.available === true;
+				this.interpolationReason = status.interpolation?.reason ?? null;
 				this.inReplay = status.inReplay;
 				this.liveAnchor = status.anchorFrame;
 				// Don't let the main process's own busy flag fight our local latch
@@ -854,13 +906,6 @@ export default defineComponent({
    scanning past, not bright enough to look like a warning. */
 .long-exposure__summary.is-modified {
 	color: rgba(255, 255, 255, 0.75);
-}
-
-.long-exposure__backend {
-	margin-left: auto;
-	font-size: 0.68rem;
-	color: rgba(255, 255, 255, 0.4);
-	font-variant-numeric: tabular-nums;
 }
 
 .long-exposure__result {
