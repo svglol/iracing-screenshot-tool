@@ -58,20 +58,6 @@
 				<strong>on</strong> that frame.
 			</o-notification>
 
-			<!-- Long exposure accumulates on the GPU via the native WGC path, which is
-		     independent of the still-capture backend. Worth saying out loud, because
-		     a ReShade user reasonably expects their stills setting to apply here. -->
-			<o-notification
-				v-if="available && reshade && !disableTooltips"
-				class="sidebar-tooltip"
-				variant="info"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Long exposure captures natively and does not use ReShade, so ReShade
-				effects will not appear in the result.
-			</o-notification>
-
 			<template v-if="available">
 				<o-field label="Shutter">
 					<o-select v-model="shutter" expanded :disabled="busy">
@@ -195,29 +181,18 @@
 						</label>
 					</o-field>
 
-					<!-- The trade users won't guess: 2x supersample is 4x the pixels, which
-			     roughly halves iRacing's frame rate and therefore halves the sample
-			     count. Fewer samples means larger per-sample displacement, which shows
-			     up as a ladder of discrete ghosts on fast objects — a STRUCTURED
-			     artefact the eye reads as a defect. The aliasing supersampling removes
-			     is unstructured, and the motion blur already hides much of it. So on
-			     moving subjects, samples usually beat pixels. -->
-					<o-notification
-						v-if="supersample && !disableTooltips"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Supersampling roughly halves the sample count, which makes
-						fast objects break into visible ghosts. Turn it off for moving
-						subjects; keep it for static ones.
-					</o-notification>
-
 					<!-- Optical-flow interpolation. Shown only where the hardware can
 			     actually do it: offering a control that silently does nothing is
 			     worse than not offering it. The base feature is never gated on
-			     this. -->
+			     this.
+
+			     The advisory tooltips that used to sit around these controls — the
+			     supersample/sample-count trade, what interpolation costs, why the
+			     control is missing on non-NVIDIA hardware — are gone. They were
+			     permanent banners explaining settings most users never touch. The
+			     reasoning survives in the design note and in these comments; the
+			     pre-flight warnings below the controls carry anything that is
+			     actually true of the shot about to be taken. -->
 					<o-field
 						v-if="interpolationSupported"
 						label="Frame interpolation"
@@ -229,47 +204,6 @@
 							<option :value="8">8× (seven in-betweens)</option>
 						</o-select>
 					</o-field>
-
-					<!-- The honest trade. Interpolation adds GPU work to every captured
-			     frame, and our budget is one iRacing present. If we get slower than
-			     the sim presents, we start dropping REAL samples to manufacture
-			     synthetic ones — a net loss. The sidecar records both counts so it
-			     can be checked rather than assumed. -->
-					<o-notification
-						v-if="
-							interpolationSupported &&
-							interpolation > 1 &&
-							!disableTooltips
-						"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Interpolation invents frames between the real ones to smooth
-						the streak. It costs GPU time per frame, so check the saved
-						shot's real sample count against the same shot with it off —
-						if that number drops, it is buying invented samples with real
-						ones.
-					</o-notification>
-
-					<!-- Asked for on hardware that can't do it: say so rather than showing
-			     a control that quietly does nothing. -->
-					<o-notification
-						v-if="
-							!interpolationSupported &&
-							interpolationReason &&
-							!disableTooltips
-						"
-						class="sidebar-tooltip"
-						variant="info"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Frame interpolation needs an NVIDIA Turing or newer GPU
-						{{ adapter ? `(this capture runs on ${adapter})` : '' }}.
-						Everything else about long exposure works as normal.
-					</o-notification>
 
 					<!-- Applied BEFORE accumulation. That ordering is the entire point: it
 			     is what makes a bright light deposit energy faster than a dull one,
@@ -291,20 +225,36 @@
 					</o-field>
 				</div>
 
-				<!-- Re-shoot reuses the STORED anchor rather than the live cursor, so
-			     adjusting settings after a rejected shot captures the same moment. -->
+				<!-- Pre-flight. These are the SAME validatePlan results the capture
+			     would have reported afterwards, shown while they can still change
+			     the decision — a 10" shot at 1/16 is 160 seconds of driven replay,
+			     and announcing that once the wait is over is not a warning.
+
+			     Errors are shown too: the capture would refuse with exactly this
+			     message, and refusing before the press beats refusing after it. The
+			     button is deliberately NOT disabled on one — main is the authority
+			     on whether a shot can run, and a preview that is briefly stale must
+			     never be able to lock the user out of their own capture. -->
 				<o-notification
-					v-if="pinnedAnchor !== null && !busy"
+					v-for="(problem, index) in previewErrors"
+					:key="'pe-' + index"
 					class="sidebar-tooltip"
-					variant="info"
+					variant="danger"
 					aria-close-label="Close message"
 					size="small"
 				>
-					Re-shooting frame <strong>{{ pinnedAnchor }}</strong
-					>.
-					<a class="sidebar-vram-switch" @click="releaseAnchor"
-						>Use current frame</a
-					>
+					{{ problem }}
+				</o-notification>
+
+				<o-notification
+					v-for="(warning, index) in previewWarnings"
+					:key="'pw-' + index"
+					class="sidebar-tooltip"
+					variant="warning"
+					aria-close-label="Close message"
+					size="small"
+				>
+					{{ warning }}
 				</o-notification>
 
 				<o-button
@@ -418,8 +368,12 @@ interface CaptureResult {
 export default defineComponent({
 	name: 'LongExposurePanel',
 	props: {
-		// Whether the still-capture path is set to ReShade. Used ONLY to explain
-		// that long exposure ignores it — never to gate the feature.
+		// No longer consumed. Its only reader was the banner explaining that long
+		// exposure captures natively and ignores the ReShade setting, which went
+		// with the rest of the advisory tooltips. Still DECLARED because SideBar
+		// passes it: an undeclared prop would fall through and land in the DOM as a
+		// stray attribute. Dropping both is a two-line change, kept out of this one
+		// so it does not have to carry SideBar's unrelated reformatting.
 		reshade: { type: Boolean, default: false },
 	},
 	data() {
@@ -430,15 +384,9 @@ export default defineComponent({
 			// Optical-flow interpolation support, reported independently of the
 			// compute backend. Null until the first poll answers.
 			interpolationSupported: false,
-			interpolationReason: null as string | null,
-			adapter: null as string | null,
 			inReplay: false,
 			liveAnchor: null as number | null,
-			replayFrameNumEnd: null as number | null,
-			sessionNum: null as number | null,
-			frameRate: null as number | null,
 			externallyBusy: false,
-			disableTooltips: config.get('disableTooltips'),
 			collapsed: config.get('longExposureCollapsed') !== false,
 			advancedOpen: config.get('longExposureAdvancedOpen') === true,
 
@@ -453,10 +401,11 @@ export default defineComponent({
 			// the still-capture setting. Not a control — the panel does not own this
 			// choice any more, it only says what the choice came out as.
 			resolvedFormat: null as string | null,
+			// validatePlan's verdict on the CURRENT settings, from the same call the
+			// capture makes. Shown before the shot rather than after it.
+			previewWarnings: [] as string[],
+			previewErrors: [] as string[],
 
-			// Set once a shot has been taken, so adjusting parameters and shooting
-			// again captures the SAME moment rather than wherever the cursor is now.
-			pinnedAnchor: null as number | null,
 			capturing: false,
 			progress: null as { phase: string; accepted?: number } | null,
 			lastResult: null as CaptureResult | null,
@@ -593,12 +542,17 @@ export default defineComponent({
 		// one place means the preview and the capture can never disagree about what
 		// the current settings mean.
 		recipe(): Record<string, unknown> {
-			const anchor = this.pinnedAnchor ?? this.liveAnchor;
 			return {
-				...(anchor === null ? {} : { anchorFrame: anchor }),
-				...(this.sessionNum === null
-					? {}
-					: { sessionNum: this.sessionNum }),
+				// anchorFrame and sessionNum are deliberately absent, so main reads
+				// the live cursor when it handles the call. The anchor is therefore
+				// whatever the replay is parked on at the instant Capture is pressed,
+				// not a frame pinned by an earlier shot — scrub, press, and you get
+				// where you scrubbed to.
+				//
+				// It is still fixed for the DURATION of a capture: main reads the
+				// cursor once, writes it into the recipe, and every seek, the window
+				// and the restore use that one value. Only the choice of anchor moved
+				// from the renderer to the press.
 				shutter: this.shutter,
 				playbackSpeed: this.playbackSpeed === 0 ? null : this.playbackSpeed,
 				targetSamples:
@@ -658,11 +612,10 @@ export default defineComponent({
 			}
 		},
 		liveAnchor() {
-			// The window preview is anchored on the cursor, so scrubbing has to
-			// refresh it — otherwise the frame range shown is stale.
-			if (this.pinnedAnchor === null) {
-				void this.refreshPreview();
-			}
+			// The window preview is anchored on the cursor, and the cursor is now
+			// what a press would capture — so scrubbing has to refresh it, otherwise
+			// the frame range shown is not the range that would be shot.
+			void this.refreshPreview();
 		},
 	},
 	mounted() {
@@ -712,17 +665,12 @@ export default defineComponent({
 				this.available = status.available;
 				this.unavailableReason = status.reason;
 				this.backend = status.backend;
-				this.adapter = status.adapter ?? null;
 				// Absent (older addon) is treated exactly like unsupported: the
 				// control stays hidden and shots are taken without interpolation.
 				this.interpolationSupported =
 					status.interpolation?.available === true;
-				this.interpolationReason = status.interpolation?.reason ?? null;
 				this.inReplay = status.inReplay;
 				this.liveAnchor = status.anchorFrame;
-				this.replayFrameNumEnd = status.replayFrameNumEnd;
-				this.sessionNum = status.sessionNum;
-				this.frameRate = status.frameRate;
 				// Don't let the main process's own busy flag fight our local latch
 				// while OUR capture is the thing making it busy.
 				this.externallyBusy = status.busy && !this.capturing;
@@ -746,9 +694,15 @@ export default defineComponent({
 					// read it back rather than deriving it here — one source, and
 					// the panel cannot claim a format the capture won't write.
 					this.resolvedFormat = result.recipe?.outputFormat ?? null;
+					this.previewWarnings = result.validation?.warnings ?? [];
+					this.previewErrors = result.validation?.errors ?? [];
 				}
 			} catch {
 				this.plan = null;
+				// A failed preview must not leave a stale verdict on screen claiming
+				// something about settings it was never asked about.
+				this.previewWarnings = [];
+				this.previewErrors = [];
 			}
 		},
 		formatDuration(seconds: number): string {
@@ -756,18 +710,14 @@ export default defineComponent({
 			if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
 			return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
 		},
-		releaseAnchor() {
-			this.pinnedAnchor = null;
-			void this.refreshPreview();
-		},
 		async capture() {
 			if (!this.canCapture) {
 				return;
 			}
-			// Pin the anchor for the whole shot AND for any re-shoot, so changing
-			// parameters afterwards never silently moves the moment.
-			const anchor = this.pinnedAnchor ?? this.liveAnchor;
-			this.pinnedAnchor = anchor;
+			// The anchor is NOT chosen here. The recipe omits it, so main reads the
+			// replay cursor as it handles this call — the moment of the press, not a
+			// value polled up to a second ago and not a frame pinned by an earlier
+			// shot. Main then fixes it in the recipe for the whole capture.
 			// Unfold for the duration: Cancel, the progress phase and the achieved
 			// sample count all live in the body, and a capture moves the user's
 			// replay cursor. Nothing that touches their cursor should be able to run

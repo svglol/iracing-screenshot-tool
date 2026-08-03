@@ -57,6 +57,7 @@ import {
 	longExposureFormatForStillFormat,
 	normalizeRecipe,
 	resolvePlan,
+	validatePlan,
 	type LongExposureRecipe,
 } from '../utilities/long-exposure/shot-recipe';
 import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
@@ -1129,11 +1130,24 @@ ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
 		(rawRecipe as Partial<LongExposureRecipe>) || {},
 		longExposureDefaults(live)
 	);
+	const plan = resolvePlan(recipe, {
+		renderFps: live?.frameRate ?? undefined,
+		currentWindowPixels: currentWindowPixels(),
+	});
 	return {
 		recipe,
-		plan: resolvePlan(recipe, {
-			renderFps: live?.frameRate ?? undefined,
-			currentWindowPixels: currentWindowPixels(),
+		plan,
+		// The same validation the capture runs, so the panel can show it BEFORE the
+		// shot rather than reporting a 160-second wait once it is over. Identical
+		// inputs to the capture path's own call, so the two cannot disagree about
+		// whether a shot is workable.
+		validation: validatePlan({
+			plan,
+			recipe,
+			replayFrameNumEnd: live?.replayFrameNumEnd ?? null,
+			currentSessionNum: live?.replaySessionNum ?? null,
+			lossyInterpolationLoad:
+				config.get('longExposureLossyInterpolationLoad') || null,
 		}),
 	};
 });

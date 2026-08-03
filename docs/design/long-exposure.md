@@ -432,8 +432,22 @@ GPU, user abort, native throw, and app-level watchdog. The orchestrator's abort
 signal is checked between every step, and abort is *cooperative* — it unwinds through
 the same `finally`.
 
-The stored anchor, not the live cursor, is the re-shoot source: rejecting a shot and
-changing parameters re-executes against `snapshot.anchorFrame`.
+Within a capture the anchor is fixed: `snapshot.anchorFrame` comes from the recipe,
+and every seek, the window and the restore use that one value. Playback moving under
+us cannot change where the shot ends or where the cursor is returned to.
+
+**CHANGED 2026-08-03: the PANEL no longer pins the anchor across shots.** It used to
+stamp the first shot's anchor and reuse it, so re-shooting after scrubbing captured
+the original moment and a notice offered "use current frame". Pressing Capture now
+takes whatever the replay is parked on at that instant: the panel omits `anchorFrame`
+from the recipe entirely and main reads the cursor as it handles the call — fresher
+than the renderer's once-a-second poll, and it removes a piece of hidden state whose
+whole job was to make the button mean something other than what it says.
+
+Note this is a UI decision, not a recipe one. A recipe still carries its anchor and
+`executeRecipe` still honours it exactly, so re-executing a stored recipe (a sidecar,
+or a Spotter Pack batch) reproduces the original moment as it always did. Only the
+panel's choice of anchor for a NEW shot moved.
 
 **The camera is never touched.** The existing capture path's `UIHidden` camera-state
 toggle is reused unchanged (it hides the UI, it does not move the camera); no
@@ -572,7 +586,7 @@ can be executed repeatedly and unattended:
 
 ```ts
 interface LongExposureRecipe {
-  anchorFrame: number;          // authoritative; re-shoots reuse it, never re-read the cursor
+  anchorFrame: number;          // authoritative for THIS execution; never re-read mid-capture
   sessionNum: number;
   shutter: ShutterKey | null;   // '1/8' etc, or null when exposureMs is explicit
   exposureMs: number;
@@ -588,8 +602,11 @@ interface LongExposureRecipe {
 }
 ```
 
-**Three fields no longer have a UI control** (2026-08-03), and the distinction
-matters: they were removed from the PANEL, not from the recipe.
+**Five fields no longer have a UI control** (2026-08-03), and the distinction
+matters: they were removed from the PANEL, not from the recipe. `anchorFrame` and
+`sessionNum` are the other two — the panel omits both so main reads the live cursor
+at the moment Capture is pressed (§4), which also removes the stale-session check's
+only failure mode: the two used to be able to come from different instants.
 
 - `outputFormat` is derived from the still-capture `outputFormat` setting, so there
   is one format choice for stills and long exposures both.
@@ -610,7 +627,9 @@ not be able to beat the setting.
 recipe; it has no other privileges. Consequences:
 
 - **Re-shoot** = same recipe object, one field changed. The anchor is carried in the
-  recipe, so a re-shoot after scrubbing is impossible to get wrong.
+  recipe, so re-executing a STORED recipe is impossible to get wrong. (The panel
+  itself no longer replays the previous shot's anchor — pressing Capture anchors on
+  the live cursor. See §4.)
 - **Spotter Pack** = `for (const paint of paints) { swapPaint(paint); await executeRecipe({...recipe, variantId: paint.id}) }`.
   The only variable between runs is external sim state. Nothing in the capture path
   needs to know that a batch is happening.
