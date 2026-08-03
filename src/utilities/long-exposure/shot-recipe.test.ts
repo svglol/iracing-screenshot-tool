@@ -87,6 +87,61 @@ describe('normalizeRecipe — highlight recovery', () => {
 	});
 });
 
+// Highlight recovery expands near-clipped values BEFORE integrating, and the shader
+// says outright that it relies on a compressive pass at resolve to put persistent
+// bright surfaces back. Without one, a STATIC bright surface — a plain sky — is
+// present in every sample, averages to gain x itself, and clips flat: at 3 stops the
+// clip point is 0.797 linear, about 231/255 in sRGB, with the transfer slope
+// reaching ~8x just below it. That is a white patch with a hard edge, and banding in
+// the gradient leading up to it. Reported from a real capture.
+describe('normalizeRecipe — highlight recovery implies a tonemap', () => {
+	it('turns ACES on when recovery is used and no tonemap was named', () => {
+		expect(normalizeRecipe({ highlightRecovery: 3 }, base()).tonemap).toBe(
+			'aces'
+		);
+	});
+
+	it('leaves the tonemap alone when recovery is off', () => {
+		expect(normalizeRecipe({ highlightRecovery: 0 }, base()).tonemap).toBe(
+			'none'
+		);
+		expect(normalizeRecipe({}, base()).tonemap).toBe('none');
+	});
+
+	// The coupling only fills an ABSENT field. A stored recipe that names its
+	// tonemap reproduces exactly what it recorded — including, deliberately, the
+	// broken combination, because that is what reproduction means.
+	it('never overrides an explicit tonemap', () => {
+		expect(
+			normalizeRecipe({ highlightRecovery: 3, tonemap: 'none' }, base())
+				.tonemap
+		).toBe('none');
+		expect(
+			normalizeRecipe({ highlightRecovery: 3, tonemap: 'reinhard' }, base())
+				.tonemap
+		).toBe('reinhard');
+	});
+
+	// The panel omits tonemap entirely, so this is the path every shot takes.
+	it('couples on the path the UI actually uses', () => {
+		const fromPanel: Partial<LongExposureRecipe> = {
+			shutter: '1/8',
+			supersample: 1,
+			interpolationFactor: 1,
+			weighting: 'box',
+			highlightRecovery: 3,
+		};
+		expect(normalizeRecipe(fromPanel, base()).tonemap).toBe('aces');
+	});
+
+	it('still round-trips through JSON once coupled', () => {
+		const recipe = normalizeRecipe({ highlightRecovery: 3 }, base());
+		expect(
+			normalizeRecipe(JSON.parse(JSON.stringify(recipe)), base())
+		).toEqual(recipe);
+	});
+});
+
 describe('normalizeRecipe — frame interpolation', () => {
 	it('accepts every factor on the ladder', () => {
 		for (const factor of [1, 2, 4, 8] as const) {

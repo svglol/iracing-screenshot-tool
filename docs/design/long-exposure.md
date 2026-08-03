@@ -617,6 +617,13 @@ only failure mode: the two used to be able to come from different instants.
   paths, so **an old sidecar carrying either still reproduces exactly**. Nothing in
   the UI sets them, and their config keys are gone rather than orphaned — persisting
   a value no control can change back is how a setting becomes impossible to undo.
+- **`tonemap` is not free of the UI, though: `highlightRecovery > 0` sets it to
+  `aces` when the recipe does not name one.** Recovery expands near-clipped values
+  before integrating and depends on a compressive resolve to put static bright
+  surfaces back; with `tonemap: 'none'` a plain sky above ~0.797 linear clips flat
+  and the gradient below it bands. Removing the tonemap control took away the only
+  way to fix that by hand, so the pair is now kept together in `normalizeRecipe`.
+  See `long-exposure-frame-interpolation.md` §7.3.
 
 The panel deliberately omits these fields from the recipe it sends rather than
 sending a default, because an omitted field takes the value resolved in main. That

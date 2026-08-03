@@ -431,13 +431,46 @@ Four decisions worth not re-litigating:
 - **Applied in `CSWarpAccumulate` too.** If only real samples were expanded, the
   streak would pulse in brightness between real and synthetic contributions.
 
-### 7.3 Why it does not blow out the sky
+### 7.3 Why it does not blow out the sky — ONLY WITH A COMPRESSIVE RESOLVE
 
 This is the property that makes a blind expansion safe. A persistent bright surface is
 present in *every* sample, so it averages to ~`gain` and ACES compresses it straight
 back to white. A transient highlight averages to `gain ×` its small duty cycle and
 lands genuinely bright. **The correction is self-limiting on anything that does not
 move**, which is why no spatial "is this a light or a wall?" heuristic was needed.
+
+**AMENDED 2026-08-03 — "and ACES compresses it" was doing more work in that sentence
+than it looked.** Field report: 3 stops on a plain sky produced a banded gradient and
+a hard-edged white patch. Both are this section's premise failing, because `tonemap`
+defaults to `none` and nothing was compressing anything.
+
+Run the arithmetic at `gain = 8`, `knee = 0.75`, squared shoulder:
+
+| linear in | scale | out | d(out)/d(in) |
+|---|---|---|---|
+| 0.75 | 1.00 | 0.75 | 1.0 |
+| 0.76 | 1.01 | 0.77 | 2.7 |
+| 0.79 | 1.18 | 0.93 | 8.3 |
+| **0.797** | 1.23 | **1.00** | clips |
+| 0.85 | 1.90 | 1.62 | clips |
+
+So a static surface above **0.797 linear (~231/255 sRGB)** lands past 1.0 and clamps
+flat — a white patch with a hard edge along that contour — while the slope reaching
+~8× just below it magnifies single 8-bit input steps into visible bands. The
+expansion is self-limiting only in the sense that *the second half of the pair*
+limits it; on its own it is a straightforward blow-out.
+
+`normalizeRecipe` now couples them: **highlight recovery implies ACES unless the
+recipe names a tonemap explicitly.** That is a recipe-layer fix, so it needed no
+shader change and no rebuild. An explicit tonemap still wins, so a sidecar reproduces
+what it recorded.
+
+**The better fix is a shader change and has not been made.** Compressing with the
+*inverse of the expansion* rather than with ACES would make a static pixel round-trip
+to exactly itself — self-limiting by construction rather than by a second curve that
+happens to be compressive — and would leave the rest of the image's look alone, which
+ACES does not. `expand_highlights` is monotonic and invertible (a cubic in `peak`);
+the cost is a resolve-side solve and a native rebuild.
 
 Confirmed visually: at 5 stops the browser chrome, favicons and background in the test
 capture are indistinguishable from the 0-stop version, while the moving lamps go from

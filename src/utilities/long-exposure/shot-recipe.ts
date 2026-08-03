@@ -246,6 +246,41 @@ export function normalizeRecipe(
 	const hasExplicitSpeed =
 		input.playbackSpeed !== null && input.playbackSpeed !== undefined;
 
+	const highlightRecovery = Number.isFinite(Number(input.highlightRecovery))
+		? Math.min(
+				MAX_HIGHLIGHT_RECOVERY_STOPS,
+				Math.max(0, Number(input.highlightRecovery))
+			)
+		: (defaults.highlightRecovery ?? 0);
+
+	// HIGHLIGHT RECOVERY IMPLIES A COMPRESSIVE RESOLVE, and this is where that pair
+	// is kept together.
+	//
+	// Recovery expands near-clipped values BEFORE integrating, on the explicit
+	// assumption that something at resolve puts persistent bright surfaces back —
+	// `expand_highlights` in shaders.hlsl says so in as many words. Without it the
+	// expansion is only half applied, and a STATIC bright surface is the case that
+	// breaks: it is present in every sample, so it averages to gain x itself instead
+	// of being diluted by a duty cycle.
+	//
+	// At 3 stops (gain 8, knee 0.75, squared shoulder) that puts the clip point at
+	// 0.797 linear — about 231/255 in sRGB. A plain sky above that is multiplied
+	// past 1.0 and lands flat white with a hard edge along the contour, and just
+	// below it the transfer slope reaches ~8x, so single 8-bit steps in a smooth
+	// gradient are magnified into visible bands. Both were reported from a real
+	// capture at 3 stops.
+	//
+	// An EXPLICIT tonemap still wins, so a sidecar written before this reproduces
+	// exactly what it recorded — including, deliberately, a broken combination.
+	// Only the absent case, which is every shot the panel builds, is coupled.
+	const explicitTonemap = (TONEMAPPERS as readonly string[]).includes(
+		input.tonemap as string
+	)
+		? (input.tonemap as Tonemapper)
+		: null;
+	const tonemap: Tonemapper =
+		explicitTonemap ?? (highlightRecovery > 0 ? 'aces' : defaults.tonemap);
+
 	return {
 		anchorFrame: clampInt(
 			input.anchorFrame ?? defaults.anchorFrame,
@@ -291,20 +326,11 @@ export function normalizeRecipe(
 		).includes(Number(input.interpolationFactor))
 			? (Number(input.interpolationFactor) as InterpolationFactor)
 			: (defaults.interpolationFactor ?? 1),
-		highlightRecovery: Number.isFinite(Number(input.highlightRecovery))
-			? Math.min(
-					MAX_HIGHLIGHT_RECOVERY_STOPS,
-					Math.max(0, Number(input.highlightRecovery))
-				)
-			: (defaults.highlightRecovery ?? 0),
+		highlightRecovery,
 		weighting: isWeightingCurve(input.weighting)
 			? input.weighting
 			: defaults.weighting,
-		tonemap: (TONEMAPPERS as readonly string[]).includes(
-			input.tonemap as string
-		)
-			? (input.tonemap as Tonemapper)
-			: defaults.tonemap,
+		tonemap,
 		exposureCompensation: Number.isFinite(Number(input.exposureCompensation))
 			? Math.min(6, Math.max(-6, Number(input.exposureCompensation)))
 			: defaults.exposureCompensation,
