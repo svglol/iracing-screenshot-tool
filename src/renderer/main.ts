@@ -27,6 +27,7 @@ import {
 	faCopy,
 	faCircleQuestion,
 	faArrowDown,
+	faChevronRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -42,6 +43,7 @@ library.add(
 	faCopy,
 	faCircleQuestion,
 	faArrowDown,
+	faChevronRight,
 	faDiscord
 );
 

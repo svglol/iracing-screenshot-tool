@@ -126,6 +126,20 @@ const schema = {
 	// where they left off. The anchor is deliberately NOT persisted: it belongs to
 	// a moment in a specific replay and is read fresh (or carried in the recipe for
 	// a re-shoot).
+	// Whether the long-exposure panel is folded away in the sidebar. Collapsed by
+	// default: it is a replay-only mode with a dozen parameters sitting under the
+	// everyday still-capture controls, so unfolded-by-default makes the sidebar read
+	// as cluttered to someone who only wants a screenshot.
+	longExposureCollapsed: {
+		type: 'boolean',
+		default: true,
+	},
+	// Whether the panel's Advanced group is unfolded. Separate from the panel fold
+	// so opening the panel does not drag seven tuning controls back onto the screen.
+	longExposureAdvancedOpen: {
+		type: 'boolean',
+		default: false,
+	},
 	longExposureShutter: {
 		type: 'string',
 		default: '1/8',

@@ -1,338 +1,395 @@
 <template>
-	<div class="long-exposure">
-		<div class="long-exposure__header">
+	<div class="long-exposure" :class="{ 'is-collapsed': collapsed }">
+		<!-- The whole panel folds. Long exposure is a replay-only mode with a dozen
+		     parameters sitting directly under the everyday still-capture controls, so
+		     leaving it open by default makes the sidebar read as cluttered to someone
+		     who only came for a screenshot. Folded it is one row that still says what
+		     it would shoot. -->
+		<button
+			type="button"
+			class="long-exposure__header"
+			:aria-expanded="!collapsed"
+			aria-controls="long-exposure-body"
+			@click="toggleCollapsed"
+		>
+			<span
+				class="long-exposure__chevron"
+				:class="{ 'is-open': !collapsed }"
+				aria-hidden="true"
+			>
+				<font-awesome-icon icon="chevron-right" />
+			</span>
 			<span class="label" style="margin-bottom: 0">Long Exposure</span>
-			<span v-if="backend" class="long-exposure__backend">{{
+			<!-- Collapsed, this is the only thing the panel can tell you, so it
+			     carries the state that decides whether opening it is worthwhile:
+			     unavailable, needs a replay, mid-capture, or what it would shoot. -->
+			<span v-if="collapsed" class="long-exposure__summary">{{
+				headerSummary
+			}}</span>
+			<span v-else-if="backend" class="long-exposure__backend">{{
 				backend
 			}}</span>
-		</div>
+		</button>
 
-		<!-- Availability / prerequisite banners. A long exposure integrates over a
+		<div v-show="!collapsed" id="long-exposure-body">
+			<!-- Availability / prerequisite banners. A long exposure integrates over a
 		     window of PAST replay frames, so a live session has nothing to
 		     integrate over — this is a prerequisite, not an error. -->
-		<o-notification
-			v-if="!available"
-			class="sidebar-tooltip"
-			variant="warning"
-			aria-close-label="Close message"
-			size="small"
-		>
-			Long exposure is unavailable on this machine{{
-				unavailableReason ? ': ' + unavailableReason : '.'
-			}}
-		</o-notification>
+			<o-notification
+				v-if="!available"
+				class="sidebar-tooltip"
+				variant="warning"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Long exposure is unavailable on this machine{{
+					unavailableReason ? ': ' + unavailableReason : '.'
+				}}
+			</o-notification>
 
-		<o-notification
-			v-else-if="!inReplay"
-			class="sidebar-tooltip"
-			variant="info"
-			aria-close-label="Close message"
-			size="small"
-		>
-			Open a replay and scrub to the moment you want. The exposure ends
-			<strong>on</strong> that frame.
-		</o-notification>
+			<o-notification
+				v-else-if="!inReplay"
+				class="sidebar-tooltip"
+				variant="info"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Open a replay and scrub to the moment you want. The exposure ends
+				<strong>on</strong> that frame.
+			</o-notification>
 
-		<!-- Long exposure accumulates on the GPU via the native WGC path, which is
+			<!-- Long exposure accumulates on the GPU via the native WGC path, which is
 		     independent of the still-capture backend. Worth saying out loud, because
 		     a ReShade user reasonably expects their stills setting to apply here. -->
-		<o-notification
-			v-if="available && reshade && !disableTooltips"
-			class="sidebar-tooltip"
-			variant="info"
-			aria-close-label="Close message"
-			size="small"
-		>
-			Long exposure captures natively and does not use ReShade, so ReShade
-			effects will not appear in the result.
-		</o-notification>
+			<o-notification
+				v-if="available && reshade && !disableTooltips"
+				class="sidebar-tooltip"
+				variant="info"
+				aria-close-label="Close message"
+				size="small"
+			>
+				Long exposure captures natively and does not use ReShade, so ReShade
+				effects will not appear in the result.
+			</o-notification>
 
-		<template v-if="available">
-			<o-field label="Shutter">
-				<o-select v-model="shutter" expanded :disabled="busy">
-					<option
-						v-for="stop in shutterOptions"
-						:key="stop.key"
-						:value="stop.key"
-					>
-						{{ stop.label }}
-					</option>
-				</o-select>
-			</o-field>
+			<template v-if="available">
+				<o-field label="Shutter">
+					<o-select v-model="shutter" expanded :disabled="busy">
+						<option
+							v-for="stop in shutterOptions"
+							:key="stop.key"
+							:value="stop.key"
+						>
+							{{ stop.label }}
+						</option>
+					</o-select>
+				</o-field>
 
-			<o-field label="Playback speed">
-				<o-select v-model="playbackSpeed" expanded :disabled="busy">
-					<option :value="0">Auto (from sample target)</option>
-					<option v-for="d in playbackDivisors" :key="d" :value="d">
-						{{ d === 1 ? '1x (real time)' : '1/' + d }}
-					</option>
-				</o-select>
-			</o-field>
+				<o-field label="Playback speed">
+					<o-select v-model="playbackSpeed" expanded :disabled="busy">
+						<option :value="0">Auto (from sample target)</option>
+						<option v-for="d in playbackDivisors" :key="d" :value="d">
+							{{ d === 1 ? '1x (real time)' : '1/' + d }}
+						</option>
+					</o-select>
+				</o-field>
 
-			<o-field v-if="playbackSpeed === 0" label="Target samples">
-				<o-input
-					v-model="targetSamples"
-					type="number"
-					min="1"
-					max="8192"
-					:disabled="busy"
-				/>
-			</o-field>
+				<o-field v-if="playbackSpeed === 0" label="Target samples">
+					<o-input
+						v-model="targetSamples"
+						type="number"
+						min="1"
+						max="8192"
+						:disabled="busy"
+					/>
+				</o-field>
 
-			<!-- The single most useful thing this panel shows: what the current
+				<!-- The single most useful thing this panel shows: what the current
 			     settings will actually produce, and how long the user will wait for
 			     it. Slow-motion playback trades patience for sample count, so that
 			     cost should never be a surprise. -->
-			<p v-if="plan" class="sidebar-target-hint">
-				<span class="sidebar-target-hint__value">
-					~{{ plan.predictedSamples }} samples
-				</span>
-				<span class="sidebar-target-hint__render">
-					· at {{ speedLabel }} ·
-					{{ formatDuration(plan.predictedWallClockSeconds) }}
-				</span>
-				<br />
-				<!-- A sub-replay-frame exposure spans one frame but only exposes for
+				<p v-if="plan" class="sidebar-target-hint">
+					<span class="sidebar-target-hint__value">
+						~{{ plan.predictedSamples }} samples
+					</span>
+					<span class="sidebar-target-hint__render">
+						· at {{ speedLabel }} ·
+						{{ formatDuration(plan.predictedWallClockSeconds) }}
+					</span>
+					<br />
+					<!-- A sub-replay-frame exposure spans one frame but only exposes for
 				     part of it, so a frame count alone would misdescribe the fast half
 				     of the ladder. Show the window it actually opens for. -->
-				<span class="sidebar-target-hint__render">
-					frames {{ plan.startFrame }} → {{ plan.anchorFrame }} ({{
-						windowLabel
-					}})
-				</span>
-			</p>
+					<span class="sidebar-target-hint__render">
+						frames {{ plan.startFrame }} → {{ plan.anchorFrame }} ({{
+							windowLabel
+						}})
+					</span>
+				</p>
 
-			<o-field label="Weighting">
-				<o-select v-model="weighting" expanded :disabled="busy">
-					<option value="box">Box (even)</option>
-					<option value="linear">Linear (sharp at the end)</option>
-					<option value="ease">Ease (sharper head, long tail)</option>
-				</o-select>
-			</o-field>
-
-			<o-field class="settings-toggle-row sidebar-toggle-row">
-				<o-switch
-					id="long-exposure-supersample-switch"
-					v-model="supersample"
-					:rounded="false"
-					:disabled="busy"
-					class="settings-light-switch"
-				/>
-				<label
-					for="long-exposure-supersample-switch"
-					class="settings-toggle-row__text"
+				<!-- Everything below is tuning: it has a default that is right for
+				     almost every shot, and leaving it all on screen buried the four
+				     controls that decide the picture. Folded, but NOT silent — the
+				     summary names anything currently set away from its default, because
+				     a hidden 2x supersample quietly halving the sample count is exactly
+				     the trap a disclosure like this sets. -->
+				<button
+					type="button"
+					class="long-exposure__advanced"
+					:aria-expanded="advancedOpen"
+					aria-controls="long-exposure-advanced"
+					@click="toggleAdvanced"
 				>
-					<span class="label" style="margin-bottom: 0px"
-						>2× Supersample</span
+					<span
+						class="long-exposure__chevron"
+						:class="{ 'is-open': advancedOpen }"
+						aria-hidden="true"
 					>
-				</label>
-			</o-field>
+						<font-awesome-icon icon="chevron-right" />
+					</span>
+					<span>Advanced</span>
+					<span
+						class="long-exposure__summary"
+						:class="{ 'is-modified': advancedModified.length > 0 }"
+					>
+						{{ advancedSummary }}
+					</span>
+				</button>
 
-			<!-- The trade users won't guess: 2x supersample is 4x the pixels, which
+				<div v-show="advancedOpen" id="long-exposure-advanced">
+					<o-field label="Weighting">
+						<o-select v-model="weighting" expanded :disabled="busy">
+							<option value="box">Box (even)</option>
+							<option value="linear">Linear (sharp at the end)</option>
+							<option value="ease">
+								Ease (sharper head, long tail)
+							</option>
+						</o-select>
+					</o-field>
+
+					<o-field class="settings-toggle-row sidebar-toggle-row">
+						<o-switch
+							id="long-exposure-supersample-switch"
+							v-model="supersample"
+							:rounded="false"
+							:disabled="busy"
+							class="settings-light-switch"
+						/>
+						<label
+							for="long-exposure-supersample-switch"
+							class="settings-toggle-row__text"
+						>
+							<span class="label" style="margin-bottom: 0px"
+								>2× Supersample</span
+							>
+						</label>
+					</o-field>
+
+					<!-- The trade users won't guess: 2x supersample is 4x the pixels, which
 			     roughly halves iRacing's frame rate and therefore halves the sample
 			     count. Fewer samples means larger per-sample displacement, which shows
 			     up as a ladder of discrete ghosts on fast objects — a STRUCTURED
 			     artefact the eye reads as a defect. The aliasing supersampling removes
 			     is unstructured, and the motion blur already hides much of it. So on
 			     moving subjects, samples usually beat pixels. -->
-			<o-notification
-				v-if="supersample && !disableTooltips"
-				class="sidebar-tooltip"
-				variant="warning"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Supersampling roughly halves the sample count, which makes fast
-				objects break into visible ghosts. Turn it off for moving subjects;
-				keep it for static ones.
-			</o-notification>
+					<o-notification
+						v-if="supersample && !disableTooltips"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Supersampling roughly halves the sample count, which makes
+						fast objects break into visible ghosts. Turn it off for moving
+						subjects; keep it for static ones.
+					</o-notification>
 
-			<!-- Optical-flow interpolation. Shown only where the hardware can
+					<!-- Optical-flow interpolation. Shown only where the hardware can
 			     actually do it: offering a control that silently does nothing is
 			     worse than not offering it. The base feature is never gated on
 			     this. -->
-			<o-field v-if="interpolationSupported" label="Frame interpolation">
-				<o-select v-model="interpolation" expanded :disabled="busy">
-					<option :value="1">Off</option>
-					<option :value="2">2× (one in-between)</option>
-					<option :value="4">4× (three in-betweens)</option>
-					<option :value="8">8× (seven in-betweens)</option>
-				</o-select>
-			</o-field>
+					<o-field
+						v-if="interpolationSupported"
+						label="Frame interpolation"
+					>
+						<o-select v-model="interpolation" expanded :disabled="busy">
+							<option :value="1">Off</option>
+							<option :value="2">2× (one in-between)</option>
+							<option :value="4">4× (three in-betweens)</option>
+							<option :value="8">8× (seven in-betweens)</option>
+						</o-select>
+					</o-field>
 
-			<!-- The honest trade. Interpolation adds GPU work to every captured
+					<!-- The honest trade. Interpolation adds GPU work to every captured
 			     frame, and our budget is one iRacing present. If we get slower than
 			     the sim presents, we start dropping REAL samples to manufacture
 			     synthetic ones — a net loss. The sidecar records both counts so it
 			     can be checked rather than assumed. -->
-			<o-notification
-				v-if="
-					interpolationSupported && interpolation > 1 && !disableTooltips
-				"
-				class="sidebar-tooltip"
-				variant="warning"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Interpolation invents frames between the real ones to smooth the
-				streak. It costs GPU time per frame, so check the saved shot's real
-				sample count against the same shot with it off — if that number
-				drops, it is buying invented samples with real ones.
-			</o-notification>
+					<o-notification
+						v-if="
+							interpolationSupported &&
+							interpolation > 1 &&
+							!disableTooltips
+						"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Interpolation invents frames between the real ones to smooth
+						the streak. It costs GPU time per frame, so check the saved
+						shot's real sample count against the same shot with it off —
+						if that number drops, it is buying invented samples with real
+						ones.
+					</o-notification>
 
-			<!-- Asked for on hardware that can't do it: say so rather than showing
+					<!-- Asked for on hardware that can't do it: say so rather than showing
 			     a control that quietly does nothing. -->
-			<o-notification
-				v-if="
-					!interpolationSupported &&
-					interpolationReason &&
-					!disableTooltips
-				"
-				class="sidebar-tooltip"
-				variant="info"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Frame interpolation needs an NVIDIA Turing or newer GPU
-				{{ adapter ? `(this capture runs on ${adapter})` : '' }}. Everything
-				else about long exposure works as normal.
-			</o-notification>
+					<o-notification
+						v-if="
+							!interpolationSupported &&
+							interpolationReason &&
+							!disableTooltips
+						"
+						class="sidebar-tooltip"
+						variant="info"
+						aria-close-label="Close message"
+						size="small"
+					>
+						Frame interpolation needs an NVIDIA Turing or newer GPU
+						{{ adapter ? `(this capture runs on ${adapter})` : '' }}.
+						Everything else about long exposure works as normal.
+					</o-notification>
 
-			<o-field label="Tonemap">
-				<o-select v-model="tonemap" expanded :disabled="busy">
-					<option value="none">None</option>
-					<option value="reinhard">Reinhard</option>
-					<option value="aces">ACES</option>
-				</o-select>
-			</o-field>
+					<o-field label="Tonemap">
+						<o-select v-model="tonemap" expanded :disabled="busy">
+							<option value="none">None</option>
+							<option value="reinhard">Reinhard</option>
+							<option value="aces">ACES</option>
+						</o-select>
+					</o-field>
 
-			<o-field label="Exposure compensation (EV)">
-				<o-input
-					v-model="exposureCompensation"
-					type="number"
-					step="0.25"
-					min="-6"
-					max="6"
-					:disabled="busy"
-				/>
-			</o-field>
+					<o-field label="Exposure compensation (EV)">
+						<o-input
+							v-model="exposureCompensation"
+							type="number"
+							step="0.25"
+							min="-6"
+							max="6"
+							:disabled="busy"
+						/>
+					</o-field>
 
-			<!-- Applied BEFORE accumulation, unlike exposure compensation which is
+					<!-- Applied BEFORE accumulation, unlike exposure compensation which is
 			     applied after. That ordering is the entire point: it is what makes a
 			     bright light deposit energy faster than a dull one, the way a sensor
-			     does. Needs no particular GPU. -->
-			<o-field label="Highlight recovery (stops)">
-				<o-input
-					v-model="highlightRecovery"
-					type="number"
-					step="0.5"
-					min="0"
-					max="8"
-					:disabled="busy"
-				/>
-			</o-field>
+			     does. Needs no particular GPU.
 
-			<o-notification
-				v-if="Number(highlightRecovery) === 0 && !disableTooltips"
-				class="sidebar-tooltip"
-				variant="info"
-				aria-close-label="Close message"
-				size="small"
-			>
-				iRacing hands us an image whose highlights are already clipped, so a
-				headlight and a white wall arrive equally bright and a light that
-				sweeps past leaves a dull grey trail. Raising this expands
-				near-clipped values before they are averaged, so bright sources burn
-				in faster — the way they do on film. Try 3–5 stops.
-			</o-notification>
+			     This used to carry a banner recommending 3-5 stops whenever the value
+			     was 0 — i.e. permanently, since 0 is the default. A tip that fires on
+			     the default state is a nag, not guidance. The default stays 0, where
+			     it is exactly identity. -->
+					<o-field label="Highlight recovery (stops)">
+						<o-input
+							v-model="highlightRecovery"
+							type="number"
+							step="0.5"
+							min="0"
+							max="8"
+							:disabled="busy"
+						/>
+					</o-field>
 
-			<o-field label="Output">
-				<o-select v-model="outputFormat" expanded :disabled="busy">
-					<option value="png16">16-bit PNG master + preview</option>
-					<option value="png">PNG (8-bit)</option>
-					<option value="jpeg">JPEG</option>
-					<option value="webp">WebP</option>
-				</o-select>
-			</o-field>
+					<o-field label="Output">
+						<o-select v-model="outputFormat" expanded :disabled="busy">
+							<option value="png16">16-bit PNG master + preview</option>
+							<option value="png">PNG (8-bit)</option>
+							<option value="jpeg">JPEG</option>
+							<option value="webp">WebP</option>
+						</o-select>
+					</o-field>
+				</div>
 
-			<!-- Re-shoot reuses the STORED anchor rather than the live cursor, so
+				<!-- Re-shoot reuses the STORED anchor rather than the live cursor, so
 			     adjusting settings after a rejected shot captures the same moment. -->
-			<o-notification
-				v-if="pinnedAnchor !== null && !busy"
-				class="sidebar-tooltip"
-				variant="info"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Re-shooting frame <strong>{{ pinnedAnchor }}</strong
-				>.
-				<a class="sidebar-vram-switch" @click="releaseAnchor"
-					>Use current frame</a
-				>
-			</o-notification>
-
-			<o-button
-				variant="primary"
-				icon-left="camera"
-				expanded
-				:loading="busy"
-				:disabled="!canCapture"
-				style="margin-top: 0.5rem"
-				@click="capture"
-			>
-				{{ busy ? progressLabel : 'Capture Long Exposure' }}
-			</o-button>
-
-			<o-button
-				v-if="busy"
-				variant="danger"
-				expanded
-				size="small"
-				style="margin-top: 0.35rem"
-				@click="abort"
-			>
-				Cancel
-			</o-button>
-
-			<!-- Achieved sampling, reported after every shot. This is what JRT's
-			     pair-blend QA view conveys, as a number instead of an eyeball test. -->
-			<div v-if="lastResult" class="long-exposure__result">
-				<p
-					v-if="lastResult.ok && lastResult.stats"
-					class="sidebar-target-hint"
-				>
-					<span class="sidebar-target-hint__value">
-						{{ lastResult.stats.accepted }} samples
-					</span>
-					<span class="sidebar-target-hint__render">
-						· evenness {{ Math.round(lastResult.stats.evenness * 100) }}%
-						<template v-if="lastResult.stats.duplicatesRejected">
-							· {{ lastResult.stats.duplicatesRejected }} duplicates
-							rejected
-						</template>
-					</span>
-				</p>
 				<o-notification
-					v-for="(warning, index) in lastResult.warnings"
-					:key="'lw-' + index"
+					v-if="pinnedAnchor !== null && !busy"
 					class="sidebar-tooltip"
-					variant="warning"
+					variant="info"
 					aria-close-label="Close message"
 					size="small"
 				>
-					{{ warning }}
+					Re-shooting frame <strong>{{ pinnedAnchor }}</strong
+					>.
+					<a class="sidebar-vram-switch" @click="releaseAnchor"
+						>Use current frame</a
+					>
 				</o-notification>
-				<o-notification
-					v-if="!lastResult.ok"
-					class="sidebar-tooltip"
+
+				<o-button
+					variant="primary"
+					icon-left="camera"
+					expanded
+					:loading="busy"
+					:disabled="!canCapture"
+					style="margin-top: 0.5rem"
+					@click="capture"
+				>
+					{{ busy ? progressLabel : 'Capture Long Exposure' }}
+				</o-button>
+
+				<o-button
+					v-if="busy"
 					variant="danger"
-					aria-close-label="Close message"
+					expanded
 					size="small"
+					style="margin-top: 0.35rem"
+					@click="abort"
 				>
-					{{ lastResult.message }}
-				</o-notification>
-			</div>
-		</template>
+					Cancel
+				</o-button>
+
+				<!-- Achieved sampling, reported after every shot. This is what JRT's
+			     pair-blend QA view conveys, as a number instead of an eyeball test. -->
+				<div v-if="lastResult" class="long-exposure__result">
+					<p
+						v-if="lastResult.ok && lastResult.stats"
+						class="sidebar-target-hint"
+					>
+						<span class="sidebar-target-hint__value">
+							{{ lastResult.stats.accepted }} samples
+						</span>
+						<span class="sidebar-target-hint__render">
+							· evenness
+							{{ Math.round(lastResult.stats.evenness * 100) }}%
+							<template v-if="lastResult.stats.duplicatesRejected">
+								· {{ lastResult.stats.duplicatesRejected }} duplicates
+								rejected
+							</template>
+						</span>
+					</p>
+					<o-notification
+						v-for="(warning, index) in lastResult.warnings"
+						:key="'lw-' + index"
+						class="sidebar-tooltip"
+						variant="warning"
+						aria-close-label="Close message"
+						size="small"
+					>
+						{{ warning }}
+					</o-notification>
+					<o-notification
+						v-if="!lastResult.ok"
+						class="sidebar-tooltip"
+						variant="danger"
+						aria-close-label="Close message"
+						size="small"
+					>
+						{{ lastResult.message }}
+					</o-notification>
+				</div>
+			</template>
+		</div>
 	</div>
 </template>
 
@@ -401,6 +458,8 @@ export default defineComponent({
 			frameRate: null as number | null,
 			externallyBusy: false,
 			disableTooltips: config.get('disableTooltips'),
+			collapsed: config.get('longExposureCollapsed') !== false,
+			advancedOpen: config.get('longExposureAdvancedOpen') === true,
 
 			shutter: config.get('longExposureShutter'),
 			playbackSpeed: config.get('longExposurePlaybackSpeed'),
@@ -412,9 +471,7 @@ export default defineComponent({
 			exposureCompensation: String(
 				config.get('longExposureExposureCompensation')
 			),
-			highlightRecovery: String(
-				config.get('longExposureHighlightRecovery')
-			),
+			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
 			outputFormat: config.get('longExposureFormat'),
 
 			// Set once a shot has been taken, so adjusting parameters and shooting
@@ -467,6 +524,64 @@ export default defineComponent({
 				return `${(this.plan.effectiveExposureSeconds * 1000).toFixed(1)} ms within one replay frame`;
 			}
 			return `${this.plan.windowFrames} replay frames`;
+		},
+		// Which advanced settings are away from their default, named the way the user
+		// would recognise them.
+		//
+		// The point of the disclosure is that these have defaults that are right for
+		// almost every shot. The risk it introduces is that a value left set from a
+		// previous session — 2x supersample halves the sample count — becomes
+		// invisible. So the folded row names them rather than merely counting.
+		advancedModified(): string[] {
+			const active: string[] = [];
+			if (this.weighting !== 'box') {
+				active.push(this.weighting);
+			}
+			if (this.supersample) {
+				active.push('2× supersample');
+			}
+			if (this.interpolationSupported && Number(this.interpolation) > 1) {
+				active.push(`${this.interpolation}× interpolation`);
+			}
+			if (this.tonemap !== 'none') {
+				active.push(this.tonemap === 'aces' ? 'ACES' : 'Reinhard');
+			}
+			const ev = parseFloat(this.exposureCompensation);
+			if (Number.isFinite(ev) && ev !== 0) {
+				active.push(`${ev > 0 ? '+' : ''}${ev} EV`);
+			}
+			const recovery = parseFloat(this.highlightRecovery);
+			if (Number.isFinite(recovery) && recovery !== 0) {
+				active.push(`${recovery} stop recovery`);
+			}
+			if (this.outputFormat !== 'png16') {
+				active.push(this.outputFormat.toUpperCase());
+			}
+			return active;
+		},
+		// How many controls the fold is hiding. Interpolation is only rendered on
+		// hardware that can do it, so the count has to agree with what is actually
+		// in there.
+		advancedCount(): number {
+			return this.interpolationSupported ? 7 : 6;
+		},
+		advancedSummary(): string {
+			if (this.advancedOpen) {
+				return '';
+			}
+			return this.advancedModified.length > 0
+				? this.advancedModified.join(', ')
+				: `${this.advancedCount} defaults`;
+		},
+		// What the folded header says. Ordered by what would stop the user opening
+		// the panel at all: a machine that cannot do it, then a missing replay, then
+		// a capture already running, then what the current settings would shoot.
+		headerSummary(): string {
+			if (!this.available) return 'unavailable';
+			if (this.busy) return this.progressLabel;
+			if (!this.inReplay) return 'needs a replay';
+			if (!this.plan) return this.shutter;
+			return `${this.shutter} · ~${this.plan.predictedSamples} samples`;
 		},
 		progressLabel(): string {
 			if (!this.progress) return 'Working…';
@@ -589,6 +704,14 @@ export default defineComponent({
 		}
 	},
 	methods: {
+		toggleCollapsed() {
+			this.collapsed = !this.collapsed;
+			config.set('longExposureCollapsed', this.collapsed);
+		},
+		toggleAdvanced() {
+			this.advancedOpen = !this.advancedOpen;
+			config.set('longExposureAdvancedOpen', this.advancedOpen);
+		},
 		async poll() {
 			try {
 				const status = await ipcRenderer.invoke(
@@ -649,6 +772,13 @@ export default defineComponent({
 			// parameters afterwards never silently moves the moment.
 			const anchor = this.pinnedAnchor ?? this.liveAnchor;
 			this.pinnedAnchor = anchor;
+			// Unfold for the duration: Cancel, the progress phase and the achieved
+			// sample count all live in the body, and a capture moves the user's
+			// replay cursor. Nothing that touches their cursor should be able to run
+			// with its stop button folded away.
+			if (this.collapsed) {
+				this.toggleCollapsed();
+			}
 			this.capturing = true;
 			this.progress = { phase: 'seeking' };
 			this.lastResult = null;
@@ -695,14 +825,93 @@ export default defineComponent({
 	border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+/* A real <button>, so the fold is keyboard-reachable and screen readers get the
+   expanded state — but styled back down to the label row it replaced. */
 .long-exposure__header {
 	display: flex;
 	align-items: baseline;
-	justify-content: space-between;
+	gap: 0.45rem;
+	width: 100%;
 	margin-bottom: 0.5rem;
+	padding: 0;
+	background: none;
+	border: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.long-exposure__header:focus-visible {
+	outline: 1px solid rgba(255, 255, 255, 0.4);
+	outline-offset: 2px;
+}
+
+/* Collapsed the panel is just a header, so the bottom padding would read as a
+   stray gap above whatever follows. */
+.long-exposure.is-collapsed .long-exposure__header {
+	margin-bottom: 0;
+}
+
+.long-exposure__chevron {
+	display: inline-flex;
+	width: 0.7rem;
+	font-size: 0.7rem;
+	color: rgba(255, 255, 255, 0.5);
+	transition: transform 0.15s ease;
+}
+
+.long-exposure__chevron.is-open {
+	transform: rotate(90deg);
+}
+
+/* The Advanced disclosure. Same affordance as the panel header, one step quieter:
+   it is a group of tuning controls, not a feature. */
+.long-exposure__advanced {
+	display: flex;
+	align-items: baseline;
+	gap: 0.45rem;
+	width: 100%;
+	margin: 0.35rem 0 0.5rem;
+	padding: 0;
+	background: none;
+	border: none;
+	color: rgba(255, 255, 255, 0.65);
+	font: inherit;
+	font-size: 0.78rem;
+	text-align: left;
+	cursor: pointer;
+}
+
+.long-exposure__advanced:hover {
+	color: rgba(255, 255, 255, 0.85);
+}
+
+.long-exposure__advanced:focus-visible {
+	outline: 1px solid rgba(255, 255, 255, 0.4);
+	outline-offset: 2px;
+}
+
+/* Pushed right, and allowed to shrink rather than wrap the header onto a second
+   line — the summary is the least important thing in the row. */
+.long-exposure__summary {
+	margin-left: auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.68rem;
+	color: rgba(255, 255, 255, 0.45);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Something in there is not at its default. Bright enough to be noticed while
+   scanning past, not bright enough to look like a warning. */
+.long-exposure__summary.is-modified {
+	color: rgba(255, 255, 255, 0.75);
 }
 
 .long-exposure__backend {
+	margin-left: auto;
 	font-size: 0.68rem;
 	color: rgba(255, 255, 255, 0.4);
 	font-variant-numeric: tabular-nums;
