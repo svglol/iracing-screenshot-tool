@@ -19,6 +19,9 @@
 //
 // Reference: PNG (Portable Network Graphics) Specification, W3C/ISO 15948.
 
+import fs from 'node:fs';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import zlib from 'node:zlib';
 
 const PNG_SIGNATURE = Buffer.from([
@@ -90,18 +93,32 @@ export interface Png16Input {
 	compressionLevel?: number;
 }
 
-// Build the filtered, byte-swapped scanline stream. Separated from encoding so the
-// (hot, allocation-heavy) transform is testable on its own.
-export function buildScanlines(input: Png16Input): Buffer {
+// One filtered, byte-swapped scanline at a time.
+//
+// A GENERATOR, so a 33 Mpx master never needs its whole scanline stream resident:
+// `writePng16` feeds these straight into a deflate stream. `buildScanlines` below
+// still concatenates them for callers that want the whole buffer.
+//
+// Each yielded row is a FRESH buffer, deliberately. Reusing one would be faster,
+// but `writePng16` hands these to a stream that queues them — the next iteration
+// would then overwrite data already in flight, and the corruption would be silent
+// and image-dependent. The two working rows below are still reused, which is where
+// the churn actually was: the previous implementation allocated a copy per scanline
+// AND zeroed the row it was discarding, while its comment claimed it swapped.
+function* scanlineRows(input: Png16Input): Generator<Buffer> {
 	const { rgbaLe, width, height } = input;
 	const rowBytes = width * BYTES_PER_PIXEL;
-	const out = Buffer.alloc(height * (rowBytes + 1));
 
 	// Previous row's UNFILTERED bytes, needed by the Up filter.
 	let prior = Buffer.alloc(rowBytes);
-	const current = Buffer.alloc(rowBytes);
+	let current = Buffer.alloc(rowBytes);
 
 	for (let y = 0; y < height; y += 1) {
+		// allocUnsafe is safe here only because every byte is written below: the
+		// filter tag, then all `rowBytes` of filtered data.
+		const out = Buffer.allocUnsafe(rowBytes + 1);
+		out[0] = FILTER_UP;
+
 		const srcRow = y * width * 8;
 		for (let x = 0; x < width; x += 1) {
 			const src = srcRow + x * 8;
@@ -115,24 +132,34 @@ export function buildScanlines(input: Png16Input): Buffer {
 			current[dst + 5] = rgbaLe[src + 4];
 		}
 
-		const rowStart = y * (rowBytes + 1);
-		out[rowStart] = FILTER_UP;
 		for (let i = 0; i < rowBytes; i += 1) {
-			out[rowStart + 1 + i] = (current[i] - prior[i]) & 0xff;
+			out[i + 1] = (current[i] - prior[i]) & 0xff;
 		}
+		yield out;
 
-		// Swap buffers rather than allocating a fresh row per scanline: at 4K this
-		// loop runs 4320 times over 46 KB rows.
 		const swap = prior;
-		prior = Buffer.from(current);
-		swap.fill(0);
+		prior = current;
+		current = swap;
+	}
+}
+
+// Build the filtered, byte-swapped scanline stream. Separated from encoding so the
+// (hot, allocation-heavy) transform is testable on its own.
+export function buildScanlines(input: Png16Input): Buffer {
+	const { width, height } = input;
+	const rowBytes = width * BYTES_PER_PIXEL;
+	const out = Buffer.alloc(height * (rowBytes + 1));
+
+	let offset = 0;
+	for (const row of scanlineRows(input)) {
+		row.copy(out, offset);
+		offset += row.length;
 	}
 
 	return out;
 }
 
-// Encode 16-bit RGBA (little-endian) as a 16-bit RGB PNG.
-export function encodePng16(input: Png16Input): Buffer {
+function assertDimensions(input: Png16Input): void {
 	const { width, height, rgbaLe } = input;
 	if (
 		!Number.isInteger(width) ||
@@ -148,6 +175,15 @@ export function encodePng16(input: Png16Input): Buffer {
 			`pixel buffer too small: ${rgbaLe.length} bytes for ${width}x${height} 16-bit RGBA (need ${expected})`
 		);
 	}
+}
+
+// Encode 16-bit RGBA (little-endian) as a 16-bit RGB PNG, wholly in memory.
+//
+// Fine for small images and for tests, which is where it is still used. For a
+// capture-sized master prefer `writePng16` — see the note there.
+export function encodePng16(input: Png16Input): Buffer {
+	const { width, height } = input;
+	assertDimensions(input);
 
 	const compressed = zlib.deflateSync(buildScanlines(input), {
 		level: input.compressionLevel ?? 6,
@@ -160,4 +196,63 @@ export function encodePng16(input: Png16Input): Buffer {
 		chunk('IDAT', compressed),
 		chunk('IEND', Buffer.alloc(0)),
 	]);
+}
+
+// Encode straight to a file, streaming.
+//
+// PREFER THIS FOR ANYTHING LARGE. `encodePng16` holds the whole pipeline in memory
+// at once — source, scanline stream, deflate output, and then a `Buffer.concat`
+// copy of the lot. At 7680x4320 that is ~760 MB of transient buffers in the main
+// process, and a field capture took 63.7 s to write where the encode alone measures
+// ~4 s. The same shot at 2560x1440 took 0.6 s, so the cost is superlinear in a way
+// only the whole-image path explains.
+//
+// It is also OFF THE MAIN THREAD: zlib's streaming deflate runs on libuv's
+// threadpool, so the UI stays responsive instead of going "not responding" for a
+// minute with no feedback.
+//
+// The image data is split across MULTIPLE IDAT chunks, one per deflate output
+// buffer. That is ordinary PNG — the spec defines the image as the concatenation of
+// all IDAT chunk data, and it is the only way to stream, since a chunk is
+// length-prefixed and the compressed length is not known in advance.
+export async function writePng16(
+	filePath: string,
+	input: Png16Input
+): Promise<void> {
+	const { width, height } = input;
+	assertDimensions(input);
+
+	const file = fs.createWriteStream(filePath);
+	try {
+		await new Promise<void>((resolve, reject) => {
+			file.once('error', reject);
+			file.write(
+				Buffer.concat([PNG_SIGNATURE, ihdr(width, height), srgbChunks()]),
+				(error) => (error ? reject(error) : resolve())
+			);
+		});
+
+		const toIdat = new Transform({
+			transform(compressed: Buffer, _encoding, done) {
+				done(null, chunk('IDAT', compressed));
+			},
+		});
+
+		await pipeline(
+			Readable.from(scanlineRows(input)),
+			zlib.createDeflate({ level: input.compressionLevel ?? 6 }),
+			toIdat,
+			file,
+			// Keep the file open so IEND can still be appended.
+			{ end: false }
+		);
+
+		await new Promise<void>((resolve, reject) => {
+			file.end(chunk('IEND', Buffer.alloc(0)), () => resolve());
+			file.once('error', reject);
+		});
+	} catch (error) {
+		file.destroy();
+		throw error;
+	}
 }

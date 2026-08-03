@@ -22,7 +22,7 @@ import {
 	buildUniqueScreenshotName,
 	getOutputExtension,
 } from '../../utilities/screenshot-output';
-import { encodePng16 } from '../../utilities/long-exposure/png16';
+import { writePng16 } from '../../utilities/long-exposure/png16';
 import {
 	buildSidecar,
 	extractSessionContext,
@@ -220,15 +220,24 @@ export async function writeLongExposure(
 	const thumbnailPath = path.join(cacheDir, `${fileKey}.webp`);
 
 	// --- master -----------------------------------------------------------
+	// Timed because a 7680x4320 master once took 63.7 s to write where the encode
+	// measures ~4 s in isolation, and the remaining ~59 s has no confirmed cause:
+	// the encode, the file write, Defender and memory pressure were each measured
+	// and cleared. The leading suspect is contention with iRacing rebuilding its
+	// render targets after the capture resize, which cannot be reproduced off the
+	// sim. So the next occurrence records itself rather than being re-theorised.
+	const masterStartedAt = Date.now();
 	if (wantsPng16) {
-		fs.writeFileSync(
-			masterPath,
-			encodePng16({
-				rgbaLe: image.data,
-				width: image.width,
-				height: image.height,
-			})
-		);
+		// Streamed, not encodePng16 + writeFileSync. The whole-image path holds the
+		// source, the scanline stream, the deflate output and a concat copy at once —
+		// ~760 MB at 7680x4320, where a field capture took 63.7 s to write against a
+		// ~4 s measured encode. It also blocks the main thread for that whole time,
+		// which is what "not responding" looked like to the user.
+		await writePng16(masterPath, {
+			rgbaLe: image.data,
+			width: image.width,
+			height: image.height,
+		});
 	} else {
 		await encodePreview(previewPipeline(image), recipe.outputFormat).toFile(
 			masterPath
@@ -238,6 +247,8 @@ export async function writeLongExposure(
 		file: masterPath,
 		bitDepth: wantsPng16 ? 16 : 8,
 		dimensions: { width: image.width, height: image.height },
+		elapsedMs: Date.now() - masterStartedAt,
+		megapixels: Number(((image.width * image.height) / 1e6).toFixed(1)),
 	});
 
 	// --- 8-bit preview ----------------------------------------------------

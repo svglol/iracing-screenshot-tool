@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import zlib from 'node:zlib';
-import { buildScanlines, encodePng16 } from './png16';
+import { PNG } from 'pngjs';
+import { buildScanlines, encodePng16, writePng16 } from './png16';
 
 // NOTE ON VERIFICATION STRATEGY.
 //
@@ -335,5 +339,67 @@ describe('buildScanlines', () => {
 		expect([...scanlines.subarray(8, 14)]).toEqual([
 			0x02, 0x00, 0x02, 0x00, 0x02, 0x00,
 		]);
+	});
+});
+
+// The streaming writer is what the capture path actually uses; encodePng16 is the
+// in-memory reference. They must agree, or the master depends on which one ran.
+describe('writePng16', () => {
+	const tmp = path.join(os.tmpdir(), `png16-stream-${process.pid}.png`);
+	afterEach(() => {
+		if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+	});
+
+	it('produces a file a decoder reads back exactly, at 16 bits', async () => {
+		const width = 37;
+		const height = 19;
+		const rgbaLe = Buffer.alloc(width * height * 8);
+		for (let i = 0; i < width * height; i++) {
+			// Values that would not survive a 16->8 reduction, so a silent downconvert
+			// is caught rather than rounded away.
+			rgbaLe.writeUInt16LE((i * 7919) % 65536, i * 8);
+			rgbaLe.writeUInt16LE((i * 104729) % 65536, i * 8 + 2);
+			rgbaLe.writeUInt16LE((i * 1299709) % 65536, i * 8 + 4);
+			rgbaLe.writeUInt16LE(65535, i * 8 + 6);
+		}
+
+		await writePng16(tmp, { rgbaLe, width, height });
+		const decoded = PNG.sync.read(fs.readFileSync(tmp), {
+			skipRescale: true,
+		});
+		expect(decoded.width).toBe(width);
+		expect(decoded.height).toBe(height);
+		for (let i = 0; i < width * height; i++) {
+			expect(decoded.data[i * 4]).toBe(rgbaLe.readUInt16LE(i * 8));
+			expect(decoded.data[i * 4 + 1]).toBe(rgbaLe.readUInt16LE(i * 8 + 2));
+			expect(decoded.data[i * 4 + 2]).toBe(rgbaLe.readUInt16LE(i * 8 + 4));
+		}
+	});
+
+	// Multiple IDAT chunks are the only way to stream a length-prefixed chunk, so
+	// the streamed file is not byte-identical to the in-memory one. The IMAGE must
+	// be, and that is the property worth pinning.
+	it('decodes identically to the in-memory encoder', async () => {
+		const width = 64;
+		const height = 48;
+		const rgbaLe = Buffer.alloc(width * height * 8);
+		for (let i = 0; i < rgbaLe.length; i += 2) {
+			rgbaLe.writeUInt16LE((i * 2654435761) % 65536, i);
+		}
+
+		await writePng16(tmp, { rgbaLe, width, height });
+		const streamed = PNG.sync.read(fs.readFileSync(tmp), {
+			skipRescale: true,
+		});
+		const inMemory = PNG.sync.read(encodePng16({ rgbaLe, width, height }), {
+			skipRescale: true,
+		});
+		expect(Buffer.from(streamed.data)).toEqual(Buffer.from(inMemory.data));
+	});
+
+	it('rejects bad dimensions before creating a file', async () => {
+		await expect(
+			writePng16(tmp, { rgbaLe: Buffer.alloc(8), width: 0, height: 1 })
+		).rejects.toThrow(/invalid PNG dimensions/);
 	});
 });
