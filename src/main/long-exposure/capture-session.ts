@@ -19,6 +19,7 @@
 
 import {
 	REPLAY_FRAMES_PER_SECOND,
+	replayFrameWallMs,
 	subFramePosition,
 } from '../../utilities/long-exposure/exposure-math';
 import {
@@ -160,6 +161,11 @@ export interface NativeSessionApi {
 		sessionTime: number
 	): void;
 	longExposureSetGate(session: number, open: boolean): void;
+	// Declare a new visit to the exposure window. Does NOT clear the accumulator.
+	// Optional: an addon build predating multi-pass omits it, which is why the
+	// session refuses to run more than one pass without it rather than silently
+	// producing a whole-window smear.
+	longExposureBeginPass?(session: number, passIndex: number): void;
 	longExposureStats(session: number): {
 		accepted: number;
 		synthesized?: number;
@@ -199,6 +205,7 @@ export interface NativeSessionApi {
 			digest: string;
 			presentedAt: string;
 			accepted: boolean;
+			pass?: number;
 		}>;
 		error: string | null;
 	};
@@ -233,6 +240,10 @@ export interface CaptureSessionDeps {
 		accepted?: number;
 		rejected?: number;
 		progress?: number;
+		// Zero-based pass index and total, so a multi-pass capture can show "pass 3
+		// of 8" rather than appearing to restart. Both absent on a single-pass shot.
+		pass?: number;
+		passes?: number;
 	}): void;
 }
 
@@ -296,12 +307,20 @@ export function buildInterpolationReport(opts: {
 	setupFrameMs: number | null;
 	renderWidth: number;
 	renderHeight: number;
+	// PER PASS, as the planner reports it.
 	predictedSamples: number;
+	// Multiplies the prediction, because `realSamples` is the cumulative count across
+	// every pass. Left at 1 an 8-pass capture reports achievedRatio ~8.0 and
+	// `diagnoseInterpolationShortfall` can never fire — the shortfall guardrail
+	// disabled by the very feature that makes shortfalls easier to hide.
+	passes?: number;
 }): LongExposureInterpolationReport {
 	const { requestedFactor, status } = opts;
 	const enabled = status?.enabled === true;
 	const achievedFactor = enabled ? (status?.factor ?? 1) : 1;
 	const renderMegapixels = (opts.renderWidth * opts.renderHeight) / 1e6;
+	const predictedTotal =
+		opts.predictedSamples * Math.max(1, Math.round(opts.passes ?? 1));
 	return {
 		requestedFactor,
 		enabled,
@@ -317,8 +336,8 @@ export function buildInterpolationReport(opts: {
 		setupFrameMs: opts.setupFrameMs,
 		load: Number((renderMegapixels * achievedFactor).toFixed(3)),
 		achievedRatio:
-			opts.predictedSamples > 0
-				? Number((opts.realSamples / opts.predictedSamples).toFixed(3))
+			predictedTotal > 0
+				? Number((opts.realSamples / predictedTotal).toFixed(3))
 				: null,
 	};
 }
@@ -562,6 +581,20 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	const native = deps.native as NativeSessionApi;
 	const aborted = () => deps.signal?.aborted === true;
 
+	// Multi-pass degrades to a single pass on an addon build that predates it, the
+	// same way interpolation degrades on a non-NVIDIA card: the shot is still correct,
+	// just sampled as sparsely as it always was. It must NOT proceed silently — without
+	// `longExposureBeginPass` the retained frame survives the seek, and every pass after
+	// the first would warp its first in-betweens across the whole window.
+	const passWarnings: string[] = [];
+	let passes = Math.max(1, Math.round(recipe.passes ?? 1));
+	if (passes > 1 && typeof native.longExposureBeginPass !== 'function') {
+		passWarnings.push(
+			`This build of the capture addon cannot run multi-pass captures, so the shot was taken as a single pass instead of ${passes}. It will be noisier than requested, not wrong.`
+		);
+		passes = 1;
+	}
+
 	const base = (): LongExposureOutcome => ({
 		ok: false,
 		failure: null,
@@ -593,46 +626,221 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		return { ...base(), failure: 'aborted', message: 'Capture cancelled.' };
 	}
 
-	// --- 2. Seek to the window start and let it settle -----------------------
-	deps.onProgress?.({ phase: 'seeking' });
-	const seek = await deps.replay.seekToWindowStart(sink.startFrame, {
-		signal: deps.signal,
-	});
-	if (aborted()) {
-		return { ...base(), failure: 'aborted', message: 'Capture cancelled.' };
+	// --- 2-4. Visit the exposure window, once per pass -----------------------
+	//
+	// PASSES SUM INTO ONE ACCUMULATOR, which is never cleared between them. That is
+	// correct rather than clever: resolve normalises per pixel by ACCUMULATED WEIGHT,
+	// and every weight is a function of window POSITION rather than of sample index,
+	// so N visits to the same window produce the same brightness as one visit with N
+	// times the real samples. Each pass drops a different share of iRacing's presents,
+	// which is where the extra samples come from.
+	// See docs/design/long-exposure-multi-pass.md.
+	//
+	// ABORT IS DIFFERENT IN KIND HERE. A cancelled single-pass capture is a
+	// half-open window and correctly fails. After k COMPLETE passes the image is
+	// finished and merely noisier, because every pass covers the whole window — so it
+	// is resolved rather than thrown away. `passes = 1` keeps today's behaviour
+	// exactly, since k is then always 0.
+	let session: number | null = null;
+	let completedPasses = 0;
+	let cutShort = false;
+	// Whether the abort landed PART-WAY through a pass, which cannot be undone: those
+	// samples are already summed in, over-weighting the window positions they reached.
+	let partialPass = false;
+
+	for (let pass = 0; pass < passes; pass += 1) {
+		// --- 2. Seek to the window start and let it settle -------------------
+		deps.onProgress?.({ phase: 'seeking', pass, passes });
+		const seek = await deps.replay.seekToWindowStart(sink.startFrame, {
+			signal: deps.signal,
+			// Spread the passes across one replay frame of wall clock, so they land on
+			// different presentation instants instead of possibly re-sampling the same
+			// ones. At 1/16 that is 267 ms / passes — 33 ms steps at 8 passes, against
+			// a ~23 ms present interval, so they interleave rather than stack. Pass 0
+			// gets no dither, so a single-pass capture is unchanged.
+			extraSettleMs:
+				passes > 1
+					? (pass * replayFrameWallMs(plan.playbackDivisor)) / passes
+					: 0,
+		});
+		if (aborted()) {
+			// Between passes: nothing partial to declare.
+			if (completedPasses > 0) {
+				cutShort = true;
+				break;
+			}
+			return {
+				...base(),
+				failure: 'aborted',
+				message: 'Capture cancelled.',
+			};
+		}
+		if (!seek.landed) {
+			return {
+				...base(),
+				failure: 'seek-failed',
+				message: `The replay did not reach frame ${sink.startFrame} in time. It may still be loading.`,
+			};
+		}
+
+		// Re-anchor the frame->session-time map on a reading taken AFTER the seek, so
+		// the sink's window bounds and the live sample stream share one origin. This is
+		// also why the sink stores a window LENGTH rather than an absolute start time —
+		// the origin does not exist until here.
+		//
+		// Re-derived per pass, and it has to be: the origin is established by the seek.
+		// The same replay frame yields the same ReplaySessionTime every pass, so sample
+		// times stay comparable ACROSS passes — which is what lets the merged sample log
+		// mean anything.
+		const settled = deps.replay.state() ?? live;
+		const startFrameTime = frameToSessionTime(sink.startFrame, settled);
+		const frameTimeOf = (frame: number) =>
+			startFrameTime + (frame - sink.startFrame) / REPLAY_FRAMES_PER_SECOND;
+
+		// --- 3. Open the GPU session (gate closed) -----------------------------
+		// ONCE, on the first pass — the accumulator has to outlive every pass.
+		// The interpolation factor is a REQUEST. The native side sets it up from the
+		// first real frame and reports back what it could actually negotiate; hardware
+		// that cannot do it captures exactly as it would have.
+		// Highlight recovery, unlike interpolation, is not a request — it is a shader
+		// constant that behaves identically on every GPU, so what is asked for is always
+		// what happens.
+		if (session === null) {
+			session = native.longExposureBegin(
+				hwnd,
+				recipe.interpolationFactor,
+				recipe.highlightRecovery
+			);
+			claimSession(session);
+		}
+
+		// Declared on EVERY pass including the first, so every sample carries a correct
+		// pass index whether or not multi-pass was used. On passes after the first this
+		// is also what discards the retained frame: without it the pass's first
+		// in-betweens warp from the END of the window to its start.
+		native.longExposureBeginPass?.(session, pass);
+
+		// --- 4. Roll, and accumulate until the anchor --------------------------
+		// Snapshotted so an abort can say whether this pass actually contributed,
+		// rather than assuming the worst about a cancel that landed on its first tick.
+		const acceptedBefore = native.longExposureStats(session).accepted;
+		const failed = await accumulateWindow({
+			deps,
+			plan,
+			sink,
+			native,
+			session,
+			pass,
+			passes,
+			startFrameNum: settled.replayFrameNum,
+			frameTimeOf,
+			base,
+		});
+
+		// --- 5. Halt playback ------------------------------------------------
+		deps.replay.pause();
+		if (failed) {
+			// Only an ABORT can be salvaged. A seek failure or a stalled transport
+			// means something is wrong with the replay, and resolving on top of that
+			// would hand back an image nobody asked for.
+			if (failed.failure === 'aborted' && completedPasses > 0) {
+				cutShort = true;
+				partialPass =
+					native.longExposureStats(session).accepted > acceptedBefore;
+				break;
+			}
+			return failed;
+		}
+		completedPasses += 1;
 	}
-	if (!seek.landed) {
+
+	// Unreachable with passes >= 1, but the resolve below needs a definite session and
+	// this is cheaper than asserting.
+	if (session === null) {
 		return {
 			...base(),
-			failure: 'seek-failed',
-			message: `The replay did not reach frame ${sink.startFrame} in time. It may still be loading.`,
+			failure: 'invalid-recipe',
+			message: 'A capture must run at least one pass.',
 		};
 	}
 
-	// Re-anchor the frame->session-time map on a reading taken AFTER the seek, so
-	// the sink's window bounds and the live sample stream share one origin. This is
-	// also why the sink stores a window LENGTH rather than an absolute start time —
-	// the origin does not exist until here.
-	const settled = deps.replay.state() ?? live;
-	const startFrameTime = frameToSessionTime(sink.startFrame, settled);
-	const frameTimeOf = (frame: number) =>
-		startFrameTime + (frame - sink.startFrame) / REPLAY_FRAMES_PER_SECOND;
+	// A cancelled multi-pass capture is still a whole exposure, but the user has to be
+	// told it is not the one they asked for — and told the one thing that cannot be
+	// undone, since the partial pass's contribution is already summed into the buffer.
+	if (cutShort) {
+		passWarnings.push(
+			`Cancelled after ${completedPasses} of ${passes} passes. The exposure is complete — every pass covers the whole window — but noisier than ${passes} would have been.` +
+				(partialPass
+					? ' The cancelled pass had already contributed, so the start of the streak carries slightly more weight than the end.'
+					: '')
+		);
+	}
 
-	// --- 3. Open the GPU session (gate closed) -------------------------------
-	// The interpolation factor is a REQUEST. The native side sets it up from the
-	// first real frame and reports back what it could actually negotiate; hardware
-	// that cannot do it captures exactly as it would have.
-	// Highlight recovery, unlike interpolation, is not a request — it is a shader
-	// constant that behaves identically on every GPU, so what is asked for is always
-	// what happens.
-	const session = native.longExposureBegin(
-		hwnd,
-		recipe.interpolationFactor,
-		recipe.highlightRecovery
-	);
-	claimSession(session);
+	// --- 6. Resolve ----------------------------------------------------------
+	return await resolveCapture({
+		recipe,
+		plan,
+		deps,
+		native,
+		session,
+		// The denominator for `achievedRatio` is what actually RAN, not what was
+		// asked for. On any complete capture these are the same number; on a
+		// cancelled one, dividing by the requested count would manufacture a
+		// shortfall warning out of the user's own cancel.
+		passes: completedPasses,
+		warnings: [...warnings, ...passWarnings],
+		base,
+		releaseSession,
+	});
+}
 
-	// --- 4. Roll, and accumulate until the anchor ----------------------------
+interface AccumulateWindowArgs {
+	deps: CaptureSessionDeps;
+	plan: ResolvedPlan;
+	sink: AccumulatorSink;
+	native: NativeSessionApi;
+	session: number;
+	// Zero-based index of this visit, and the total, for progress reporting only.
+	pass: number;
+	passes: number;
+	// The replay frame the pre-roll seek actually landed on.
+	startFrameNum: number;
+	frameTimeOf(frame: number): number;
+	base(): LongExposureOutcome;
+}
+
+// Roll the replay through the exposure window once, pushing weights as it goes.
+//
+// Returns null when the window was traversed to the anchor, or the failure outcome
+// to hand straight back.
+//
+// A FUNCTION RATHER THAN AN INNER BLOCK, deliberately: every variable below is
+// per-pass, and making them locals of a per-pass call means leaking one across a
+// boundary is unrepresentable rather than merely untested. `rolling`, `lastFrameNum`
+// and `reachedAnchor` would misreport a stalled later pass; `frameChangedAt` and
+// `lastTickAt` are the quiet pair — carried over they would span the whole seek and
+// settle, saturating the sub-frame estimate and inflating the pass's first
+// `tickSeconds`. The pre-roll lead plus the frame-indexed net in `sinksOpenAt`
+// (`replayFrameNum >= sink.startFrame`) bound what that could actually cost to a
+// seek that lands inside the window, so it is a hazard rather than a demonstrated
+// defect — but it is a hazard with no upside, and this removes it by construction.
+async function accumulateWindow(
+	args: AccumulateWindowArgs
+): Promise<LongExposureOutcome | null> {
+	const {
+		deps,
+		plan,
+		sink,
+		native,
+		session,
+		pass,
+		passes,
+		startFrameNum,
+		frameTimeOf,
+		base,
+	} = args;
+	const aborted = () => deps.signal?.aborted === true;
+
 	deps.replay.setCaptureSpeed(plan.playbackDivisor);
 
 	const timeoutMs = Math.max(
@@ -641,7 +849,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	);
 	const started = deps.now();
 	let rolling = false;
-	let lastFrameNum = settled.replayFrameNum;
+	let lastFrameNum = startFrameNum;
 	let reachedAnchor = false;
 	// When the replay frame number last CHANGED, in wall-clock ms. Interpolates
 	// position WITHIN a replay frame — ReplaySessionTime is frame-quantised, so
@@ -769,6 +977,10 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			phase: 'accumulating',
 			accepted: stats.accepted,
 			rejected: stats.rejected,
+			pass,
+			passes,
+			// Within this pass. `accepted` is cumulative across passes, deliberately:
+			// it is the count the shot is judged on.
 			progress:
 				sink.endFrame > sink.startFrame
 					? Math.min(
@@ -785,9 +997,6 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		await deps.delay(SAMPLE_PUSH_INTERVAL_MS);
 	}
 
-	// --- 5. Halt playback ----------------------------------------------------
-	deps.replay.pause();
-
 	if (!reachedAnchor) {
 		return {
 			...base(),
@@ -795,8 +1004,38 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			message: 'The exposure ended before reaching the selected moment.',
 		};
 	}
+	return null;
+}
 
-	// --- 6. Resolve ----------------------------------------------------------
+interface ResolveCaptureArgs {
+	recipe: LongExposureRecipe;
+	plan: ResolvedPlan;
+	deps: CaptureSessionDeps;
+	native: NativeSessionApi;
+	session: number;
+	passes: number;
+	warnings: string[];
+	base(): LongExposureOutcome;
+	releaseSession(): void;
+}
+
+// Read the accumulator back and build the outcome. Split out only so `runCapture`
+// reads as the state machine it is; the body is unchanged from when it was inline.
+async function resolveCapture(
+	args: ResolveCaptureArgs
+): Promise<LongExposureOutcome> {
+	const {
+		recipe,
+		plan,
+		deps,
+		native,
+		session,
+		passes,
+		warnings,
+		base,
+		releaseSession,
+	} = args;
+
 	deps.onProgress?.({ phase: 'resolving' });
 	const preResolve = native.longExposureStats(session);
 	if (preResolve.accepted === 0) {
@@ -845,6 +1084,9 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		digest: sample.digest,
 		presentedAt: sample.presentedAt,
 		accepted: sample.accepted,
+		// Absent on an addon build predating multi-pass, which reads as pass 0 —
+		// exactly what a single-pass capture is.
+		pass: sample.pass ?? 0,
 	}));
 	// The native log is capped (MAX_SAMPLE_LOG, 65536); the accepted counter is not.
 	// The cap is now above anything the UI can ask for — the worst expressible recipe
@@ -868,6 +1110,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		renderWidth,
 		renderHeight,
 		predictedSamples: plan.predictedSamples,
+		passes,
 	});
 
 	if (!result.data || result.width < 1 || result.height < 1) {

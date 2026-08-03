@@ -240,9 +240,19 @@ export class ReplayController {
 	// few frames BEFORE the window start (so playback is guaranteed to cross the
 	// boundary rather than begin inside it), confirms via telemetry, then settles so
 	// the renderer is presenting at the new position before sampling begins.
+	//
+	// `extraSettleMs` is the multi-pass phase dither. Passes only buy new samples if
+	// they land on DIFFERENT presentation instants; if our consumption happened to
+	// lock in phase with iRacing's presents, every pass would re-sample the same
+	// moments and buy noise reduction instead of density. Holding pass k back by a
+	// fraction of a replay frame forces the phases apart rather than hoping for it.
+	//
+	// It delays when playback ROLLS. It does not move the window, which stays
+	// frame-indexed and gate-enforced, so this is the existing SEEK_SETTLE_MS with a
+	// term added rather than a new use of wall clock.
 	async seekToWindowStart(
 		startFrame: number,
-		opts: { signal?: { aborted: boolean } } = {}
+		opts: { signal?: { aborted: boolean }; extraSettleMs?: number } = {}
 	): Promise<SeekResult> {
 		this.pause();
 		const target = Math.max(0, startFrame - SEEK_LEAD_FRAMES);
@@ -256,8 +266,13 @@ export class ReplayController {
 			opts
 		);
 
+		const dither =
+			Number.isFinite(opts.extraSettleMs) &&
+			(opts.extraSettleMs as number) > 0
+				? Math.round(opts.extraSettleMs as number)
+				: 0;
 		if (result.landed) {
-			await this.deps.delay(SEEK_SETTLE_MS);
+			await this.deps.delay(SEEK_SETTLE_MS + dither);
 		}
 		log.info('Long-exposure pre-roll seek', {
 			startFrame,
@@ -265,6 +280,7 @@ export class ReplayController {
 			landed: result.landed,
 			frame: result.frame,
 			elapsedMs: result.elapsedMs,
+			ditherMs: dither,
 		});
 		return result;
 	}

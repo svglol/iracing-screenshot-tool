@@ -141,6 +141,12 @@ function makeHarness(options: HarnessOptions = {}) {
 	const begunWith: Array<number | undefined> = [];
 	const highlightBegunWith: Array<number | undefined> = [];
 
+	// Index into `pushes` at which each pass began, so a test can slice the samples
+	// per pass. Recorded from the addon's own pass declaration rather than inferred,
+	// because inferring it from the sample stream is exactly what the pass index
+	// exists to avoid.
+	const passBoundaries: number[] = [];
+
 	const defaultNative: NativeSessionApi = {
 		longExposureBegin: (
 			_hwnd,
@@ -162,6 +168,10 @@ function makeHarness(options: HarnessOptions = {}) {
 		},
 		longExposureSetGate: (_session, open) => {
 			gateOpen = open;
+		},
+		longExposureBeginPass: (_session, passIndex) => {
+			nativeCalls.push(`beginPass:${passIndex}`);
+			passBoundaries.push(pushes.length);
 		},
 		longExposureStats: () => ({
 			accepted,
@@ -233,6 +243,7 @@ function makeHarness(options: HarnessOptions = {}) {
 		begunWith,
 		highlightBegunWith,
 		pushes,
+		passBoundaries,
 		state,
 		replay,
 	};
@@ -399,6 +410,246 @@ describe('executeRecipe — sub-replay-frame exposure windows', () => {
 		for (const push of pushes) {
 			expect(push.frameNum).toBeGreaterThanOrEqual(ANCHOR - 1);
 		}
+	});
+});
+
+// Multi-pass visits the same window repeatedly and sums into ONE accumulator, so the
+// properties worth pinning are (a) the session outlives every pass and (b) each pass
+// starts from a clean slate of per-pass loop state. See
+// docs/design/long-exposure-multi-pass.md.
+describe('executeRecipe — multi-pass accumulation', () => {
+	// The pre-roll seek is the FIRST absolute seek of a capture; the last one is the
+	// restore. Derived rather than spelled out, so these tests do not silently pass
+	// when the shutter ladder or the seek lead changes.
+	function preRollSeeks(events: string[]): string[] {
+		const first = events.find((event) => event.startsWith('seek:0:'));
+		return events.filter((event) => event === first);
+	}
+
+	it('visits the window once per pass on a single GPU session', async () => {
+		const harness = makeHarness();
+		await executeRecipe(recipe({ passes: 3 }), harness.deps);
+
+		// One accumulator, opened once and resolved once — that is the whole design.
+		expect(
+			harness.nativeCalls.filter((call) => call === 'begin')
+		).toHaveLength(1);
+		expect(
+			harness.nativeCalls.filter((call) => call === 'finish')
+		).toHaveLength(1);
+		// Three pre-roll seeks to the window start, plus the unconditional restore.
+		expect(preRollSeeks(harness.events)).toHaveLength(3);
+		expectAnchorRestored(harness.events);
+	});
+
+	it('declares every pass boundary, including the first', async () => {
+		const harness = makeHarness();
+		await executeRecipe(recipe({ passes: 3 }), harness.deps);
+
+		// Pass 0 is declared too, so every sample carries a correct pass index whether
+		// or not multi-pass was used.
+		expect(
+			harness.nativeCalls.filter((call) => call.startsWith('beginPass:'))
+		).toEqual(['beginPass:0', 'beginPass:1', 'beginPass:2']);
+	});
+
+	it('accumulates across passes rather than restarting', async () => {
+		const single = makeHarness();
+		await executeRecipe(recipe({ passes: 1 }), single.deps);
+		const triple = makeHarness();
+		await executeRecipe(recipe({ passes: 3 }), triple.deps);
+
+		// Nothing clears the accumulator between passes, so three visits to the same
+		// window contribute three times the samples.
+		expect(triple.pushes).toHaveLength(single.pushes.length * 3);
+		expect(triple.passBoundaries).toEqual([
+			0,
+			single.pushes.length,
+			single.pushes.length * 2,
+		]);
+	});
+
+	// Passes must be INTERCHANGEABLE: nothing about being the second or third visit
+	// may change how the window is traversed or weighted. Weight and u are the whole
+	// observable contract with the accumulator, so they are what is compared.
+	//
+	// This is a broad invariant rather than a probe for one bug. `accumulateWindow`
+	// owns every piece of per-pass loop state, so leaking it across a boundary is
+	// unrepresentable rather than merely untested — see the note on that function.
+	it('weights every pass identically, so no pass boundary biases the taper', async () => {
+		const harness = makeHarness({ framesPerPoll: 0.05 });
+		await executeRecipe(
+			recipe({ shutter: '1/60', playbackSpeed: 16, passes: 3 }),
+			harness.deps
+		);
+
+		expect(harness.passBoundaries).toHaveLength(3);
+		const perPass = harness.passBoundaries.map((start, index) =>
+			harness.pushes
+				.slice(start, harness.passBoundaries[index + 1])
+				// sessionTime is absolute and legitimately differs between passes; the
+				// window-relative quantities are what must not.
+				.map((push) => ({ weight: push.weight, u: push.u }))
+		);
+		expect(perPass[0].length).toBeGreaterThan(1);
+		expect(perPass[1]).toEqual(perPass[0]);
+		expect(perPass[2]).toEqual(perPass[0]);
+	});
+
+	it('degrades to one pass, loudly, on an addon that cannot declare one', async () => {
+		// Without the declaration the retained frame survives the seek and every pass
+		// after the first would warp its in-betweens across the whole window. Refusing
+		// to run them is the only safe answer; saying so is the rest of it.
+		const harness = makeHarness({
+			nativeOverrides: { longExposureBeginPass: undefined },
+		});
+		const outcome = await executeRecipe(recipe({ passes: 4 }), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(preRollSeeks(harness.events)).toHaveLength(1);
+		expect(outcome.warnings.join(' ')).toContain('single pass');
+		expectAnchorRestored(harness.events);
+	});
+
+	// Passes only buy new samples if they land on DIFFERENT presentation instants. If
+	// consumption happened to lock in phase with iRacing's presents, every pass would
+	// re-sample the same moments and buy noise reduction instead of density — so the
+	// phases are forced apart rather than hoped for.
+	it('spreads the passes across one replay frame of wall clock', async () => {
+		const harness = makeHarness();
+		const settles: number[] = [];
+		const realSeek = harness.deps.replay.seekToWindowStart.bind(
+			harness.deps.replay
+		);
+		harness.deps.replay.seekToWindowStart = (frame, opts = {}) => {
+			settles.push(opts.extraSettleMs ?? 0);
+			return realSeek(frame, opts);
+		};
+
+		// 1/4 playback: one replay frame is 1000/60 * 4 = 66.67 ms of wall clock,
+		// so four passes step by a sixth of that each.
+		await executeRecipe(
+			recipe({ playbackSpeed: 4, passes: 4 }),
+			harness.deps
+		);
+
+		const frameMs = (1000 / 60) * 4;
+		expect(settles).toHaveLength(4);
+		// Pass 0 is never held back, so a single-pass capture is unchanged.
+		expect(settles[0]).toBe(0);
+		expect(settles[1]).toBeCloseTo(frameMs / 4, 6);
+		expect(settles[2]).toBeCloseTo(frameMs / 2, 6);
+		expect(settles[3]).toBeCloseTo((frameMs * 3) / 4, 6);
+	});
+
+	it('never dithers a single-pass capture', async () => {
+		const harness = makeHarness();
+		const settles: number[] = [];
+		const realSeek = harness.deps.replay.seekToWindowStart.bind(
+			harness.deps.replay
+		);
+		harness.deps.replay.seekToWindowStart = (frame, opts = {}) => {
+			settles.push(opts.extraSettleMs ?? 0);
+			return realSeek(frame, opts);
+		};
+		await executeRecipe(recipe({ passes: 1 }), harness.deps);
+		expect(settles).toEqual([0]);
+	});
+
+	// A cancelled single-pass capture is a half-open window and correctly fails. After
+	// a whole pass the exposure is COMPLETE and merely noisier, because every pass
+	// covers the whole window — so throwing it away would discard a finished image.
+	it('resolves a cancelled capture once a whole pass has landed', async () => {
+		const signal = { aborted: false };
+		const harness = makeHarness({ signal });
+		const native = harness.deps.native as NativeSessionApi;
+		const declare = native.longExposureBeginPass as (
+			s: number,
+			p: number
+		) => void;
+		// Cancel exactly on the pass-1 boundary: pass 0 is whole, pass 1 contributes
+		// nothing, so there is no partial contribution to confess to.
+		native.longExposureBeginPass = (s, p) => {
+			declare(s, p);
+			if (p === 1) {
+				signal.aborted = true;
+			}
+		};
+
+		const outcome = await executeRecipe(recipe({ passes: 4 }), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(outcome.image).not.toBeNull();
+		expect(outcome.warnings.join(' ')).toContain('Cancelled after 1 of 4');
+		// Nothing was mid-flight, so the taper caveat must NOT be raised.
+		expect(outcome.warnings.join(' ')).not.toContain('more weight');
+		expectAnchorRestored(harness.events);
+	});
+
+	it('admits when the cancelled pass had already contributed', async () => {
+		const signal = { aborted: false };
+		const harness = makeHarness({ signal });
+		const native = harness.deps.native as NativeSessionApi;
+		const push = native.longExposureSetSample.bind(native);
+		native.longExposureSetSample = (s, w, u, f, t) => {
+			push(s, w, u, f, t);
+			// Cancel once the SECOND pass has genuinely summed samples in — measured
+			// from that pass's own boundary, which is what the addon records.
+			const started =
+				harness.passBoundaries[harness.passBoundaries.length - 1];
+			if (
+				harness.passBoundaries.length > 1 &&
+				harness.pushes.length - started >= 1
+			) {
+				signal.aborted = true;
+			}
+		};
+
+		const outcome = await executeRecipe(recipe({ passes: 4 }), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		// The partial pass cannot be subtracted from the accumulator, so the bias it
+		// leaves is stated rather than hidden.
+		expect(outcome.warnings.join(' ')).toContain('more weight');
+		expectAnchorRestored(harness.events);
+	});
+
+	it('still fails a cancel that lands before any pass completed', async () => {
+		const signal = { aborted: false };
+		const harness = makeHarness({ signal });
+		const native = harness.deps.native as NativeSessionApi;
+		const declare = native.longExposureBeginPass as (
+			s: number,
+			p: number
+		) => void;
+		native.longExposureBeginPass = (s, p) => {
+			declare(s, p);
+			signal.aborted = true;
+		};
+
+		const outcome = await executeRecipe(recipe({ passes: 4 }), harness.deps);
+
+		expect(outcome.ok).toBe(false);
+		expect(outcome.failure).toBe('aborted');
+		expect(outcome.image).toBeNull();
+		expectAnchorRestored(harness.events);
+	});
+
+	it('reports which pass is running, so progress cannot look like a restart', async () => {
+		const harness = makeHarness();
+		const updates: Array<{ pass?: number; passes?: number }> = [];
+		harness.deps.onProgress = (update) => {
+			if (update.phase === 'seeking') {
+				updates.push({ pass: update.pass, passes: update.passes });
+			}
+		};
+		await executeRecipe(recipe({ passes: 3 }), harness.deps);
+
+		expect(updates).toEqual([
+			{ pass: 0, passes: 3 },
+			{ pass: 1, passes: 3 },
+			{ pass: 2, passes: 3 },
+		]);
 	});
 });
 
@@ -911,6 +1162,57 @@ describe('buildInterpolationReport', () => {
 			predictedSamples: 100,
 		});
 		expect(report.load).toBeCloseTo(3.6864, 3);
+	});
+
+	// `predictedSamples` is PER PASS while `realSamples` is cumulative, so a multi-pass
+	// capture that fell just as far behind as a single-pass one must report the same
+	// ratio. Get this wrong and an 8-pass shot reports ~8.0, which is above every
+	// threshold there is — the shortfall guardrail switched off by the feature that
+	// makes shortfalls easiest to miss.
+	it('measures the shortfall per pass, not against one pass of prediction', () => {
+		const common = {
+			requestedFactor: 8,
+			status: {
+				enabled: true,
+				factor: 8,
+				reason: null,
+				gridSize: 4,
+				bidirectional: true,
+			},
+			syntheticSamples: 0,
+			meanFrameMs: 30,
+			maxFrameMs: 50,
+			setupFrameMs: 30,
+			renderWidth: 2560,
+			renderHeight: 1440,
+			predictedSamples: 10,
+		};
+		const single = buildInterpolationReport({ ...common, realSamples: 4 });
+		const quad = buildInterpolationReport({
+			...common,
+			realSamples: 16,
+			passes: 4,
+		});
+		expect(quad.achievedRatio).toBeCloseTo(0.4, 3);
+		expect(quad.achievedRatio).toBe(single.achievedRatio);
+		// Both are shortfalls, and both must still say so.
+		expect(quad.achievedRatio).toBeLessThan(SAMPLE_SHORTFALL_RATIO);
+	});
+
+	it('treats an absent pass count as a single pass', () => {
+		const report = buildInterpolationReport({
+			requestedFactor: 1,
+			status: null,
+			realSamples: 50,
+			syntheticSamples: 0,
+			meanFrameMs: 2,
+			maxFrameMs: 5,
+			setupFrameMs: 1,
+			renderWidth: 2560,
+			renderHeight: 1440,
+			predictedSamples: 100,
+		});
+		expect(report.achievedRatio).toBeCloseTo(0.5, 3);
 	});
 });
 
