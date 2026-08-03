@@ -34,6 +34,9 @@ export interface SampleLogEntry {
 	presentedAt: string;
 	// Whether the sample was accumulated (false = rejected duplicate).
 	accepted: boolean;
+	// Which pass of a multi-pass capture produced this sample. Absent on an addon
+	// build predating multi-pass, which reads as 0 — exactly what those captures did.
+	pass?: number;
 }
 
 export interface SampleStats {
@@ -44,14 +47,34 @@ export interface SampleStats {
 	// Frames whose digest repeated but whose presentation timestamp did NOT — the
 	// specific signature of a stalled renderer rather than a re-delivered frame.
 	stalledPresents: number;
-	// Sim-time gaps between consecutive ACCEPTED samples, in seconds.
+	// How many passes contributed. 1 for an ordinary capture.
+	//
+	// MULTI-PASS SPLITS THIS REPORT IN TWO, and which half a metric belongs to is
+	// not a matter of taste:
+	//
+	//   WITHIN a pass — median gap, evenness, dropouts. These describe whether one
+	//   visit kept up with the sim, so merging passes destroys them. Samples from N
+	//   independent passes interleave with near-exponentially distributed gaps, so a
+	//   merged median/max collapses toward 0 on a perfectly healthy capture and would
+	//   trip EVENNESS_WARN_THRESHOLD every time. Merging would also destroy
+	//   `medianGapSeconds` as the per-frame cost metric (frame-interpolation note
+	//   §9.7), which is the only stable read we have on whether the GPU kept up.
+	//
+	//   ACROSS passes — max gap and achieved window. The largest hole in the COMBINED
+	//   sampling is what actually shows in the image, and no single pass can see it.
+	passes: number;
+	// Median of the gaps WITHIN each pass, pooled. Per-frame consumption cost.
 	medianGapSeconds: number;
+	// The largest gap in the MERGED, time-sorted sample stream — the biggest hole the
+	// finished image actually contains.
 	maxGapSeconds: number;
-	// medianGap / maxGap ∈ (0,1]. 1.0 = perfectly even sampling. Below
-	// EVENNESS_WARN_THRESHOLD the capture had a visible hitch and the streak will
-	// show a brighter clump where sampling bunched up.
+	// medianGap / maxGap ∈ (0,1], computed WITHIN a pass; the WORST pass is reported.
+	// 1.0 = perfectly even sampling. Below EVENNESS_WARN_THRESHOLD that pass had a
+	// visible hitch and the streak will show a brighter clump where sampling bunched
+	// up. Worst rather than mean because one hitched pass puts a clump in the image
+	// that three clean ones do not remove.
 	evenness: number;
-	// Gaps beyond DROP_GAP_FACTOR × median — i.e. probable dropped frames.
+	// Gaps beyond DROP_GAP_FACTOR × median, summed over passes.
 	dropouts: number;
 	// Sim time from the first accepted sample to the last: the window the exposure
 	// ACHIEVED, as opposed to the one it planned.
@@ -133,30 +156,88 @@ export function summarizeSamples(
 		}
 	}
 
+	// Group by pass. A single-pass capture yields exactly one group, and every metric
+	// below then reduces to what it computed before multi-pass existed.
+	const byPass = new Map<number, SampleLogEntry[]>();
+	for (const entry of accepted) {
+		const pass = Number.isFinite(entry.pass) ? Number(entry.pass) : 0;
+		const group = byPass.get(pass);
+		if (group) {
+			group.push(entry);
+		} else {
+			byPass.set(pass, [entry]);
+		}
+	}
+
+	// Gaps WITHIN each pass, pooled — per-frame consumption cost — plus that pass's
+	// own evenness and dropouts.
 	const gaps: number[] = [];
-	for (let i = 1; i < accepted.length; i += 1) {
-		const gap = accepted[i].sessionTime - accepted[i - 1].sessionTime;
-		if (Number.isFinite(gap) && gap > 0) {
-			gaps.push(gap);
+	let worstEvenness = 1;
+	let dropoutTotal = 0;
+	for (const group of byPass.values()) {
+		const passGaps: number[] = [];
+		for (let i = 1; i < group.length; i += 1) {
+			const gap = group[i].sessionTime - group[i - 1].sessionTime;
+			if (Number.isFinite(gap) && gap > 0) {
+				passGaps.push(gap);
+			}
+		}
+		if (passGaps.length === 0) {
+			// One sample in this pass: no gaps to be uneven about, exactly as a
+			// one-sample capture is evenly sampled by definition.
+			continue;
+		}
+		gaps.push(...passGaps);
+		const sortedPass = [...passGaps].sort((a, b) => a - b);
+		const passMedian = median(sortedPass);
+		const passMax = sortedPass[sortedPass.length - 1];
+		worstEvenness = Math.min(
+			worstEvenness,
+			passMax > 0 ? passMedian / passMax : 1
+		);
+		dropoutTotal += passGaps.filter(
+			(gap) => gap > passMedian * DROP_GAP_FACTOR
+		).length;
+	}
+
+	// MERGED, for the two metrics that describe the finished image rather than one
+	// visit to the window. Sorting is a no-op for a single pass — sessionTime is
+	// monotonic within a pass, since the frame index only advances and the sub-frame
+	// term resets as it does.
+	const timeline = accepted
+		.map((entry) => entry.sessionTime)
+		.filter((t): t is number => Number.isFinite(t))
+		.sort((a, b) => a - b);
+	let mergedMaxGap = 0;
+	for (let i = 1; i < timeline.length; i += 1) {
+		const gap = timeline[i] - timeline[i - 1];
+		if (gap > mergedMaxGap) {
+			mergedMaxGap = gap;
 		}
 	}
 
 	const span =
-		accepted.length > 1
-			? accepted[accepted.length - 1].sessionTime - accepted[0].sessionTime
-			: 0;
+		timeline.length > 1 ? timeline[timeline.length - 1] - timeline[0] : 0;
 	const windowSeconds = Number.isFinite(span) && span > 0 ? span : 0;
 
 	// Fewer than two accepted samples means there are no gaps to be uneven about.
 	// A one-sample exposure — the correct result for a fast enough shutter — is
 	// evenly sampled by definition.
+	const passes = Math.max(1, byPass.size);
+
+	// Fewer than two accepted samples in every pass means there are no gaps to be
+	// uneven about. A one-sample exposure — the correct result for a fast enough
+	// shutter — is evenly sampled by definition.
 	if (gaps.length === 0) {
 		return {
 			accepted: acceptedCount,
 			duplicatesRejected: rejected.length,
 			stalledPresents,
+			passes,
 			medianGapSeconds: 0,
-			maxGapSeconds: 0,
+			// Still merged: two passes of one sample each have a real gap between
+			// them, and it is the only hole the image has.
+			maxGapSeconds: mergedMaxGap,
 			evenness: 1,
 			dropouts: 0,
 			windowSeconds,
@@ -166,19 +247,16 @@ export function summarizeSamples(
 
 	const sorted = [...gaps].sort((a, b) => a - b);
 	const medianGapSeconds = median(sorted);
-	const maxGapSeconds = sorted[sorted.length - 1];
-	const dropouts = gaps.filter(
-		(gap) => gap > medianGapSeconds * DROP_GAP_FACTOR
-	).length;
 
 	return {
 		accepted: acceptedCount,
 		duplicatesRejected: rejected.length,
 		stalledPresents,
+		passes,
 		medianGapSeconds,
-		maxGapSeconds,
-		evenness: maxGapSeconds > 0 ? medianGapSeconds / maxGapSeconds : 1,
-		dropouts,
+		maxGapSeconds: mergedMaxGap,
+		evenness: worstEvenness,
+		dropouts: dropoutTotal,
 		windowSeconds,
 		logTruncated,
 	};
@@ -186,7 +264,11 @@ export function summarizeSamples(
 
 // One-line human summary for the review step and the log.
 export function describeSampleStats(stats: SampleStats): string {
-	const parts = [`${stats.accepted} samples`];
+	const parts = [
+		stats.passes > 1
+			? `${stats.accepted} samples over ${stats.passes} passes`
+			: `${stats.accepted} samples`,
+	];
 	if (stats.duplicatesRejected > 0) {
 		parts.push(`${stats.duplicatesRejected} duplicates rejected`);
 	}

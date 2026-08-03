@@ -191,6 +191,90 @@ describe('shouldWarnAboutSampling', () => {
 	});
 });
 
+// Multi-pass visits the same window N times, so the sample stream is N interleaved
+// sequences rather than one. Which half of the report a metric belongs to is the
+// whole design here: per-pass metrics answer "did a visit keep up with the sim",
+// merged ones answer "what does the finished image contain".
+describe('summarizeSamples — multi-pass', () => {
+	// N passes over the same window, each internally even, offset by a fraction of
+	// the step so they interleave — which is what the phase dither exists to force.
+	function passes(count: number, perPass: number, step = 1 / 60) {
+		const log: SampleLogEntry[] = [];
+		for (let p = 0; p < count; p++) {
+			for (let i = 0; i < perPass; i++) {
+				log.push({
+					u: perPass > 1 ? i / (perPass - 1) : 1,
+					sessionTime: 10 + i * step + (p * step) / count,
+					replayFrameNum: 1000 + i,
+					digest: `p${p}d${i}`,
+					presentedAt: String(p * 1000 + i),
+					accepted: true,
+					pass: p,
+				});
+			}
+		}
+		return log;
+	}
+
+	it('reports the pass count and treats an absent index as one pass', () => {
+		expect(summarizeSamples(evenLog(30)).passes).toBe(1);
+		expect(summarizeSamples(passes(4, 10)).passes).toBe(4);
+	});
+
+	// The trap this design exists to avoid: merged gaps from independent passes are
+	// near-exponential, so a merged median/max would collapse and trip the warning
+	// on a perfectly healthy capture.
+	it('measures evenness within a pass, not across the merged stream', () => {
+		const stats = summarizeSamples(passes(4, 12));
+		expect(stats.evenness).toBeCloseTo(1);
+		expect(stats.dropouts).toBe(0);
+		expect(shouldWarnAboutSampling(stats)).toBe(false);
+	});
+
+	// medianGapSeconds is the per-frame consumption cost (frame-interpolation §9.7).
+	// Adding passes does not make the GPU faster, so it must not move.
+	it('keeps the median gap at the per-pass spacing, whatever the pass count', () => {
+		const one = summarizeSamples(evenLog(12));
+		const four = summarizeSamples(passes(4, 12));
+		expect(four.medianGapSeconds).toBeCloseTo(one.medianGapSeconds, 9);
+	});
+
+	// The merged stream is what the image integrates, so its largest hole is the one
+	// worth reporting — and interleaved passes genuinely shrink it.
+	it('measures the max gap across the merged stream', () => {
+		const one = summarizeSamples(evenLog(12));
+		const four = summarizeSamples(passes(4, 12));
+		expect(four.maxGapSeconds).toBeCloseTo(one.maxGapSeconds / 4, 9);
+		expect(four.maxGapSeconds).toBeLessThan(four.medianGapSeconds);
+	});
+
+	// One hitched pass puts a clump in the image that three clean passes do not
+	// remove, so the worst pass is reported rather than the average.
+	it('reports the worst pass, not the mean of them', () => {
+		const log = passes(3, 12);
+		// Open a hole inside pass 1 only.
+		for (const entry of log) {
+			if (entry.pass === 1 && entry.u > 0.5) {
+				entry.sessionTime += (1 / 60) * DROP_GAP_FACTOR * 2;
+			}
+		}
+		const stats = summarizeSamples(log);
+		expect(stats.evenness).toBeLessThan(EVENNESS_WARN_THRESHOLD);
+		expect(stats.dropouts).toBe(1);
+		// And the clean passes are still clean — the hole is one pass's fault.
+		expect(
+			summarizeSamples(log.filter((entry) => entry.pass !== 1)).evenness
+		).toBeCloseTo(1);
+	});
+
+	it('spans the whole window across passes', () => {
+		const stats = summarizeSamples(passes(4, 12));
+		expect(stats.windowSeconds).toBeGreaterThan(
+			summarizeSamples(evenLog(12)).windowSeconds
+		);
+	});
+});
+
 describe('describeSampleStats', () => {
 	it('always reports the achieved sample count and evenness', () => {
 		const text = describeSampleStats(summarizeSamples(evenLog(120)));
