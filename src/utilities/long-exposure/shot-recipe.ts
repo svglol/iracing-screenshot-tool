@@ -32,6 +32,7 @@ import {
 	type PlaybackDivisor,
 	type WeightingCurve,
 } from './exposure-math';
+import { resolveCropTarget } from '../screenshot-output';
 
 export const TONEMAPPERS = ['none', 'reinhard', 'aces'] as const;
 export type Tonemapper = (typeof TONEMAPPERS)[number];
@@ -137,10 +138,35 @@ export interface LongExposureRecipe {
 	targetSamples: number | null;
 
 	// The capture size, from the Resolution setting. iRacing's window is resized to
-	// exactly this and the saved image is exactly this — there is no longer a render
-	// size distinct from the output size.
+	// exactly this, and the frame is accumulated at exactly this. The SAVED size is
+	// this minus the watermark margin when `crop` is on — see resolveCropTarget.
 	width: number;
 	height: number;
+
+	// Emit one image per shutter stop at or faster than `shutter`, from the same
+	// captured frames (`docs/design/long-exposure-bracketing.md`).
+	//
+	// Nearly free in TIME — with a trailing window every stop ends on the same
+	// anchor and a faster shutter is the tail subset of samples already flowing —
+	// and NOT free in memory: each stop owns a full-size accumulator, so an 11-stop
+	// bracket is 11x the accumulator VRAM. The pre-flight counts them.
+	//
+	// Ignored for a free-form exposure that is not on the ladder: there is no
+	// "at or faster" set to build from a key that does not exist.
+	bracket: boolean;
+
+	// Crop Watermark, the same setting the still path obeys and with the same
+	// geometry (utilities/screenshot-output resolveCropTarget / resolveCropRect).
+	// Applied to the resolved image on the way to disk, so the master, the preview
+	// and the gallery thumbnail are all the cropped frame and cannot disagree.
+	//
+	// Recorded in the recipe rather than read from config at write time so the
+	// sidecar says what was actually done and a re-shoot reproduces it. A fresh
+	// shot inherits the live setting the same way outputFormat does — one place to
+	// set it, in Settings, for both kinds of capture.
+	crop: boolean;
+	// Legacy corner-only mode. Meaningless unless `crop` is on.
+	cropTopLeft: boolean;
 
 	// Requested optical-flow interpolation factor. A REQUEST, not a guarantee: the
 	// achieved factor is reported back from the capture and written to the sidecar.
@@ -234,6 +260,15 @@ export function createDefaultRecipe(opts: {
 		targetSamples: 240,
 		width: opts.width,
 		height: opts.height,
+		// Off by default: a bracket is a deliberate choice with a real VRAM cost, and
+		// a sidecar written before it existed has no such field.
+		bracket: false,
+		// Off by default, for the same reproducibility reason as highlightRecovery and
+		// passes below: a sidecar written before crop existed has no such field, and
+		// must not silently reproduce at a different size. Fresh shots get the live
+		// setting from longExposureDefaults(), which is where Settings is read.
+		crop: false,
+		cropTopLeft: false,
 		// Off by default. It is hardware-specific, it costs per-frame time that could
 		// otherwise buy real samples, and the base feature must stand on its own.
 		interpolationFactor: 1,
@@ -362,6 +397,15 @@ export function normalizeRecipe(
 			10000,
 			defaults.height
 		),
+		bracket:
+			input.bracket === undefined ? !!defaults.bracket : !!input.bracket,
+		// Absent reads as the default, which for a sidecar predating crop support is
+		// `false` from createDefaultRecipe and for a fresh shot is the live setting.
+		crop: input.crop === undefined ? !!defaults.crop : !!input.crop,
+		cropTopLeft:
+			input.cropTopLeft === undefined
+				? !!defaults.cropTopLeft
+				: !!input.cropTopLeft,
 		// `input.supersample` is deliberately DROPPED rather than honoured. A v1-v3
 		// sidecar carrying 2 rendered at twice this size and saved at half of that,
 		// so it cannot be reproduced on this build at all — and quietly obeying it
@@ -442,13 +486,20 @@ export interface ResolvedPlan {
 	// on a single-pass capture.
 	predictedTotalSamples: number;
 	predictedTotalWallClockSeconds: number;
-	// Dimensions iRacing's window is resized to, and the size of the saved image.
-	// Identical to the recipe's width/height since supersample was removed; kept as
-	// distinct fields because everything downstream — the VRAM pre-flight, the
-	// interpolation load, the resolve — is about what is RENDERED, and conflating the
-	// two is how a 2x supersample used to hide a 4x cost behind a 1x-looking number.
+	// Dimensions iRacing's window is resized to, and the size the frame is
+	// accumulated at. Identical to the recipe's width/height; kept as distinct fields
+	// because everything downstream — the VRAM pre-flight, the interpolation load,
+	// the resolve — is about what is RENDERED, and conflating the two is how a 2x
+	// supersample used to hide a 4x cost behind a 1x-looking number.
 	renderWidth: number;
 	renderHeight: number;
+	// Dimensions of the SAVED file: the render size minus the watermark margin when
+	// Crop Watermark is on, otherwise identical to it. The render/output split is
+	// back for a different reason than supersampling had — cropping trims the
+	// captured frame INWARD, so iRacing still renders (and still pays VRAM for) the
+	// full render size, and only the file is smaller.
+	outputWidth: number;
+	outputHeight: number;
 	// True when the exposure is predicted to collect ONE sample — no blur, and the
 	// capture degenerates to the existing still path.
 	//
@@ -519,6 +570,18 @@ export function resolvePlan(
 		predictedTotalWallClockSeconds: predictedWallClockSeconds * passes,
 		renderWidth,
 		renderHeight,
+		// The SAME helper the still path's sidebar hint and its capture call use, so
+		// a still and a long exposure of one Resolution cannot come out different
+		// sizes — the reason the geometry lives in screenshot-output at all.
+		...(() => {
+			const output = resolveCropTarget({
+				width: renderWidth,
+				height: renderHeight,
+				crop: recipe.crop,
+				cropTopLeft: recipe.cropTopLeft,
+			});
+			return { outputWidth: output.width, outputHeight: output.height };
+		})(),
 		isSingleSample: predictedSamples <= 1,
 	};
 }

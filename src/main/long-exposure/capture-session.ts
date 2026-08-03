@@ -23,6 +23,8 @@ import {
 	subFramePosition,
 } from '../../utilities/long-exposure/exposure-math';
 import {
+	earliestStartFrame,
+	planBracketSinks,
 	planPrimarySink,
 	routeFrame,
 	type AccumulatorSink,
@@ -82,6 +84,19 @@ export interface LongExposureImage {
 	height: number;
 }
 
+// One resolved bracket stop. A single-stop shot produces exactly one of these and
+// it is the same image as `outcome.image`.
+export interface LongExposureSinkImage extends LongExposureImage {
+	// The sink id, which for a bracket is the shutter key ('1/125').
+	sinkId: string;
+	// How that stop reads to a person ('1/125 s'). Used for the filename suffix and
+	// the sidecar, never as a key.
+	label: string;
+	// This stop's own exposure, which is the ONLY thing that differs between the
+	// images in a bracket — they share every captured frame.
+	exposureSeconds: number;
+}
+
 // What optical-flow interpolation actually did, as opposed to what was requested.
 //
 // Reported on every capture, including when it was never asked for, so the sidecar
@@ -123,6 +138,9 @@ export interface LongExposureOutcome {
 	message: string | null;
 	warnings: string[];
 	image: LongExposureImage | null;
+	// Every resolved stop. One entry (the same image as `image`) for an ordinary
+	// shot; one per stop for a bracket. Empty on every failure path.
+	images: LongExposureSinkImage[];
 	plan: ResolvedPlan | null;
 	stats: SampleStats | null;
 	backend: string | null;
@@ -151,14 +169,16 @@ export interface NativeSessionApi {
 	longExposureBegin(
 		hwnd: number,
 		interpolationFactor?: number,
-		highlightRecoveryStops?: number
+		highlightRecoveryStops?: number,
+		sinkIds?: string[]
 	): number;
 	longExposureSetSample(
 		session: number,
 		weight: number,
 		u: number,
 		replayFrameNum: number,
-		sessionTime: number
+		sessionTime: number,
+		sinkWeights?: number[]
 	): void;
 	longExposureSetGate(session: number, open: boolean): void;
 	// Declare a new visit to the exposure window. Does NOT clear the accumulator.
@@ -194,6 +214,15 @@ export interface NativeSessionApi {
 		data: Buffer | null;
 		width: number;
 		height: number;
+		// One entry per sink, in the order the ids were given to begin. Optional so
+		// an addon build predating bracketing still satisfies this interface — the
+		// caller falls back to the single `data` above.
+		images?: Array<{
+			sinkId: string;
+			data: Buffer | null;
+			width: number;
+			height: number;
+		}>;
 		accepted: number;
 		synthesized?: number;
 		rejected: number;
@@ -284,6 +313,7 @@ function failure(
 		message,
 		warnings: [],
 		image: null,
+		images: [],
 		plan: null,
 		stats: null,
 		backend: null,
@@ -440,13 +470,49 @@ export async function executeRecipe(
 		);
 	}
 
+	// One sink, or the whole at-or-faster ladder when bracketing is on.
+	//
+	// The structural property that makes bracketing nearly free in TIME: with a
+	// trailing window every stop ends on the same anchor frame and differs only in
+	// how far back it reaches, so a faster shutter is literally the tail subset of
+	// the samples already flowing past. One capture, N images, one wait.
+	//
+	// It is NOT free in MEMORY — each stop owns a full-size accumulator — which is
+	// why the VRAM pre-flight below counts sinks rather than assuming one.
+	//
+	// `planBracketSinks` returns the chosen stop FIRST, then progressively faster
+	// ones. That order is load-bearing: the native side reports index 0 as the
+	// primary image, and the gallery gets the stop the user actually asked for.
+	const primarySink = planPrimarySink({
+		anchorFrame: recipe.anchorFrame,
+		exposureSeconds: plan.effectiveExposureSeconds,
+		weighting: recipe.weighting,
+		label: recipe.shutter || `${Math.round(recipe.exposureMs)}ms`,
+	});
+	const bracketSinks = recipe.bracket
+		? planBracketSinks({
+				anchorFrame: recipe.anchorFrame,
+				shutterKey: recipe.shutter || '',
+				weighting: recipe.weighting,
+			})
+		: [];
+	// Falls back to the single sink when bracketing is asked for with a free-form
+	// exposure that is not on the ladder — there is no "at or faster" set to build
+	// from a key that does not exist, and refusing the shot over it would be worse.
+	const sinks: AccumulatorSink[] =
+		bracketSinks.length > 1 ? bracketSinks : [primarySink];
+	const sink = sinks[0];
+
 	// Pre-flight our OWN allocation. Unlike iRacing's, it is deterministic and ours
 	// to be honest about, so this is the one place we hard-refuse.
 	const vram = assessLongExposureVram({
 		info: deps.vramInfo(),
 		renderWidth: plan.renderWidth,
 		renderHeight: plan.renderHeight,
-		sinkCount: 1,
+		// Every stop owns a full accumulator (width x height x 16 B), so a bracket
+		// multiplies the accumulator budget by the number of stops. This is the
+		// pre-flight that stops an 11-stop 8K shot from being attempted.
+		sinkCount: sinks.length,
 		baseline: deps.baselineDims(),
 		interpolationFactor: recipe.interpolationFactor,
 	});
@@ -463,13 +529,6 @@ export async function executeRecipe(
 		...capturePlaybackSnapshot(live),
 		anchorFrame: recipe.anchorFrame,
 	};
-
-	const sink = planPrimarySink({
-		anchorFrame: recipe.anchorFrame,
-		exposureSeconds: plan.effectiveExposureSeconds,
-		weighting: recipe.weighting,
-		label: recipe.shutter || `${Math.round(recipe.exposureMs)}ms`,
-	});
 
 	log.info('Long exposure starting', {
 		anchorFrame: recipe.anchorFrame,
@@ -490,6 +549,7 @@ export async function executeRecipe(
 			recipe,
 			plan,
 			sink,
+			sinks,
 			live,
 			deps,
 			warnings: validation.warnings,
@@ -563,7 +623,9 @@ export async function executeRecipe(
 interface RunCaptureArgs {
 	recipe: LongExposureRecipe;
 	plan: ResolvedPlan;
+	// The chosen stop, and the full set it leads (itself alone, or the bracket).
 	sink: AccumulatorSink;
+	sinks: AccumulatorSink[];
 	live: ReplayState;
 	deps: CaptureSessionDeps;
 	warnings: string[];
@@ -576,6 +638,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		recipe,
 		plan,
 		sink,
+		sinks,
 		live,
 		deps,
 		warnings,
@@ -605,6 +668,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		message: null,
 		warnings,
 		image: null,
+		images: [],
 		plan,
 		stats: null,
 		backend: deps.backendName,
@@ -655,18 +719,21 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	for (let pass = 0; pass < passes; pass += 1) {
 		// --- 2. Seek to the window start and let it settle -------------------
 		deps.onProgress?.({ phase: 'seeking', pass, passes });
-		const seek = await deps.replay.seekToWindowStart(sink.startFrame, {
-			signal: deps.signal,
-			// Spread the passes across one replay frame of wall clock, so they land on
-			// different presentation instants instead of possibly re-sampling the same
-			// ones. At 1/16 that is 267 ms / passes — 33 ms steps at 8 passes, against
-			// a ~23 ms present interval, so they interleave rather than stack. Pass 0
-			// gets no dither, so a single-pass capture is unchanged.
-			extraSettleMs:
-				passes > 1
-					? (pass * replayFrameWallMs(plan.playbackDivisor)) / passes
-					: 0,
-		});
+		const seek = await deps.replay.seekToWindowStart(
+			earliestStartFrame(sinks),
+			{
+				signal: deps.signal,
+				// Spread the passes across one replay frame of wall clock, so they land on
+				// different presentation instants instead of possibly re-sampling the same
+				// ones. At 1/16 that is 267 ms / passes — 33 ms steps at 8 passes, against
+				// a ~23 ms present interval, so they interleave rather than stack. Pass 0
+				// gets no dither, so a single-pass capture is unchanged.
+				extraSettleMs:
+					passes > 1
+						? (pass * replayFrameWallMs(plan.playbackDivisor)) / passes
+						: 0,
+			}
+		);
 		if (aborted()) {
 			// Between passes: nothing partial to declare.
 			if (completedPasses > 0) {
@@ -713,7 +780,11 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			session = native.longExposureBegin(
 				hwnd,
 				recipe.interpolationFactor,
-				recipe.highlightRecovery
+				recipe.highlightRecovery,
+				// One accumulator per stop. An addon build predating bracketing
+				// ignores this and creates the single primary sink, which is why the
+				// outcome below falls back to one image rather than failing.
+				sinks.map((entry) => entry.id)
 			);
 			claimSession(session);
 		}
@@ -732,6 +803,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			deps,
 			plan,
 			sink,
+			sinks,
 			native,
 			session,
 			pass,
@@ -784,6 +856,8 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	return await resolveCapture({
 		recipe,
 		plan,
+		sink,
+		sinks,
 		deps,
 		native,
 		session,
@@ -801,7 +875,11 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 interface AccumulateWindowArgs {
 	deps: CaptureSessionDeps;
 	plan: ResolvedPlan;
+	// The PRIMARY sink — the stop the user chose. Drives the gate, the sample log
+	// and termination. Always `sinks[0]`.
 	sink: AccumulatorSink;
+	// Every sink this capture feeds: just the primary, or the whole bracket ladder.
+	sinks: AccumulatorSink[];
 	native: NativeSessionApi;
 	session: number;
 	// Zero-based index of this visit, and the total, for progress reporting only.
@@ -835,6 +913,7 @@ async function accumulateWindow(
 		deps,
 		plan,
 		sink,
+		sinks,
 		native,
 		session,
 		pass,
@@ -919,25 +998,43 @@ async function accumulateWindow(
 			// is exactly the kind of duplication that survives a change to one of
 			// them.) The gate opens the moment we cross into the window and NOT
 			// before, so pre-roll frames can never join the exposure.
-			const [contribution] = routeFrame({
-				sinks: [sink],
+			const contributions = routeFrame({
+				sinks,
 				replayFrameNum: frameNum,
 				sessionTime,
 				frameTimeOf,
 				tickSeconds,
 			});
-			native.longExposureSetGate(session, contribution !== undefined);
+			// The PRIMARY's contribution drives the gate and the sample log. Every
+			// stop shares the same terminal frame and the primary reaches furthest
+			// back, so it is open whenever any of them is — the gate is the same
+			// condition it always was.
+			const contribution = contributions.find(
+				(entry) => entry.sinkId === sink.id
+			);
+			native.longExposureSetGate(session, contributions.length > 0);
 
-			if (contribution) {
+			if (contributions.length > 0) {
+				// NEGATIVE means "this stop's window is not open on this tick" and is
+				// skipped natively. Zero cannot mean that: linear weighting is
+				// legitimately 0 at the start of its own window, and those frames have
+				// always been accumulated and counted.
+				const weights = sinks.map((entry) => {
+					const match = contributions.find(
+						(item) => item.sinkId === entry.id
+					);
+					return match ? match.weight : -1;
+				});
 				// The interpolated time goes into the sample log too, so the evenness
 				// report measures actual sample spacing rather than the frame-quantised
 				// staircase (which reported a flat 1/60 s).
 				native.longExposureSetSample(
 					session,
-					contribution.weight,
-					contribution.u,
+					contribution?.weight ?? weights[0],
+					contribution?.u ?? 0,
 					frameNum,
-					sessionTime
+					sessionTime,
+					weights
 				);
 			}
 
@@ -1014,6 +1111,10 @@ async function accumulateWindow(
 interface ResolveCaptureArgs {
 	recipe: LongExposureRecipe;
 	plan: ResolvedPlan;
+	// The primary sink and the full set, so each resolved accumulator can be
+	// labelled with the stop it actually is.
+	sink: AccumulatorSink;
+	sinks: AccumulatorSink[];
 	deps: CaptureSessionDeps;
 	native: NativeSessionApi;
 	session: number;
@@ -1031,6 +1132,8 @@ async function resolveCapture(
 	const {
 		recipe,
 		plan,
+		sink,
+		sinks,
 		deps,
 		native,
 		session,
@@ -1175,10 +1278,46 @@ async function resolveCapture(
 		interpolationWarnings.push(shortfall);
 	}
 
+	// Every resolved stop, in sink order. An addon build predating bracketing
+	// reports no `images`, so this degrades to the single master it did return —
+	// which is exactly the shot the user would have got before, not a failure.
+	const bySinkId = new Map(sinks.map((entry) => [entry.id, entry]));
+	const resolvedImages: LongExposureSinkImage[] = (result.images ?? [])
+		.filter((entry) => entry.data)
+		.map((entry) => {
+			const planned = bySinkId.get(entry.sinkId);
+			return {
+				sinkId: entry.sinkId,
+				label: planned?.label ?? entry.sinkId,
+				exposureSeconds:
+					planned?.exposureSeconds ?? plan.effectiveExposureSeconds,
+				data: entry.data as Buffer,
+				width: entry.width,
+				height: entry.height,
+			};
+		});
+	if (resolvedImages.length === 0) {
+		resolvedImages.push({
+			sinkId: sink.id,
+			label: sink.label,
+			exposureSeconds: sink.exposureSeconds,
+			data: result.data,
+			width: result.width,
+			height: result.height,
+		});
+	}
+	if (sinks.length > 1 && resolvedImages.length < sinks.length) {
+		warnings.push(
+			`Bracketing asked for ${sinks.length} stops but ${resolvedImages.length} came back — ` +
+				'the rest failed to resolve, or this build of the capture addon predates bracketing.'
+		);
+	}
+
 	return {
 		...base(),
 		ok: true,
 		image: { data: result.data, width: result.width, height: result.height },
+		images: resolvedImages,
 		stats,
 		backend: result.backend || deps.backendName,
 		interpolation,

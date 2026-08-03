@@ -81,6 +81,43 @@ export interface CropRect {
 	height: number;
 }
 
+// Watermark margin, as a fraction of each axis, for the two crop modes:
+//   top-left  3% off the bottom-right corner only (the legacy behaviour)
+//   centered  3% off every side, i.e. 6% of each axis in total
+//
+// These were literals duplicated in two places in SideBar.vue, which is why long
+// exposure could not honour Crop Watermark: the main process had no way to ask
+// what the setting meant in pixels. Same reason capture-resolution.ts exists.
+export const WATERMARK_MARGIN_TOP_LEFT = 0.03;
+export const WATERMARK_MARGIN_CENTERED = 0.06;
+
+// The SAVED size for a frame rendered at width x height under the current crop
+// setting. iRacing is resized to the full render size and the watermark is
+// trimmed INWARD from the captured frame, so the file ends up slightly smaller
+// than the nominal resolution — deliberately, because the alternative (render
+// 6% larger and crop back to nominal) forces ~12% more pixels at exactly the
+// resolutions where iRacing OOM-crashes.
+//
+// Crop off, or a degenerate size, returns the input unchanged.
+export function resolveCropTarget(opts: {
+	width: number;
+	height: number;
+	crop: boolean;
+	cropTopLeft: boolean;
+}): { width: number; height: number } {
+	const { width, height, crop, cropTopLeft } = opts;
+	if (!crop || !(width > 0) || !(height > 0)) {
+		return { width, height };
+	}
+	const margin = cropTopLeft
+		? WATERMARK_MARGIN_TOP_LEFT
+		: WATERMARK_MARGIN_CENTERED;
+	return {
+		width: width - Math.ceil(width * margin),
+		height: height - Math.ceil(height * margin),
+	};
+}
+
 // Compute the extract rectangle for a captured frame given the target output
 // size (the render size minus the watermark margin). Returns null when no crop
 // applies (crop off, or no target size), in which case the caller saves the full

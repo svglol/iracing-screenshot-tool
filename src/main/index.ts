@@ -307,6 +307,42 @@ function broadcastToWindows(channel: string, ...args: unknown[]): void {
 	});
 }
 
+// Bring OUR window back to the front. A capture deliberately raises iRacing
+// (resizeIracingWindowAsync -> BringWindowToTop + SetForegroundWindow) so the
+// compositor renders it for the grab; without this the user is left staring at
+// the sim after a shot that finished minutes ago, with the result, its warnings
+// and the gallery all behind it.
+//
+// A bare focus() is not enough on Windows. Having handed the foreground away
+// ourselves, we are subject to the foreground lock (SetForegroundWindow's
+// caller must own the foreground or the last input event), and the call
+// degrades to a taskbar flash. Flipping topmost on and straight back off raises
+// the window through the lock via SetWindowPos and leaves it at the top of the
+// normal (non-topmost) Z-order, so the app does not become a permanently
+// always-on-top window.
+function focusAppWindow(): void {
+	if (!mainWindow || mainWindow.isDestroyed()) {
+		return;
+	}
+	try {
+		if (mainWindow.isMinimized()) {
+			mainWindow.restore();
+		}
+		const wasAlwaysOnTop = mainWindow.isAlwaysOnTop();
+		mainWindow.setAlwaysOnTop(true);
+		mainWindow.show();
+		mainWindow.focus();
+		if (!wasAlwaysOnTop) {
+			mainWindow.setAlwaysOnTop(false);
+		}
+	} catch (error) {
+		// Never let a focus courtesy fail a capture that already succeeded.
+		log.debug('Could not return focus to the app window', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
+}
+
 function getConfigDiagnosticValue(key: string): unknown {
 	if (!config) {
 		return undefined;
@@ -897,6 +933,13 @@ function longExposureDefaults(live: ReplayState | null): LongExposureRecipe {
 		outputFormat: longExposureFormatForStillFormat(
 			config.get('outputFormat')
 		),
+		// Crop Watermark, read from the SAME setting the still path obeys and for
+		// the same reason as outputFormat above: it is one decision about how a shot
+		// is saved, so it belongs in one place. The panel sends no crop field, so
+		// this default is what a fresh shot uses; a recipe replayed from a sidecar
+		// keeps whatever it recorded.
+		crop: config.get('crop') === true,
+		cropTopLeft: config.get('cropTopLeft') === true,
 	};
 }
 
@@ -1030,6 +1073,8 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 
 		const written = await writeLongExposure({
 			image: outcome.image,
+			// Every bracket stop. One entry — the same image — when bracketing is off.
+			images: outcome.images,
 			recipe,
 			plan: outcome.plan,
 			stats: outcome.stats,
@@ -1037,6 +1082,11 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			interpolation: outcome.interpolation,
 			screenshotDir: path.resolve(config.get('screenshotFolder')),
 			cacheDir: path.join(app.getPath('userData'), 'Cache'),
+			// Beside app.log rather than beside the image: a sidecar is a diagnostic
+			// record, and with bracketing a single shot writes a dozen of them. Same
+			// directory the logger resolves, so everything needed to explain a
+			// capture is in one place to zip up.
+			sidecarDir: path.join(app.getPath('userData'), 'logs'),
 			sessionInfo: iracing.sessionInfo,
 			telemetry: iracing.telemetry,
 			filenameFormat: config.get('customFilenameFormat')
@@ -1130,6 +1180,13 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		// executeRecipe's own finally already restored the window and the cursor;
 		// this is the backstop for a throw before that could run.
 		restoreScreenshotState();
+		// Hand the foreground back. A long exposure can run for minutes with
+		// iRacing raised in front, and every outcome it reports — the sample
+		// count, the warnings, the saved shot in the gallery — is in OUR window.
+		// Runs on every exit (success, refusal, abort, throw) because the
+		// foreground was taken on every one of them; the early guards above
+		// return before iRacing is ever raised and so never reach this.
+		focusAppWindow();
 	}
 });
 

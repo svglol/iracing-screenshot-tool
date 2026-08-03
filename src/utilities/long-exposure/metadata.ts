@@ -44,7 +44,17 @@ import type { SampleStats } from './sample-stats';
 //     1920; re-executing that recipe here renders AND saves at 1920, so the image
 //     will differ in both antialiasing and dimensions. That is deliberate, it cannot
 //     be reproduced on this build, and the two sidecars say why.
-export const SIDECAR_VERSION = 4;
+//
+// 5 — Crop Watermark. `recipe.crop` / `recipe.cropTopLeft` record the still path's
+//     crop setting, which long exposure now obeys, and that BREAKS THE v4 INVARIANT
+//     ABOVE: with crop on, `image.renderWidth`/`renderHeight` are the size iRacing
+//     was resized to and accumulated at, while `image.width`/`height` are the
+//     smaller saved size. They are equal again whenever crop is off.
+//
+//     Unlike v4 this changes nothing about older sidecars: v1-v4 have no `crop`
+//     field, which reads as `false`, and false is exactly what those captures did —
+//     the same shape as the v3 `passes` note. Re-executing one still reproduces it.
+export const SIDECAR_VERSION = 5;
 
 export interface LongExposureSidecar {
 	sidecarVersion: number;
@@ -139,11 +149,15 @@ export interface LongExposureSidecar {
 	} | null;
 
 	image: {
+		// The SAVED file's dimensions, after any watermark crop.
 		width: number;
 		height: number;
-		// Equal to width/height since supersampling was removed. Both are still
-		// recorded: a future reader comparing them across versions is exactly how the
-		// v1-v3 shots stay legible.
+		// The size iRacing was resized to and the frame was accumulated at. Equal to
+		// width/height unless Crop Watermark trimmed the saved image (v5) — and, for
+		// v1-v3, unless supersampling was in play. Both are still recorded: a future
+		// reader comparing them across versions is exactly how those shots stay
+		// legible, and it is also what says how much iRacing actually rendered, which
+		// is what the VRAM cost was paid for.
 		renderWidth: number;
 		renderHeight: number;
 		bitDepth: number;

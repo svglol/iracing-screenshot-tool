@@ -28,6 +28,10 @@ import {
 	faCircleQuestion,
 	faArrowDown,
 	faChevronRight,
+	// NoticeCard's severity glyphs: severity must not be carried by colour alone.
+	faCircleExclamation,
+	faTriangleExclamation,
+	faCircleInfo,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -44,6 +48,9 @@ library.add(
 	faCircleQuestion,
 	faArrowDown,
 	faChevronRight,
+	faCircleExclamation,
+	faTriangleExclamation,
+	faCircleInfo,
 	faDiscord
 );
 

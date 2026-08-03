@@ -68,6 +68,16 @@ export interface NativeLongExposureResult {
 	data: Buffer | null;
 	width: number;
 	height: number;
+	// Every resolved sink, in the order the ids were passed to begin — one entry for
+	// an ordinary shot, N for a bracket. ADDITIVE: `data`/`width`/`height` above are
+	// this list's first entry, so an addon build predating bracketing leaves this
+	// undefined and the caller falls back to the single image.
+	images?: {
+		sinkId: string;
+		data: Buffer | null;
+		width: number;
+		height: number;
+	}[];
 	// REAL captured frames. Never merged with `synthesized`: the risk of
 	// interpolation is that its GPU cost slows frame consumption below iRacing's
 	// present rate, buying synthetic samples with real ones. Comparing this number
@@ -118,14 +128,23 @@ export interface WgcLongExposureAddon {
 	longExposureBegin(
 		hwnd: number,
 		interpolationFactor?: number,
-		highlightRecoveryStops?: number
+		highlightRecoveryStops?: number,
+		// One accumulator per id, all the same size; `longExposureFinish` returns one
+		// image per id in `images`. Omitted means the single 'primary' sink, which is
+		// what every shot did before bracketing — so an addon build predating it
+		// ignores this and returns one image, and the caller degrades to one stop.
+		sinkIds?: string[]
 	): number;
 	longExposureSetSample(
 		session: number,
 		weight: number,
 		u: number,
 		replayFrameNum: number,
-		sessionTime: number
+		sessionTime: number,
+		// One weight per sink, in `sinkIds` order. NEGATIVE means that sink's window
+		// is not open on this tick; zero is a real contribution and is accumulated,
+		// because linear weighting is legitimately 0 at the start of its own window.
+		sinkWeights?: number[]
 	): void;
 	longExposureSetGate(session: number, open: boolean): void;
 	// Declare that the exposure window is about to be visited again. Does NOT clear

@@ -51,7 +51,9 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
-use backend::{AccumulateBackend, InterpolationStatus, ResolveParams, ResolvedImage, Tonemap};
+use backend::{
+    AccumulateBackend, InterpolationStatus, ResolveParams, ResolvedImage, SampleOutcome, Tonemap,
+};
 use d3d11::D3d11Backend;
 
 /// v1 accumulates into exactly one sink. The backend and the router both support N
@@ -115,6 +117,22 @@ struct SessionShared {
     weight_bits: AtomicU32,
     /// f32 bits of the current normalised window position.
     u_bits: AtomicU32,
+
+    /// Sink ids for this session, in the order weights are pushed. Exactly one
+    /// ("primary") for an ordinary shot; N shutter keys for a bracket, where every
+    /// stop shares the same terminal frame and differs only in how far back its
+    /// window reaches (`docs/design/long-exposure-bracketing.md`).
+    sink_ids: Mutex<Vec<String>>,
+    /// Current weight for each sink, parallel to `sink_ids`.
+    ///
+    /// NEGATIVE MEANS CLOSED, and that is load-bearing rather than a convention of
+    /// convenience: a weight of exactly ZERO is a legitimate contribution — linear
+    /// weighting is 0 at the start of its own window — and the single-sink path has
+    /// always accumulated those frames, counting them in `accepted`. Skipping on
+    /// `w == 0.0` would silently change the sample count of every linear/ease shot.
+    /// So the router sends -1 for a sink whose window is not open on this tick, and
+    /// only that is skipped.
+    sink_weights: Mutex<Vec<f32>>,
     /// f64 bits of the current ReplaySessionTime.
     session_time_bits: AtomicU64,
     replay_frame: AtomicI64,
@@ -201,7 +219,9 @@ struct HandlerFlags {
 /// What the worker thread sends back once the capture loop has ended and (if
 /// requested) the resolve has run.
 struct SessionOutcome {
-    image: Option<ResolvedImage>,
+    /// One entry per sink that resolved, in `sink_ids` order. A single-sink shot
+    /// yields exactly one, which is what `finish` reports as the master.
+    images: Vec<(String, ResolvedImage)>,
     error: Option<String>,
 }
 
@@ -229,6 +249,21 @@ fn record_error(shared: &SessionShared, message: String) {
     }
 }
 
+/// The session's sink ids, defaulting to the single primary sink so a caller that
+/// never declared any behaves exactly as it did before bracketing existed.
+fn sink_ids_of(shared: &SessionShared) -> Vec<String> {
+    let ids = shared
+        .sink_ids
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
+    if ids.is_empty() {
+        vec![PRIMARY_SINK.to_string()]
+    } else {
+        ids
+    }
+}
+
 // --- capture handler -------------------------------------------------------
 
 struct Accumulator {
@@ -240,6 +275,23 @@ struct Accumulator {
 }
 
 impl Accumulator {
+    /// Snapshot of the session's sink ids. Cloned rather than held, because the
+    /// backend calls below take `&mut` and must not run under this lock.
+    fn sink_ids(&self) -> Vec<String> {
+        sink_ids_of(&self.shared)
+    }
+
+    /// Snapshot of the current per-sink weights. Same reason as above, and it is a
+    /// short lock on a vector of at most a dozen floats — the same shape as the
+    /// per-frame `digests` lock this path already takes.
+    fn sink_weights(&self) -> Vec<f32> {
+        self.shared
+            .sink_weights
+            .lock()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
+    }
+
     /// Returns Err only for faults that should abort the session; a per-frame
     /// hiccup is recorded and skipped so one bad frame cannot kill a long capture.
     fn handle_frame(&mut self, frame: &mut Frame) -> Result<(), String> {
@@ -273,9 +325,14 @@ impl Accumulator {
         let texture = frame.as_raw_texture().clone();
 
         if !self.sink_ready {
-            backend
-                .create_sink(PRIMARY_SINK, width, height)
-                .map_err(|e| format!("create_sink failed: {e}"))?;
+            // Every sink is created here, on the first real frame, because this is
+            // where the frame size is established — the same reason interpolation is
+            // set up here. A bracket's accumulators are all the same size.
+            for id in self.sink_ids() {
+                backend
+                    .create_sink(&id, width, height)
+                    .map_err(|e| format!("create_sink '{id}' failed: {e}"))?;
+            }
             self.sink_ready = true;
             if let Ok(mut dims) = self.shared.frame_dims.lock() {
                 *dims = Some((width, height));
@@ -312,10 +369,37 @@ impl Accumulator {
         // and reported — never excluded. Resolve normalises by accumulated weight, so
         // a duplicate only gives one instant double weight among hundreds of samples;
         // that is negligible next to the real frames the old synchronous check cost us.
-        let weight = f32::from_bits(self.shared.weight_bits.load(Ordering::Relaxed));
-        let outcome = backend
-            .accumulate_sample(PRIMARY_SINK, &texture, weight)
-            .map_err(|e| format!("accumulate failed: {e}"))?;
+        //
+        // One accumulate per OPEN sink. With interpolation off each is a plain
+        // dispatch against that sink's own accumulator, so the cost is linear in
+        // sinks and nothing else changes. With interpolation ON the fused warp
+        // kernel re-warps per sink — known, structural, and documented in
+        // `long-exposure-bracketing.md` §3.1; it is a cost, not a defect.
+        let ids = self.sink_ids();
+        let weights = self.sink_weights();
+        let mut outcome = SampleOutcome {
+            real: 0,
+            synthetic: 0,
+        };
+        let mut counted = false;
+        for (index, id) in ids.iter().enumerate() {
+            // Negative = this sink's window is not open on this tick. Zero is a real
+            // contribution and is accumulated — see `sink_weights`.
+            let weight = weights.get(index).copied().unwrap_or(-1.0);
+            if weight < 0.0 {
+                continue;
+            }
+            let sample = backend
+                .accumulate_sample(id, &texture, weight)
+                .map_err(|e| format!("accumulate '{id}' failed: {e}"))?;
+            // `accepted`/`synthesized` count frames CONSUMED, which is a property of
+            // the session and not of a sink — so they are folded once, from the first
+            // sink to take this frame, however many sinks it then lands in.
+            if !counted {
+                outcome = sample;
+                counted = true;
+            }
+        }
         self.shared
             .accepted
             .fetch_add(outcome.real, Ordering::Relaxed);
@@ -533,16 +617,28 @@ fn run_session(
 
     // Resolve on THIS thread — the same one that created every D3D11 resource and
     // ran every accumulate. No cross-thread device use anywhere in the session.
-    let mut image = None;
+    //
+    // EVERY sink is resolved before the session is torn down, because `finish`
+    // consumes it — there is no second chance to read a bracket stop's accumulator.
+    // A sink that fails to resolve is recorded and skipped rather than failing the
+    // shot: losing one bracket stop must not lose the ten that worked.
+    let mut images: Vec<(String, ResolvedImage)> = Vec::new();
     let params = shared.resolve_params.lock().ok().and_then(|g| *g);
     if let Some(params) = params {
         if shared.accepted.load(Ordering::SeqCst) > 0 {
             match backend_slot.0.lock() {
                 Ok(mut guard) => match guard.as_mut() {
-                    Some(backend) => match backend.resolve(PRIMARY_SINK, &params) {
-                        Ok(resolved) => image = Some(resolved),
-                        Err(error) => record_error(&shared, format!("resolve failed: {error}")),
-                    },
+                    Some(backend) => {
+                        for id in sink_ids_of(&shared) {
+                            match backend.resolve(&id, &params) {
+                                Ok(resolved) => images.push((id, resolved)),
+                                Err(error) => record_error(
+                                    &shared,
+                                    format!("resolve '{id}' failed: {error}"),
+                                ),
+                            }
+                        }
+                    }
                     None => record_error(&shared, "backend unavailable at resolve".to_string()),
                 },
                 Err(_) => record_error(&shared, "backend mutex poisoned at resolve".to_string()),
@@ -562,7 +658,7 @@ fn run_session(
     }
 
     let error = shared.last_error.lock().ok().and_then(|g| g.clone());
-    let _ = outcome_tx.send(SessionOutcome { image, error });
+    let _ = outcome_tx.send(SessionOutcome { images, error });
 }
 
 fn post_quit(shared: &SessionShared) {
@@ -642,9 +738,17 @@ pub struct LongExposureStats {
 pub struct LongExposureResult {
     /// Tightly packed 16-bit RGBA, little-endian — the exact layout sharp wants for
     /// `{ raw: { channels: 4, depth: 'ushort' } }`.
+    ///
+    /// The FIRST sink's image, which for a single-sink shot is the only one and for
+    /// a bracket is the stop the user actually chose. Kept as a top-level field so
+    /// every caller written before bracketing keeps working unchanged.
     pub data: Option<Buffer>,
     pub width: u32,
     pub height: u32,
+    /// Every resolved sink, in the order the ids were given to `begin` — one entry
+    /// for an ordinary shot, N for a bracket. Additive: `data` above is this list's
+    /// first entry.
+    pub images: Vec<LongExposureSinkImage>,
     pub accepted: u32,
     pub synthesized: u32,
     pub rejected: u32,
@@ -655,6 +759,16 @@ pub struct LongExposureResult {
     pub interpolation: Option<LongExposureInterpolationReport>,
     pub samples: Vec<LongExposureSample>,
     pub error: Option<String>,
+}
+
+/// One resolved accumulator. `sink_id` is the id given to `begin` — 'primary' for
+/// an ordinary shot, a shutter key such as '1/125' for a bracket stop.
+#[napi(object)]
+pub struct LongExposureSinkImage {
+    pub sink_id: String,
+    pub data: Option<Buffer>,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Shared by `stats` and `finish` so the two can never disagree.
@@ -788,16 +902,36 @@ pub fn long_exposure_interpolation_info(
 /// `highlight_recovery_stops`: gain applied to near-clipped values before
 /// accumulation, in stops. 0 (the default) is off and is exactly identity. Unlike
 /// interpolation this needs no special hardware and behaves identically on every GPU.
+///
+/// `sink_ids`: one accumulator is created per id, all the same size, and `finish`
+/// returns one image per id. Omitted or empty means the single "primary" sink, which
+/// is exactly what every shot did before bracketing. Each accumulator costs
+/// width x height x 16 bytes of VRAM, so the caller is responsible for pre-flighting
+/// the total — see `estimateLongExposureVram`.
 #[napi(catch_unwind)]
 pub fn long_exposure_begin(
     hwnd: f64,
     interpolation_factor: Option<u32>,
     highlight_recovery_stops: Option<f64>,
+    sink_ids: Option<Vec<String>>,
 ) -> napi::Result<u32> {
     let shared = Arc::new(SessionShared::default());
     shared.gate_open.store(false, Ordering::SeqCst);
     shared.weight_bits.store(1.0f32.to_bits(), Ordering::SeqCst);
     shared.u_bits.store(0.0f32.to_bits(), Ordering::SeqCst);
+
+    let ids = match sink_ids {
+        Some(ids) if !ids.is_empty() => ids,
+        _ => vec![PRIMARY_SINK.to_string()],
+    };
+    if let Ok(mut guard) = shared.sink_weights.lock() {
+        // Full weight until the router says otherwise, matching `weight_bits` above.
+        // The gate is closed here, so nothing accumulates before the first push.
+        *guard = vec![1.0f32; ids.len()];
+    }
+    if let Ok(mut guard) = shared.sink_ids.lock() {
+        *guard = ids;
+    }
     // Clamped rather than rejected: an out-of-range factor from a stale recipe should
     // degrade, not fail a shot.
     shared.interpolation_factor.store(
@@ -855,6 +989,12 @@ fn with_session<T>(
 
 /// Push the current sample weight and replay position. Called once per telemetry
 /// tick; frames arriving between calls use the last pushed value.
+///
+/// `sink_weights`: one weight per sink, in the order the ids were given to `begin`.
+/// A NEGATIVE entry means that sink's window is not open on this tick and the frame
+/// is not offered to it; zero is a real contribution and IS accumulated, because
+/// linear weighting is legitimately 0 at the start of its own window. Omitted means
+/// the single-sink shape, where `weight` alone drives the one accumulator.
 #[napi(catch_unwind)]
 pub fn long_exposure_set_sample(
     session: u32,
@@ -862,8 +1002,25 @@ pub fn long_exposure_set_sample(
     u: f64,
     replay_frame_num: f64,
     session_time: f64,
+    sink_weights: Option<Vec<f64>>,
 ) -> napi::Result<()> {
     with_session(session, |entry| {
+        if let Ok(mut guard) = entry.shared.sink_weights.lock() {
+            match sink_weights.as_ref() {
+                // Written element-wise into the existing vector so a caller that
+                // sends the wrong length cannot resize the session's sink set.
+                Some(values) => {
+                    for (slot, value) in guard.iter_mut().zip(values.iter()) {
+                        *slot = *value as f32;
+                    }
+                }
+                None => {
+                    if let Some(first) = guard.first_mut() {
+                        *first = weight as f32;
+                    }
+                }
+            }
+        }
         entry
             .shared
             .weight_bits
@@ -956,7 +1113,7 @@ fn take_session(id: u32) -> napi::Result<SessionEntry> {
 fn finalize(
     mut entry: SessionEntry,
     timeout_ms: u32,
-) -> napi::Result<(Option<ResolvedImage>, Option<String>, SessionEntry)> {
+) -> napi::Result<(Vec<(String, ResolvedImage)>, Option<String>, SessionEntry)> {
     post_quit(&entry.shared);
 
     let outcome = match entry
@@ -965,11 +1122,11 @@ fn finalize(
     {
         Ok(outcome) => outcome,
         Err(RecvTimeoutError::Timeout) => SessionOutcome {
-            image: None,
+            images: Vec::new(),
             error: Some("long-exposure session did not finish in time".to_string()),
         },
         Err(RecvTimeoutError::Disconnected) => SessionOutcome {
-            image: None,
+            images: Vec::new(),
             error: Some("long-exposure worker exited without a result".to_string()),
         },
     };
@@ -983,7 +1140,7 @@ fn finalize(
         }
     }
 
-    Ok((outcome.image, outcome.error, entry))
+    Ok((outcome.images, outcome.error, entry))
 }
 
 /// Stop accumulating, resolve, and return the 16-bit master plus the per-sample
@@ -1012,7 +1169,7 @@ pub fn long_exposure_finish(
     }
     entry.shared.finish_requested.store(true, Ordering::SeqCst);
 
-    let (image, error, entry) = finalize(entry, timeout_ms)?;
+    let (resolved_images, error, entry) = finalize(entry, timeout_ms)?;
 
     let samples = entry
         .shared
@@ -1041,11 +1198,22 @@ pub fn long_exposure_finish(
         .and_then(|g| g.clone())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let (data, width, height) = match image {
-        Some(resolved) => (
-            Some(Buffer::from(resolved.data)),
-            resolved.width,
-            resolved.height,
+    let images: Vec<LongExposureSinkImage> = resolved_images
+        .into_iter()
+        .map(|(sink_id, resolved)| LongExposureSinkImage {
+            sink_id,
+            data: Some(Buffer::from(resolved.data)),
+            width: resolved.width,
+            height: resolved.height,
+        })
+        .collect();
+    // The primary is the first sink, by construction: `begin` puts the chosen stop
+    // at index 0 and the resolve loop preserves that order.
+    let (data, width, height) = match images.first() {
+        Some(first) => (
+            first.data.as_ref().map(|b| Buffer::from(b.to_vec())),
+            first.width,
+            first.height,
         ),
         None => (None, 0, 0),
     };
@@ -1056,6 +1224,7 @@ pub fn long_exposure_finish(
         data,
         width,
         height,
+        images,
         accepted: entry.shared.accepted.load(Ordering::SeqCst),
         synthesized: entry.shared.synthesized.load(Ordering::SeqCst),
         rejected: entry.shared.rejected.load(Ordering::SeqCst),

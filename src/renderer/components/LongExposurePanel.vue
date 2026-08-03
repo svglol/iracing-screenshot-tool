@@ -29,35 +29,6 @@
 		</button>
 
 		<div v-show="!collapsed" id="long-exposure-body">
-			<!-- Availability / prerequisite banners. A long exposure integrates over a
-		     window of PAST replay frames, so a live session has nothing to
-		     integrate over — this is a prerequisite, not an error. -->
-			<o-notification
-				v-if="!available"
-				class="sidebar-tooltip"
-				variant="warning"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Long exposure is unavailable on this machine{{
-					unavailableReason ? ': ' + unavailableReason : '.'
-				}}
-			</o-notification>
-
-			<!-- Long exposure accumulates on the GPU via the native WGC path, which is
-		     independent of the still-capture backend. Worth saying out loud, because
-		     a ReShade user reasonably expects their stills setting to apply here. -->
-			<o-notification
-				v-if="available && reshade && !disableTooltips"
-				class="sidebar-tooltip"
-				variant="info"
-				aria-close-label="Close message"
-				size="small"
-			>
-				Long exposure captures natively and does not use ReShade, so ReShade
-				effects will not appear in the result.
-			</o-notification>
-
 			<template v-if="available">
 				<o-field label="Shutter">
 					<o-select v-model="shutter" expanded :disabled="busy">
@@ -89,55 +60,6 @@
 						:disabled="busy"
 					/>
 				</o-field>
-
-				<!-- The single most useful thing this panel shows: what the current
-			     settings will actually produce, and how long the user will wait for
-			     it. Slow-motion playback trades patience for sample count, so that
-			     cost should never be a surprise. -->
-				<!-- Also gated on being in a replay: without a cursor the plan
-			     resolves against frame 0 and this would read "frames -8 → 0". -->
-				<!-- TOTALS, always: quoting one pass of an eight-pass capture would
-			     understate the wait by eight, and the wait is the entire cost of
-			     that setting. Equal to the per-pass figures at one pass. -->
-				<p v-if="plan && inReplay" class="sidebar-target-hint">
-					<span class="sidebar-target-hint__value">
-						~{{ plan.predictedTotalSamples }} samples
-					</span>
-					<span class="sidebar-target-hint__render">
-						· at {{ speedLabel }} ·
-						{{ formatDuration(plan.predictedTotalWallClockSeconds) }}
-						<template v-if="plan.passes > 1">
-							· {{ plan.passes }} passes
-						</template>
-					</span>
-					<br />
-					<!-- A sub-replay-frame exposure spans one frame but only exposes for
-				     part of it, so a frame count alone would misdescribe the fast half
-				     of the ladder. Show the window it actually opens for. -->
-					<span class="sidebar-target-hint__render">
-						frames {{ plan.startFrame }} → {{ plan.anchorFrame }} ({{
-							windowLabel
-						}})
-					</span>
-					<!-- The capture size follows the Resolution control above, and until
-				     2026-08-03 it silently did not — so it is worth showing rather
-				     than assuming. It is also the dominant cost in everything else on
-				     this line: pixels are bought at the direct cost of samples. -->
-					<br />
-					<span class="sidebar-target-hint__render">
-						{{ plan.renderWidth }}×{{ plan.renderHeight }}
-					</span>
-					<!-- The format select is gone: a long exposure saves in whatever
-				     Settings says. Naming the result here keeps that discoverable
-				     without another control, and makes the one non-obvious part of
-				     the mapping — PNG meaning 16-bit — visible before the shot. -->
-					<template v-if="formatLabel">
-						<br />
-						<span class="sidebar-target-hint__render">{{
-							formatLabel
-						}}</span>
-					</template>
-				</p>
 
 				<!-- Everything below is tuning: it has a default that is right for
 				     almost every shot, and leaving it all on screen buried the four
@@ -204,29 +126,6 @@
 						</o-select>
 					</o-field>
 
-					<!-- The honest trade. Interpolation adds GPU work to every captured
-			     frame, and our budget is one iRacing present. If we get slower than
-			     the sim presents, we start dropping REAL samples to manufacture
-			     synthetic ones — a net loss. The sidecar records both counts so it
-			     can be checked rather than assumed. -->
-					<o-notification
-						v-if="
-							interpolationSupported &&
-							interpolation > 1 &&
-							!disableTooltips
-						"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Interpolation invents frames between the real ones to smooth
-						the streak. It costs GPU time per frame, so check the saved
-						shot's real sample count against the same shot with it off —
-						if that number drops, it is buying invented samples with real
-						ones.
-					</o-notification>
-
 					<!-- Passes sit next to interpolation because they are ALTERNATIVES,
 			     not companions: both buy sample density, one with GPU time we may
 			     not have and one with wall clock we always do. Needs no particular
@@ -240,62 +139,28 @@
 						</o-select>
 					</o-field>
 
-					<!-- The trade is entirely time, and the panel already quotes the total
-			     above — so this explains the part a duration cannot: WHY repeating
-			     the same moment produces anything new, and why the picture does not
-			     come out brighter. -->
-					<o-notification
-						v-if="passes > 1 && !disableTooltips"
-						class="sidebar-tooltip"
-						variant="info"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Each pass replays the same moment and catches frames the
-						others missed, so the streak gets smoother rather than
-						brighter. Best on fast shutters, where a single pass collects
-						only a handful of samples.
-					</o-notification>
-
-					<!-- Both on is the worst of the trade: interpolation slows each pass
-			     enough to cost it real frames, so the same wait buys fewer real
-			     samples than passes alone would. validatePlan says this too — this
-			     is the same fact where the control is. -->
-					<o-notification
-						v-if="
-							passes > 1 &&
-							interpolationSupported &&
-							interpolation > 1 &&
-							!disableTooltips
-						"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Passes and interpolation compete for the same per-frame
-						budget. With both on, each pass captures fewer real frames —
-						turning interpolation off usually makes the better shot for
-						the same wait.
-					</o-notification>
-
-					<!-- Asked for on hardware that can't do it: say so rather than showing
-			     a control that quietly does nothing. -->
-					<o-notification
-						v-if="
-							!interpolationSupported &&
-							interpolationReason &&
-							!disableTooltips
-						"
-						class="sidebar-tooltip"
-						variant="info"
-						aria-close-label="Close message"
-						size="small"
-					>
-						Frame interpolation needs an NVIDIA Turing or newer GPU
-						{{ adapter ? `(this capture runs on ${adapter})` : '' }}.
-						Everything else about long exposure works as normal.
-					</o-notification>
+					<!-- Bracketing sits with Passes because both change what ONE capture
+			     yields — but in opposite directions: passes spend more wall clock on
+			     the same picture, bracketing spends more VRAM on more pictures for
+			     the same wait. Costs no extra time at all, which is why it is worth
+			     offering to anyone unsure which shutter they wanted. -->
+					<o-field class="settings-toggle-row">
+						<o-switch
+							id="long-exposure-bracket-switch"
+							v-model="bracket"
+							:rounded="false"
+							class="settings-light-switch"
+							:disabled="busy"
+						/>
+						<label
+							for="long-exposure-bracket-switch"
+							class="settings-toggle-row__text"
+						>
+							<span class="label" style="margin-bottom: 0px"
+								>Bracket shutters</span
+							>
+						</label>
+					</o-field>
 
 					<!-- Applied BEFORE accumulation. That ordering is the entire point: it
 			     is what makes a bright light deposit energy faster than a dull one,
@@ -316,112 +181,56 @@
 						/>
 					</o-field>
 				</div>
-
-				<!-- Pre-flight. These are the SAME validatePlan results the capture
-			     would have reported afterwards, shown while they can still change
-			     the decision — a 10" shot at 1/16 is 160 seconds of driven replay,
-			     and announcing that once the wait is over is not a warning.
-
-			     Errors are shown too: the capture would refuse with exactly this
-			     message, and refusing before the press beats refusing after it. The
-			     button is deliberately NOT disabled on one — main is the authority
-			     on whether a shot can run, and a preview that is briefly stale must
-			     never be able to lock the user out of their own capture.
-
-			     Gated on being in a replay. Outside one there is no cursor to
-			     anchor on, so the preview resolves against frame 0 and validatePlan
-			     correctly reports that the window reaches past the start of the
-			     tape — a true statement about a shot nobody is taking, and the
-			     wrong thing to put on screen when the real answer is simply that no
-			     replay is open. -->
-				<template v-if="inReplay">
-					<o-notification
-						v-for="(problem, index) in previewErrors"
-						:key="'pe-' + index"
-						class="sidebar-tooltip"
-						variant="danger"
-						aria-close-label="Close message"
-						size="small"
-					>
-						{{ problem }}
-					</o-notification>
-
-					<o-notification
-						v-for="(warning, index) in previewWarnings"
-						:key="'pw-' + index"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						{{ warning }}
-					</o-notification>
-				</template>
-
-				<o-button
-					variant="primary"
-					icon-left="camera"
-					expanded
-					:loading="busy"
-					:disabled="!canCapture"
-					style="margin-top: 0.5rem"
-					@click="capture"
-				>
-					{{ busy ? progressLabel : 'Long Exposure' }}
-				</o-button>
-
-				<o-button
-					v-if="busy"
-					variant="danger"
-					expanded
-					size="small"
-					style="margin-top: 0.35rem"
-					@click="abort"
-				>
-					Cancel
-				</o-button>
-
-				<!-- Achieved sampling, reported after every shot. This is what JRT's
-			     pair-blend QA view conveys, as a number instead of an eyeball test. -->
-				<div v-if="lastResult" class="long-exposure__result">
-					<p
-						v-if="lastResult.ok && lastResult.stats"
-						class="sidebar-target-hint"
-					>
-						<span class="sidebar-target-hint__value">
-							{{ lastResult.stats.accepted }} samples
-						</span>
-						<span class="sidebar-target-hint__render">
-							· evenness
-							{{ Math.round(lastResult.stats.evenness * 100) }}%
-							<template v-if="lastResult.stats.duplicatesRejected">
-								· {{ lastResult.stats.duplicatesRejected }} duplicates
-								rejected
-							</template>
-						</span>
-					</p>
-					<o-notification
-						v-for="(warning, index) in lastResult.warnings"
-						:key="'lw-' + index"
-						class="sidebar-tooltip"
-						variant="warning"
-						aria-close-label="Close message"
-						size="small"
-					>
-						{{ warning }}
-					</o-notification>
-					<o-notification
-						v-if="!lastResult.ok"
-						class="sidebar-tooltip"
-						variant="danger"
-						aria-close-label="Close message"
-						size="small"
-					>
-						{{ lastResult.message }}
-					</o-notification>
-				</div>
 			</template>
 		</div>
+
+		<!-- OUTSIDE the fold, deliberately. Everything above is how to configure a
+		     shot, and folding that away is the whole point of the disclosure —
+		     but TAKING the shot is not configuration, and a user who folded the
+		     panel to keep the sidebar tidy still wants to press the button.
+
+		     Cancel and the progress phase come with it rather than staying
+		     behind: a capture drives the user's replay cursor for minutes, and
+		     nothing that touches their cursor may run with its stop button folded
+		     away. That invariant used to be met by force-unfolding the panel on
+		     every press, which now would undo the fold the user just chose.
+
+		     The notice card is deliberately NOT gated on `available` — the sentence
+		     explaining why the button is missing is the one notice that has to
+		     survive when everything else is hidden. -->
+		<NoticeCard :notices="notices" />
+
+		<template v-if="available">
+			<o-button
+				variant="primary"
+				icon-left="camera"
+				expanded
+				:loading="busy"
+				:disabled="!canCapture"
+				style="margin-top: 0.5rem"
+				@click="capture"
+			>
+				{{ busy ? progressLabel : 'Long Exposure' }}
+			</o-button>
+
+			<o-button
+				v-if="busy"
+				variant="danger"
+				expanded
+				size="small"
+				style="margin-top: 0.35rem"
+				@click="abort"
+			>
+				Cancel
+			</o-button>
+
+			<!-- No shot summary here any more. The panel used to forecast samples,
+		     duration, window, size and format — first as a run-on paragraph among
+		     the controls, then as a card under this button — and the size and
+		     format halves of it were answering a question the sidebar's own
+		     "Output: W × H (FORMAT)" line already answers for both capture modes.
+		     The panel is controls, the button, and the notices above it. -->
+		</template>
 	</div>
 </template>
 
@@ -433,35 +242,13 @@ import {
 	SHUTTER_LADDER,
 } from '../../utilities/long-exposure/exposure-math';
 import { useOruga } from '@oruga-ui/oruga-next';
+import NoticeCard, { type Notice } from './NoticeCard.vue';
 const { ipcRenderer } = require('electron');
 
 // How often to re-poll backend availability and the live replay cursor. The
 // cursor is what the anchor is read from, so this also keeps the window preview
 // honest as the user scrubs.
 const AVAILABILITY_POLL_MS = 1000;
-
-// Mirrors ResolvedPlan / the capture IPC reply. Declared locally rather than
-// imported so the renderer doesn't pull main-process modules into its bundle.
-interface CapturePlan {
-	windowFrames: number;
-	effectiveExposureSeconds: number;
-	// True when the shutter is faster than one replay frame, so the window opens
-	// partway through frame `startFrame` rather than on its boundary.
-	isSubFrameWindow: boolean;
-	startFrame: number;
-	anchorFrame: number;
-	playbackDivisor: number;
-	passes: number;
-	// iRacing is resized to these, and this is also the saved size — since
-	// supersampling was removed there is no longer a difference between the two.
-	renderWidth: number;
-	renderHeight: number;
-	// PER PASS. What the user waits for, and what they get, are the totals below.
-	predictedSamples: number;
-	predictedWallClockSeconds: number;
-	predictedTotalSamples: number;
-	predictedTotalWallClockSeconds: number;
-}
 
 interface CaptureResult {
 	ok: boolean;
@@ -476,6 +263,7 @@ interface CaptureResult {
 
 export default defineComponent({
 	name: 'LongExposurePanel',
+	components: { NoticeCard },
 	props: {
 		// Whether the still-capture path is set to ReShade. Used ONLY to explain
 		// that long exposure ignores it — never to gate the feature.
@@ -502,14 +290,13 @@ export default defineComponent({
 			targetSamples: String(config.get('longExposureTargetSamples')),
 			interpolation: config.get('longExposureInterpolation'),
 			passes: config.get('longExposurePasses'),
+			bracket: config.get('longExposureBracket') === true,
 			weighting: config.get('longExposureWeighting'),
 			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
-			// The format the capture will actually write, reported back by main from
-			// the still-capture setting. Not a control — the panel does not own this
-			// choice any more, it only says what the choice came out as.
-			resolvedFormat: null as string | null,
 			// validatePlan's verdict on the CURRENT settings, from the same call the
-			// capture makes. Shown before the shot rather than after it.
+			// capture makes. Shown before the shot rather than after it, and now the
+			// ONLY thing the preview call is read for — the plan it also returns fed
+			// the shot summary, which is gone.
 			previewWarnings: [] as string[],
 			previewErrors: [] as string[],
 
@@ -523,12 +310,8 @@ export default defineComponent({
 			} | null,
 			lastResult: null as CaptureResult | null,
 
-			plan: null as CapturePlan | null,
 			pollTimer: null as ReturnType<typeof setInterval> | null,
 			previewToken: 0,
-			// electron-store's onDidChange returns an unsubscribe fn — held so
-			// beforeUnmount can drop it (same pattern as Home.vue's gallery folder).
-			formatDisposer: null as (() => void) | null,
 			// Hoisted so beforeUnmount can removeListener it (same pattern as
 			// Home.vue's onScreenshotResponse).
 			onProgress: null as
@@ -554,22 +337,6 @@ export default defineComponent({
 				!this.externallyBusy
 			);
 		},
-		speedLabel(): string {
-			if (!this.plan) return '';
-			return this.plan.playbackDivisor === 1
-				? '1x'
-				: `1/${this.plan.playbackDivisor}`;
-		},
-		// What the window actually opens for. A shutter faster than one replay frame
-		// exposes for part of a single frame, so reporting "1 replay frame" there
-		// would describe the seek rather than the exposure.
-		windowLabel(): string {
-			if (!this.plan) return '';
-			if (this.plan.isSubFrameWindow) {
-				return `${(this.plan.effectiveExposureSeconds * 1000).toFixed(1)} ms within one replay frame`;
-			}
-			return `${this.plan.windowFrames} replay frames`;
-		},
 		// Which advanced settings are away from their default, named the way the user
 		// would recognise them.
 		//
@@ -590,6 +357,9 @@ export default defineComponent({
 			if (Number(this.passes) > 1) {
 				active.push(`${this.passes} passes`);
 			}
+			if (this.bracket) {
+				active.push('bracketed');
+			}
 			const recovery = parseFloat(this.highlightRecovery);
 			if (Number.isFinite(recovery) && recovery !== 0) {
 				active.push(`${recovery} stop recovery`);
@@ -601,7 +371,132 @@ export default defineComponent({
 		// in there. Weighting, passes, highlight recovery, and interpolation where it
 		// is offered.
 		advancedCount(): number {
-			return this.interpolationSupported ? 4 : 3;
+			return this.interpolationSupported ? 5 : 4;
+		},
+		// Every notice this panel raises, as data for the single NoticeCard: the
+		// availability banner, the tuning notes that used to sit inside Advanced,
+		// the pre-flight verdict, and the outcome of the last shot. NoticeCard
+		// sorts by severity, so a hard refusal always leads regardless of order here.
+		//
+		// Hoisting the Advanced notes out of the fold is deliberate. They describe
+		// settings that are ON, and the panel already argues a forgotten 8 passes
+		// must stay visible — one bullet in a shared card costs far less room than
+		// the three stacked banners they replace, so there is no longer a reason to
+		// hide them behind a chevron.
+		notices(): Notice[] {
+			const notices: Notice[] = [];
+
+			// A long exposure integrates over a window of PAST replay frames, so a
+			// live session has nothing to integrate over — a prerequisite, not an
+			// error, which is why this is a warning and not a danger.
+			if (!this.available) {
+				notices.push({
+					level: 'warning',
+					text: `Long exposure is unavailable on this machine${
+						this.unavailableReason ? ': ' + this.unavailableReason : '.'
+					}`,
+				});
+				// Nothing below applies when the feature cannot run at all.
+				return notices;
+			}
+
+			// Pre-flight: the SAME validatePlan results the capture would report
+			// afterwards, shown while they can still change the decision. Gated on
+			// being in a replay — outside one the preview resolves against frame 0
+			// and truthfully reports a window reaching past the start of the tape,
+			// which describes a shot nobody is taking.
+			if (this.inReplay) {
+				this.previewErrors.forEach((problem) => {
+					notices.push({ level: 'danger', text: problem });
+				});
+				this.previewWarnings.forEach((warning) => {
+					notices.push({ level: 'warning', text: warning });
+				});
+			}
+
+			// Outcome of the last shot.
+			if (this.lastResult && !this.lastResult.ok) {
+				notices.push({
+					level: 'danger',
+					text: this.lastResult.message || 'Long exposure failed',
+				});
+			}
+			if (this.lastResult) {
+				this.lastResult.warnings.forEach((warning) => {
+					notices.push({ level: 'warning', text: warning });
+				});
+			}
+
+			if (this.disableTooltips) {
+				return notices;
+			}
+
+			// Interpolation adds GPU work to every captured frame against a budget of
+			// one iRacing present. Slower than the sim presents and we drop REAL
+			// samples to manufacture synthetic ones — a net loss, and one the sidecar
+			// records both halves of so it can be checked rather than assumed.
+			if (this.interpolationSupported && Number(this.interpolation) > 1) {
+				notices.push({
+					level: 'warning',
+					text:
+						'Interpolation invents frames between the real ones to smooth the ' +
+						"streak. It costs GPU time per frame, so check the saved shot's " +
+						'real sample count against the same shot with it off — if that ' +
+						'number drops, it is buying invented samples with real ones.',
+				});
+			}
+
+			// Both on is the worst of the trade, and validatePlan says so too — this
+			// is the same fact stated where the controls are.
+			if (
+				Number(this.passes) > 1 &&
+				this.interpolationSupported &&
+				Number(this.interpolation) > 1
+			) {
+				notices.push({
+					level: 'warning',
+					text:
+						'Passes and interpolation compete for the same per-frame budget. ' +
+						'With both on, each pass captures fewer real frames — turning ' +
+						'interpolation off usually makes the better shot for the same wait.',
+				});
+			}
+
+			if (Number(this.passes) > 1) {
+				notices.push({
+					level: 'info',
+					text:
+						'Each pass replays the same moment and catches frames the others ' +
+						'missed, so the streak gets smoother rather than brighter. Best on ' +
+						'fast shutters, where a single pass collects only a handful of samples.',
+				});
+			}
+
+			// Asked for on hardware that can't do it: say so, rather than showing a
+			// control that quietly does nothing.
+			if (!this.interpolationSupported && this.interpolationReason) {
+				notices.push({
+					level: 'info',
+					text:
+						'Frame interpolation needs an NVIDIA Turing or newer GPU' +
+						`${this.adapter ? ` (this capture runs on ${this.adapter})` : ''}. ` +
+						'Everything else about long exposure works as normal.',
+				});
+			}
+
+			// Accumulation always runs through the native WGC + D3D11 compute path,
+			// independent of the still-capture backend — worth saying out loud,
+			// because a ReShade user reasonably expects their stills setting to apply.
+			if (this.reshade) {
+				notices.push({
+					level: 'info',
+					text:
+						'Long exposure captures natively and does not use ReShade, so ' +
+						'ReShade effects will not appear in the result.',
+				});
+			}
+
+			return notices;
 		},
 		advancedSummary(): string {
 			if (this.advancedOpen) {
@@ -610,24 +505,6 @@ export default defineComponent({
 			return this.advancedModified.length > 0
 				? this.advancedModified.join(', ')
 				: `${this.advancedCount} defaults`;
-		},
-		// What the shot will be saved as. PNG in Settings gives the 16-bit master,
-		// which is worth naming explicitly — it is the one part of the mapping a
-		// user would not guess, and the only format where accumulating in fp32
-		// reaches disk.
-		formatLabel(): string {
-			switch (this.resolvedFormat) {
-				case 'png16':
-					return 'saves as 16-bit PNG + preview';
-				case 'png':
-					return 'saves as PNG';
-				case 'jpeg':
-					return 'saves as JPEG';
-				case 'webp':
-					return 'saves as WebP';
-				default:
-					return '';
-			}
 		},
 		// Multi-pass re-seeks between passes, so without the pass number the progress
 		// line would appear to restart part-way through and read as a fault.
@@ -684,6 +561,8 @@ export default defineComponent({
 				// as chosen. An addon build too old to run passes degrades to one and
 				// says so in the outcome's warnings.
 				passes: Number(this.passes) || 1,
+				// Every stop at or faster than the chosen shutter, from one capture.
+				bracket: this.bracket === true,
 				weighting: this.weighting,
 				highlightRecovery: parseFloat(this.highlightRecovery) || 0,
 				// outputFormat, exposureCompensation and tonemap are deliberately
@@ -717,6 +596,12 @@ export default defineComponent({
 			// to keep the pre-flight honest.
 			void this.refreshPreview();
 		},
+		bracket(value) {
+			config.set('longExposureBracket', value === true);
+			// Changes the VRAM pre-flight by the number of stops, which is the one
+			// thing that can refuse the shot outright — so the verdict has to refresh.
+			void this.refreshPreview();
+		},
 		passes(value) {
 			config.set('longExposurePasses', Number(value));
 			// Multiplies the predicted wait and sample count, which is the whole cost
@@ -733,9 +618,11 @@ export default defineComponent({
 			}
 		},
 		liveAnchor() {
-			// The window preview is anchored on the cursor, and the cursor is now
-			// what a press would capture — so scrubbing has to refresh it, otherwise
-			// the frame range shown is not the range that would be shot.
+			// validatePlan's verdict is anchored on the cursor, and the cursor is
+			// what a press would capture — so scrubbing has to re-run it. Chief among
+			// those verdicts: an anchor closer to the start of the tape than the
+			// exposure window is long, which is a refusal that must appear as the
+			// user scrubs INTO it, not only when they change a parameter.
 			void this.refreshPreview();
 		},
 	},
@@ -751,12 +638,9 @@ export default defineComponent({
 			AVAILABILITY_POLL_MS
 		);
 
-		// The output format now lives in Settings, so a change there has to reach
-		// the line that reports it. Without this the panel would keep naming the
-		// old format until some unrelated parameter happened to refresh it.
-		this.formatDisposer = config.onDidChange?.('outputFormat', () => {
-			void this.refreshPreview();
-		});
+		// No outputFormat subscription here any more. It existed to refresh the
+		// preview so the panel's format line stayed current; the sidebar's Output
+		// line names the format now, and it subscribes for itself.
 	},
 	beforeUnmount() {
 		if (this.pollTimer) {
@@ -764,9 +648,6 @@ export default defineComponent({
 		}
 		if (this.onProgress) {
 			ipcRenderer.removeListener('long-exposure:progress', this.onProgress);
-		}
-		if (this.formatDisposer) {
-			this.formatDisposer();
 		}
 	},
 	methods: {
@@ -809,28 +690,17 @@ export default defineComponent({
 					this.recipe
 				);
 				// Drop a stale reply so rapid parameter changes can't show an
-				// out-of-order preview.
+				// out-of-order verdict.
 				if (token === this.previewToken) {
-					this.plan = result.plan;
-					// Main resolves the format from the still-capture setting, so
-					// read it back rather than deriving it here — one source, and
-					// the panel cannot claim a format the capture won't write.
-					this.resolvedFormat = result.recipe?.outputFormat ?? null;
 					this.previewWarnings = result.validation?.warnings ?? [];
 					this.previewErrors = result.validation?.errors ?? [];
 				}
 			} catch {
-				this.plan = null;
 				// A failed preview must not leave a stale verdict on screen claiming
 				// something about settings it was never asked about.
 				this.previewWarnings = [];
 				this.previewErrors = [];
 			}
-		},
-		formatDuration(seconds: number): string {
-			if (!Number.isFinite(seconds)) return '';
-			if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
-			return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
 		},
 		async capture() {
 			if (!this.canCapture) {
@@ -840,13 +710,13 @@ export default defineComponent({
 			// replay cursor as it handles this call — the moment of the press, not a
 			// value polled up to a second ago and not a frame pinned by an earlier
 			// shot. Main then fixes it in the recipe for the whole capture.
-			// Unfold for the duration: Cancel, the progress phase and the achieved
-			// sample count all live in the body, and a capture moves the user's
-			// replay cursor. Nothing that touches their cursor should be able to run
-			// with its stop button folded away.
-			if (this.collapsed) {
-				this.toggleCollapsed();
-			}
+			//
+			// The panel is NOT unfolded for the duration any more. That existed to
+			// keep Cancel, the progress phase and the sample count reachable while a
+			// capture drove the user's replay cursor; all three now live outside the
+			// fold, so the same guarantee holds without overriding a fold the user
+			// chose — which, for a button that is deliberately pressable while
+			// collapsed, would undo the thing they asked for on every press.
 			this.capturing = true;
 			this.progress = { phase: 'seeking' };
 			this.lastResult = null;
@@ -915,8 +785,9 @@ export default defineComponent({
 	outline-offset: 2px;
 }
 
-/* Collapsed the panel is just a header, so the bottom padding would read as a
-   stray gap above whatever follows. */
+/* Collapsed, the header is followed by the capture button's own top margin (or,
+   where long exposure is unavailable, by nothing at all) — so its bottom margin
+   would either double the gap or read as a stray one. */
 .long-exposure.is-collapsed .long-exposure__header {
 	margin-bottom: 0;
 }
@@ -976,9 +847,5 @@ export default defineComponent({
    scanning past, not bright enough to look like a warning. */
 .long-exposure__summary.is-modified {
 	color: rgba(255, 255, 255, 0.75);
-}
-
-.long-exposure__result {
-	margin-top: 0.5rem;
 }
 </style>

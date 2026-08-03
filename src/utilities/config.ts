@@ -176,6 +176,13 @@ const schema = {
 		minimum: 1,
 		maximum: 16,
 	},
+	// Emit one image per shutter stop at or faster than the chosen one, from the
+	// same captured frames. Nearly free in time, NOT free in VRAM — every stop owns
+	// a full-size accumulator — so it is off by default and pre-flighted.
+	longExposureBracket: {
+		type: 'boolean',
+		default: false,
+	},
 	longExposureWeighting: {
 		type: 'string',
 		default: 'box',
