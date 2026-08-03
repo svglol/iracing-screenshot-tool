@@ -527,6 +527,29 @@ The **stdev nearly tripling** is the tell: highlights are separating from midton
 rather than the whole frame getting uniformly brighter, which is exactly the intent.
 3 stops looks balanced; 5 is strong for that scene. Hence a control, not a constant.
 
+### 7.4b The round-trip property, verified on hardware 2026-08-03
+
+§7.2 claims `compress_highlights` inverts `expand_highlights` exactly, so a pixel
+whose value does not vary across the exposure comes back to itself while one that
+does gains. That is falsifiable, and it is what the ACES coupling failed.
+
+Road America, anchor 6215, 2560×1440, 1/30, interpolation off, one pass. Shots
+44 (0 stops) and 45 (3 stops), same anchor, recovery the only change.
+
+| region | luma at 0 → 3 stops | change | mean abs diff |
+|---|---|---|---|
+| sky — near-uniform, so static in VALUE | 0.7403 → 0.7403 | **0.000%** | 0.00053 |
+| car bodywork — tracked, bright speculars | 0.2849 → 0.2856 | +0.234% | 0.00338 (max **0.342**) |
+| grass/trees — swept by the pan | 0.4827 → 0.4824 | −0.067% | 0.00366 |
+
+**The sky is unchanged to four decimal places**, and its 0.00053 mean deviation is
+the measured noise floor between any two shots at one anchor (0.00054, from the
+multi-pass pair of the same day). Meanwhile individual bright pixels on the
+bodywork move by up to 34%. Static returns to itself; varying highlights gain.
+
+Whole-frame mean moves +0.13%, i.e. this is not a brightness control — which is the
+distinction §7.3 insisted on and the reason the ACES coupling had to go.
+
 ### 7.5 Deliberately NOT done: HDR capture
 
 `ColorFormat::Rgba16F` exists in `windows-capture` (`= 10`, `R16G16B16A16_FLOAT`) and

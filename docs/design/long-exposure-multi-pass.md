@@ -369,7 +369,30 @@ the streak where there is a streak, and nothing where there is not.
 The achieved window grew only 6.8% while sample count grew 3.25× — passes repeat the
 window rather than lengthening it, which is the other thing that had to be true.
 
-**What this run did NOT establish, and cannot:**
+**SECOND RUN 2026-08-03 — check 3 (the interpolation reset) PASSES.**
+
+Road America, anchor 6215, 2560×1440, 1/60, recovery 0. Shot 40 is **2 passes at
+8× interpolation** (25 real + 161 synthetic); shot 41 is the 1-pass
+interpolation-off reference at the same anchor (14 real).
+
+`begin_pass` clearing `have_prev` works. Had it not, pass 2's first warp would have
+interpolated between the window's END and its START, depositing 7 synthetic samples
+of full-window displacement at ~4% of total weight — on a pan this wide, an obvious
+frame-spanning ghost. **There is none.** The car is sharp, the background streaks
+along the pan axis, and whole-frame luma sits at 0.99961 of the reference.
+
+Real samples 25 across 2 passes against 14 in one, i.e. ×1.79 — multi-pass density
+confirmed at a second anchor.
+
+**Interleaving (§5 Q1) is now measurable but the answer is WEAK.** Merged
+`maxGapSeconds` went 0.00169 (1 pass) → 0.00156 (2 passes), only **8% better**,
+where genuine interleaving predicts closer to half. Do not read that as settled:
+this pair is a poor test of it — two passes only, and interpolation on in one of
+them but not the other, so per-pass sample yield differs. **The clean test is
+interpolation OFF, 1 pass vs 4, comparing merged `maxGapSeconds`.** If that also
+comes back near 1.0, the phase dither is not doing its job and §5 Q1 reopens.
+
+**What the first run did NOT establish, and cannot:**
 
 - **Interleaving (§5 Q1) is still open, but is now measurable.** Shots 36/37 were
   taken on a build where step 5 did not exist, so `summarizeSamples` still walked the

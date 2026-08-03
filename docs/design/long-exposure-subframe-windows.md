@@ -252,7 +252,36 @@ gating): not done, and the fractional boundary weight is why — it reduces the
 Q3 (`framesForExposure`'s floor): kept, and it now has exactly one consumer — the
 whole-frame quantiser. `windowFramesForExposure` (ceil) owns the seek span.
 
-## 9. Hardware verification — outstanding
+## 9. Hardware verification — DONE 2026-08-03. Passes, with a measured caveat.
+
+Road America, anchor 6215, 2560×1440, 1/16 playback, interpolation off, box,
+recovery 0, one pass. Shots 41/42/43, same anchor, nothing else changed.
+
+| shutter | requested | **achieved window** | real samples | vs previous |
+|---|---|---|---|---|
+| 1/60 | 16.67 ms | **16.06 ms** | 14 | — |
+| 1/125 | 8.00 ms | **8.19 ms** | 8 | ×0.51 |
+| 1/250 | 4.00 ms | **5.02 ms** | 6 | ×0.61 |
+
+**The defect this brief exists to fix is gone.** Before sub-frame windows all three
+of these delivered 16.67 ms, because `framesForExposure` quantised them to one
+replay frame. They now deliver three distinct windows that track the request.
+
+**1/60 → 1/125 halves cleanly (×0.51). 1/125 → 1/250 does not (×0.61)** — the
+window runs **1.02 ms long**, which is 25% of a 4 ms exposure. That figure is not
+mysterious: at 1/16 playback one 16 ms control tick is 1 ms of sim time, so this is
+exactly the one-tick quantisation §5.3 predicted, now measured in the field for the
+first time. The boundary-sample fix in §5.3 is what would close it; until then, the
+fast end of the ladder is systematically long by up to one tick and 1/250 is where
+it first matters.
+
+The §8 simulation predicted weighted windows of exactly 16.67 / 8.0 / 4.0. The field
+is within one tick of that at every stop, and the error has the sign and magnitude
+the quantisation argument predicts.
+
+---
+
+## 9b. The original instructions, kept for the re-shoot
 
 Everything above is verified by 628 unit tests, including an end-to-end harness run
 at a realistic 1/16-playback tick rate that measures the achieved window per stop:
