@@ -1043,3 +1043,107 @@ If more is wanted from the code, in value order:
   between GPU units rather than reducing SM work.
 
 ---
+
+## 10. Spending WALL CLOCK instead of GPU — tiling, and the thing that beats it
+
+Everything in §9 tries to fit the per-frame work inside iRacing's present interval.
+This section is about the other axis: the replay can be *replayed*, so the same
+exposure window can be visited more than once. Two designs do that, and the
+comparison between them is the useful part.
+
+### 10.1 The tiling proposal, taken seriously
+
+Capture the window N times; on pass *k* accumulate only slice *k* of the image;
+stitch. Per-frame SM work drops ~N×, so each pass keeps up with the source.
+
+Mechanically this is easy, and easier than it looks: every kernel already dispatches
+over the whole frame (`d3d11.rs:698`, `:725`, `:793`), so restricting one to a
+sub-rect is an offset and a bound. **The warp needs no halo either** — the retained
+frames stay full-resolution, so a tile-edge pixel can still sample a source position
+outside its tile.
+
+But only part of the 34.6 ms scales with tile area:
+
+| per captured frame | shrinks with the tile? |
+|---|---|
+| `CSWarpAccumulate` + `CSAccumulate` — the SM work that contends with iRacing | yes |
+| `CSLuma`, `CSDigest` | yes, but both feed full-frame consumers |
+| `CopyResource` of the retained RGBA frame (`d3d11.rs:554`; 59 MB at 5K) | no |
+| NVOFA flow execute | ROI is expressible (`nvof.rs:121`, `:146`) — but §9.5 measured NVOFA as a *separate hardware unit* that is not what we wait on under contention, so shrinking it buys nothing in the field |
+| waiting for iRacing to present | no |
+
+So tiling would work. **Its problem is a ceiling, not a cost.** Once a pass is
+source-limited it captures every presented frame and no more: 15 real samples, the
+interpolation-off baseline. Eight passes to go from 7 real samples to 15. Tiling can
+never produce a sample of a moment iRacing never rendered — which is precisely the
+gap NVOFA exists to fake.
+
+### 10.2 What beats it: accumulate N passes into the same buffer
+
+Run the window N times at **full resolution** and don't clear the accumulator between
+passes.
+
+Two properties already in the code make this correct with no shader change at all:
+
+- The accumulator is `float4` = (weighted linear RGB, accumulated weight), and
+  `CSAccumulate` does `acc.rgb += linear * gWeight; acc.a += gWeight`
+  (`shaders.hlsl:311`). Purely additive.
+- `CSResolve` normalises **per pixel by accumulated weight**, not by nominal sample
+  count (`shaders.hlsl:584`), with a comment saying this is what keeps exposure
+  correct "after duplicate rejection and dropped frames".
+
+And weights come from position-in-window `u`, never from sample index (main note §5),
+so a pass that lands on different instants composes correctly instead of
+double-weighting.
+
+**Why it has no ceiling.** Each pass still drops ~1/3 of presented frames — but a
+*different* 1/3, because presentation phase drifts run to run (the ±13% spread in
+§9.7 *is* that drift). The digest comment at `shaders.hlsl:330` establishes that
+sub-replay-frame presents carry "genuinely different interpolated motion", so the
+frames a second pass catches are new information, not duplicates.
+
+| 8 passes, 5120×2880 | real samples/px | wall clock |
+|---|---|---|
+| today, 8× interpolation | 7 real + ~49 synthetic | 1× |
+| 8-way tiling | 15 real + synthetic | 8× |
+| 8 accumulated passes, **interpolation off** | ~120 real, no synthetic | 8× |
+
+The last row runs at 23 ms/frame rather than 34.6, needs no NVOFA, no flow-trust
+heuristic and no warp artifacts. **It attacks the thing interpolation was a
+workaround for, rather than making the workaround cheaper.** Even N=2 gives ~30
+genuine samples against today's 7.
+
+### 10.3 The two failure modes hit the two designs in opposite directions
+
+Both designs assume iRacing re-renders the same replay segment the same way. It does
+not, exactly — and that asymmetry decides the choice:
+
+- **Non-telemetry-driven rendering** (tyre smoke, spray, particles, crowd, flags,
+  any temporal-AA history) decorrelates between passes. Under accumulation those
+  regions simply **average** — soft, slightly mushier smoke. Under tiling they
+  produce a hard straight-line seam, the artifact human vision is most sensitive to.
+  Accumulation fails gracefully; tiling fails ugly.
+- **Phase might not drift.** If consumption locks in phase with presentation, pass 2
+  re-samples the same instants and buys noise reduction only. That is cheap to
+  insure against, and — this is the part worth keeping — it is **falsifiable from
+  data already recorded**: every sample logs its `u`, so the `u` histogram in the
+  sidecar says directly whether the passes interleaved or stacked.
+
+### 10.4 Where the tiling idea still wins, and it is not nothing
+
+VRAM. The accumulator is 32 B/px, so tiling divides it by N. That is the lever for
+**bracketing**, whose brief now needs 2.6 GB at 5K for 11 sinks
+(`long-exposure-bracketing.md` §3.3) — tiling makes that affordable, though the 8-UAV
+cap still forces two batches. File it there, not here.
+
+### 10.5 Consequence for §9.9
+
+Multi-pass accumulation is now the leading item, ahead of merging the real sample
+into the warp dispatch. The merge is a ~42% cut to SM work; multi-pass is a ~17×
+increase in real samples that also lets interpolation be switched **off**, which
+removes the cost §9 has been chipping at rather than reducing it. The merge stays
+worth doing — it makes each pass cheaper — but it is no longer the headline.
+
+Full design and implementation order: **`docs/design/long-exposure-multi-pass.md`**.
+
+---
