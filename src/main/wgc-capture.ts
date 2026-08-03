@@ -42,6 +42,10 @@ export interface NativeLongExposureSample {
 	digest: string;
 	presentedAt: string;
 	accepted: boolean;
+	// Which pass of a multi-pass capture produced this sample; 0 on a single-pass
+	// shot. Optional because an addon build predating multi-pass omits it — absent
+	// is read as 0, which is exactly what a single-pass capture means.
+	pass?: number;
 }
 
 // What NVIDIA's hardware optical-flow accelerator did for a capture. Optional
@@ -124,6 +128,12 @@ export interface WgcLongExposureAddon {
 		sessionTime: number
 	): void;
 	longExposureSetGate(session: number, open: boolean): void;
+	// Declare that the exposure window is about to be visited again. Does NOT clear
+	// the accumulator — passes sum, and the resolve normalises per pixel by
+	// accumulated weight — but does discard retained inter-frame state, since the
+	// pass's first frame is not temporally adjacent to the previous pass's last.
+	// Optional: an addon build predating multi-pass simply has no passes to declare.
+	longExposureBeginPass?(session: number, passIndex: number): void;
 	longExposureStats(session: number): NativeLongExposureStats;
 	longExposureFinish(
 		session: number,

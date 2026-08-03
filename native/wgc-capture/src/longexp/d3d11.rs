@@ -1138,6 +1138,20 @@ impl AccumulateBackend for D3d11Backend {
         // across the whole stalled gap rather than across a zero-motion pair.
     }
 
+    fn begin_pass(&mut self) {
+        // Only the ping-pong's "a predecessor exists" flag is cleared. The retained
+        // textures themselves are left in place and simply overwritten by the pass's
+        // first frame, exactly as they are at the start of a capture.
+        //
+        // Costs `factor - 1` synthetic samples per pass, because the first frame of a
+        // pass now has no predecessor — the same thing that is already true of the
+        // first frame of a capture, and negligible against a pass's real-sample yield.
+        if let Some(interp) = self.interpolation.as_mut() {
+            interp.have_prev = false;
+            interp.prev_weight = 0.0;
+        }
+    }
+
     fn resolve(
         &mut self,
         sink_id: &str,

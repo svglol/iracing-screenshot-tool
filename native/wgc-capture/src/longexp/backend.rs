@@ -212,6 +212,19 @@ pub trait AccumulateBackend {
     /// previous frame can decide what to do about it. Default: nothing.
     fn note_rejected_frame(&mut self) {}
 
+    /// Discard retained INTER-FRAME state: the next frame offered is not temporally
+    /// adjacent to the last one. Accumulator contents are untouched.
+    ///
+    /// Multi-pass accumulation (see `docs/design/long-exposure-multi-pass.md`) visits
+    /// the same exposure window repeatedly WITHOUT clearing the accumulator, so at a
+    /// pass boundary the retained "previous frame" is the END of the window while the
+    /// next frame offered is its START. Interpolating across that pair would warp the
+    /// entire exposure into the first in-betweens of every pass after the first — and
+    /// it is not a subtle artifact.
+    ///
+    /// Default: nothing retained, nothing to discard.
+    fn begin_pass(&mut self) {}
+
     /// Normalise by accumulated weight, apply exposure, tonemap, box-downsample the
     /// supersample, encode to 16-bit sRGB and read back.
     fn resolve(

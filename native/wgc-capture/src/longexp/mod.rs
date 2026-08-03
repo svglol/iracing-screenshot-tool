@@ -83,6 +83,10 @@ struct SampleRecord {
     digest: u64,
     presented_at: i64,
     accepted: bool,
+    /// Which pass of a multi-pass capture produced this sample. The evenness metrics
+    /// are computed PER PASS — merged across passes, sample gaps are near-exponential
+    /// and `median/max` collapses on a perfectly healthy shot.
+    pass: u32,
 }
 
 /// Bookkeeping for the asynchronous digest readback: which sample each outstanding
@@ -114,6 +118,15 @@ struct SessionShared {
     /// f64 bits of the current ReplaySessionTime.
     session_time_bits: AtomicU64,
     replay_frame: AtomicI64,
+
+    /// Which pass of a multi-pass capture is currently accumulating. 0 for an
+    /// ordinary single-pass shot, so every sample carries a meaningful value whether
+    /// or not the feature is used.
+    pass_index: AtomicU32,
+    /// Set by `long_exposure_begin_pass`, consumed by the capture thread on the next
+    /// gated-in frame. A FLAG rather than an edge on `gate_open`, because JS re-stores
+    /// the gate on every telemetry tick and there is no reliable edge in it.
+    pass_reset: AtomicBool,
 
     finish_requested: AtomicBool,
     /// REAL captured frames accumulated. Deliberately never merged with
@@ -239,6 +252,22 @@ impl Accumulator {
             .as_mut()
             .ok_or_else(|| "backend not initialised".to_string())?;
 
+        // A pass boundary, consumed exactly once. Must happen BEFORE anything touches
+        // the retained frame, or this pass's first in-betweens warp across the whole
+        // window (see `AccumulateBackend::begin_pass`).
+        if self.shared.pass_reset.swap(false, Ordering::SeqCst) {
+            backend.begin_pass();
+            // Cross-pass digest comparison is meaningless: the last frame of a pass and
+            // the first of the next are the two ENDS of the window, and on a static
+            // scene they can legitimately hash equal — which would report a duplicate
+            // that is nothing of the kind, once per pass. Cost of clearing it: a
+            // genuine duplicate in the two or three frames still in flight from the
+            // previous pass goes uncounted. Under-reporting beats manufacturing.
+            if let Ok(mut tracking) = self.shared.digests.lock() {
+                tracking.last = None;
+            }
+        }
+
         let width = frame.width();
         let height = frame.height();
         let texture = frame.as_raw_texture().clone();
@@ -305,6 +334,7 @@ impl Accumulator {
                     digest: 0,
                     presented_at,
                     accepted: true,
+                    pass: self.shared.pass_index.load(Ordering::Relaxed),
                 });
                 Some(log.len() - 1)
             } else {
@@ -563,6 +593,9 @@ pub struct LongExposureSample {
     /// WGC SystemRelativeTime in 100ns units, as a string for the same reason.
     pub presented_at: String,
     pub accepted: bool,
+    /// Which pass of a multi-pass capture produced this sample; 0 on a single-pass
+    /// shot. Evenness and gap metrics are computed within a pass, never across.
+    pub pass: u32,
 }
 
 /// What frame interpolation actually did, reported alongside every capture.
@@ -851,6 +884,30 @@ pub fn long_exposure_set_sample(
     })
 }
 
+/// Declare that the replay has been re-positioned and the exposure window is about
+/// to be visited again — the multi-pass entry point
+/// (`docs/design/long-exposure-multi-pass.md`).
+///
+/// The ACCUMULATOR IS NOT CLEARED, which is the entire point: passes sum, and the
+/// resolve normalises per pixel by accumulated weight, so N passes of the same window
+/// come out at the same brightness as one, with N times the real samples. What IS
+/// discarded is retained inter-frame state, because the pass's first frame is not
+/// temporally adjacent to the previous pass's last.
+///
+/// Call it with the gate CLOSED, before rolling each pass — including pass 0, so
+/// every sample carries a correct `pass` whether or not more than one is used.
+#[napi(catch_unwind)]
+pub fn long_exposure_begin_pass(session: u32, pass_index: u32) -> napi::Result<()> {
+    with_session(session, |entry| {
+        entry
+            .shared
+            .pass_index
+            .store(pass_index, Ordering::SeqCst);
+        entry.shared.pass_reset.store(true, Ordering::SeqCst);
+        Ok(())
+    })
+}
+
 /// Open or close the accumulation gate. Closing is how termination is enforced: a
 /// frame arriving after the anchor can never join the exposure.
 #[napi(catch_unwind)]
@@ -970,6 +1027,7 @@ pub fn long_exposure_finish(
                     digest: format!("{:016x}", record.digest),
                     presented_at: record.presented_at.to_string(),
                     accepted: record.accepted,
+                    pass: record.pass,
                 })
                 .collect()
         })
