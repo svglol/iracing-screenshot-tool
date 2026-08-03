@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createDefaultRecipe,
+	longExposureFormatForStillFormat,
 	normalizeRecipe,
 	resolvePlan,
 	validatePlan,
 	variantSuffix,
 	interpolationLoad,
+	LONG_EXPOSURE_FORMATS,
 	MAX_HIGHLIGHT_RECOVERY_STOPS,
 	type LongExposureRecipe,
 } from './shot-recipe';
@@ -194,6 +196,37 @@ describe('normalizeRecipe', () => {
 		expect(
 			normalizeRecipe(JSON.parse(JSON.stringify(recipe)), base())
 		).toEqual(recipe);
+	});
+});
+
+// The panel no longer carries its own format select: a long exposure saves the way
+// a screenshot saves. Settings has no 16-bit option, so PNG there is read as "the
+// lossless one" and maps to the 16-bit master.
+describe('longExposureFormatForStillFormat', () => {
+	it('maps PNG to the 16-bit master', () => {
+		expect(longExposureFormatForStillFormat('png')).toBe('png16');
+	});
+
+	it('passes the 8-bit formats through unchanged', () => {
+		expect(longExposureFormatForStillFormat('jpeg')).toBe('jpeg');
+		expect(longExposureFormatForStillFormat('webp')).toBe('webp');
+	});
+
+	// The still path defaults to jpeg, so an unset or unrecognised value has to land
+	// there too rather than on a format the user never chose.
+	it('falls back to jpeg for anything unrecognised', () => {
+		for (const bogus of [undefined, null, '', 'png16', 'tiff', 7, {}]) {
+			expect(longExposureFormatForStillFormat(bogus)).toBe('jpeg');
+		}
+	});
+
+	// Whatever it returns has to be a format the writer can actually encode.
+	it('only ever returns a supported long-exposure format', () => {
+		for (const still of ['jpeg', 'png', 'webp', 'nonsense']) {
+			expect(LONG_EXPOSURE_FORMATS).toContain(
+				longExposureFormatForStillFormat(still)
+			);
+		}
 	});
 });
 

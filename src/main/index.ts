@@ -45,6 +45,7 @@ import {
 import {
 	ReplayController,
 	readReplayState,
+	type ReplayState,
 } from './long-exposure/replay-control';
 import {
 	executeRecipe,
@@ -53,6 +54,7 @@ import {
 import { writeLongExposure } from './long-exposure/output';
 import {
 	createDefaultRecipe,
+	longExposureFormatForStillFormat,
 	normalizeRecipe,
 	resolvePlan,
 	type LongExposureRecipe,
@@ -856,6 +858,28 @@ const replayController = new ReplayController({
 	now: () => Date.now(),
 });
 
+// Baseline recipe for a long exposure. The capture handler and the preview handler
+// must derive it identically — if they drift, the panel previews a shot that is not
+// the shot it takes.
+function longExposureDefaults(live: ReplayState | null): LongExposureRecipe {
+	return {
+		...createDefaultRecipe({
+			anchorFrame: live?.replayFrameNum ?? 0,
+			sessionNum: live?.replaySessionNum ?? 0,
+			width: width || 1920,
+			height: height || 1080,
+			outputDir: path.resolve(config.get('screenshotFolder')),
+		}),
+		// A long exposure saves the way a screenshot saves: one format setting, in
+		// Settings, for both. PNG there means the 16-bit master, which is the only
+		// format where accumulating in fp32 reaches disk at all — the panel used to
+		// carry its own format select, which meant two places to set one thing.
+		outputFormat: longExposureFormatForStillFormat(
+			config.get('outputFormat')
+		),
+	};
+}
+
 // Availability of the compute backend + whether a shot can be set up right now.
 // The renderer polls this to enable/disable the panel and explain why.
 ipcMain.handle('long-exposure:availability', () => {
@@ -923,16 +947,9 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 
 	// The anchor comes from the recipe when the UI supplied one (a re-shoot reuses
 	// the stored anchor), and from the live cursor only on a fresh shot.
-	const defaults = createDefaultRecipe({
-		anchorFrame: live.replayFrameNum,
-		sessionNum: live.replaySessionNum ?? 0,
-		width: width || 1920,
-		height: height || 1080,
-		outputDir: path.resolve(config.get('screenshotFolder')),
-	});
 	const recipe: LongExposureRecipe = normalizeRecipe(
 		(rawRecipe as Partial<LongExposureRecipe>) || {},
-		defaults
+		longExposureDefaults(live)
 	);
 
 	const signal = { aborted: false };
@@ -1108,16 +1125,9 @@ function currentWindowPixels(): number | null {
 
 ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
 	const live = replayController.state();
-	const defaults = createDefaultRecipe({
-		anchorFrame: live?.replayFrameNum ?? 0,
-		sessionNum: live?.replaySessionNum ?? 0,
-		width: width || 1920,
-		height: height || 1080,
-		outputDir: path.resolve(config.get('screenshotFolder')),
-	});
 	const recipe = normalizeRecipe(
 		(rawRecipe as Partial<LongExposureRecipe>) || {},
-		defaults
+		longExposureDefaults(live)
 	);
 	return {
 		recipe,

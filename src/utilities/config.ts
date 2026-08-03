@@ -176,11 +176,14 @@ const schema = {
 		default: 'none',
 		enum: ['none', 'reinhard', 'aces'],
 	},
-	// Exposure compensation in stops, applied in linear space before tonemapping.
-	longExposureExposureCompensation: {
-		type: 'number',
-		default: 0,
-	},
+	// NOTE: there is deliberately no longExposureFormat or
+	// longExposureExposureCompensation key. The output format comes from
+	// `outputFormat` above — one format setting for stills and long exposures both,
+	// with PNG there meaning the 16-bit master. Exposure compensation is still a
+	// recipe field (an old sidecar carrying one still reproduces), but nothing in
+	// the UI sets it, so persisting it would only preserve a value no control can
+	// change back.
+	//
 	// Highlight recovery in stops, applied to near-clipped values BEFORE
 	// accumulation. 0 = off (and exactly identity). Needs no particular hardware.
 	longExposureHighlightRecovery: {
@@ -197,13 +200,6 @@ const schema = {
 	longExposureLossyInterpolationLoad: {
 		type: 'number',
 		default: 0,
-	},
-	// png16 is the 16-bit master (written by our own encoder — sharp reduces 16-bit
-	// to 8 before encoding). The others produce an 8-bit file only.
-	longExposureFormat: {
-		type: 'string',
-		default: 'png16',
-		enum: ['png16', 'png', 'jpeg', 'webp'],
 	},
 };
 

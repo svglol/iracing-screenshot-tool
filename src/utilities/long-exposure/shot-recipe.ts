@@ -59,6 +59,31 @@ export const MAX_HIGHLIGHT_RECOVERY_STOPS = 8;
 export const LONG_EXPOSURE_FORMATS = ['png16', 'png', 'jpeg', 'webp'] as const;
 export type LongExposureFormat = (typeof LONG_EXPOSURE_FORMATS)[number];
 
+// The long-exposure format for the user's configured STILL-capture format.
+//
+// A long exposure saves where and how a screenshot saves, so it follows the one
+// format setting rather than carrying a second one of its own. The catch is that
+// Settings offers jpeg/png/webp and has no 16-bit option — adding one there would
+// put a long-exposure-only choice in the still-capture settings.
+//
+// So PNG is read as "give me the lossless one" and maps to the 16-bit master,
+// which is the only format where accumulating in fp32 reaches disk at all. jpeg and
+// webp map to themselves and write a single 8-bit file. An unrecognised value falls
+// to jpeg, matching the still path's own default.
+export function longExposureFormatForStillFormat(
+	stillFormat: unknown
+): LongExposureFormat {
+	switch (stillFormat) {
+		case 'png':
+			return 'png16';
+		case 'webp':
+			return 'webp';
+		case 'jpeg':
+		default:
+			return 'jpeg';
+	}
+}
+
 export interface LongExposureRecipe {
 	// The moment the user framed. The LAST sample of the exposure, the state we owe
 	// them back, and the source of truth for every re-shoot. Never re-read from the

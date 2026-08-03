@@ -125,6 +125,16 @@
 							windowLabel
 						}})
 					</span>
+					<!-- The format select is gone: a long exposure saves in whatever
+				     Settings says. Naming the result here keeps that discoverable
+				     without another control, and makes the one non-obvious part of
+				     the mapping — PNG meaning 16-bit — visible before the shot. -->
+					<template v-if="formatLabel">
+						<br />
+						<span class="sidebar-target-hint__render">{{
+							formatLabel
+						}}</span>
+					</template>
 				</p>
 
 				<!-- Everything below is tuning: it has a default that is right for
@@ -269,21 +279,9 @@
 						</o-select>
 					</o-field>
 
-					<o-field label="Exposure compensation (EV)">
-						<o-input
-							v-model="exposureCompensation"
-							type="number"
-							step="0.25"
-							min="-6"
-							max="6"
-							:disabled="busy"
-						/>
-					</o-field>
-
-					<!-- Applied BEFORE accumulation, unlike exposure compensation which is
-			     applied after. That ordering is the entire point: it is what makes a
-			     bright light deposit energy faster than a dull one, the way a sensor
-			     does. Needs no particular GPU.
+					<!-- Applied BEFORE accumulation. That ordering is the entire point: it
+			     is what makes a bright light deposit energy faster than a dull one,
+			     the way a sensor does. Needs no particular GPU.
 
 			     This used to carry a banner recommending 3-5 stops whenever the value
 			     was 0 — i.e. permanently, since 0 is the default. A tip that fires on
@@ -298,15 +296,6 @@
 							max="8"
 							:disabled="busy"
 						/>
-					</o-field>
-
-					<o-field label="Output">
-						<o-select v-model="outputFormat" expanded :disabled="busy">
-							<option value="png16">16-bit PNG master + preview</option>
-							<option value="png">PNG (8-bit)</option>
-							<option value="jpeg">JPEG</option>
-							<option value="webp">WebP</option>
-						</o-select>
 					</o-field>
 				</div>
 
@@ -468,11 +457,11 @@ export default defineComponent({
 			interpolation: config.get('longExposureInterpolation'),
 			weighting: config.get('longExposureWeighting'),
 			tonemap: config.get('longExposureTonemap'),
-			exposureCompensation: String(
-				config.get('longExposureExposureCompensation')
-			),
 			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
-			outputFormat: config.get('longExposureFormat'),
+			// The format the capture will actually write, reported back by main from
+			// the still-capture setting. Not a control — the panel does not own this
+			// choice any more, it only says what the choice came out as.
+			resolvedFormat: null as string | null,
 
 			// Set once a shot has been taken, so adjusting parameters and shooting
 			// again captures the SAME moment rather than wherever the cursor is now.
@@ -484,6 +473,9 @@ export default defineComponent({
 			plan: null as CapturePlan | null,
 			pollTimer: null as ReturnType<typeof setInterval> | null,
 			previewToken: 0,
+			// electron-store's onDidChange returns an unsubscribe fn — held so
+			// beforeUnmount can drop it (same pattern as Home.vue's gallery folder).
+			formatDisposer: null as (() => void) | null,
 			// Hoisted so beforeUnmount can removeListener it (same pattern as
 			// Home.vue's onScreenshotResponse).
 			onProgress: null as
@@ -546,16 +538,9 @@ export default defineComponent({
 			if (this.tonemap !== 'none') {
 				active.push(this.tonemap === 'aces' ? 'ACES' : 'Reinhard');
 			}
-			const ev = parseFloat(this.exposureCompensation);
-			if (Number.isFinite(ev) && ev !== 0) {
-				active.push(`${ev > 0 ? '+' : ''}${ev} EV`);
-			}
 			const recovery = parseFloat(this.highlightRecovery);
 			if (Number.isFinite(recovery) && recovery !== 0) {
 				active.push(`${recovery} stop recovery`);
-			}
-			if (this.outputFormat !== 'png16') {
-				active.push(this.outputFormat.toUpperCase());
 			}
 			return active;
 		},
@@ -563,7 +548,7 @@ export default defineComponent({
 		// hardware that can do it, so the count has to agree with what is actually
 		// in there.
 		advancedCount(): number {
-			return this.interpolationSupported ? 7 : 6;
+			return this.interpolationSupported ? 5 : 4;
 		},
 		advancedSummary(): string {
 			if (this.advancedOpen) {
@@ -572,6 +557,24 @@ export default defineComponent({
 			return this.advancedModified.length > 0
 				? this.advancedModified.join(', ')
 				: `${this.advancedCount} defaults`;
+		},
+		// What the shot will be saved as. PNG in Settings gives the 16-bit master,
+		// which is worth naming explicitly — it is the one part of the mapping a
+		// user would not guess, and the only format where accumulating in fp32
+		// reaches disk.
+		formatLabel(): string {
+			switch (this.resolvedFormat) {
+				case 'png16':
+					return 'saves as 16-bit PNG + preview';
+				case 'png':
+					return 'saves as PNG';
+				case 'jpeg':
+					return 'saves as JPEG';
+				case 'webp':
+					return 'saves as WebP';
+				default:
+					return '';
+			}
 		},
 		// What the folded header says. Ordered by what would stop the user opening
 		// the panel at all: a machine that cannot do it, then a missing replay, then
@@ -622,9 +625,12 @@ export default defineComponent({
 					: 1,
 				weighting: this.weighting,
 				tonemap: this.tonemap,
-				exposureCompensation: parseFloat(this.exposureCompensation) || 0,
 				highlightRecovery: parseFloat(this.highlightRecovery) || 0,
-				outputFormat: this.outputFormat,
+				// outputFormat and exposureCompensation are deliberately absent. Main
+				// resolves the format from the still-capture setting so there is one
+				// place to set it, and an omitted field takes the default there —
+				// which is exactly what "follow Settings" has to mean. Sending them
+				// from here would let a stale panel value win over Settings.
 			};
 		},
 	},
@@ -660,20 +666,11 @@ export default defineComponent({
 		tonemap(value) {
 			config.set('longExposureTonemap', value);
 		},
-		exposureCompensation(value) {
-			const n = parseFloat(value);
-			if (Number.isFinite(n)) {
-				config.set('longExposureExposureCompensation', n);
-			}
-		},
 		highlightRecovery(value) {
 			const n = parseFloat(value);
 			if (Number.isFinite(n)) {
 				config.set('longExposureHighlightRecovery', n);
 			}
-		},
-		outputFormat(value) {
-			config.set('longExposureFormat', value);
 		},
 		liveAnchor() {
 			// The window preview is anchored on the cursor, so scrubbing has to
@@ -694,6 +691,13 @@ export default defineComponent({
 			() => void this.poll(),
 			AVAILABILITY_POLL_MS
 		);
+
+		// The output format now lives in Settings, so a change there has to reach
+		// the line that reports it. Without this the panel would keep naming the
+		// old format until some unrelated parameter happened to refresh it.
+		this.formatDisposer = config.onDidChange?.('outputFormat', () => {
+			void this.refreshPreview();
+		});
 	},
 	beforeUnmount() {
 		if (this.pollTimer) {
@@ -701,6 +705,9 @@ export default defineComponent({
 		}
 		if (this.onProgress) {
 			ipcRenderer.removeListener('long-exposure:progress', this.onProgress);
+		}
+		if (this.formatDisposer) {
+			this.formatDisposer();
 		}
 	},
 	methods: {
@@ -750,6 +757,10 @@ export default defineComponent({
 				// out-of-order preview.
 				if (token === this.previewToken) {
 					this.plan = result.plan;
+					// Main resolves the format from the still-capture setting, so
+					// read it back rather than deriving it here — one source, and
+					// the panel cannot claim a format the capture won't write.
+					this.resolvedFormat = result.recipe?.outputFormat ?? null;
 				}
 			} catch {
 				this.plan = null;
