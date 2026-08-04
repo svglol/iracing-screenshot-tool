@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { REPLAY_FRAMES_PER_SECOND, weightAt } from './exposure-math';
+import {
+	REPLAY_FRAMES_PER_SECOND,
+	SHUTTER_LADDER,
+	weightAt,
+} from './exposure-math';
 import {
 	PRIMARY_SINK_ID,
 	earliestStartFrame,
 	planBracketSinks,
 	planPrimarySink,
+	plannedSinkCount,
 	routeFrame,
 	sinkFrameSpan,
 	sinkStartTime,
@@ -81,6 +86,40 @@ describe('planPrimarySink', () => {
 				10
 			);
 		}
+	});
+});
+
+// The capture plans the sinks and pays their VRAM; `validatePlan` warns about what
+// that costs before the shot. Both answer "is this a bracket?" and they must never
+// disagree — a warning about a bracket the capture does not build, or silence about
+// one it does, is worse than either alone. So the count is asserted against the
+// sinks themselves, across the whole ladder, rather than trusted to stay in step.
+describe('plannedSinkCount', () => {
+	it('matches what the capture path would actually plan, at every stop', () => {
+		for (const stop of SHUTTER_LADDER) {
+			const bracketSinks = planBracketSinks({
+				anchorFrame: 1000,
+				shutterKey: stop.key,
+				weighting: 'box',
+			});
+			// Exactly the rule executeRecipe applies: a set of one is not a bracket, so
+			// it falls back to the single primary sink.
+			const actual = bracketSinks.length > 1 ? bracketSinks.length : 1;
+			expect(plannedSinkCount({ bracket: true, shutterKey: stop.key })).toBe(
+				actual
+			);
+		}
+	});
+
+	it('counts one whenever there is no bracket to build', () => {
+		expect(plannedSinkCount({ bracket: false, shutterKey: '1/30' })).toBe(1);
+		// A free-form exposure has no ladder key, so there is no at-or-faster set.
+		expect(plannedSinkCount({ bracket: true, shutterKey: null })).toBe(1);
+		expect(plannedSinkCount({ bracket: true, shutterKey: undefined })).toBe(
+			1
+		);
+		// A key from a build with a wider ladder resolves to nothing here.
+		expect(plannedSinkCount({ bracket: true, shutterKey: '1/4000' })).toBe(1);
 	});
 });
 

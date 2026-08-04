@@ -492,6 +492,67 @@ describe('validatePlan', () => {
 		expect(validate({ shutter: '1/8' }).errors).toEqual([]);
 	});
 
+	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN. The native session keeps one
+	// retained-frame ping-pong and advances it once per OPEN SINK, so every stop
+	// after the primary would warp between two copies of the same frame and collect
+	// zero-motion duplicates in place of in-betweens. The capture drops interpolation;
+	// this is the warning that says so before the shot rather than after.
+	it('warns that a bracket will be taken without interpolation', () => {
+		const result = validate({
+			shutter: '1/30',
+			bracket: true,
+			interpolationFactor: 4,
+		});
+		expect(result.errors).toEqual([]);
+		expect(
+			result.warnings.some(
+				(w) => /bracket/i.test(w) && /interpolation/i.test(w)
+			)
+		).toBe(true);
+	});
+
+	// A warning about a cost the capture is not going to pay is worse than no
+	// warning: interpolation is already being dropped, so telling the user it
+	// competes with passes sends them hunting a setting that is inert.
+	it('drops the multi-pass interpolation warning on a bracketed shot', () => {
+		const competing = validate({
+			shutter: '1/30',
+			passes: 4,
+			interpolationFactor: 4,
+		});
+		expect(competing.warnings.some((w) => /compete/i.test(w))).toBe(true);
+
+		const bracketed = validate({
+			shutter: '1/30',
+			passes: 4,
+			interpolationFactor: 4,
+			bracket: true,
+		});
+		expect(bracketed.warnings.some((w) => /compete/i.test(w))).toBe(false);
+	});
+
+	// A bracket only exists when the ladder actually has an at-or-faster set to build
+	// from, so these must stay silent — the capture plans one sink in both cases.
+	it('does not warn about interpolation when the bracket resolves to one sink', () => {
+		// The fastest stop: the at-or-faster set is the chosen stop alone.
+		expect(
+			validate({
+				shutter: '1/1000',
+				bracket: true,
+				interpolationFactor: 4,
+			}).warnings.some((w) => /bracket/i.test(w))
+		).toBe(false);
+		// A free-form exposure has no ladder key to build a set from.
+		expect(
+			validate({
+				shutter: null,
+				exposureMs: 40,
+				bracket: true,
+				interpolationFactor: 4,
+			}).warnings.some((w) => /bracket/i.test(w))
+		).toBe(false);
+	});
+
 	// A trailing window means an anchor near the END is always safe — we never need
 	// frames after it. Only the START of the replay constrains us.
 	it('accepts an anchor at the very end of the replay', () => {

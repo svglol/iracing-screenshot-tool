@@ -32,6 +32,7 @@ import {
 	type PlaybackDivisor,
 	type WeightingCurve,
 } from './exposure-math';
+import { plannedSinkCount } from './accumulator-sinks';
 import { resolveCropTarget } from '../screenshot-output';
 
 export const TONEMAPPERS = ['none', 'reinhard', 'aces'] as const;
@@ -470,6 +471,16 @@ export interface ResolvedPlan {
 	anchorFrame: number;
 	// Chosen slow-motion divisor (playback = 1/divisor).
 	playbackDivisor: PlaybackDivisor;
+	// The render rate this plan predicted from, AFTER the resize discount — i.e. the
+	// value `predictedSamples` was computed with, not the raw FrameRate reading.
+	//
+	// Recorded so a prediction can be re-derived for a DIFFERENT exposure against the
+	// same capture conditions, which is what a bracket stop's sidecar needs: every
+	// stop rode one capture at one render rate and one playback divisor, and differs
+	// only in how much of that stream fell inside its window. Without it the only way
+	// to give a stop its own predicted count is to invert `predictedSamples`, which
+	// is arithmetic on an already-floored number.
+	renderFps: number;
 	// How many times the window is visited. 1 is an ordinary capture.
 	passes: number;
 	// Predictions — the achieved count is always measured separately.
@@ -560,6 +571,7 @@ export function resolvePlan(
 		startFrame: recipe.anchorFrame - windowFrames,
 		anchorFrame: recipe.anchorFrame,
 		playbackDivisor,
+		renderFps,
 		passes,
 		predictedSamples,
 		predictedWallClockSeconds,
@@ -626,6 +638,15 @@ export function validatePlan(opts: {
 	const { plan, recipe, replayFrameNumEnd, currentSessionNum } = opts;
 	const errors: string[] = [];
 	const warnings: string[] = [];
+	// Whether this recipe actually resolves to more than one accumulator. Asked once,
+	// through the same helper the capture plans from, because two of the warnings
+	// below turn on it and a warning that disagrees with what the capture does is
+	// worse than no warning.
+	const bracketed =
+		plannedSinkCount({
+			bracket: recipe.bracket,
+			shutterKey: recipe.shutter,
+		}) > 1;
 
 	if (plan.startFrame < 0) {
 		// A trailing window means an anchor near the END of the replay is always
@@ -661,11 +682,37 @@ export function validatePlan(opts: {
 		);
 	}
 
+	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN. This is a correctness limit, not
+	// a preference: the native session keeps ONE retained-frame ping-pong and
+	// advances it inside `accumulate_sample`, which the frame handler calls once per
+	// OPEN SINK. On the second and later stops of a captured frame both slots already
+	// hold that same frame, so the flow estimate runs between identical inputs and
+	// the warp deposits `factor - 1` zero-motion COPIES of the real frame instead of
+	// in-betweens. Every stop but the primary comes out quietly wrong, in the way
+	// that reads as merely under-blurred rather than as broken.
+	//
+	// Interpolation is what gives way, because it is the optional accelerator while
+	// bracketing is what the user asked for by name. `executeRecipe` applies that
+	// downgrade; this says so before the shot rather than after.
+	//
+	// The proper fix is the N-UAV warp kernel in
+	// docs/design/long-exposure-bracketing.md §3.1, which warps once and does one
+	// read-modify-write per sink from values already in registers.
+	if (bracketed && recipe.interpolationFactor > 1) {
+		warnings.push(
+			`Bracket shutters and ${recipe.interpolationFactor}x frame interpolation cannot both run, so this shot will be taken without interpolation. Turn bracketing off if the in-betweens matter more to you than the extra stops.`
+		);
+	}
+
 	// Both are optional accelerators competing for the same per-frame budget, and
 	// running them together is the worst of the trade: interpolation roughly halves
 	// each pass's real-sample yield, so the wall clock buys synthetic samples where
 	// plain multi-pass would have bought real ones (frame-interpolation note §10.2).
-	if (plan.passes > 1 && recipe.interpolationFactor > 1) {
+	//
+	// Silent on a bracketed shot: interpolation is already being dropped above, so
+	// advising the user to turn off something that is not going to run would send
+	// them looking for a setting that is no longer doing anything.
+	if (!bracketed && plan.passes > 1 && recipe.interpolationFactor > 1) {
 		warnings.push(
 			`Multi-pass and ${recipe.interpolationFactor}x interpolation are both on. They compete: interpolation slows each pass enough to cost it real frames, so the same wait buys fewer real samples than passes alone would. Turning interpolation off is usually the better shot.`
 		);
@@ -717,7 +764,10 @@ export function validatePlan(opts: {
 	// Interpolation that cannot keep up buys synthetic samples with real ones, and the
 	// result looks under-blurred rather than obviously broken — so it is worth saying
 	// BEFORE the shot, once this machine has shown where its limit is.
-	if (recipe.interpolationFactor > 1) {
+	//
+	// Silent on a bracketed shot, for the same reason as the multi-pass warning above:
+	// interpolation is not going to run, so it cannot cost this capture anything.
+	if (!bracketed && recipe.interpolationFactor > 1) {
 		const load = interpolationLoad({
 			renderWidth: plan.renderWidth,
 			renderHeight: plan.renderHeight,

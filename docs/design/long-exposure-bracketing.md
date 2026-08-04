@@ -191,9 +191,31 @@ Three consequences, and they are the ones that size this work:
 
 - **Highlight recovery** is a per-session shader constant, applied identically to
   every sink. Nothing to do.
-- **Interpolation** needs §3.1 handled. Also note the flow field is computed **once
-  per captured frame** regardless of sink count — only the warp/accumulate multiplies —
-  so NVOFA cost does not scale with the bracket set.
+- **Interpolation** needs §3.1 handled, and until it is the two **cannot both run**.
+  `executeRecipe` forces the factor to 1 whenever more than one sink is planned;
+  `validatePlan` says so before the shot and the sidecar records `requestedFactor`
+  alongside `enabled: false` with bracketing as the reason.
+
+  **The claim this bullet used to make was wrong, and the guard exists because of
+  it.** It said the flow field is computed "once per captured frame regardless of
+  sink count — only the warp/accumulate multiplies". That is true of the design in
+  §3.1 and false of the code that ships: `accumulate_sample` is called **once per
+  open sink**, and `accumulate_interpolated` advances the whole per-frame
+  interpolation state on every call — `dispatch_luma` into `luma_uav[cur]`, a
+  full-res `CopyResource` into `rgba[cur]`, `flow.execute`, then the ping-pong flip.
+  So for the second and later stops of a frame **both ping-pong slots already hold
+  that same frame**: flow runs between identical inputs and the warp deposits
+  `factor - 1` zero-motion COPIES of the real frame in place of in-betweens. Every
+  stop but the primary comes out quietly wrong — under-blurred rather than visibly
+  broken — and NVOFA runs N times per frame rather than once. `prev_weight` also
+  ends up holding the last sink's weight, so even the primary's next warp is
+  weighted from the wrong stop under a tapered curve.
+
+  Implementing §3.1 is what lifts the guard: one dispatch, one warp, N
+  read-modify-writes from registers, and the retained state advanced exactly once
+  per captured frame. **Move the luma/retain/flow out of the per-sink loop as part
+  of that** — leaving them inside is the actual defect, and the UAV batching alone
+  does not remove it.
 - **Interpolation VRAM** (`INTERPOLATION_BYTES_PER_PIXEL`) is per-session, not per
   sink, and `estimateLongExposureVram` already treats it that way. It is now `4+4+1+1`
   rather than `4+1+1`: the warp reads both frames through owned `_TYPELESS` copies so

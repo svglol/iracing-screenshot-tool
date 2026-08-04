@@ -885,6 +885,66 @@ describe('frame interpolation', () => {
 		expect(harness.begunWith).toEqual([1]);
 	});
 
+	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN, and this is the guard that makes
+	// that true rather than a preference.
+	//
+	// The native session keeps ONE retained-frame ping-pong and advances it inside
+	// `accumulate_sample`, which the frame handler calls once per OPEN SINK. On the
+	// second and later stops of a captured frame both slots already hold that same
+	// frame, so the flow runs between identical inputs and the warp deposits
+	// `factor - 1` zero-motion COPIES of the real frame instead of in-betweens: every
+	// stop but the primary comes out quietly wrong, in the way that reads as merely
+	// under-blurred rather than as broken.
+	describe('with bracketing', () => {
+		it('forces the factor to 1 for the native session', async () => {
+			const harness = makeHarness();
+			await executeRecipe(
+				recipe({ bracket: true, interpolationFactor: 8 }),
+				harness.deps
+			);
+			expect(harness.begunWith).toEqual([1]);
+		});
+
+		it('leaves the factor alone when the bracket resolves to one sink', async () => {
+			const harness = makeHarness();
+			// The fastest stop: the at-or-faster set is the chosen stop alone, so
+			// there is only ever one accumulator and nothing to protect.
+			await executeRecipe(
+				recipe({
+					shutter: '1/1000',
+					bracket: true,
+					interpolationFactor: 8,
+				}),
+				harness.deps
+			);
+			expect(harness.begunWith).toEqual([8]);
+		});
+
+		// The decision was OURS, so the sidecar must not blame the machine for it —
+		// and the capture must not add a second, wrong-reasoned warning on top of the
+		// accurate one `validatePlan` already raised.
+		it('records our own reason and does not blame the hardware', async () => {
+			const harness = makeHarness({
+				nativeOverrides: nativeWithInterpolation(null),
+			});
+			const outcome = await executeRecipe(
+				recipe({ bracket: true, interpolationFactor: 4 }),
+				harness.deps
+			);
+			// What was ASKED for is still recorded — a sidecar that dropped it would
+			// read as though the user never turned interpolation on.
+			expect(outcome.interpolation?.requestedFactor).toBe(4);
+			expect(outcome.interpolation?.enabled).toBe(false);
+			expect(outcome.interpolation?.achievedFactor).toBe(1);
+			expect(outcome.interpolation?.reason).toMatch(/bracket/i);
+			expect(
+				outcome.warnings.some((w) =>
+					/not available on this machine/i.test(w)
+				)
+			).toBe(false);
+		});
+	});
+
 	it('reports what the hardware actually delivered', async () => {
 		const harness = makeHarness({
 			nativeOverrides: nativeWithInterpolation(

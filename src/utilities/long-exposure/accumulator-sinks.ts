@@ -144,6 +144,27 @@ export function planBracketSinks(opts: {
 	});
 }
 
+// How many accumulator sinks a recipe will instantiate, WITHOUT building them.
+//
+// Exported because two places need the answer and they must not disagree: the
+// capture plans the sinks and pays their VRAM, while `validatePlan` warns about what
+// that costs BEFORE the shot. Both derive it from `shutterStopsAtOrFaster`, so a
+// bracket the planner builds and a bracket the warning describes are the same
+// bracket — including the degenerate cases, where both land on 1:
+//
+//   bracketing off              the single primary sink
+//   free-form exposure          no ladder key, so no "at or faster" set to build
+//   the fastest stop chosen     the set is the chosen stop alone
+export function plannedSinkCount(opts: {
+	bracket: boolean;
+	shutterKey: string | null | undefined;
+}): number {
+	if (!opts.bracket || !opts.shutterKey) {
+		return 1;
+	}
+	return Math.max(1, shutterStopsAtOrFaster(opts.shutterKey).length);
+}
+
 // The earliest frame any sink needs — i.e. where the replay must be seeked to.
 // With bracketing this is the slowest stop's start; with one sink it is that
 // sink's start.

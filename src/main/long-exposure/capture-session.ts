@@ -344,6 +344,11 @@ export function buildInterpolationReport(opts: {
 	meanFrameMs: number | null;
 	maxFrameMs: number | null;
 	setupFrameMs: number | null;
+	// Why WE declined interpolation, when the decision was ours rather than the
+	// hardware's — today, only "bracketing is on". Takes precedence over the native
+	// status's own reason, because the native side was never asked in that case and
+	// whatever it says about factor 1 describes a question nobody put to it.
+	disabledReason?: string | null;
 	renderWidth: number;
 	renderHeight: number;
 	// PER PASS, as the planner reports it.
@@ -365,7 +370,7 @@ export function buildInterpolationReport(opts: {
 		enabled,
 		// Never claim the requested factor when the hardware declined it.
 		achievedFactor,
-		reason: status?.reason ?? null,
+		reason: (!enabled && opts.disabledReason) || status?.reason || null,
 		gridSize: status?.gridSize ?? 0,
 		bidirectional: status?.bidirectional === true,
 		realSamples: opts.realSamples,
@@ -508,6 +513,39 @@ export async function executeRecipe(
 		bracketSinks.length > 1 ? bracketSinks : [primarySink];
 	const sink = sinks[0];
 
+	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN, and this is the downgrade that
+	// makes that true rather than a preference.
+	//
+	// The native session keeps ONE retained-frame ping-pong and advances it inside
+	// `accumulate_sample` — which the frame handler calls once per OPEN SINK. So on
+	// the second and later stops of a captured frame both ping-pong slots already
+	// hold that same frame: the flow estimate runs between identical inputs and the
+	// warp deposits `factor - 1` zero-motion COPIES of the real frame rather than
+	// in-betweens. Every stop but the primary would be quietly wrong, and wrong in
+	// the way that reads as merely under-blurred rather than as broken. It also runs
+	// NVOFA once per sink per frame, against a design note that assumes once per
+	// frame.
+	//
+	// Interpolation gives way because it is the optional accelerator and bracketing
+	// is what the user asked for by name — the same "fail soft, never silently
+	// wrong" rule that governs interpolation on non-NVIDIA hardware. `validatePlan`
+	// has already told the user, so this stays silent and just does it.
+	//
+	// Fixing it properly is the N-UAV warp kernel in
+	// docs/design/long-exposure-bracketing.md §3.1.
+	const interpolationFactor =
+		sinks.length > 1 ? 1 : recipe.interpolationFactor;
+	const interpolationDisabledReason =
+		interpolationFactor !== recipe.interpolationFactor
+			? 'bracketing is on, and the two cannot share the retained-frame state'
+			: null;
+	if (interpolationDisabledReason) {
+		log.info('Long exposure dropped interpolation for a bracket', {
+			requestedFactor: recipe.interpolationFactor,
+			stops: sinks.length,
+		});
+	}
+
 	// Pre-flight our OWN allocation. Unlike iRacing's, it is deterministic and ours
 	// to be honest about, so this is the one place we hard-refuse.
 	const vram = assessLongExposureVram({
@@ -519,7 +557,10 @@ export async function executeRecipe(
 		// pre-flight that stops an 11-stop 8K shot from being attempted.
 		sinkCount: sinks.length,
 		baseline: deps.baselineDims(),
-		interpolationFactor: recipe.interpolationFactor,
+		// The EFFECTIVE factor, not the requested one: a bracket does not allocate
+		// the interpolation surfaces, so reserving for them would refuse shots that
+		// would in fact have fit.
+		interpolationFactor,
 	});
 	if (vram.refuse) {
 		return failure('insufficient-vram', vram.refusalMessage as string, {
@@ -555,6 +596,8 @@ export async function executeRecipe(
 			plan,
 			sink,
 			sinks,
+			interpolationFactor,
+			interpolationDisabledReason,
 			live,
 			deps,
 			warnings: validation.warnings,
@@ -631,6 +674,14 @@ interface RunCaptureArgs {
 	// The chosen stop, and the full set it leads (itself alone, or the bracket).
 	sink: AccumulatorSink;
 	sinks: AccumulatorSink[];
+	// The interpolation factor actually handed to the native session, which is the
+	// recipe's EXCEPT on a bracket, where it is forced to 1. Separate from
+	// `recipe.interpolationFactor` on purpose: the recipe records what was asked for
+	// and the sidecar must keep saying so.
+	interpolationFactor: number;
+	// Why we declined it, when the decision was ours rather than the hardware's.
+	// null when the recipe's factor was honoured (including when it was already 1).
+	interpolationDisabledReason: string | null;
 	live: ReplayState;
 	deps: CaptureSessionDeps;
 	warnings: string[];
@@ -644,6 +695,8 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		plan,
 		sink,
 		sinks,
+		interpolationFactor,
+		interpolationDisabledReason,
 		live,
 		deps,
 		warnings,
@@ -784,7 +837,10 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		if (session === null) {
 			session = native.longExposureBegin(
 				hwnd,
-				recipe.interpolationFactor,
+				// The EFFECTIVE factor, which a bracket forces to 1 — see the note on
+				// the downgrade in `executeRecipe`. `recipe.interpolationFactor` stays
+				// what was ASKED for and is what the sidecar reports.
+				interpolationFactor,
 				recipe.highlightRecovery,
 				// One accumulator per stop. An addon build predating bracketing
 				// ignores this and creates the single primary sink, which is why the
@@ -863,6 +919,8 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		plan,
 		sink,
 		sinks,
+		interpolationFactor,
+		interpolationDisabledReason,
 		deps,
 		native,
 		session,
@@ -1120,6 +1178,10 @@ interface ResolveCaptureArgs {
 	// labelled with the stop it actually is.
 	sink: AccumulatorSink;
 	sinks: AccumulatorSink[];
+	// The factor the session actually ran with, and why it differs from the recipe's
+	// when it does. See `RunCaptureArgs`.
+	interpolationFactor: number;
+	interpolationDisabledReason: string | null;
 	deps: CaptureSessionDeps;
 	native: NativeSessionApi;
 	session: number;
@@ -1139,6 +1201,8 @@ async function resolveCapture(
 		plan,
 		sink,
 		sinks,
+		interpolationFactor,
+		interpolationDisabledReason,
 		deps,
 		native,
 		session,
@@ -1212,8 +1276,12 @@ async function resolveCapture(
 	const stats = summarizeSamples(samples, { acceptedTotal: result.accepted });
 
 	const interpolation = buildInterpolationReport({
+		// What was ASKED for, always — a bracket that dropped interpolation must still
+		// record that it was requested, or the sidecar reads as though the user never
+		// turned it on.
 		requestedFactor: recipe.interpolationFactor,
 		status: result.interpolation,
+		disabledReason: interpolationDisabledReason,
 		realSamples: result.accepted,
 		syntheticSamples: result.synthesized ?? 0,
 		meanFrameMs: result.meanFrameMs ?? null,
@@ -1269,7 +1337,11 @@ async function resolveCapture(
 	const interpolationWarnings: string[] = [];
 	// Asked for it, did not get it. Say so — silently producing the un-interpolated
 	// image would leave the user thinking this is what interpolation looks like.
-	if (recipe.interpolationFactor > 1 && !interpolation.enabled) {
+	//
+	// Keyed on the EFFECTIVE factor, so a bracket that dropped interpolation by our
+	// own decision does not get blamed on the machine. `validatePlan` already told
+	// the user why, before the shot, and its message is the accurate one.
+	if (interpolationFactor > 1 && !interpolation.enabled) {
 		interpolationWarnings.push(
 			`Frame interpolation was requested but is not available on this machine, so the shot was taken without it${
 				interpolation.reason ? ` (${interpolation.reason})` : ''
