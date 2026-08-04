@@ -284,9 +284,7 @@ function createNativeApi(): NativeApi | null {
 		const CloseHandle = kernel32.func(
 			'bool __stdcall CloseHandle(HANDLE hObject)'
 		);
-		const GetLastError = kernel32.func(
-			'uint32_t __stdcall GetLastError()'
-		);
+		const GetLastError = kernel32.func('uint32_t __stdcall GetLastError()');
 
 		// CreateToolhelp32Snapshot returns INVALID_HANDLE_VALUE ((HANDLE)-1), not
 		// NULL, on failure. koffi.address() may surface that as the unsigned or the
@@ -398,9 +396,7 @@ function createNativeApi(): NativeApi | null {
 					// The window resolved but its rect couldn't be read — treat as
 					// "unresolved" so the caller cross-checks via PowerShell
 					// (shouldKeepNativeAfter) instead of silently reporting not-found.
-					log.warn(
-						'GetWindowRect failed on resolved iRacing window'
-					);
+					log.warn('GetWindowRect failed on resolved iRacing window');
 					throw new IracingWindowUnresolvedError(
 						'GetWindowRect failed on resolved iRacing window'
 					);

@@ -121,10 +121,106 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	// --- Long exposure (docs/design/long-exposure.md) ---------------------
+	// The last parameter set the user shot with, so re-opening the panel resumes
+	// where they left off. The anchor is deliberately NOT persisted: it belongs to
+	// a moment in a specific replay and is read fresh (or carried in the recipe for
+	// a re-shoot).
+	// Whether the long-exposure panel is folded away in the sidebar. Collapsed by
+	// default: it is a replay-only mode with a dozen parameters sitting under the
+	// everyday still-capture controls, so unfolded-by-default makes the sidebar read
+	// as cluttered to someone who only wants a screenshot.
+	longExposureCollapsed: {
+		type: 'boolean',
+		default: true,
+	},
+	// Whether the panel's Advanced group is unfolded. Separate from the panel fold
+	// so opening the panel does not drag seven tuning controls back onto the screen.
+	longExposureAdvancedOpen: {
+		type: 'boolean',
+		default: false,
+	},
+	longExposureShutter: {
+		type: 'string',
+		default: '1/8',
+	},
+	// 0 = derive the playback speed from the sample target. Any other value pins it.
+	longExposurePlaybackSpeed: {
+		type: 'number',
+		default: 0,
+	},
+	longExposureTargetSamples: {
+		type: 'number',
+		default: 240,
+	},
+	// NOTE: longExposureSupersample was REMOVED 2026-08-03. It rendered at 2x and
+	// box-downsampled at resolve, which bought antialiasing at 4x the VRAM and
+	// roughly half the sample count — a losing trade on the moving subjects this
+	// feature exists for. A stored value is simply ignored; picking a higher
+	// Resolution is the replacement.
+	// Optical-flow frame interpolation factor. 1 = off. Needs NVIDIA Turing-or-newer
+	// hardware; on anything else the shot is simply taken without it, so persisting a
+	// value here is safe even if the user later changes GPU.
+	longExposureInterpolation: {
+		type: 'number',
+		default: 1,
+		enum: [1, 2, 4, 8],
+	},
+	// How many times the exposure window is visited, accumulating into one buffer.
+	// 1 = an ordinary capture. Costs N times the wall clock and buys roughly N times
+	// the real samples, so it pays for short shutters and is unaffordable for long
+	// ones — which is why it persists but the panel keeps quoting the total wait.
+	longExposurePasses: {
+		type: 'number',
+		default: 1,
+		minimum: 1,
+		maximum: 16,
+	},
+	// Emit one image per shutter stop at or faster than the chosen one, from the
+	// same captured frames. Nearly free in time, NOT free in VRAM — every stop owns
+	// a full-size accumulator — so it is off by default and pre-flighted.
+	longExposureBracket: {
+		type: 'boolean',
+		default: false,
+	},
+	longExposureWeighting: {
+		type: 'string',
+		default: 'box',
+		enum: ['box', 'linear', 'ease'],
+	},
+	// NOTE: there is deliberately no longExposureFormat,
+	// longExposureExposureCompensation or longExposureTonemap key. The output format
+	// comes from `outputFormat` above — one format setting for stills and long
+	// exposures both, with PNG there meaning the 16-bit master. Exposure
+	// compensation and tonemap are still recipe fields (an old sidecar carrying
+	// either still reproduces exactly), but nothing in the UI sets them, so
+	// persisting them would only preserve a value no control can change back.
+	//
+	// Highlight recovery in stops, applied to near-clipped values BEFORE
+	// accumulation. 0 = off (and exactly identity). Needs no particular hardware.
+	longExposureHighlightRecovery: {
+		type: 'number',
+		default: 0,
+	},
+	// Learned, not configured: the smallest interpolation load (render megapixels x
+	// factor) at which THIS machine has been observed to fall behind the sim and lose
+	// real samples. 0 = no evidence yet, and no warning is shown.
+	//
+	// Measured rather than hard-coded because where interpolation stops being free
+	// depends entirely on the GPU — a threshold calibrated on one card would be wrong
+	// on every other.
+	longExposureLossyInterpolationLoad: {
+		type: 'number',
+		default: 0,
+	},
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ConfigShape {
+	// `any` on purpose: this is electron-store's own accessor, which is keyed by
+	// string across a schema of mixed types, and every call site narrows it. The
+	// directive has to sit on THIS line — one line higher it suppresses nothing and
+	// eslint --fix removes it as unused.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	get(key: string): any;
 	set(key: string, value: unknown): void;
 	onDidChange?(

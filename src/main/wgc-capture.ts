@@ -33,6 +33,168 @@ export interface WgcCaptureResult {
 	height: number;
 }
 
+// One entry of the native per-sample diagnostic log (long exposure). See
+// utilities/long-exposure/sample-stats.ts for what it is used for.
+export interface NativeLongExposureSample {
+	u: number;
+	sessionTime: number;
+	replayFrameNum: number;
+	digest: string;
+	presentedAt: string;
+	accepted: boolean;
+	// Which pass of a multi-pass capture produced this sample; 0 on a single-pass
+	// shot. Optional because an addon build predating multi-pass omits it — absent
+	// is read as 0, which is exactly what a single-pass capture means.
+	pass?: number;
+}
+
+// What NVIDIA's hardware optical-flow accelerator did for a capture. Optional
+// throughout: an addon build predating interpolation omits it entirely, and a
+// non-NVIDIA machine reports `enabled: false` with a reason. Neither is an error.
+export interface NativeLongExposureInterpolation {
+	enabled: boolean;
+	factor: number;
+	reason: string | null;
+	// One flow vector per gridSize × gridSize pixels.
+	gridSize: number;
+	// Whether backward flow was available too, which is what enables the
+	// forward/backward consistency check and so occlusion handling.
+	bidirectional: boolean;
+}
+
+export interface NativeLongExposureResult {
+	// Tightly packed 16-bit RGBA, little-endian. null when the resolve produced
+	// nothing (no accumulated samples, or a GPU fault — see `error`).
+	data: Buffer | null;
+	width: number;
+	height: number;
+	// Every resolved sink, in the order the ids were passed to begin — one entry for
+	// an ordinary shot, N for a bracket. ADDITIVE: `data`/`width`/`height` above are
+	// this list's first entry, so an addon build predating bracketing leaves this
+	// undefined and the caller falls back to the single image.
+	images?: {
+		sinkId: string;
+		data: Buffer | null;
+		width: number;
+		height: number;
+		// REAL frames THIS sink took, which is smaller than the session's `accepted`
+		// for any bracket stop whose window opened later than the primary's.
+		accepted?: number;
+	}[];
+	// REAL captured frames. Never merged with `synthesized`: the risk of
+	// interpolation is that its GPU cost slows frame consumption below iRacing's
+	// present rate, buying synthetic samples with real ones. Comparing this number
+	// across interpolation on/off at identical settings is how that stays visible.
+	accepted: number;
+	synthesized?: number;
+	rejected: number;
+	backend: string;
+	// CPU-side time per consumed frame, EXCLUDING the first. Since the digest stopped
+	// blocking these no longer include waiting on the GPU, so a small value does NOT
+	// prove we kept up — compare accepted against the predicted count for that.
+	meanFrameMs?: number;
+	maxFrameMs?: number;
+	// The first frame alone: sink allocation plus NVOFA session creation.
+	setupFrameMs?: number;
+	interpolation?: NativeLongExposureInterpolation | null;
+	samples: NativeLongExposureSample[];
+	error: string | null;
+}
+
+export interface NativeLongExposureStats {
+	accepted: number;
+	synthesized?: number;
+	rejected: number;
+	sawFrame: boolean;
+	meanFrameMs?: number;
+	maxFrameMs?: number;
+	setupFrameMs?: number;
+	interpolation?: NativeLongExposureInterpolation | null;
+	// Dimensions WGC is actually delivering, once the first frame has arrived (0
+	// before that). The caller resized the window, but DPI and client-area geometry
+	// mean the delivered size is WGC's to report, not ours to assume.
+	frameWidth: number;
+	frameHeight: number;
+	error: string | null;
+}
+
+// The long-exposure accumulation surface (design note §3/§7). Kept as a separate
+// interface from the still-capture pair so a build of the addon that predates the
+// feature degrades to "long exposure unavailable" rather than crashing on load.
+export interface WgcLongExposureAddon {
+	// Compiles the compute kernels and throws with a reason if this machine can't
+	// run them. Cheap and side-effect-free — no device, no GPU work.
+	longExposureProbe(): string;
+	// Open a live capture of the window. The accumulation gate starts CLOSED.
+	// `interpolationFactor` (1 = off) and `highlightRecoveryStops` (0 = off) are both
+	// optional — an addon build predating them simply ignores the extra arguments.
+	longExposureBegin(
+		hwnd: number,
+		interpolationFactor?: number,
+		highlightRecoveryStops?: number,
+		// One accumulator per id, all the same size; `longExposureFinish` returns one
+		// image per id in `images`. Omitted means the single 'primary' sink, which is
+		// what every shot did before bracketing — so an addon build predating it
+		// ignores this and returns one image, and the caller degrades to one stop.
+		sinkIds?: string[]
+	): number;
+	longExposureSetSample(
+		session: number,
+		weight: number,
+		u: number,
+		replayFrameNum: number,
+		sessionTime: number,
+		// One weight per sink, in `sinkIds` order. NEGATIVE means that sink's window
+		// is not open on this tick; zero is a real contribution and is accumulated,
+		// because linear weighting is legitimately 0 at the start of its own window.
+		sinkWeights?: number[]
+	): void;
+	longExposureSetGate(session: number, open: boolean): void;
+	// Declare that the exposure window is about to be visited again. Does NOT clear
+	// the accumulator — passes sum, and the resolve normalises per pixel by
+	// accumulated weight — but does discard retained inter-frame state, since the
+	// pass's first frame is not temporally adjacent to the previous pass's last.
+	// Optional: an addon build predating multi-pass simply has no passes to declare.
+	longExposureBeginPass?(session: number, passIndex: number): void;
+	longExposureStats(session: number): NativeLongExposureStats;
+	longExposureFinish(
+		session: number,
+		outWidth: number,
+		outHeight: number,
+		// Always 1 since supersampling was removed, which makes the resolve's box
+		// downsample a single tap — exactly identity. The parameter stays because
+		// removing it from the shader means rebuilding the addon and re-verifying the
+		// most safety-critical pass in the feature, for no user-visible gain.
+		supersample: number,
+		tonemap: number,
+		exposureMul: number,
+		timeoutMs: number
+	): NativeLongExposureResult;
+	longExposureAbort(session: number, timeoutMs: number): void;
+	// Which physical GPU the capture/accumulate device landed on. Optional: an
+	// addon build predating this reports nothing rather than failing to load.
+	longExposureDeviceInfo?(): {
+		adapter: string;
+		vendorId: number;
+		isNvidia: boolean;
+		dedicatedVideoMemory: number;
+	};
+	// Whether NVIDIA's optical-flow hardware can drive interpolation at this frame
+	// size, and what it negotiated. Optional for the same reason as the above: an
+	// older addon reports nothing and interpolation stays off.
+	longExposureInterpolationInfo?(
+		width: number,
+		height: number
+	): {
+		available: boolean;
+		reason: string | null;
+		gridSize: number;
+		bidirectional: boolean;
+		inputFormat: string;
+		apiVersion: string;
+	};
+}
+
 interface WgcAddon {
 	// Whether Windows.Graphics.Capture is available on this OS build. WGC's
 	// CreateForWindow needs Win10 1903 (build 18362) or newer.
@@ -131,6 +293,20 @@ export function getWgcApi(): WgcAddon | null {
 	return wgcApi;
 }
 
+// The long-exposure accumulation surface of the SAME addon, or null when this
+// build predates the feature (or WGC is unavailable at all). Kept separate from
+// getWgcApi so an older .node degrades to "long exposure unavailable" while still
+// serving still captures — the addon is loaded once either way.
+export function getLongExposureAddon(): WgcLongExposureAddon | null {
+	const api = getWgcApi() as unknown as
+		| (WgcAddon & Partial<WgcLongExposureAddon>)
+		| null;
+	if (!api || typeof api.longExposureBegin !== 'function') {
+		return null;
+	}
+	return api as unknown as WgcLongExposureAddon;
+}
+
 // Whether the WGC path is available this session (used to gate UI / pre-flight).
 export function isWgcAvailable(): boolean {
 	return getWgcApi() !== null;
@@ -141,9 +317,7 @@ export function isWgcAvailable(): boolean {
 // machine below can be exercised without a real .node or a live window. NEVER
 // called by production code; it exists solely so wgc-capture.test.ts can drive
 // captureIracingWindowNative's lastNativeFailureReason transitions deterministically.
-export function __setWgcApiForTests(
-	api: WgcAddon | null | undefined
-): void {
+export function __setWgcApiForTests(api: WgcAddon | null | undefined): void {
 	wgcApi = api;
 }
 

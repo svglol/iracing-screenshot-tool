@@ -36,7 +36,9 @@ function getRepoSlug(remote) {
 // ---------------------------------------------------------------------------
 const { bump, requestedRemotes } = parseReleaseArgs(process.argv.slice(2));
 if (!['major', 'minor', 'patch'].includes(bump)) {
-	fail('Usage: node _scripts/release.js <major|minor|patch> [--remote <name>]');
+	fail(
+		'Usage: node _scripts/release.js <major|minor|patch> [--remote <name>]'
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +62,9 @@ try {
 // uploads out to every configured remote (e.g. a personal fork).
 let remotes;
 try {
-	const availableRemotes = runCapture('git remote').split('\n').filter(Boolean);
+	const availableRemotes = runCapture('git remote')
+		.split('\n')
+		.filter(Boolean);
 	remotes = resolveRemotes(requestedRemotes, availableRemotes);
 } catch (error) {
 	fail(error.message);

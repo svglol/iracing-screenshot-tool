@@ -29,97 +29,20 @@
 			<o-input v-model="customHeight" type="number" min="0" max="10000" />
 		</o-field>
 
+		<!-- What you will get, in one line, for BOTH kinds of capture: a long
+		     exposure obeys this same Resolution, the same Crop Watermark and the
+		     same output format, so it needs no size or format line of its own —
+		     the long-exposure panel used to carry one and it read as a second,
+		     competing answer to a question already answered here. -->
 		<p v-if="outputDimensions" class="sidebar-target-hint">
 			Output:
 			<span class="sidebar-target-hint__value"
-				>{{ outputDimensions.width }} × {{ outputDimensions.height }}</span
-			>
-			<span v-if="crop" class="sidebar-target-hint__render"
-				>· renders at {{ targetDimensions.width }} ×
-				{{ targetDimensions.height }}</span
+				>{{ outputDimensions.width }}×{{ outputDimensions.height }}
+				<template v-if="outputFormatLabel"
+					>({{ outputFormatLabel }})</template
+				></span
 			>
 		</p>
-
-		<!-- #10: exclusive-fullscreen warning. iRacing in exclusive fullscreen
-		     makes any DWM-based grab come back black (DWM bypass) — this applies to
-		     BOTH the desktopCapturer path and the #11 WGC native path (WGC is also a
-		     DWM-composition capture and can't capture true exclusive fullscreen), so
-		     the warning must show in either mode. Shown regardless of disableTooltips
-		     — a hard-failure safety signal, like the VRAM banner — and only when the
-		     state is attributed to iRacing (foreground). Hidden ONLY in ReShade mode:
-		     ReShade captures the back buffer via injection, so it works in exclusive
-		     fullscreen (no black capture). -->
-		<o-notification
-			v-if="exclusiveFullscreen && !reshade"
-			class="sidebar-tooltip"
-			variant="danger"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			iRacing is in <strong>exclusive fullscreen</strong> — screenshots will
-			capture black. In iRacing set <strong>Display &gt; Full Screen</strong>
-			to OFF (Borderless or Windowed) to enable capture.
-		</o-notification>
-
-		<!-- Live, measurement-driven VRAM warning. Shown regardless of
-		     disableTooltips: unlike the informational tips this is a safety
-		     signal that a capture may OOM-crash iRacing, and it also fires on the
-		     hotkey path where the user never opens the sidebar. -->
-		<o-notification
-			v-if="showDynamicVramWarning"
-			class="sidebar-tooltip"
-			:variant="vramAssessment.tier === 'risk' ? 'danger' : 'warning'"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			<template v-if="vramAssessment.tier === 'risk'">
-				{{ resolution }} needs about
-				{{ formatVram(vramAssessment.deltaBytes) }} more VRAM but only
-				{{ formatVram(vramAssessment.freeBytes) }} is free — iRacing will
-				likely run out of memory and crash.
-			</template>
-			<template v-else>
-				{{ resolution }} leaves little VRAM headroom ({{
-					formatVram(vramAssessment.freeBytes)
-				}}
-				free) and may crash on heavy track/car combinations.
-			</template>
-			<a
-				v-if="safeResolutionLabel && safeResolutionLabel !== resolution"
-				class="sidebar-vram-switch"
-				@click="applySafeResolution"
-			>
-				Switch to {{ safeResolutionLabel }}
-			</a>
-		</o-notification>
-
-		<!-- Static fallback tip: only when we CANNOT measure VRAM (tier unknown),
-		     so the dynamic warning above never double-fires with it. -->
-		<o-notification
-			v-if="showStaticVramWarning"
-			class="sidebar-tooltip"
-			variant="warning"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			High resolutions may crash iRacing if you run out of VRAM. Certain
-			track/car combinations will require more VRAM
-		</o-notification>
 
 		<o-field class="settings-toggle-row sidebar-toggle-row">
 			<o-switch
@@ -142,22 +65,6 @@
 			</label>
 		</o-field>
 
-		<o-notification
-			v-if="crop && !disableTooltips"
-			class="sidebar-tooltip"
-			variant="info"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			With this option, the final picture is slightly zoomed in. Regions near
-			the borders of the screen will be cut off.
-		</o-notification>
-
 		<o-field class="settings-toggle-row sidebar-toggle-row">
 			<o-switch
 				id="sidebar-keep-aspect-ratio-switch"
@@ -175,22 +82,13 @@
 			</label>
 		</o-field>
 
-		<o-notification
-			v-if="keepAspectRatio && !disableTooltips"
-			class="sidebar-tooltip"
-			variant="info"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			The screenshot height is adjusted so the final image matches your
-			monitor's aspect ratio (e.g. 21:9 ultrawide), instead of the default
-			16:9. The selected resolution sets the width.
-		</o-notification>
+		<!-- ONE card for everything the sidebar wants to say, in severity order,
+		     sitting where the decision is made: directly above the button it is
+		     advice about. This replaced six independently-stacked
+		     <o-notification>s that could all be on screen at once, where an
+		     exclusive-fullscreen capture that WILL come back black had no more
+		     visual weight than a tip about cropping the watermark. -->
+		<NoticeCard :notices="notices" />
 
 		<o-button
 			variant="primary"
@@ -204,37 +102,16 @@
 			Screenshot
 		</o-button>
 
-		<o-notification
-			v-for="(warning, index) in configWarnings"
-			:key="'cw-' + index"
-			class="sidebar-tooltip"
-			variant="warning"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			{{ warning }}
-		</o-notification>
-
-		<o-notification
-			v-if="reshade && !disableTooltips"
-			class="sidebar-tooltip"
-			variant="danger"
-			aria-close-label="Close message"
-			size="small"
-			style="
-				background-color: rgba(0, 0, 0, 0.3) !important;
-				margin-top: 0.5rem;
-				margin-bottom: 0.5rem;
-			"
-		>
-			After pressing the screenshot button in the iRacing Screenshot Tool,
-			you will need to press the keybind for taking a screenshot for ReShade
-		</o-notification>
+		<!-- Long exposure. Self-contained: it owns its own parameters, its own
+		     availability polling and its own capture call, because a long exposure
+		     is a replay-driven recipe rather than a variation on the still path.
+		     Deliberately NOT gated on the ReShade toggle: accumulation always runs
+		     through the native WGC + D3D11 compute path regardless of which backend
+		     stills use, so hiding it here would deny a working capture to anyone
+		     running ReShade in borderless. Exclusive fullscreen — the case that
+		     genuinely can't work — is caught by the capture pre-flight with a
+		     specific message. -->
+		<LongExposurePanel :reshade="reshade" />
 	</div>
 </template>
 
@@ -247,7 +124,14 @@ import {
 	largestSafeResolution,
 	formatVramGiB,
 } from '../../utilities/vram-prediction';
+import {
+	applyAspectRatio,
+	getResolutionDimensions,
+} from '../../utilities/capture-resolution';
+import { resolveCropTarget } from '../../utilities/screenshot-output';
 import { useOruga } from '@oruga-ui/oruga-next';
+import LongExposurePanel from './LongExposurePanel.vue';
+import NoticeCard from './NoticeCard.vue';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 
@@ -296,31 +180,14 @@ const ScreenshotErrorContent = defineComponent({
 	},
 });
 
-function getResolutionDimensions(label: string): {
-	width: number;
-	height: number;
-} {
-	switch (label) {
-		case '1080p':
-			return { width: 1920, height: 1080 };
-		case '2k':
-			return { width: 2560, height: 1440 };
-		case '4k':
-			return { width: 3840, height: 2160 };
-		case '5k':
-			return { width: 5120, height: 2880 };
-		case '6k':
-			return { width: 6400, height: 3600 };
-		case '7k':
-			return { width: 7168, height: 4032 };
-		case '8k':
-			return { width: 7680, height: 4320 };
-		default:
-			return { width: 1920, height: 1080 };
-	}
-}
+// getResolutionDimensions and applyAspectRatio now live in
+// utilities/capture-resolution, because the MAIN process needs them too: long
+// exposure has its recipe filled in there, and while this mapping was local to
+// this component main had no way to ask what '8k' meant — so it fell back to the
+// baseline window size and silently ignored the Resolution control above.
 
 export default {
+	components: { LongExposurePanel, NoticeCard },
 	// Declare 'screenshot' as a custom emit. Previously used 'click', which in
 	// Vue 3 is treated as a NATIVE DOM event unless explicitly declared —
 	// native clicks from child elements (e.g. <o-select> dropdown) bubbled
@@ -340,6 +207,11 @@ export default {
 			takingScreenshot: false,
 			disableTooltips: config.get('disableTooltips'),
 			reshade: config.get('reshade'),
+			// Mirrored into data (not read straight from config in the computed) so a
+			// change in Settings re-renders the Output line — a config.get() call is
+			// not reactive, so without this the format shown would go stale until
+			// some unrelated change happened to re-evaluate.
+			outputFormat: config.get('outputFormat'),
 			cropTopLeft: config.get('cropTopLeft'),
 			configWarnings: checkIracingConfig(),
 			// Live GPU VRAM from main (null until first poll / unavailable).
@@ -388,12 +260,31 @@ export default {
 		outputDimensions() {
 			const base = this.targetDimensions;
 			if (!base) return null;
-			if (!this.crop) return base;
-			const factor = this.cropTopLeft ? 0.03 : 0.06;
-			return {
-				width: base.width - Math.ceil(base.width * factor),
-				height: base.height - Math.ceil(base.height * factor),
-			};
+			// The shared helper, not a local copy of the margin: long exposure needs
+			// this same mapping in the MAIN process, and while the numbers lived here
+			// it had no way to ask — so it silently saved uncropped.
+			return resolveCropTarget({
+				width: base.width,
+				height: base.height,
+				crop: this.crop,
+				cropTopLeft: this.cropTopLeft,
+			});
+		},
+		// The saved file's format, named the way a user would recognise it. Applies
+		// to stills and long exposures alike — one setting in Settings drives both,
+		// which is exactly why it belongs on this shared line rather than being
+		// repeated per capture mode.
+		outputFormatLabel() {
+			switch (this.outputFormat) {
+				case 'jpeg':
+					return 'JPEG';
+				case 'png':
+					return 'PNG';
+				case 'webp':
+					return 'WebP';
+				default:
+					return '';
+			}
 		},
 		// Preset resolutions (excluding Custom) with the SAME aspect-adjusted
 		// {width,height} the banner and capture use, for per-option VRAM colouring
@@ -463,6 +354,142 @@ export default {
 					this.resolution === '8k') &&
 				!this.disableTooltips
 			);
+		},
+		// Everything the sidebar has to say, as data for the single NoticeCard.
+		// NoticeCard sorts by severity, so the order here is only the order within
+		// a severity — safety signals are declared first anyway so they read in a
+		// sensible order when they tie.
+		//
+		// The disableTooltips gating is UNCHANGED and deliberately uneven: the
+		// exclusive-fullscreen and VRAM entries ignore it because they are
+		// hard-failure signals (a black capture, an OOM crash), not tips. The
+		// explanatory notes about crop / aspect ratio / ReShade respect it.
+		notices() {
+			const notices = [];
+
+			// #10. iRacing in exclusive fullscreen bypasses DWM, so any
+			// composition-based grab comes back black — that is true of the
+			// desktopCapturer path AND the #11 WGC native path, so this must show in
+			// either mode. Hidden only under ReShade, which injects into the back
+			// buffer and therefore works in exclusive fullscreen.
+			if (this.exclusiveFullscreen && !this.reshade) {
+				notices.push({
+					level: 'danger',
+					text:
+						'iRacing is in exclusive fullscreen — screenshots will capture ' +
+						'black. In iRacing set Display > Full Screen to OFF ' +
+						'(Borderless or Windowed) to enable capture.',
+				});
+			}
+
+			if (this.showDynamicVramWarning) {
+				const risk = this.vramAssessment.tier === 'risk';
+				notices.push({
+					level: risk ? 'danger' : 'warning',
+					text: risk
+						? `${this.resolution} needs about ${this.formatVram(
+								this.vramAssessment.deltaBytes
+							)} more VRAM but only ${this.formatVram(
+								this.vramAssessment.freeBytes
+							)} is free — iRacing will likely run out of memory and crash.`
+						: `${this.resolution} leaves little VRAM headroom (${this.formatVram(
+								this.vramAssessment.freeBytes
+							)} free) and may crash on heavy track/car combinations.`,
+					// The one-click fix travels with the sentence that motivates it.
+					action:
+						this.safeResolutionLabel &&
+						this.safeResolutionLabel !== this.resolution
+							? {
+									label: `Switch to ${this.safeResolutionLabel}`,
+									run: () => this.applySafeResolution(),
+								}
+							: undefined,
+				});
+			}
+
+			if (this.showStaticVramWarning) {
+				notices.push({
+					level: 'warning',
+					text:
+						'High resolutions may crash iRacing if you run out of VRAM. ' +
+						'Certain track/car combinations will require more VRAM.',
+				});
+			}
+
+			this.configWarnings.forEach((warning) => {
+				notices.push({ level: 'warning', text: warning });
+			});
+
+			if (this.reshade && !this.disableTooltips) {
+				notices.push({
+					level: 'warning',
+					text:
+						'After pressing the screenshot button in the iRacing ' +
+						'Screenshot Tool, you will need to press the keybind for ' +
+						'taking a screenshot for ReShade.',
+				});
+			}
+
+			if (this.crop && !this.disableTooltips) {
+				notices.push({
+					level: 'info',
+					text:
+						'Crop Watermark zooms the final picture in slightly. Regions ' +
+						'near the borders of the screen will be cut off.',
+				});
+			}
+
+			if (this.keepAspectRatio && !this.disableTooltips) {
+				notices.push({
+					level: 'info',
+					text:
+						"Keep Aspect Ratio adjusts the screenshot height to match your monitor's " +
+						'aspect ratio (e.g. 21:9 ultrawide) instead of the default 16:9. ' +
+						'The selected resolution sets the width.',
+				});
+			}
+
+			return notices;
+		},
+	},
+	// Persist each config-backed field only when IT actually changes
+	// (cq-renderer-settings-ui#2). The old updated() hook re-ran all six blocking
+	// sendSync 'config:set' writes on EVERY reactive change (VRAM poll,
+	// takingScreenshot latch, notifications) — a write storm on idle re-renders.
+	// The config.get(...)!==value guard also stops mounted()'s config→field copy
+	// and the reshade onDidChange round-trip from writing the same value back.
+	watch: {
+		crop(value) {
+			if (config.get('crop') !== value) {
+				config.set('crop', value);
+			}
+		},
+		keepAspectRatio(value) {
+			if (config.get('keepAspectRatio') !== value) {
+				config.set('keepAspectRatio', value);
+			}
+		},
+		reshade(value) {
+			if (config.get('reshade') !== value) {
+				config.set('reshade', value);
+			}
+		},
+		resolution(value) {
+			if (config.get('resolution') !== value) {
+				config.set('resolution', value);
+			}
+		},
+		customWidth(value) {
+			const n = parseInt(value);
+			if (!isNaN(n) && config.get('customWidth') !== n) {
+				config.set('customWidth', n);
+			}
+		},
+		customHeight(value) {
+			const n = parseInt(value);
+			if (!isNaN(n) && config.get('customHeight') !== n) {
+				config.set('customHeight', n);
+			}
 		},
 	},
 	created() {
@@ -559,6 +586,10 @@ export default {
 		config.onDidChange('cropTopLeft', (newValue) => {
 			this.cropTopLeft = newValue;
 		});
+
+		config.onDidChange('outputFormat', (newValue) => {
+			this.outputFormat = newValue;
+		});
 	},
 	mounted() {
 		this.crop = config.get('crop');
@@ -583,46 +614,6 @@ export default {
 			this.vramTimer = null;
 		}
 		this.stopIracingStatusPoll();
-	},
-	// Persist each config-backed field only when IT actually changes
-	// (cq-renderer-settings-ui#2). The old updated() hook re-ran all six blocking
-	// sendSync 'config:set' writes on EVERY reactive change (VRAM poll,
-	// takingScreenshot latch, notifications) — a write storm on idle re-renders.
-	// The config.get(...)!==value guard also stops mounted()'s config→field copy
-	// and the reshade onDidChange round-trip from writing the same value back.
-	watch: {
-		crop(value) {
-			if (config.get('crop') !== value) {
-				config.set('crop', value);
-			}
-		},
-		keepAspectRatio(value) {
-			if (config.get('keepAspectRatio') !== value) {
-				config.set('keepAspectRatio', value);
-			}
-		},
-		reshade(value) {
-			if (config.get('reshade') !== value) {
-				config.set('reshade', value);
-			}
-		},
-		resolution(value) {
-			if (config.get('resolution') !== value) {
-				config.set('resolution', value);
-			}
-		},
-		customWidth(value) {
-			const n = parseInt(value);
-			if (!isNaN(n) && config.get('customWidth') !== n) {
-				config.set('customWidth', n);
-			}
-		},
-		customHeight(value) {
-			const n = parseInt(value);
-			if (!isNaN(n) && config.get('customHeight') !== n) {
-				config.set('customHeight', n);
-			}
-		},
 	},
 	methods: {
 		// Mark iRacing connected and fire the one-time on-connect refreshes.
@@ -682,15 +673,16 @@ export default {
 		// warned resolution.
 		applyAspectRatio(base) {
 			if (!base) return base;
-			if (!this.keepAspectRatio) return base;
-			const sw = parseInt(config.get('defaultScreenWidth'), 10);
-			const sh = parseInt(config.get('defaultScreenHeight'), 10);
-			if (!sw || !sh) return base;
-			const adjustedHeight = Math.round((base.width * sh) / sw);
-			if (!Number.isFinite(adjustedHeight) || adjustedHeight <= 0) {
-				return base;
-			}
-			return { width: base.width, height: adjustedHeight };
+			// The shared implementation, so a still and a long exposure of the same
+			// Resolution cannot come out different sizes.
+			return applyAspectRatio(
+				base,
+				{
+					width: config.get('defaultScreenWidth'),
+					height: config.get('defaultScreenHeight'),
+				},
+				this.keepAspectRatio
+			);
 		},
 		// Pull the latest VRAM reading from main (koffi FFI). Best-effort: on
 		// error we keep the previous reading so a transient failure doesn't wipe
@@ -804,19 +796,18 @@ export default {
 
 			// Crop output = render size minus the watermark margin. Worker.vue
 			// extracts a (targetWidth x targetHeight) region from the w x h frame.
-			let targetWidth = w;
-			let targetHeight = h;
-
+			// Same shared helper as outputDimensions above and as the long-exposure
+			// write path, so the hint, the still and the long exposure cannot
+			// disagree about what Crop Watermark means in pixels.
 			const cropTopLeft = config.get('cropTopLeft');
-			if (this.crop && cropTopLeft) {
-				// Legacy: crop 3% off the bottom-right corner to remove the watermark
-				targetWidth = w - Math.ceil(w * 0.03);
-				targetHeight = h - Math.ceil(h * 0.03);
-			} else if (this.crop) {
-				// Default: crop 3% from each side (6% total) to remove the watermark
-				targetWidth = w - Math.ceil(w * 0.06);
-				targetHeight = h - Math.ceil(h * 0.06);
-			}
+			const { width: targetWidth, height: targetHeight } = resolveCropTarget(
+				{
+					width: w,
+					height: h,
+					crop: this.crop,
+					cropTopLeft,
+				}
+			);
 			this.takingScreenshot = true;
 			this.$emit('screenshot', {
 				width: w,
@@ -889,48 +880,16 @@ export default {
 	background: #ff6b6b;
 }
 
-.sidebar-vram-switch {
-	display: inline-block;
-	margin-left: 0.35rem;
-	font-weight: 700;
-	text-decoration: underline;
-	cursor: pointer;
-	color: inherit;
-}
-
-/* Sidebar tooltip notifications. Namespaced via .sidebar-tooltip so global
-   Oruga toasts fired from useOruga().notification.open() (screenshot saved /
-   error) keep their default Bulma 1.0 look. The legacy .message.is-warning
-   selectors are gone — Oruga 0.13 + Bulma 1.0 renders .notification > .media
-   > .media-content, not .message > .message-body. */
-
-.sidebar-tooltip.notification {
-	padding: 0.6rem 0.85rem;
-	font-size: 0.78rem;
-	line-height: 1.25;
-	font-weight: 400;
-}
-
-.sidebar-tooltip.notification .media {
-	align-items: flex-start;
-}
-
-.sidebar-tooltip.notification .media-content {
-	font-weight: 400;
-	line-height: 1.25;
-}
-
-.sidebar-tooltip.notification.is-warning .media-content {
-	color: #ffdd57;
-}
-
-.sidebar-tooltip.notification.is-info .media-content {
-	color: rgb(50, 152, 220);
-}
-
-.sidebar-tooltip.notification.is-danger .media-content {
-	color: #ff6b6b;
-}
+/* The .sidebar-tooltip notification rules are GONE with the <o-notification>s
+   they styled — NoticeCard replaces every one of them. They are worth a note
+   because they are where the readability problem lived: they coloured the
+   message TEXT by severity (#ffdd57 / #3298dc / #ff6b6b) while leaving the
+   background to Bulma, and only SideBar's own notifications set a dark one,
+   inline. LongExposurePanel's did not, so its warnings rendered #ffdd57 on
+   Bulma's light is-warning panel — yellow on yellow. NoticeCard fixes that by
+   construction: it owns its background, and severity never touches the message
+   text. Global Oruga toasts (screenshot saved / error) were never in scope of
+   those rules and are unchanged. */
 
 .screenshot-error-log {
 	margin-top: 0.35rem;

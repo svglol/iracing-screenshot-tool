@@ -1,7 +1,4 @@
-import {
-	decideCaptureBackend,
-	classifyWgcResult,
-} from './capture-decisions';
+import { decideCaptureBackend, classifyWgcResult } from './capture-decisions';
 
 describe('decideCaptureBackend (cq-tests#2)', () => {
 	test('ReShade wins whenever it is enabled — even if WGC is available', () => {
@@ -58,9 +55,7 @@ describe('decideCaptureBackend (cq-tests#2)', () => {
 
 describe('classifyWgcResult (cq-tests#2)', () => {
 	test('no-frame carries the native reason when present (H1/H2 distinguisher)', () => {
-		expect(
-			classifyWgcResult('no-frame', 'WGC capture timed out')
-		).toEqual({
+		expect(classifyWgcResult('no-frame', 'WGC capture timed out')).toEqual({
 			outcome: 'fallback',
 			fallbackReason: 'WGC capture timed out',
 		});

@@ -27,6 +27,11 @@ import {
 	faCopy,
 	faCircleQuestion,
 	faArrowDown,
+	faChevronRight,
+	// NoticeCard's severity glyphs: severity must not be carried by colour alone.
+	faCircleExclamation,
+	faTriangleExclamation,
+	faCircleInfo,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -42,6 +47,10 @@ library.add(
 	faCopy,
 	faCircleQuestion,
 	faArrowDown,
+	faChevronRight,
+	faCircleExclamation,
+	faTriangleExclamation,
+	faCircleInfo,
 	faDiscord
 );
 
@@ -54,9 +63,18 @@ const oruga = createOruga();
 // OButton/OModal/etc. to oruga.use() silently no-ops because raw components
 // have no install method. Carousel plugin registers both OCarousel and
 // OCarouselItem, so CarouselItem is not imported separately.
-[Button, Modal, Input, Field, Select, Switch, Tag, Carousel, Notification, Dropdown].forEach(
-	(p) => oruga.use(p)
-);
+[
+	Button,
+	Modal,
+	Input,
+	Field,
+	Select,
+	Switch,
+	Tag,
+	Carousel,
+	Notification,
+	Dropdown,
+].forEach((p) => oruga.use(p));
 app.use(oruga, {
 	...bulmaConfig,
 	iconComponent: 'vue-fontawesome',

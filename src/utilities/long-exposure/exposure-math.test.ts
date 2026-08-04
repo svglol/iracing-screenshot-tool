@@ -1,0 +1,699 @@
+import { describe, expect, it } from 'vitest';
+import {
+	ASSUMED_RENDER_FPS,
+	EASE_EXPONENT,
+	PLAYBACK_DIVISORS,
+	REPLAY_FRAMES_PER_SECOND,
+	SHUTTER_LADDER,
+	TAPER_FLOOR,
+	exposureSecondsForFrames,
+	findShutterStop,
+	framesForExposure,
+	isSubFrameExposure,
+	isWeightingCurve,
+	MAX_EXPOSURE_MS,
+	nearestPlaybackDivisor,
+	MIN_USABLE_RENDER_FPS,
+	predictSampleCount,
+	predictWallClockSeconds,
+	replayFrameWallMs,
+	resolveExposureSeconds,
+	scaleRenderFpsForResize,
+	startBoundaryCoverage,
+	subFramePosition,
+	shutterStopsAtOrFaster,
+	solvePlaybackDivisor,
+	usableRenderFps,
+	weightAt,
+	windowFramesForExposure,
+	windowPosition,
+} from './exposure-math';
+
+describe('SHUTTER_LADDER', () => {
+	// The parameter vocabulary has to match JRT's or users can't carry their
+	// instincts across; each stop doubles the reference tool's sample count.
+	it('reproduces the JRT ladder from 1/1000 to 0.5"', () => {
+		const keys = SHUTTER_LADDER.map((stop) => stop.key);
+		expect(keys.slice(0, 10)).toEqual([
+			'1/1000',
+			'1/500',
+			'1/250',
+			'1/125',
+			'1/60',
+			'1/30',
+			'1/15',
+			'1/8',
+			'1/4',
+			'0.5',
+		]);
+	});
+
+	// Doubling is a property of JRT's own ladder, which stops at 1". The long end
+	// (2"/5"/10") has no reference number to match, so it just tracks seconds.
+	it('doubles the reference sample count across the JRT range', () => {
+		const jrtRange = SHUTTER_LADDER.filter((stop) => stop.seconds <= 1);
+		for (let i = 1; i < jrtRange.length; i += 1) {
+			expect(jrtRange[i].jrtSamples).toBe(jrtRange[i - 1].jrtSamples * 2);
+		}
+	});
+
+	it('keeps the reference number on the seconds x 1024 line past that', () => {
+		for (const stop of SHUTTER_LADDER.filter((s) => s.seconds > 1)) {
+			expect(stop.jrtSamples).toBe(stop.seconds * 1024);
+		}
+	});
+
+	it('is ordered fastest shutter first', () => {
+		for (let i = 1; i < SHUTTER_LADDER.length; i += 1) {
+			expect(SHUTTER_LADDER[i].seconds).toBeGreaterThan(
+				SHUTTER_LADDER[i - 1].seconds
+			);
+		}
+	});
+
+	it('goes past the reference ceiling with a 1-second stop', () => {
+		expect(findShutterStop('1')?.seconds).toBe(1);
+	});
+
+	// Memory does not grow with exposure — one fixed-size accumulator holds a
+	// 10-second shot exactly as it holds a 1/1000 one — so the long end costs only
+	// the user's patience. That is what makes these expressible at all.
+	it('offers the long exposures 2, 5 and 10 seconds', () => {
+		expect(findShutterStop('2')?.seconds).toBe(2);
+		expect(findShutterStop('5')?.seconds).toBe(5);
+		expect(findShutterStop('10')?.seconds).toBe(10);
+		expect(findShutterStop('10')?.label).toBe('10"');
+	});
+
+	it('caps free-form exposures at the slowest stop on the ladder', () => {
+		expect(MAX_EXPOSURE_MS).toBe(10000);
+		expect(MAX_EXPOSURE_MS).toBe(
+			SHUTTER_LADDER[SHUTTER_LADDER.length - 1].seconds * 1000
+		);
+	});
+});
+
+describe('findShutterStop', () => {
+	it('resolves a known key', () => {
+		expect(findShutterStop('1/8')?.seconds).toBeCloseTo(0.125);
+	});
+
+	it('returns null for unknown or absent keys', () => {
+		expect(findShutterStop('1/3')).toBeNull();
+		expect(findShutterStop(null)).toBeNull();
+		expect(findShutterStop(undefined)).toBeNull();
+		expect(findShutterStop('')).toBeNull();
+	});
+});
+
+describe('shutterStopsAtOrFaster', () => {
+	// The bracket set: with a trailing window every faster shutter is the tail
+	// subset of the samples already flowing.
+	it('returns the stop plus every faster one, slowest first', () => {
+		expect(shutterStopsAtOrFaster('1/60').map((s) => s.key)).toEqual([
+			'1/60',
+			'1/125',
+			'1/250',
+			'1/500',
+			'1/1000',
+		]);
+	});
+
+	it('returns just the fastest stop for 1/1000', () => {
+		expect(shutterStopsAtOrFaster('1/1000').map((s) => s.key)).toEqual([
+			'1/1000',
+		]);
+	});
+
+	it('returns nothing for an unknown key', () => {
+		expect(shutterStopsAtOrFaster('nope')).toEqual([]);
+	});
+});
+
+describe('framesForExposure', () => {
+	it('converts seconds to 60 Hz replay frames', () => {
+		expect(framesForExposure(1)).toBe(REPLAY_FRAMES_PER_SECOND);
+		expect(framesForExposure(0.5)).toBe(30);
+		expect(framesForExposure(0.125)).toBe(8);
+	});
+
+	// framesForExposure is the WHOLE-FRAME quantiser; below one frame it saturates
+	// and resolveExposureSeconds takes over.
+	it('never returns fewer than one frame', () => {
+		expect(framesForExposure(1 / 1000)).toBe(1);
+		expect(framesForExposure(1 / 60)).toBe(1);
+		expect(framesForExposure(0)).toBe(1);
+		expect(framesForExposure(-5)).toBe(1);
+		expect(framesForExposure(NaN)).toBe(1);
+	});
+
+	it('round-trips through exposureSecondsForFrames', () => {
+		expect(exposureSecondsForFrames(framesForExposure(0.5))).toBeCloseTo(0.5);
+		// 1/8 s is 7.5 frames, quantised to 8 — reported honestly as 0.1333 s.
+		expect(exposureSecondsForFrames(framesForExposure(0.125))).toBeCloseTo(
+			8 / 60
+		);
+	});
+});
+
+describe('resolveExposureSeconds', () => {
+	// The fast half of the ladder used to quantise onto 1/60, so asking for 1/1000
+	// delivered 16x the intended blur. Below one replay frame the request now
+	// passes through exactly — iRacing renders ~10 interpolated frames per replay
+	// frame, so the window is capturable.
+	it('passes a sub-frame exposure through unquantised', () => {
+		expect(resolveExposureSeconds(1 / 1000)).toBeCloseTo(0.001, 10);
+		expect(resolveExposureSeconds(1 / 250)).toBeCloseTo(0.004, 10);
+		expect(resolveExposureSeconds(0.005)).toBeCloseTo(0.005, 10);
+	});
+
+	// Unchanged, deliberately: quantising these differently would silently change
+	// what every stored recipe means.
+	it('still quantises a whole-frame exposure to whole frames', () => {
+		expect(resolveExposureSeconds(0.125)).toBeCloseTo(8 / 60, 12);
+		expect(resolveExposureSeconds(0.25)).toBeCloseTo(15 / 60, 12);
+		expect(resolveExposureSeconds(1)).toBe(1);
+	});
+
+	// 1/60 s does not survive a millisecond round trip exactly ((1/60)*1000/1000 is
+	// a hair under 1/60), and it must not fall into the sub-frame branch on that.
+	it('treats one replay frame as a whole frame despite float noise', () => {
+		const throughMs = ((1 / 60) * 1000) / 1000;
+		expect(resolveExposureSeconds(throughMs)).toBe(1 / 60);
+	});
+
+	it('falls back to one frame for a nonsense exposure', () => {
+		expect(resolveExposureSeconds(0)).toBe(1 / 60);
+		expect(resolveExposureSeconds(-1)).toBe(1 / 60);
+		expect(resolveExposureSeconds(NaN)).toBe(1 / 60);
+	});
+});
+
+describe('windowFramesForExposure', () => {
+	// CEIL, because this is the seek target and the frame-indexed safety net: it
+	// has to reach back far enough to contain the whole continuous window.
+	it('gives a sub-frame window one whole frame to start inside', () => {
+		expect(windowFramesForExposure(1 / 1000)).toBe(1);
+		expect(windowFramesForExposure(1 / 125)).toBe(1);
+		expect(windowFramesForExposure(1 / 60)).toBe(1);
+	});
+
+	// The seek must not move for exposures that have not changed — (8/60)*60 is
+	// 8.000000000000002 in float, and a naive ceil would send it back nine frames.
+	it('does not overshoot a whole-frame window', () => {
+		for (const frames of [1, 2, 4, 8, 15, 30, 60]) {
+			expect(windowFramesForExposure(frames / 60)).toBe(frames);
+		}
+	});
+
+	it('rounds a fractional multi-frame window up', () => {
+		expect(windowFramesForExposure(1.5 / 60)).toBe(2);
+		expect(windowFramesForExposure(8.2 / 60)).toBe(9);
+	});
+});
+
+describe('isSubFrameExposure', () => {
+	it('is true only below one replay frame', () => {
+		expect(isSubFrameExposure(1 / 1000)).toBe(true);
+		expect(isSubFrameExposure(1 / 125)).toBe(true);
+		expect(isSubFrameExposure(1 / 60)).toBe(false);
+		expect(isSubFrameExposure(((1 / 60) * 1000) / 1000)).toBe(false);
+		expect(isSubFrameExposure(0.125)).toBe(false);
+		expect(isSubFrameExposure(0)).toBe(false);
+	});
+});
+
+describe('usableRenderFps', () => {
+	it('passes a plausible reading through', () => {
+		expect(usableRenderFps(120)).toBe(120);
+	});
+
+	it('falls back to the assumed rate when absent or nonsensical', () => {
+		expect(usableRenderFps(undefined)).toBe(ASSUMED_RENDER_FPS);
+		expect(usableRenderFps(null)).toBe(ASSUMED_RENDER_FPS);
+		expect(usableRenderFps(0)).toBe(ASSUMED_RENDER_FPS);
+		expect(usableRenderFps(-1)).toBe(ASSUMED_RENDER_FPS);
+		expect(usableRenderFps('60')).toBe(ASSUMED_RENDER_FPS);
+	});
+
+	// A transient 5 fps or a 900 fps menu reading would otherwise pick an absurd
+	// playback speed.
+	it('clamps extremes into a usable band', () => {
+		expect(usableRenderFps(5)).toBe(30);
+		expect(usableRenderFps(900)).toBe(360);
+	});
+});
+
+describe('predictSampleCount', () => {
+	// The identity the whole design rests on: S = T x R x P.
+	it('is exposure x render rate x playback divisor', () => {
+		expect(
+			predictSampleCount({
+				exposureSeconds: 0.5,
+				renderFps: 60,
+				playbackDivisor: 16,
+			})
+		).toBe(480);
+		expect(
+			predictSampleCount({
+				exposureSeconds: 1,
+				renderFps: 120,
+				playbackDivisor: 16,
+			})
+		).toBe(1920);
+	});
+
+	// Past JRT's 512 ceiling with real interpolated geometry, not synthesised
+	// in-betweens.
+	it('exceeds the reference tool ceiling at 1/16 speed', () => {
+		expect(
+			predictSampleCount({
+				exposureSeconds: 1,
+				renderFps: 60,
+				playbackDivisor: 16,
+			})
+		).toBeGreaterThan(512);
+	});
+
+	it('never returns fewer than one sample', () => {
+		expect(
+			predictSampleCount({
+				exposureSeconds: 0.001,
+				renderFps: 60,
+				playbackDivisor: 1,
+			})
+		).toBe(1);
+		expect(
+			predictSampleCount({
+				exposureSeconds: NaN,
+				renderFps: 60,
+				playbackDivisor: 1,
+			})
+		).toBe(1);
+	});
+});
+
+describe('predictWallClockSeconds', () => {
+	// The real cost of a big sample count in this design is patience, not memory.
+	it('is exposure x playback divisor', () => {
+		expect(
+			predictWallClockSeconds({ exposureSeconds: 1, playbackDivisor: 16 })
+		).toBe(16);
+		expect(
+			predictWallClockSeconds({ exposureSeconds: 0.125, playbackDivisor: 8 })
+		).toBe(1);
+	});
+
+	it('returns 0 for nonsense input rather than NaN', () => {
+		expect(
+			predictWallClockSeconds({ exposureSeconds: NaN, playbackDivisor: 4 })
+		).toBe(0);
+	});
+});
+
+describe('solvePlaybackDivisor', () => {
+	// Choose the FASTEST playback that still hits the target, so we never spend
+	// wall-clock we don't need.
+	it('picks the smallest sufficient divisor', () => {
+		// 0.5s at 60fps: 1x->30, 2x->60, 4x->120, 8x->240.
+		expect(
+			solvePlaybackDivisor({
+				exposureSeconds: 0.5,
+				renderFps: 60,
+				targetSamples: 100,
+			})
+		).toBe(4);
+		expect(
+			solvePlaybackDivisor({
+				exposureSeconds: 0.5,
+				renderFps: 60,
+				targetSamples: 240,
+			})
+		).toBe(8);
+	});
+
+	it('uses 1x when the target is already met at real time', () => {
+		expect(
+			solvePlaybackDivisor({
+				exposureSeconds: 1,
+				renderFps: 60,
+				targetSamples: 30,
+			})
+		).toBe(1);
+	});
+
+	it('caps at the slowest rung when the target is unreachable', () => {
+		expect(
+			solvePlaybackDivisor({
+				exposureSeconds: 1 / 60,
+				renderFps: 60,
+				targetSamples: 5000,
+			})
+		).toBe(16);
+	});
+
+	it('returns 1x for a degenerate target', () => {
+		expect(
+			solvePlaybackDivisor({
+				exposureSeconds: 1,
+				renderFps: 60,
+				targetSamples: 0,
+			})
+		).toBe(1);
+	});
+});
+
+describe('nearestPlaybackDivisor', () => {
+	it('snaps to a supported rung', () => {
+		expect(nearestPlaybackDivisor(3)).toBe(2);
+		expect(nearestPlaybackDivisor(7)).toBe(8);
+		expect(nearestPlaybackDivisor(100)).toBe(16);
+		expect(nearestPlaybackDivisor(1)).toBe(1);
+	});
+
+	it('defaults to real time for nonsense', () => {
+		expect(nearestPlaybackDivisor('x')).toBe(1);
+		expect(nearestPlaybackDivisor(-4)).toBe(1);
+		expect(nearestPlaybackDivisor(null)).toBe(1);
+	});
+
+	it('only ever returns a supported divisor', () => {
+		for (const value of [0.4, 1.6, 5, 11, 15.9, 40]) {
+			expect(PLAYBACK_DIVISORS).toContain(nearestPlaybackDivisor(value));
+		}
+	});
+});
+
+describe('replayFrameWallMs', () => {
+	it('is 1/60 s of wall clock at real-time playback', () => {
+		expect(replayFrameWallMs(1)).toBeCloseTo(16.667, 2);
+	});
+
+	// The reason the taper staircase is visible at all: at 1/16 a single replay
+	// frame occupies over a quarter-second of real time, during which ~10 frames
+	// are rendered and would otherwise share one weight.
+	it('stretches to 267 ms per replay frame at 1/16 playback', () => {
+		expect(replayFrameWallMs(16)).toBeCloseTo(266.67, 1);
+	});
+
+	it('treats a nonsense divisor as real time', () => {
+		expect(replayFrameWallMs(0)).toBeCloseTo(16.667, 2);
+		expect(replayFrameWallMs(NaN)).toBeCloseTo(16.667, 2);
+	});
+});
+
+describe('subFramePosition', () => {
+	// ReplaySessionTime is frame-quantised (field-measured), so without this the
+	// taper weight is a staircase with one step per replay frame.
+	it('interpolates linearly across a replay frame', () => {
+		const at = (ms: number) =>
+			subFramePosition({
+				elapsedSinceFrameChangeMs: ms,
+				playbackDivisor: 16,
+			});
+		expect(at(0)).toBe(0);
+		expect(at(66.67)).toBeCloseTo(0.25, 2);
+		expect(at(133.3)).toBeCloseTo(0.5, 2);
+	});
+
+	// Never reaches 1: a sample must not be attributed to the NEXT replay frame,
+	// because the frame index stays authoritative for boundaries and termination.
+	it('never reaches 1, even when a frame overruns', () => {
+		expect(
+			subFramePosition({
+				elapsedSinceFrameChangeMs: 10000,
+				playbackDivisor: 16,
+			})
+		).toBeLessThan(1);
+		expect(
+			subFramePosition({
+				elapsedSinceFrameChangeMs: 266.67,
+				playbackDivisor: 16,
+			})
+		).toBeLessThan(1);
+	});
+
+	it('returns 0 for non-positive or non-finite elapsed time', () => {
+		for (const ms of [0, -5, NaN, Infinity]) {
+			expect(
+				subFramePosition({
+					elapsedSinceFrameChangeMs: ms,
+					playbackDivisor: 16,
+				})
+			).toBe(0);
+		}
+	});
+
+	// The whole point: enough distinct positions that a tapered curve reads as a
+	// gradient rather than as bands.
+	it('yields many distinct positions across one replay frame', () => {
+		const positions = new Set<number>();
+		for (let ms = 0; ms < 267; ms += 26) {
+			positions.add(
+				subFramePosition({
+					elapsedSinceFrameChangeMs: ms,
+					playbackDivisor: 16,
+				})
+			);
+		}
+		expect(positions.size).toBeGreaterThanOrEqual(10);
+	});
+});
+
+describe('scaleRenderFpsForResize', () => {
+	// Field data: 73 fps reported at 2560x1440, capture ran at 5120x2880, and the
+	// achieved rate was 38.75 fps. The sqrt law lands within ~6%.
+	it('discounts the reported rate for a larger render size', () => {
+		const scaled = scaleRenderFpsForResize({
+			reportedFps: 73,
+			currentPixels: 2560 * 1440,
+			renderPixels: 5120 * 2880,
+		});
+		expect(scaled).toBeCloseTo(36.5, 0);
+		expect(Math.abs(scaled - 38.75)).toBeLessThan(4);
+	});
+
+	it('does not scale when the render is no larger than the current window', () => {
+		expect(
+			scaleRenderFpsForResize({
+				reportedFps: 73,
+				currentPixels: 2560 * 1440,
+				renderPixels: 1920 * 1080,
+			})
+		).toBe(73);
+	});
+
+	// Fail open: with no baseline we cannot model the resize, so don't invent one.
+	it('passes the reading through when the current window is unknown', () => {
+		for (const current of [null, undefined, 0, NaN]) {
+			expect(
+				scaleRenderFpsForResize({
+					reportedFps: 73,
+					currentPixels: current as number | null,
+					renderPixels: 5120 * 2880,
+				})
+			).toBe(73);
+		}
+	});
+
+	it('never predicts below the usable floor', () => {
+		expect(
+			scaleRenderFpsForResize({
+				reportedFps: 40,
+				currentPixels: 640 * 360,
+				renderPixels: 7680 * 4320,
+			})
+		).toBeGreaterThanOrEqual(MIN_USABLE_RENDER_FPS);
+	});
+
+	it('falls back to the assumed rate when FrameRate is unavailable', () => {
+		expect(
+			scaleRenderFpsForResize({
+				reportedFps: null,
+				currentPixels: null,
+				renderPixels: 1920 * 1080,
+			})
+		).toBe(ASSUMED_RENDER_FPS);
+	});
+});
+
+describe('weightAt', () => {
+	it('is flat for the box curve', () => {
+		expect(weightAt('box', 0)).toBe(1);
+		expect(weightAt('box', 0.5)).toBe(1);
+		expect(weightAt('box', 1)).toBe(1);
+	});
+
+	// Tapered curves must be heaviest at the ANCHOR end (u=1), so the user's
+	// chosen moment reads as the crisp head of the streak.
+	it('weights the anchor end most heavily for tapered curves', () => {
+		for (const curve of ['linear', 'ease'] as const) {
+			expect(weightAt(curve, 1)).toBeCloseTo(1);
+			expect(weightAt(curve, 1)).toBeGreaterThan(weightAt(curve, 0.5));
+			expect(weightAt(curve, 0.5)).toBeGreaterThan(weightAt(curve, 0));
+		}
+	});
+
+	it('keeps a floor so the tail fades out instead of ending on a hard edge', () => {
+		expect(weightAt('linear', 0)).toBeCloseTo(TAPER_FLOOR);
+		expect(weightAt('ease', 0)).toBeCloseTo(TAPER_FLOOR);
+	});
+
+	it('makes ease fall away faster than linear', () => {
+		expect(weightAt('ease', 0.5)).toBeLessThan(weightAt('linear', 0.5));
+		expect(EASE_EXPONENT).toBeGreaterThan(1);
+	});
+
+	it('clamps out-of-range and non-finite positions', () => {
+		expect(weightAt('linear', -1)).toBeCloseTo(TAPER_FLOOR);
+		expect(weightAt('linear', 5)).toBeCloseTo(1);
+		expect(weightAt('linear', NaN)).toBeCloseTo(1);
+	});
+
+	it('never returns a non-positive weight', () => {
+		for (const curve of ['box', 'linear', 'ease'] as const) {
+			for (let u = 0; u <= 1; u += 0.05) {
+				expect(weightAt(curve, u)).toBeGreaterThan(0);
+			}
+		}
+	});
+});
+
+describe('isWeightingCurve', () => {
+	it('accepts the known curves and rejects anything else', () => {
+		expect(isWeightingCurve('box')).toBe(true);
+		expect(isWeightingCurve('linear')).toBe(true);
+		expect(isWeightingCurve('ease')).toBe(true);
+		expect(isWeightingCurve('gaussian')).toBe(false);
+		expect(isWeightingCurve(null)).toBe(false);
+		expect(isWeightingCurve(3)).toBe(false);
+	});
+});
+
+describe('windowPosition', () => {
+	it('maps the window start to 0 and the anchor to 1', () => {
+		expect(
+			windowPosition({
+				sessionTime: 10,
+				windowStartTime: 10,
+				windowEndTime: 11,
+			})
+		).toBe(0);
+		expect(
+			windowPosition({
+				sessionTime: 11,
+				windowStartTime: 10,
+				windowEndTime: 11,
+			})
+		).toBe(1);
+		expect(
+			windowPosition({
+				sessionTime: 10.25,
+				windowStartTime: 10,
+				windowEndTime: 11,
+			})
+		).toBeCloseTo(0.25);
+	});
+
+	it('clamps outside the window', () => {
+		expect(
+			windowPosition({
+				sessionTime: 9,
+				windowStartTime: 10,
+				windowEndTime: 11,
+			})
+		).toBe(0);
+		expect(
+			windowPosition({
+				sessionTime: 12,
+				windowStartTime: 10,
+				windowEndTime: 11,
+			})
+		).toBe(1);
+	});
+
+	// A single-frame exposure has a zero-length window: the one sample IS the
+	// anchor, so it must carry full weight rather than divide by zero.
+	it('treats a zero-length window as the anchor', () => {
+		expect(
+			windowPosition({
+				sessionTime: 10,
+				windowStartTime: 10,
+				windowEndTime: 10,
+			})
+		).toBe(1);
+		expect(
+			windowPosition({
+				sessionTime: NaN,
+				windowStartTime: 10,
+				windowEndTime: 11,
+			})
+		).toBe(1);
+	});
+});
+
+describe('startBoundaryCoverage', () => {
+	// One control tick at 1/16 playback: 16 ms of wall clock, 1 ms of sim time.
+	const tickSeconds = 0.001;
+
+	it('is 1 for a tick wholly inside the window', () => {
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10.5,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBe(1);
+	});
+
+	it('is 0 for a tick that ends before the window opens', () => {
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10 - tickSeconds * 2,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBe(0);
+	});
+
+	// The whole point: a tick straddling the start contributes the fraction of
+	// itself that fell inside, instead of all or nothing. Against a 4 ms 1/250
+	// exposure a whole tick is 25%, which would otherwise stair-step.
+	it('scales the straddling tick by its covered fraction', () => {
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10 - tickSeconds * 0.25,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBeCloseTo(0.75);
+		expect(
+			startBoundaryCoverage({
+				sessionTime: 10 - tickSeconds * 0.75,
+				tickSeconds,
+				windowStartTime: 10,
+			})
+		).toBeCloseTo(0.25);
+	});
+
+	// Without a usable tick estimate there is nothing to antialias with, so it
+	// degrades to the binary test rather than guessing.
+	it('falls back to a binary test with no tick estimate', () => {
+		for (const bad of [0, -1, NaN]) {
+			expect(
+				startBoundaryCoverage({
+					sessionTime: 10,
+					tickSeconds: bad,
+					windowStartTime: 10,
+				})
+			).toBe(1);
+			expect(
+				startBoundaryCoverage({
+					sessionTime: 9.999,
+					tickSeconds: bad,
+					windowStartTime: 10,
+				})
+			).toBe(0);
+		}
+	});
+});

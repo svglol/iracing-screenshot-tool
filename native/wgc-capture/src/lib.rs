@@ -1,8 +1,10 @@
 //! Windows.Graphics.Capture (WGC) N-API addon for the iRacing Screenshot Tool.
 //!
-//! Exposes two functions to Node/Electron:
+//! Exposes to Node/Electron:
 //!   - `isSupported()` -> bool
 //!   - `captureWindow(hwnd, timeoutMs?)` -> { data: Buffer, width, height }
+//!   - the `longExposure*` family (see `longexp`), which holds a live WGC capture
+//!     open and accumulates its frames on the GPU via a D3D11 compute shader.
 //!
 //! WGC delivers true, un-subsampled 8-bit RGBA frames (unlike the
 //! desktopCapturer/getUserMedia path, which chroma-subsamples to I420). We use
@@ -17,6 +19,8 @@
 //! bounded `recv_timeout`, so it can never hang the Electron main process. A
 //! pathological never-arriving frame leaks the worker thread (documented,
 //! acceptable) but never calls `process::exit`.
+
+mod longexp;
 
 use std::sync::mpsc;
 use std::sync::mpsc::RecvTimeoutError;

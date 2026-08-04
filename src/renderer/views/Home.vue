@@ -8,9 +8,17 @@
 				flex-direction: column;
 				min-width: 240px;
 				max-width: 240px;
+				min-height: 0;
 			"
 		>
-			<SideBar @screenshot="screenshot" />
+			<!-- The controls scroll, the footer does not. `html` is overflow:hidden
+			     and this column is pinned to 100vh, so without a scroll region here
+			     anything taller than the window is not merely cut off — it is
+			     unreachable. Expanding the long-exposure panel could put its own
+			     Capture button past the bottom edge with no way to reach it. -->
+			<div class="sidebar-scroll">
+				<SideBar @screenshot="screenshot" />
+			</div>
 			<div class="sidebar-footer">
 				<PromoCard class="sidebar-promo" />
 				<Settings />
@@ -731,7 +739,9 @@ body {
 	border-radius: 4px;
 	cursor: pointer;
 	overflow: hidden;
-	transition: transform 0.18s ease, border-color 0.18s ease,
+	transition:
+		transform 0.18s ease,
+		border-color 0.18s ease,
 		box-shadow 0.18s ease;
 }
 
@@ -752,7 +762,9 @@ body {
    class, no :deep() needed. CSS targets our class on our element directly. */
 .gallery-virtual__thumb--active {
 	border-color: #ec202a;
-	box-shadow: 0 0 0 2px #ec202a, 0 4px 12px rgba(236, 32, 42, 0.45);
+	box-shadow:
+		0 0 0 2px #ec202a,
+		0 4px 12px rgba(236, 32, 42, 0.45);
 	transform: scale(1.05);
 	z-index: 1;
 }
@@ -761,7 +773,27 @@ body {
 	filter: brightness(1.08);
 }
 
+/* Takes the leftover height and scrolls inside it. `min-height: 0` is the part
+   that actually does the work: a flex item defaults to min-height:auto, which
+   refuses to shrink below its content, so without it the column would grow past
+   the viewport again and the overflow would never trigger.
+
+   `scrollbar-gutter: stable` reserves the 8px the scrollbar will need whether or
+   not it is showing, so folding the long-exposure panel open and shut does not
+   shift every control left and right by 8px. */
+.sidebar-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-gutter: stable;
+}
+
+/* Pinned below the scroll region: the settings gear and the promo should not be
+   something you have to scroll to find. margin-top:auto still holds it down if
+   the scroll region is ever removed. */
 .sidebar-footer {
+	flex: 0 0 auto;
 	margin-top: auto;
 }
 

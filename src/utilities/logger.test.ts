@@ -16,21 +16,34 @@ const KEEP_TAIL = 1024 * 1024; // mirrors LOG_KEEP_TAIL
 
 describe('sliceToLineBoundary', () => {
 	test('drops the leading partial line', () => {
-		const buf = Buffer.from('partial-json-fragment}\n{"a":1}\n{"b":2}\n', 'utf8');
-		expect(sliceToLineBoundary(buf).toString('utf8')).toBe('{"a":1}\n{"b":2}\n');
+		const buf = Buffer.from(
+			'partial-json-fragment}\n{"a":1}\n{"b":2}\n',
+			'utf8'
+		);
+		expect(sliceToLineBoundary(buf).toString('utf8')).toBe(
+			'{"a":1}\n{"b":2}\n'
+		);
 	});
 
 	test('returns empty when there is no newline', () => {
-		expect(sliceToLineBoundary(Buffer.from('no-newline-here', 'utf8')).length).toBe(0);
+		expect(
+			sliceToLineBoundary(Buffer.from('no-newline-here', 'utf8')).length
+		).toBe(0);
 	});
 });
 
 describe('computeRotatedBuffer (obs-logging#2)', () => {
 	test('every retained line — marker included — is valid JSON', () => {
 		// Build a JSON-lines buffer well over the keep-tail so slicing lands mid-line.
-		const lines = Array.from({ length: 60000 }, (_v, i) =>
-			JSON.stringify({ ts: 't', level: 'INFO', proc: 'p', msg: 'm'.repeat(20) + i })
-		).join('\n') + '\n';
+		const lines =
+			Array.from({ length: 60000 }, (_v, i) =>
+				JSON.stringify({
+					ts: 't',
+					level: 'INFO',
+					proc: 'p',
+					msg: 'm'.repeat(20) + i,
+				})
+			).join('\n') + '\n';
 		const content = Buffer.from(lines, 'utf8');
 		expect(content.length).toBeGreaterThan(KEEP_TAIL);
 
@@ -99,7 +112,9 @@ describe('redactPaths (obs-logging#7)', () => {
 
 	test('masks the home prefix in a raw (unescaped) line', () => {
 		const line = `open ${home}\\AppData\\Roaming\\app\\logs`;
-		expect(redactPaths(line, home)).toBe('open <home>\\AppData\\Roaming\\app\\logs');
+		expect(redactPaths(line, home)).toBe(
+			'open <home>\\AppData\\Roaming\\app\\logs'
+		);
 	});
 
 	test('masks the home prefix in a JSON-escaped line', () => {

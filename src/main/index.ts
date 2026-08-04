@@ -38,6 +38,30 @@ import {
 	getWgcUnavailableReason,
 	isWgcAvailable,
 } from './wgc-capture';
+import {
+	getLongExposureApi,
+	getLongExposureAvailability,
+} from './long-exposure/long-exposure-native';
+import {
+	ReplayController,
+	readReplayState,
+	type ReplayState,
+} from './long-exposure/replay-control';
+import {
+	executeRecipe,
+	SAMPLE_SHORTFALL_RATIO,
+} from './long-exposure/capture-session';
+import { writeLongExposure } from './long-exposure/output';
+import {
+	createDefaultRecipe,
+	longExposureFormatForStillFormat,
+	normalizeRecipe,
+	resolvePlan,
+	validatePlan,
+	type LongExposureRecipe,
+} from '../utilities/long-exposure/shot-recipe';
+import { resolveCaptureDimensions } from '../utilities/capture-resolution';
+import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
 import sharp from 'sharp';
 import { DEFAULT_FORMAT } from '../utilities/filenameFormat';
 import {
@@ -281,6 +305,42 @@ function broadcastToWindows(channel: string, ...args: unknown[]): void {
 			window.webContents.send(channel, ...args);
 		}
 	});
+}
+
+// Bring OUR window back to the front. A capture deliberately raises iRacing
+// (resizeIracingWindowAsync -> BringWindowToTop + SetForegroundWindow) so the
+// compositor renders it for the grab; without this the user is left staring at
+// the sim after a shot that finished minutes ago, with the result, its warnings
+// and the gallery all behind it.
+//
+// A bare focus() is not enough on Windows. Having handed the foreground away
+// ourselves, we are subject to the foreground lock (SetForegroundWindow's
+// caller must own the foreground or the last input event), and the call
+// degrades to a taskbar flash. Flipping topmost on and straight back off raises
+// the window through the lock via SetWindowPos and leaves it at the top of the
+// normal (non-topmost) Z-order, so the app does not become a permanently
+// always-on-top window.
+function focusAppWindow(): void {
+	if (!mainWindow || mainWindow.isDestroyed()) {
+		return;
+	}
+	try {
+		if (mainWindow.isMinimized()) {
+			mainWindow.restore();
+		}
+		const wasAlwaysOnTop = mainWindow.isAlwaysOnTop();
+		mainWindow.setAlwaysOnTop(true);
+		mainWindow.show();
+		mainWindow.focus();
+		if (!wasAlwaysOnTop) {
+			mainWindow.setAlwaysOnTop(false);
+		}
+	} catch (error) {
+		// Never let a focus courtesy fail a capture that already succeeded.
+		log.debug('Could not return focus to the app window', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
 }
 
 function getConfigDiagnosticValue(key: string): unknown {
@@ -797,6 +857,378 @@ ipcMain.handle('get-iracing-fullscreen-state', () =>
 // unsupported system. Fails open in the loader, so a false here is definitive.
 ipcMain.on('native-capture-available', (event) => {
 	event.returnValue = isWgcAvailable();
+});
+
+// ---------------------------------------------------------------------------
+// Long-exposure photo mode
+//
+// See docs/design/long-exposure.md. The sim-facing parts (replay control, GPU
+// accumulation, anchor restoration) live in main/long-exposure/; everything here
+// is the bridge: guard against a concurrent capture, hand the session the same
+// window/camera handling the still path uses, and write the result.
+// ---------------------------------------------------------------------------
+
+// Separate latch from `takingScreenshot` because a long exposure outlives the
+// window restore: the file write happens after iRacing is already back to normal,
+// and a second capture must not start in that gap.
+let longExposureActive = false;
+// The live abort signal for the running capture, so the UI can cancel. Abort is
+// cooperative and unwinds through the same finally as any other exit, so the
+// anchor is still restored.
+let longExposureSignal: { aborted: boolean } | null = null;
+
+// Replay control bound to the live SDK bridge. Every position/speed change the
+// feature makes goes through here — broadcast messages only, never synthesised
+// input or UI automation.
+const replayController = new ReplayController({
+	readState: () =>
+		readReplayState(
+			(iracing.telemetry?.values as Record<string, unknown>) || null
+		),
+	setPlaySpeed: (speed, slowMotion) =>
+		iracing.sdk.changeReplaySpeed(speed, slowMotion),
+	setPlayPosition: (mode, frame) =>
+		iracing.sdk.changeReplayPosition(mode, frame),
+	// Wrapped rather than passed by reference: `delay` is a const declared at the
+	// end of this file, so referencing it directly here would hit its TDZ at module
+	// evaluation time.
+	delay: (ms) => delay(ms),
+	now: () => Date.now(),
+});
+
+// Baseline recipe for a long exposure. The capture handler and the preview handler
+// must derive it identically — if they drift, the panel previews a shot that is not
+// the shot it takes.
+function longExposureDefaults(live: ReplayState | null): LongExposureRecipe {
+	// THE RESOLUTION SETTING, not the baseline window size.
+	//
+	// These used to be `width || 1920, height || 1080` — the module-level vars
+	// holding `defaultScreenWidth`/`defaultScreenHeight`, i.e. the size iRacing's
+	// window sits at when we are not capturing. That is a different thing that
+	// merely looks like one, and it meant long exposure silently ignored the
+	// Resolution control the still path obeys: '8k' with a 1680x945 window produced
+	// 1680x945 long exposures, with nothing on screen to explain it. The window size
+	// still matters here, but only as the aspect-ratio reference — which is exactly
+	// the role it plays for stills.
+	const dims = resolveCaptureDimensions({
+		resolution: config.get('resolution'),
+		customWidth: config.get('customWidth'),
+		customHeight: config.get('customHeight'),
+		screen: { width, height },
+		keepAspectRatio: config.get('keepAspectRatio') === true,
+	}) ?? { width: 1920, height: 1080 };
+
+	return {
+		...createDefaultRecipe({
+			anchorFrame: live?.replayFrameNum ?? 0,
+			sessionNum: live?.replaySessionNum ?? 0,
+			width: dims.width,
+			height: dims.height,
+			outputDir: path.resolve(config.get('screenshotFolder')),
+		}),
+		// A long exposure saves the way a screenshot saves: one format setting, in
+		// Settings, for both. PNG there means the 16-bit master, which is the only
+		// format where accumulating in fp32 reaches disk at all — the panel used to
+		// carry its own format select, which meant two places to set one thing.
+		outputFormat: longExposureFormatForStillFormat(
+			config.get('outputFormat')
+		),
+		// Crop Watermark, read from the SAME setting the still path obeys and for
+		// the same reason as outputFormat above: it is one decision about how a shot
+		// is saved, so it belongs in one place. The panel sends no crop field, so
+		// this default is what a fresh shot uses; a recipe replayed from a sidecar
+		// keeps whatever it recorded.
+		crop: config.get('crop') === true,
+		cropTopLeft: config.get('cropTopLeft') === true,
+	};
+}
+
+// Availability of the compute backend + whether a shot can be set up right now.
+// The renderer polls this to enable/disable the panel and explain why.
+ipcMain.handle('long-exposure:availability', () => {
+	const availability = getLongExposureAvailability();
+	const state = replayController.state();
+	return {
+		...availability,
+		// A long exposure needs a replay: there is no window of past frames to
+		// integrate over in a live session.
+		inReplay: state !== null,
+		anchorFrame: state?.replayFrameNum ?? null,
+		replayFrameNumEnd: state?.replayFrameNumEnd ?? null,
+		sessionNum: state?.replaySessionNum ?? null,
+		frameRate: state?.frameRate ?? null,
+		busy: longExposureActive || takingScreenshot,
+	};
+});
+
+// Cooperative cancel. Does NOT itself restore anything — the running capture's
+// finally does that, which is the whole point of routing abort through the same
+// unwind path as success.
+ipcMain.handle('long-exposure:abort', () => {
+	if (longExposureSignal) {
+		longExposureSignal.aborted = true;
+		log.info('Long exposure abort requested');
+		return true;
+	}
+	return false;
+});
+
+ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
+	if (longExposureActive || takingScreenshot) {
+		return {
+			ok: false,
+			failure: 'busy',
+			message: 'A capture is already in progress.',
+			warnings: [],
+		};
+	}
+
+	const live = replayController.state();
+	if (!live) {
+		return {
+			ok: false,
+			failure: 'invalid-recipe',
+			message:
+				'Long exposure needs a replay. Open a replay and scrub to the moment you want.',
+			warnings: [],
+		};
+	}
+
+	// #10: the same exclusive-fullscreen pre-flight the still path runs. WGC is
+	// DWM-based, so exclusive fullscreen comes back black on this path too — and a
+	// long exposure would burn the full playback duration before finding out.
+	const fullscreen = getIracingExclusiveFullscreenState();
+	lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
+	if (fullscreen && fullscreen.exclusiveFullscreen) {
+		return {
+			ok: false,
+			failure: 'exclusive-fullscreen',
+			message: EXCLUSIVE_FULLSCREEN_MESSAGE,
+			warnings: [],
+		};
+	}
+
+	// The anchor comes from the recipe when the UI supplied one (a re-shoot reuses
+	// the stored anchor), and from the live cursor only on a fresh shot.
+	const recipe: LongExposureRecipe = normalizeRecipe(
+		(rawRecipe as Partial<LongExposureRecipe>) || {},
+		longExposureDefaults(live)
+	);
+
+	const signal = { aborted: false };
+	longExposureSignal = signal;
+	longExposureActive = true;
+	takingScreenshot = true;
+	originalWindowBounds = getIracingWindowDetails() || null;
+	parseCameraState(
+		(iracing.telemetry?.values as { CamCameraState?: string[] })
+			?.CamCameraState
+	);
+	try {
+		iracing.camControls.setState(
+			cameraState | iracing.Consts.CameraState.UIHidden
+		);
+	} catch (error) {
+		log.debug('Could not hide the iRacing UI for long exposure', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
+
+	try {
+		const outcome = await executeRecipe(recipe, {
+			replay: replayController,
+			native: getLongExposureApi(),
+			backendName: getLongExposureAvailability().backend,
+			backendUnavailableReason: getLongExposureAvailability().reason,
+			resizeWindow: async (renderWidth, renderHeight) =>
+				resizeIracingWindowAsync(renderWidth, renderHeight, left, top),
+			// Reuse the still path's restore exactly, so a long exposure leaves
+			// iRacing in the same state a normal screenshot would.
+			restoreWindow: () => restoreScreenshotState(),
+			vramInfo: () => getVramInfo(),
+			baselineDims: () => getIracingWindowSizeNative(),
+			lossyInterpolationLoad: () =>
+				config.get('longExposureLossyInterpolationLoad') || null,
+			delay,
+			now: () => Date.now(),
+			signal,
+			onProgress: (update) =>
+				broadcastToWindows('long-exposure:progress', update),
+		});
+
+		if (!outcome.ok || !outcome.image || !outcome.plan || !outcome.stats) {
+			log.warn('Long exposure did not produce an image', {
+				failure: outcome.failure,
+				message: outcome.message,
+				restoredExactly: outcome.restore.landedExactly,
+			});
+			return {
+				ok: false,
+				failure: outcome.failure,
+				message: outcome.message,
+				warnings: outcome.warnings,
+				restore: outcome.restore,
+			};
+		}
+
+		const written = await writeLongExposure({
+			image: outcome.image,
+			// Every bracket stop. One entry — the same image — when bracketing is off.
+			images: outcome.images,
+			recipe,
+			plan: outcome.plan,
+			stats: outcome.stats,
+			backend: outcome.backend,
+			interpolation: outcome.interpolation,
+			screenshotDir: path.resolve(config.get('screenshotFolder')),
+			cacheDir: path.join(app.getPath('userData'), 'Cache'),
+			// Beside app.log rather than beside the image: a sidecar is a diagnostic
+			// record, and with bracketing a single shot writes a dozen of them. Same
+			// directory the logger resolves, so everything needed to explain a
+			// capture is in one place to zip up.
+			sidecarDir: path.join(app.getPath('userData'), 'logs'),
+			sessionInfo: iracing.sessionInfo,
+			telemetry: iracing.telemetry,
+			filenameFormat: config.get('customFilenameFormat')
+				? config.get('filenameFormat') || DEFAULT_FORMAT
+				: DEFAULT_FORMAT,
+			toolName: productName,
+			toolVersion: app.getVersion(),
+			capturedAt: new Date().toISOString(),
+		});
+
+		// Learn this machine's own interpolation limit from what actually happened.
+		// Recording the SMALLEST load that has ever fallen short means the pre-flight
+		// warning tightens as evidence accumulates and never fires without any.
+		//
+		// Uses the SAME threshold the post-shot diagnosis does, and imports it rather
+		// than repeating the number: these two must agree, and this copy was a literal
+		// 0.6 that got left behind when the constant was retuned — so the machine would
+		// have learned its limit on different evidence than the user is warned about.
+		const interp = outcome.interpolation;
+		if (
+			interp?.enabled &&
+			interp.achievedRatio !== null &&
+			interp.achievedRatio < SAMPLE_SHORTFALL_RATIO
+		) {
+			const known = config.get('longExposureLossyInterpolationLoad') || 0;
+			if (known === 0 || interp.load < known) {
+				config.set('longExposureLossyInterpolationLoad', interp.load);
+				log.info(
+					'Recorded a new interpolation load limit for this machine',
+					{
+						load: interp.load,
+						achievedRatio: interp.achievedRatio,
+						previous: known || null,
+					}
+				);
+			}
+		}
+
+		log.info('Long exposure saved', {
+			file: written.masterPath,
+			sampling: describeSampleStats(outcome.stats),
+			backend: outcome.backend,
+			// Real vs synthetic side by side, plus per-frame cost. Two shots at
+			// identical settings — one with interpolation, one without — are all it
+			// takes to see whether the in-betweens cost real samples.
+			interpolation: outcome.interpolation
+				? {
+						requested: outcome.interpolation.requestedFactor,
+						achieved: outcome.interpolation.achievedFactor,
+						real: outcome.interpolation.realSamples,
+						synthetic: outcome.interpolation.syntheticSamples,
+						meanFrameMs: outcome.interpolation.meanFrameMs,
+					}
+				: null,
+		});
+
+		// Same gallery notification the still path uses, so a long exposure appears
+		// in the strip like any other shot. The 8-bit preview is what the gallery
+		// shows when the master is 16-bit, because Chromium renders it far faster.
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			mainWindow.webContents.send(
+				'screenshot-response',
+				written.previewPath || written.masterPath
+			);
+		}
+
+		return {
+			ok: true,
+			failure: null,
+			message: null,
+			warnings: outcome.warnings,
+			restore: outcome.restore,
+			masterPath: written.masterPath,
+			previewPath: written.previewPath,
+			sidecarPath: written.sidecarPath,
+			stats: outcome.stats,
+			plan: outcome.plan,
+			backend: outcome.backend,
+			interpolation: outcome.interpolation,
+			// Echo the recipe back with the resolved anchor so a re-shoot reuses the
+			// SAME moment rather than re-reading a cursor the user may have moved.
+			recipe,
+		};
+	} catch (error) {
+		const message = (error as Error)?.message || String(error);
+		log.error('Long exposure failed', { error: message });
+		return { ok: false, failure: 'resolve-failed', message, warnings: [] };
+	} finally {
+		longExposureActive = false;
+		longExposureSignal = null;
+		// executeRecipe's own finally already restored the window and the cursor;
+		// this is the backstop for a throw before that could run.
+		restoreScreenshotState();
+		// Hand the foreground back. A long exposure can run for minutes with
+		// iRacing raised in front, and every outcome it reports — the sample
+		// count, the warnings, the saved shot in the gallery — is in OUR window.
+		// Runs on every exit (success, refusal, abort, throw) because the
+		// foreground was taken on every one of them; the early guards above
+		// return before iRacing is ever raised and so never reach this.
+		focusAppWindow();
+	}
+});
+
+// Live preview of what a recipe would do, for the parameter UI: chosen playback
+// speed, predicted samples, and how long the user will be waiting. Pure — it never
+// touches the sim.
+// iRacing's current window area in physical pixels, or null when unknown. Feeds
+// the resize-aware sample-count prediction (FrameRate is measured at THIS size,
+// but the capture runs at the render size).
+function currentWindowPixels(): number | null {
+	const size = getIracingWindowSizeNative();
+	return size && size.width > 0 && size.height > 0
+		? size.width * size.height
+		: null;
+}
+
+ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
+	const live = replayController.state();
+	const recipe = normalizeRecipe(
+		(rawRecipe as Partial<LongExposureRecipe>) || {},
+		longExposureDefaults(live)
+	);
+	const plan = resolvePlan(recipe, {
+		renderFps: live?.frameRate ?? undefined,
+		currentWindowPixels: currentWindowPixels(),
+	});
+	return {
+		recipe,
+		plan,
+		// The same validation the capture runs, so the panel can show it BEFORE the
+		// shot rather than reporting a 160-second wait once it is over. Identical
+		// inputs to the capture path's own call, so the two cannot disagree about
+		// whether a shot is workable.
+		validation: validatePlan({
+			plan,
+			recipe,
+			replayFrameNumEnd: live?.replayFrameNumEnd ?? null,
+			currentSessionNum: live?.replaySessionNum ?? null,
+			lossyInterpolationLoad:
+				config.get('longExposureLossyInterpolationLoad') || null,
+		}),
+	};
 });
 ipcMain.handle(
 	'desktop-capturer:get-source-id',
