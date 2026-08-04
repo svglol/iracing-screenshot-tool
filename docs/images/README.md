@@ -6,10 +6,13 @@ knowing before moving anything here:
 
 - A relative path does **not** work in a GitHub release body. Release notes are
   rendered detached from the repo, so only absolute URLs resolve.
-- **SVG does not render in a release body either.** `raw.githubusercontent.com`
-  serves `.svg` as `text/plain`, so the browser refuses to draw it. Anything that
-  has to appear in release notes needs a PNG. SVG is fine inside `.md` files
-  viewed on github.com.
+- **Anything that has to appear in a release body is committed as PNG.**
+  Verified: all four PNGs here return `200 image/png` from
+  `raw.githubusercontent.com` and render. SVG is served correctly too
+  (`200 image/svg+xml`), but GitHub renders markdown images through its `camo`
+  proxy, which has a long history of refusing SVG — so PNG is the choice that is
+  known to work rather than the one that ought to. SVG is fine inside `.md` files
+  viewed on github.com, which is why the source is kept alongside.
 - Because the URLs point at `master` rather than at a tag, replacing a file here
   updates every release body that references it, with no `gh release edit`. That
   is deliberate while placeholders are in place — but it also means editing one of
