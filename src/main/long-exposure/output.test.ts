@@ -298,7 +298,7 @@ describe('writeLongExposure', () => {
 		fs.rmSync(root, { recursive: true, force: true, maxRetries: 5 });
 	});
 
-	function write(overrides = {}) {
+	function write(overrides = {}, images?: unknown[]) {
 		const recipe = normalizeRecipe(
 			overrides,
 			createDefaultRecipe({
@@ -311,6 +311,8 @@ describe('writeLongExposure', () => {
 		);
 		return writeLongExposure({
 			image: resolvedImage(),
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			images: images as any,
 			recipe,
 			plan: resolvePlan(recipe, { renderFps: 60 }),
 			stats: summarizeSamples([]),
@@ -485,6 +487,46 @@ describe('writeLongExposure', () => {
 		expect(first.masterPath).not.toBe(second.masterPath);
 		expect(fs.existsSync(first.masterPath)).toBe(true);
 		expect(fs.existsSync(second.masterPath)).toBe(true);
+	});
+
+	// Each bracket stop's sidecar must report ITS OWN achieved count. `accepted`
+	// counts frames CONSUMED by the session and is identical for every stop, so
+	// passing it through unchanged made a 1/1000 stop claim the same sample count
+	// as the 1/30 it was bracketed from — a sidecar that quietly lied about the
+	// image beside it.
+	it('gives each bracket stop its own achieved sample count', async () => {
+		const image = resolvedImage();
+		const result = await write({ outputFormat: 'jpeg' }, [
+			{
+				sinkId: 'primary',
+				label: '1/30',
+				exposureSeconds: 1 / 30,
+				accepted: 211,
+				...image,
+			},
+			{
+				sinkId: '1/500',
+				label: '1/500',
+				exposureSeconds: 1 / 500,
+				accepted: 7,
+				...image,
+			},
+		]);
+
+		const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
+		expect(read(result.sidecarPath).sampling.achieved).toBe(211);
+
+		expect(result.bracketPaths).toHaveLength(1);
+		// The stop's IMAGE is in the screenshot folder; its sidecar is in the
+		// sidecar folder, so the path has to be rebuilt rather than derived by
+		// swapping the extension.
+		const stopSidecar = path.join(
+			sidecarDir,
+			path.basename(result.bracketPaths[0]).replace(/\.[^.]+$/, '.json')
+		);
+		expect(read(stopSidecar).sampling.achieved).toBe(7);
+		// And it still records its own exposure, not the primary's.
+		expect(read(stopSidecar).recipe.shutter).toBe('1/500');
 	});
 
 	// The sidecar moved OUT of the screenshot folder and into the app's log folder.

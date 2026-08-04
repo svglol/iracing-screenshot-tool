@@ -77,6 +77,9 @@ export interface NativeLongExposureResult {
 		data: Buffer | null;
 		width: number;
 		height: number;
+		// REAL frames THIS sink took, which is smaller than the session's `accepted`
+		// for any bracket stop whose window opened later than the primary's.
+		accepted?: number;
 	}[];
 	// REAL captured frames. Never merged with `synthesized`: the risk of
 	// interpolation is that its GPU cost slows frame consumption below iRacing's

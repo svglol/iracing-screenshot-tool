@@ -210,6 +210,10 @@ export interface WriteLongExposureOptions {
 		data: Buffer;
 		width: number;
 		height: number;
+		// REAL frames THIS stop integrated. Written into its own sidecar so a
+		// bracket stop reports what went into IT rather than what the session
+		// consumed — see the note on the per-stop sidecar below.
+		accepted: number;
 	}[];
 	recipe: LongExposureRecipe;
 	plan: ResolvedPlan;
@@ -446,6 +450,7 @@ export async function writeLongExposure(
 						sinkId: PRIMARY_SINK_ID,
 						label: recipe.shutter ?? '',
 						exposureSeconds: plan.effectiveExposureSeconds,
+						accepted: stats.accepted,
 						...options.image,
 					},
 				]
@@ -553,7 +558,14 @@ export async function writeLongExposure(
 	const sidecar = buildSidecar({
 		recipe,
 		plan,
-		stats,
+		// Sourced from the stop rather than the session for the same reason the
+		// bracket stops below are, and it is not merely cosmetic uniformity: it means
+		// EVERY sidecar's `achieved` describes the image beside it, with no special
+		// case for the primary. The two are equal here by construction — the primary
+		// reaches furthest back, so it is open whenever any stop is — which is
+		// exactly why routing it through the same field cannot change a single-stop
+		// shot's output.
+		stats: { ...stats, accepted: image.accepted },
 		backend,
 		// Spread rather than field-by-field: an explicit mapping here silently dropped
 		// setupFrameMs / load / achievedRatio when they were added, so the sidecar —
@@ -611,7 +623,18 @@ export async function writeLongExposure(
 							bracket: false,
 						},
 						plan,
-						stats,
+						// THIS stop's achieved count, not the session's. `accepted`
+						// counts frames CONSUMED and is identical for every stop in a
+						// bracket, so passing it unchanged made a 1/1000 stop claim
+						// the same sample count as the 1/30 it was bracketed from.
+						//
+						// The DISTRIBUTION fields (evenness, gaps, window) are left as
+						// the session's: they are derived from the sample log, which
+						// records one entry per captured frame against the primary's
+						// window, so there is no per-stop version of them to report.
+						// Recomputing them here would be modelling what the GPU did
+						// rather than measuring it. Noted, not faked.
+						stats: { ...stats, accepted: stop.accepted },
 						backend,
 						interpolation,
 						synthesizedSamples: interpolation?.syntheticSamples ?? 0,

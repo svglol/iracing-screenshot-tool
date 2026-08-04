@@ -95,6 +95,10 @@ export interface LongExposureSinkImage extends LongExposureImage {
 	// This stop's own exposure, which is the ONLY thing that differs between the
 	// images in a bracket — they share every captured frame.
 	exposureSeconds: number;
+	// REAL frames THIS stop integrated, measured natively rather than inferred from
+	// the sample log. The session's `accepted` counts frames CONSUMED and is the
+	// same for every stop; this is the number that actually describes the image.
+	accepted: number;
 }
 
 // What optical-flow interpolation actually did, as opposed to what was requested.
@@ -222,6 +226,7 @@ export interface NativeSessionApi {
 			data: Buffer | null;
 			width: number;
 			height: number;
+			accepted?: number;
 		}>;
 		accepted: number;
 		synthesized?: number;
@@ -1294,6 +1299,10 @@ async function resolveCapture(
 				data: entry.data as Buffer,
 				width: entry.width,
 				height: entry.height,
+				// An addon build predating the per-sink tally reports nothing, and the
+				// session count is the honest fallback: for a single-sink shot the two
+				// ARE the same number.
+				accepted: entry.accepted ?? stats.accepted,
 			};
 		});
 	if (resolvedImages.length === 0) {
@@ -1304,6 +1313,7 @@ async function resolveCapture(
 			data: result.data,
 			width: result.width,
 			height: result.height,
+			accepted: stats.accepted,
 		});
 	}
 	if (sinks.length > 1 && resolvedImages.length < sinks.length) {

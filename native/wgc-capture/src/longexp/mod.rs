@@ -133,6 +133,14 @@ struct SessionShared {
     /// So the router sends -1 for a sink whose window is not open on this tick, and
     /// only that is skipped.
     sink_weights: Mutex<Vec<f32>>,
+    /// REAL frames each sink actually took, parallel to `sink_ids`.
+    ///
+    /// Per-SINK, unlike `accepted` below, which counts frames CONSUMED by the
+    /// session. The two differ precisely when bracketing is on: a fast stop's
+    /// window opens later, so it takes a subset of the frames the session
+    /// consumed. Without this, every stop's sidecar reported the session count and
+    /// a 1/1000 stop claimed the same sample count as the 1/30 it came from.
+    sink_accepted: Mutex<Vec<u32>>,
     /// f64 bits of the current ReplaySessionTime.
     session_time_bits: AtomicU64,
     replay_frame: AtomicI64,
@@ -392,6 +400,13 @@ impl Accumulator {
             let sample = backend
                 .accumulate_sample(id, &texture, weight)
                 .map_err(|e| format!("accumulate '{id}' failed: {e}"))?;
+            // This sink's OWN tally — the only number that can answer "how many
+            // samples went into THIS stop".
+            if let Ok(mut tally) = self.shared.sink_accepted.lock() {
+                if let Some(slot) = tally.get_mut(index) {
+                    *slot = slot.saturating_add(sample.real);
+                }
+            }
             // `accepted`/`synthesized` count frames CONSUMED, which is a property of
             // the session and not of a sink — so they are folded once, from the first
             // sink to take this frame, however many sinks it then lands in.
@@ -769,6 +784,10 @@ pub struct LongExposureSinkImage {
     pub data: Option<Buffer>,
     pub width: u32,
     pub height: u32,
+    /// REAL frames THIS sink took. Equal to the session's `accepted` for an
+    /// ordinary shot; strictly smaller for a bracket stop whose window opened
+    /// later than the primary's.
+    pub accepted: u32,
 }
 
 /// Shared by `stats` and `finish` so the two can never disagree.
@@ -928,6 +947,9 @@ pub fn long_exposure_begin(
         // Full weight until the router says otherwise, matching `weight_bits` above.
         // The gate is closed here, so nothing accumulates before the first push.
         *guard = vec![1.0f32; ids.len()];
+    }
+    if let Ok(mut guard) = shared.sink_accepted.lock() {
+        *guard = vec![0u32; ids.len()];
     }
     if let Ok(mut guard) = shared.sink_ids.lock() {
         *guard = ids;
@@ -1198,13 +1220,30 @@ pub fn long_exposure_finish(
         .and_then(|g| g.clone())
         .unwrap_or_else(|| "unknown".to_string());
 
+    // Sink ids and their tallies share an index, assigned at `begin` and preserved
+    // by the resolve loop.
+    let sink_order = sink_ids_of(&entry.shared);
+    let tallies = entry
+        .shared
+        .sink_accepted
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
     let images: Vec<LongExposureSinkImage> = resolved_images
         .into_iter()
-        .map(|(sink_id, resolved)| LongExposureSinkImage {
-            sink_id,
-            data: Some(Buffer::from(resolved.data)),
-            width: resolved.width,
-            height: resolved.height,
+        .map(|(sink_id, resolved)| {
+            let accepted = sink_order
+                .iter()
+                .position(|id| *id == sink_id)
+                .and_then(|index| tallies.get(index).copied())
+                .unwrap_or(0);
+            LongExposureSinkImage {
+                sink_id,
+                data: Some(Buffer::from(resolved.data)),
+                width: resolved.width,
+                height: resolved.height,
+                accepted,
+            }
         })
         .collect();
     // The primary is the first sink, by construction: `begin` puts the chosen stop
