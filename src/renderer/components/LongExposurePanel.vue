@@ -241,6 +241,7 @@ import {
 	PLAYBACK_DIVISORS,
 	SHUTTER_LADDER,
 } from '../../utilities/long-exposure/exposure-math';
+import { plannedSinkCount } from '../../utilities/long-exposure/accumulator-sinks';
 import { useOruga } from '@oruga-ui/oruga-next';
 import NoticeCard, { type Notice } from './NoticeCard.vue';
 const { ipcRenderer } = require('electron');
@@ -278,7 +279,11 @@ export default defineComponent({
 			interpolationSupported: false,
 			interpolationReason: null as string | null,
 			adapter: null as string | null,
-			inReplay: false,
+			// Whether the sim is giving us a replay position to anchor on. NOT
+			// "the user has a replay open" — iRacing writes its replay buffer
+			// continuously, so a live session reports one too and long exposure
+			// works there. False means no telemetry at all.
+			hasReplayData: false,
 			liveAnchor: null as number | null,
 			externallyBusy: false,
 			disableTooltips: config.get('disableTooltips'),
@@ -332,9 +337,27 @@ export default defineComponent({
 		canCapture(): boolean {
 			return (
 				this.available &&
-				this.inReplay &&
+				this.hasReplayData &&
 				!this.capturing &&
 				!this.externallyBusy
+			);
+		},
+		// Whether interpolation is going to run for the shot as currently configured:
+		// asked for, supported by the hardware, and not overridden by bracketing.
+		//
+		// Bracketing wins because the two cannot share the native session's retained
+		// -frame state — `executeRecipe` forces the factor to 1 whenever more than one
+		// sink is planned. The sink count comes from `plannedSinkCount`, the same
+		// helper the capture plans from and validatePlan warns from, so the panel
+		// cannot advertise interpolation for a shot that will not use it.
+		interpolationWillRun(): boolean {
+			return (
+				this.interpolationSupported &&
+				Number(this.interpolation) > 1 &&
+				plannedSinkCount({
+					bracket: this.bracket === true,
+					shutterKey: this.shutter,
+				}) === 1
 			);
 		},
 		// Which advanced settings are away from their default, named the way the user
@@ -386,9 +409,9 @@ export default defineComponent({
 		notices(): Notice[] {
 			const notices: Notice[] = [];
 
-			// A long exposure integrates over a window of PAST replay frames, so a
-			// live session has nothing to integrate over — a prerequisite, not an
-			// error, which is why this is a warning and not a danger.
+			// The compute backend could not be built on this machine. A prerequisite
+			// rather than a mistake the user made, which is why it is a warning and not
+			// a danger.
 			if (!this.available) {
 				notices.push({
 					level: 'warning',
@@ -402,10 +425,10 @@ export default defineComponent({
 
 			// Pre-flight: the SAME validatePlan results the capture would report
 			// afterwards, shown while they can still change the decision. Gated on
-			// being in a replay — outside one the preview resolves against frame 0
-			// and truthfully reports a window reaching past the start of the tape,
-			// which describes a shot nobody is taking.
-			if (this.inReplay) {
+			// having a replay position — without telemetry the preview resolves
+			// against frame 0 and truthfully reports a window reaching past the start
+			// of the tape, which describes a shot nobody is taking.
+			if (this.hasReplayData) {
 				this.previewErrors.forEach((problem) => {
 					notices.push({ level: 'danger', text: problem });
 				});
@@ -435,7 +458,13 @@ export default defineComponent({
 			// one iRacing present. Slower than the sim presents and we drop REAL
 			// samples to manufacture synthetic ones — a net loss, and one the sidecar
 			// records both halves of so it can be checked rather than assumed.
-			if (this.interpolationSupported && Number(this.interpolation) > 1) {
+			//
+			// Both of the interpolation notices below are gated on it actually being
+			// going to run: a bracket takes the shot without it, and advice about a
+			// setting that is inert sends the user to tune something that cannot
+			// affect the result. The accurate "these two cannot both run" message
+			// comes from validatePlan, through previewWarnings above.
+			if (this.interpolationWillRun) {
 				notices.push({
 					level: 'warning',
 					text:
@@ -448,11 +477,7 @@ export default defineComponent({
 
 			// Both on is the worst of the trade, and validatePlan says so too — this
 			// is the same fact stated where the controls are.
-			if (
-				Number(this.passes) > 1 &&
-				this.interpolationSupported &&
-				Number(this.interpolation) > 1
-			) {
+			if (Number(this.passes) > 1 && this.interpolationWillRun) {
 				notices.push({
 					level: 'warning',
 					text:
@@ -672,7 +697,7 @@ export default defineComponent({
 				this.interpolationSupported =
 					status.interpolation?.available === true;
 				this.interpolationReason = status.interpolation?.reason ?? null;
-				this.inReplay = status.inReplay;
+				this.hasReplayData = status.hasReplayData;
 				this.liveAnchor = status.anchorFrame;
 				// Don't let the main process's own busy flag fight our local latch
 				// while OUR capture is the thing making it busy.

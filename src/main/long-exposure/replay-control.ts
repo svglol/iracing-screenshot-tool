@@ -69,7 +69,7 @@ export const RESTORE_TIMEOUT_MS = 6000;
 export const RESTORE_ATTEMPT_TIMEOUT_MS = 1200;
 
 // The replay-related telemetry we read. Everything is nullable because a variable
-// can be absent when the sim is not in a replay.
+// can be absent when the sim is not sending telemetry at all.
 export interface ReplayState {
 	replayFrameNum: number;
 	replayFrameNumEnd: number | null;
@@ -86,8 +86,14 @@ function num(value: unknown): number | null {
 }
 
 // Extract the replay state from a flattened telemetry values record. Pure and
-// exported so the mapping is locked by tests. Returns null when the frame number
-// is absent — i.e. we are not in a replay and nothing here is meaningful.
+// exported so the mapping is locked by tests.
+//
+// Returns null when ReplayFrameNum is absent — i.e. the sim is not sending
+// telemetry we can anchor on. That is NOT the same as "the user is not watching a
+// replay": iRacing writes its replay buffer continuously, so a LIVE session
+// reports a frame number too, and long exposure works there over the frames just
+// past. Everything downstream that gates on this is gating on "have a position",
+// never on "is viewing a replay".
 export function readReplayState(
 	values: Record<string, unknown> | null | undefined
 ): ReplayState | null {

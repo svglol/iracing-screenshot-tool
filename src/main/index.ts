@@ -950,9 +950,15 @@ ipcMain.handle('long-exposure:availability', () => {
 	const state = replayController.state();
 	return {
 		...availability,
-		// A long exposure needs a replay: there is no window of past frames to
-		// integrate over in a live session.
-		inReplay: state !== null,
+		// Whether the sim is giving us a replay position to anchor on — NOT whether
+		// the user has a replay open.
+		//
+		// This was called `inReplay`, which described a gate that does not exist:
+		// `readReplayState` asks only for a finite ReplayFrameNum, and iRacing writes
+		// its replay buffer continuously, so a LIVE session reports one too. Long
+		// exposure works there, integrating over the frames just past. False here
+		// means no telemetry at all.
+		hasReplayData: state !== null,
 		anchorFrame: state?.replayFrameNum ?? null,
 		replayFrameNumEnd: state?.replayFrameNumEnd ?? null,
 		sessionNum: state?.replaySessionNum ?? null,
@@ -985,11 +991,13 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 
 	const live = replayController.state();
 	if (!live) {
+		// See the note on `hasReplayData` above: this is "no telemetry", not "not in
+		// a replay", and the message has to say the thing that would actually help.
 		return {
 			ok: false,
 			failure: 'invalid-recipe',
 			message:
-				'Long exposure needs a replay. Open a replay and scrub to the moment you want.',
+				'Long exposure needs replay telemetry from iRacing. Check that the sim is running and in a session.',
 			warnings: [],
 		};
 	}

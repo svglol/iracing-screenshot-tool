@@ -447,9 +447,15 @@ export async function executeRecipe(
 ): Promise<LongExposureOutcome> {
 	const live = deps.replay.state();
 	if (!live) {
+		// NOT "you are not in a replay". `readReplayState` returns null when
+		// ReplayFrameNum is absent from telemetry, and iRacing writes its replay
+		// buffer continuously — including during a live session — so that variable is
+		// there whenever the sim is connected and in a session. Reaching here means we
+		// have no telemetry at all, and telling the user to open a replay would send
+		// them to do something that cannot help.
 		return failure(
 			'invalid-recipe',
-			'iRacing is not showing a replay, so there is no moment to capture.'
+			'iRacing is not sending replay telemetry, so there is no moment to capture. Check that the sim is running and in a session.'
 		);
 	}
 

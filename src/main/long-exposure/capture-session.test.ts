@@ -827,12 +827,17 @@ describe('executeRecipe — pre-flight refusals move nothing', () => {
 		expect(harness.events).not.toContain('resize');
 	});
 
-	it('refuses when iRacing is not in a replay at all', async () => {
+	// No telemetry to anchor on — which is NOT "the user is out of a replay". iRacing
+	// writes its replay buffer continuously, so a live session reports a frame number
+	// too and a long exposure works there. The message has to name the thing that
+	// would actually help, so it is pinned against the old "open a replay" wording.
+	it('refuses when iRacing is not sending replay telemetry', async () => {
 		const harness = makeHarness();
 		harness.deps.replay.state = () => null;
 		const outcome = await executeRecipe(recipe(), harness.deps);
 		expect(outcome.failure).toBe('invalid-recipe');
-		expect(outcome.message).toMatch(/not showing a replay/);
+		expect(outcome.message).toMatch(/not sending replay telemetry/);
+		expect(outcome.message).not.toMatch(/open a replay/i);
 	});
 });
 

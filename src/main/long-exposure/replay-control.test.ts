@@ -100,8 +100,11 @@ describe('readReplayState', () => {
 		});
 	});
 
-	// Absent ReplayFrameNum means we are not in a replay, and nothing else here is
-	// meaningful — so the whole reading is null rather than partially populated.
+	// Absent ReplayFrameNum means the sim is not sending a position we can anchor
+	// on, and nothing else here is meaningful — so the whole reading is null rather
+	// than partially populated. It does NOT mean the user is out of a replay: a live
+	// session reports a frame number too, because iRacing writes its replay buffer
+	// continuously.
 	it('returns null when there is no replay frame number', () => {
 		expect(readReplayState({ FrameRate: 60 })).toBeNull();
 		expect(readReplayState(null)).toBeNull();
