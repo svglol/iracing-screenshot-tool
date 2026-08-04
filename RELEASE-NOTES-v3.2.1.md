@@ -11,20 +11,15 @@ Long exposure photography, from your replays.
 - **Frame interpolation.** On NVIDIA Turing or newer, the GPU's optical-flow engine invents frames between the real ones to close the gaps in a streak. Hidden entirely on hardware that cannot do it, and the tool tells you afterwards if it could not keep up.
 - **Passes.** Visit the same moment several times and accumulate into one image, catching frames the other passes missed. Smoother, not brighter. The right lever at high resolutions, where interpolation cannot keep up.
 - **Highlight recovery.** Boosts near-clipped highlights before the frames are added up, so a headlight sweeping through part of the exposure reads as a bright trail instead of a grey smudge.
-- **16-bit masters.** Choosing PNG writes a true 16-bit file with an 8-bit preview alongside it — real headroom if you intend to grade the shot.
+- **16-bit masters.** Choosing PNG writes a true 16-bit file with an 8-bit preview alongside it — real headroom if you intend to grade the shot. Long exposures obey the **Resolution** and **Crop Watermark** settings, so one at 8K really is 8K with the watermark trimmed off, exactly as a screenshot has it.
+- **Every shot explains itself.** Each long exposure records its exact settings, sample count and sample evenness as a `.json` file in the log folder, keeping the last 20 captures — so a shot that looks wrong can be explained rather than guessed at.
 - **A Long Exposure guide in Help.** The Help window now has tabs, with a page explaining what every parameter does and when to reach for passes instead of interpolation.
 
 ## Fixes & improvements
 
-- Long exposures now honour **Crop Watermark** and the **Resolution** setting, both of which they previously ignored — a long exposure at 8K really is 8K, with the watermark cropped off exactly as a screenshot has it.
-- **Focus comes back to the app** when a capture finishes, instead of leaving you looking at iRacing after a shot that ended minutes ago.
-- The **Long Exposure button stays reachable** with the panel collapsed, along with Cancel and the progress readout.
-- **Warnings are readable.** Sidebar and long-exposure messages are now one card instead of a stack of up to six, and the text has real contrast against its background — some warnings were previously near-invisible.
+- The **sidebar scrolls** instead of putting controls out of reach on short windows. The page itself does not scroll, so anything past the bottom edge was previously unreachable rather than merely cut off.
+- **Sidebar warnings are a single card** instead of a stack of separate banners, and severity is now carried by an icon and a coloured rule rather than by colour alone.
 - The **Output** line at the top of the sidebar now names the file format alongside the dimensions.
-- **8K masters no longer freeze the app.** A 33-megapixel 16-bit PNG used to lock the window for about a minute while it was written; it now streams off the main thread and takes about ten seconds. Choosing JPEG makes the same frame take under one.
-- **Gradient banding fixed** in previews and 8-bit output, which showed up as visible steps in skies.
-- The **sidebar scrolls** instead of clipping its controls off-screen on short windows.
-- Each shot's exact settings, sample count and sample evenness are recorded as a `.json` file in the log folder, keeping the last 20 captures — so a shot that looks wrong can be explained rather than guessed at.
 - Patched dependency advisories reported by `npm audit`.
 
 ## Notes
