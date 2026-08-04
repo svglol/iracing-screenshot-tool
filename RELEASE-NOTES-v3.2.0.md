@@ -30,6 +30,7 @@ Long exposure photography, from your replays.
 ## Notes
 
 - Long exposure needs a **replay** — a live session has no window of past frames to integrate over.
+- **Bracket shutters and frame interpolation cannot both run.** Turning bracketing on takes the shot without interpolation, and the panel says so before you press the button.
 - It captures natively and does **not** use ReShade, so ReShade effects will not appear in the result.
 - Like all captures, it needs iRacing in **Windowed Borderless**; exclusive Full Screen comes back black.
 
