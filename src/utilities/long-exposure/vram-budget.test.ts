@@ -174,8 +174,41 @@ describe('assessLongExposureVram', () => {
 		expect(result.refuse).toBe(true);
 		expect(result.tier).toBe('risk');
 		expect(result.refusalMessage).toMatch(/video memory/);
-		// The message must name the way out, not just the problem.
-		expect(result.refusalMessage).toMatch(/supersampling|resolution/);
+		// The message must name the way out, not just the problem — and it must name a
+		// control that EXISTS. It used to end "or turn off supersampling", which was
+		// removed on 2026-08-03, so the one sentence whose job is to say how to make
+		// the shot fit pointed at a switch the user could no longer find.
+		expect(result.refusalMessage).toMatch(/lower the resolution/i);
+		expect(result.refusalMessage).not.toMatch(/supersampl/i);
+	});
+
+	// A bracket multiplies the accumulators — the bulk of our allocation — by its stop
+	// count, so on a bracketed shot it is both the likeliest cause of a refusal and
+	// the cheapest thing to give up. Naming only the resolution would send the user
+	// down the ladder to fix something bracketing did.
+	it('names bracketing as the remedy when the refusal is a bracket', () => {
+		const result = assessLongExposureVram({
+			info: info(8, 7.5),
+			renderWidth: 3840,
+			renderHeight: 2160,
+			sinkCount: 8,
+		});
+		expect(result.refuse).toBe(true);
+		expect(result.refusalMessage).toMatch(/bracket/i);
+		expect(result.refusalMessage).toMatch(/8 stops/);
+	});
+
+	// ...and does NOT name it on a shot that is not one, which is the whole reason the
+	// estimate and the message share a sink-count normaliser.
+	it('does not mention bracketing on a single-stop refusal', () => {
+		const result = assessLongExposureVram({
+			info: info(8, 7.5),
+			renderWidth: 7680,
+			renderHeight: 4320,
+			sinkCount: 1,
+		});
+		expect(result.refuse).toBe(true);
+		expect(result.refusalMessage).not.toMatch(/bracket/i);
 	});
 
 	it('allows a shot that fits comfortably', () => {

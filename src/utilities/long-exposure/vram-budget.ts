@@ -72,6 +72,14 @@ export interface LongExposureVramEstimate {
 	combinedBytes: number;
 }
 
+// One accumulator per sink, and never fewer than one. Shared by the estimate and
+// the refusal message below, which have to agree about whether a shot is a bracket
+// — the message names bracketing as the way out, and naming it for a shot that is
+// not one would be worse than naming nothing.
+function normalizeSinkCount(sinkCount: unknown): number {
+	return Math.max(1, Math.floor(Number(sinkCount)) || 1);
+}
+
 export function estimateLongExposureVram(opts: {
 	renderWidth: number;
 	renderHeight: number;
@@ -87,7 +95,7 @@ export function estimateLongExposureVram(opts: {
 }): LongExposureVramEstimate {
 	const { renderWidth, renderHeight, sinkCount, baseline } = opts;
 	const pixels = Math.max(0, renderWidth) * Math.max(0, renderHeight);
-	const sinks = Math.max(1, Math.floor(sinkCount) || 1);
+	const sinks = normalizeSinkCount(sinkCount);
 
 	const accumulatorBytes = pixels * ACCUMULATOR_BYTES_PER_PIXEL * sinks;
 	const workingBytes = pixels * WORKING_BYTES_PER_PIXEL;
@@ -158,8 +166,22 @@ export function assessLongExposureVram(opts: {
 	}
 
 	const refuse = estimate.ourTotalBytes > freeBytes;
+
+	// Name the lever that actually caused it.
+	//
+	// This used to end "or turn off supersampling", a control that was removed on
+	// 2026-08-03 — so the one message whose entire job is to say how to make the shot
+	// fit was pointing at a switch the user could no longer find. What replaced it as
+	// the dominant term is bracketing: the accumulators are the bulk of our
+	// allocation and a bracket multiplies them by its stop count, so on a bracketed
+	// shot it is both the likeliest cause and the cheapest thing to give up.
+	const sinks = normalizeSinkCount(opts.sinkCount);
+	const remedy =
+		sinks > 1
+			? `Turn off bracket shutters — ${sinks} stops means ${sinks} full-size accumulators — or lower the resolution.`
+			: 'Lower the resolution.';
 	const refusalMessage = refuse
-		? `Long exposure needs ${formatVramGiB(estimate.ourTotalBytes)} of video memory for its accumulation buffers, but only ${formatVramGiB(freeBytes)} is free. Lower the resolution or turn off supersampling.`
+		? `Long exposure needs ${formatVramGiB(estimate.ourTotalBytes)} of video memory for its accumulation buffers, but only ${formatVramGiB(freeBytes)} is free. ${remedy}`
 		: null;
 
 	// Our own buffers are additional to the resize delta the base assessment
