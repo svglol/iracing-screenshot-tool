@@ -529,6 +529,94 @@ describe('writeLongExposure', () => {
 		expect(read(stopSidecar).recipe.shutter).toBe('1/500');
 	});
 
+	// The same defect as the one above, one field over. The `exposure` block and
+	// `sampling.predicted` are read straight off the PLAN, and every stop used to be
+	// handed the primary's — so a 1/500 stop wrote `requestedMs: 2` next to an
+	// `effectiveMs` of 33.33 and a window two replay frames long, in one file,
+	// describing an image that reached back one.
+	it('gives each bracket stop its own exposure window in the sidecar', async () => {
+		const image = resolvedImage();
+		const result = await write({ shutter: '1/30', bracket: true }, [
+			{
+				sinkId: 'primary',
+				label: '1/30',
+				exposureSeconds: 1 / 30,
+				accepted: 211,
+				...image,
+			},
+			{
+				sinkId: '1/500',
+				label: '1/500',
+				exposureSeconds: 1 / 500,
+				accepted: 7,
+				...image,
+			},
+		]);
+
+		const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
+		const stop = read(
+			path.join(
+				sidecarDir,
+				path.basename(result.bracketPaths[0]).replace(/\.[^.]+$/, '.json')
+			)
+		);
+
+		// 1/500 is 2 ms, well under one replay frame, so it resolves unquantised and
+		// spans the single frame it starts part-way through.
+		expect(stop.exposure.requestedMs).toBeCloseTo(2, 6);
+		expect(stop.exposure.effectiveMs).toBeCloseTo(2, 6);
+		expect(stop.exposure.windowFrames).toBe(1);
+		expect(stop.exposure.startFrame).toBe(stop.exposure.anchorFrame - 1);
+
+		// The primary is the shot it was bracketed from: 1/30 quantises to two whole
+		// replay frames, and the two sidecars must not agree about any of this.
+		const primary = read(result.sidecarPath);
+		expect(primary.exposure.effectiveMs).toBeCloseTo(1000 / 30, 6);
+		expect(primary.exposure.windowFrames).toBe(2);
+		expect(primary.exposure.startFrame).toBe(
+			primary.exposure.anchorFrame - 2
+		);
+
+		// And the prediction moves with the window, so it pairs with this stop's own
+		// measured `achieved` rather than with the primary's.
+		expect(stop.sampling.predicted).toBeLessThan(primary.sampling.predicted);
+	});
+
+	// Routing the primary through the same per-stop helper is only safe because it is
+	// a NO-OP there — the primary's exposure IS the plan's. Asserted rather than
+	// argued, because it is what lets the code carry no special case at all.
+	it('leaves a single-stop shot byte-for-byte unchanged in the sidecar', async () => {
+		const withImages = await write({ shutter: '1/8' }, [
+			{
+				sinkId: 'primary',
+				label: '1/8',
+				exposureSeconds: resolvePlan(
+					normalizeRecipe(
+						{ shutter: '1/8' },
+						createDefaultRecipe({
+							anchorFrame: 6921,
+							sessionNum: 0,
+							width: WIDTH,
+							height: HEIGHT,
+							outputDir: screenshotDir,
+						})
+					),
+					{ renderFps: 60 }
+				).effectiveExposureSeconds,
+				accepted: 0,
+				...resolvedImage(),
+			},
+		]);
+		const bare = await write({ shutter: '1/8' });
+
+		const strip = (file: string) => {
+			const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+			return parsed.exposure;
+		};
+		expect(strip(withImages.sidecarPath)).toEqual(strip(bare.sidecarPath));
+		expect(strip(bare.sidecarPath).windowFrames).toBe(8);
+	});
+
 	// The sidecar moved OUT of the screenshot folder and into the app's log folder.
 	// It is a diagnostic record of how a shot was taken, and with bracketing one
 	// capture writes a dozen of them — which turned the folder the user actually

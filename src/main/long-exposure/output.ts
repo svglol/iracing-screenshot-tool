@@ -37,6 +37,11 @@ import {
 	type LongExposureRecipe,
 	type ResolvedPlan,
 } from '../../utilities/long-exposure/shot-recipe';
+import {
+	isSubFrameExposure,
+	predictSampleCount,
+	windowFramesForExposure,
+} from '../../utilities/long-exposure/exposure-math';
 import type { SampleStats } from '../../utilities/long-exposure/sample-stats';
 import type { LongExposureInterpolationReport } from './capture-session';
 import { createLogger } from '../../utilities/logger';
@@ -197,6 +202,47 @@ async function captureKeyOf(fullPath: string): Promise<string> {
 
 export function bracketSuffix(sinkId: string): string {
 	return `-${sinkId.replace(/\//g, '-').replace(/\./g, 's')}`;
+}
+
+// One bracket stop's own plan, derived from the capture's.
+//
+// The sidecar's whole `exposure` block and its `sampling.predicted` are read
+// straight off the plan, so handing every stop the PRIMARY's meant a 1/1000 stop
+// recorded the 1/30 window it was bracketed from — `requestedMs: 1` sitting next to
+// `effectiveMs: 33.33`, `windowFrames: 2` and a `startFrame` two frames back, in one
+// file, describing an image that reached back one. That is the same defect the
+// per-stop `accepted` tally fixed, one field over: a sidecar quietly describing a
+// different image than the one beside it.
+//
+// ONLY the exposure-derived fields move. The anchor, the render and output sizes,
+// the playback divisor, the render rate and the pass count are genuinely shared —
+// every stop rode the same capture, and rewriting them per stop would be inventing
+// differences rather than recording them. `predictedWallClockSeconds` stays the
+// capture's for the same reason: a bracket stop cost no wall clock of its own.
+//
+// The prediction is re-derived rather than scaled, from the same render rate and
+// divisor the capture ran at, so it pairs with this stop's measured `achieved` the
+// way the primary's pair does.
+export function planForStop(
+	plan: ResolvedPlan,
+	exposureSeconds: number
+): ResolvedPlan {
+	const windowFrames = windowFramesForExposure(exposureSeconds);
+	const predictedSamples = predictSampleCount({
+		exposureSeconds,
+		renderFps: plan.renderFps,
+		playbackDivisor: plan.playbackDivisor,
+	});
+	return {
+		...plan,
+		windowFrames,
+		effectiveExposureSeconds: exposureSeconds,
+		isSubFrameWindow: isSubFrameExposure(exposureSeconds),
+		startFrame: plan.anchorFrame - windowFrames,
+		predictedSamples,
+		predictedTotalSamples: predictedSamples * plan.passes,
+		isSingleSample: predictedSamples <= 1,
+	};
 }
 
 export interface WriteLongExposureOptions {
@@ -557,7 +603,13 @@ export async function writeLongExposure(
 	const interpolation = options.interpolation ?? null;
 	const sidecar = buildSidecar({
 		recipe,
-		plan,
+		// Routed through the same helper the bracket stops use, so there is no special
+		// case for the primary. It is a NO-OP here by construction — the primary's
+		// exposure IS `plan.effectiveExposureSeconds`, and every field `planForStop`
+		// recomputes is recomputed exactly as `resolvePlan` computed it — which is
+		// precisely why it is safe to route through and worth doing: the code cannot
+		// then drift into treating the two kinds of stop differently.
+		plan: planForStop(plan, image.exposureSeconds),
 		// Sourced from the stop rather than the session for the same reason the
 		// bracket stops below are, and it is not merely cosmetic uniformity: it means
 		// EVERY sidecar's `achieved` describes the image beside it, with no special
@@ -622,7 +674,10 @@ export async function writeLongExposure(
 							// A re-shoot of one stop is a single shot, not a bracket.
 							bracket: false,
 						},
-						plan,
+						// THIS stop's window, not the primary's. Without it the
+						// `exposure` block and `sampling.predicted` described the shot
+						// this one was bracketed FROM — see planForStop.
+						plan: planForStop(plan, stop.exposureSeconds),
 						// THIS stop's achieved count, not the session's. `accepted`
 						// counts frames CONSUMED and is identical for every stop in a
 						// bracket, so passing it unchanged made a 1/1000 stop claim
