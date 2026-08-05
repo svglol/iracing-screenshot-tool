@@ -46,8 +46,8 @@ use windows_capture::capture::{Context, GraphicsCaptureApiHandler};
 use windows_capture::frame::Frame;
 use windows_capture::graphics_capture_api::InternalCaptureControl;
 use windows_capture::settings::{
-    ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
-    MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
+    ColorFormat, DirtyRegionSettings, MinimumUpdateIntervalSettings, SecondaryWindowSettings,
+    Settings,
 };
 use windows_capture::window::Window;
 
@@ -594,8 +594,11 @@ fn run_session(
 
     let settings = Settings::new(
         window,
-        CursorCaptureSettings::WithoutCursor,
-        DrawBorderSettings::WithoutBorder,
+        // Negotiated, not demanded: asking for a setting whose backing WinRT
+        // property is missing is a hard error that would fail every frame of the
+        // exposure. See the helpers in lib.rs for what each degradation costs.
+        crate::negotiated_cursor_settings(),
+        crate::negotiated_border_settings(),
         SecondaryWindowSettings::Default,
         MinimumUpdateIntervalSettings::Default,
         DirtyRegionSettings::Default,

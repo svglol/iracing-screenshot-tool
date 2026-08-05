@@ -65,7 +65,7 @@ export function checkIracingConfig(): string[] {
 				'Disable "Render Scene Using 3 Projections" in iRacing (Display > Monitor tab) to avoid vertical bands in screenshots'
 			);
 		}
-	} catch (error) {
+	} catch {
 		// Skip check if file cannot be read
 	}
 

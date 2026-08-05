@@ -91,7 +91,7 @@ function rotateLogIfNeeded(logFile: string): void {
 
 		const content = fs.readFileSync(logFile);
 		fs.writeFileSync(logFile, computeRotatedBuffer(content));
-	} catch (error) {
+	} catch {
 		// Rotation failure must not crash the app
 	}
 }
@@ -109,7 +109,7 @@ function init(): void {
 	// this can't be resolved.
 	try {
 		_homeDir = (require('os') as typeof import('os')).homedir();
-	} catch (error) {
+	} catch {
 		_homeDir = null;
 	}
 
@@ -117,7 +117,7 @@ function init(): void {
 	// mkdirSync on every line.
 	try {
 		fs.mkdirSync(_logDir, { recursive: true });
-	} catch (error) {
+	} catch {
 		// Ignore — writeLine has a one-shot retry + degraded fallback.
 	}
 
@@ -130,7 +130,7 @@ function init(): void {
 		} else {
 			_approxSize = 0;
 		}
-	} catch (error) {
+	} catch {
 		_approxSize = 0;
 	}
 }
@@ -181,7 +181,7 @@ export function normalizeLogData(data: unknown): unknown {
 export function serializeEntry(entry: LogEntry): string {
 	try {
 		return JSON.stringify(entry, errorReplacer);
-	} catch (error) {
+	} catch {
 		try {
 			const seen = new WeakSet<object>();
 			return JSON.stringify(entry, (key: string, value: unknown) => {
@@ -237,7 +237,7 @@ function writeLine(
 
 	try {
 		fs.appendFileSync(logFile, line, 'utf8');
-	} catch (error) {
+	} catch {
 		// One-shot recovery: the dir may have been removed under us. Retry once,
 		// then latch degraded so the failure of logging is itself observable
 		// (in a dev/attached console) rather than vanishing every line.
@@ -249,7 +249,7 @@ function writeLine(
 				_loggingDegraded = true;
 				try {
 					console.error('[logger] file logging degraded', error2);
-				} catch (error3) {
+				} catch {
 					// Writing must never crash the app
 				}
 			}

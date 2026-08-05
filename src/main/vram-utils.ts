@@ -113,7 +113,6 @@ function createNative(): VramNative | null {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let koffi: any;
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		koffi = require('koffi');
 	} catch {
 		return null;

@@ -59,6 +59,10 @@ interface HarnessOptions {
 	signal?: { aborted: boolean };
 	// Force the restore seek to miss, to prove the outcome reports it honestly.
 	restoreLands?: boolean;
+	// What the post-raise #10 re-sample reports: a refusal message, or null to
+	// proceed. Undefined leaves the dep off entirely, which is the shape a caller
+	// that never supplies it produces.
+	fullscreenRefusal?: string | null;
 }
 
 function makeHarness(options: HarnessOptions = {}) {
@@ -223,6 +227,14 @@ function makeHarness(options: HarnessOptions = {}) {
 		restoreWindow: () => {
 			events.push('restoreWindow');
 		},
+		...(options.fullscreenRefusal === undefined
+			? {}
+			: {
+					exclusiveFullscreenRefusal: () => {
+						events.push('fullscreenCheck');
+						return options.fullscreenRefusal ?? null;
+					},
+				}),
 		vramInfo: () => ({
 			totalBytes: 24 * GiB,
 			usedBytes: (24 - freeVramGiB) * GiB,
@@ -676,6 +688,50 @@ describe('executeRecipe — the restore guarantee holds on every failure path', 
 		expectAnchorRestored(harness.events);
 	});
 
+	// The native side records a concrete cause in `last_error` and hands it back on
+	// every stats call. Dropping it left a bug report reading "iRacing did not present
+	// any frames" with nothing to act on, so it rides along with the sentence.
+	it('surfaces the native cause when no frames arrived', async () => {
+		const harness = makeHarness({
+			nativeOverrides: {
+				longExposureStats: () => ({
+					accepted: 0,
+					rejected: 0,
+					sawFrame: false,
+					frameWidth: 0,
+					frameHeight: 0,
+					error: 'capture failed: ItemConvertFailed',
+				}),
+			},
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.failure).toBe('no-samples');
+		expect(outcome.message).toContain('did not present any frames');
+		expect(outcome.message).toContain('ItemConvertFailed');
+		expectAnchorRestored(harness.events);
+	});
+
+	// Same branch, no native string to add: the sentence must not grow an empty
+	// parenthetical.
+	it('says only the sentence when the addon reports no cause', async () => {
+		const harness = makeHarness({
+			nativeOverrides: {
+				longExposureStats: () => ({
+					accepted: 0,
+					rejected: 0,
+					sawFrame: false,
+					frameWidth: 0,
+					frameHeight: 0,
+					error: null,
+				}),
+			},
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.message).toBe(
+			'iRacing did not present any frames to capture.'
+		);
+	});
+
 	it('restores when no frames were accumulated', async () => {
 		const harness = makeHarness({
 			nativeOverrides: {
@@ -721,6 +777,31 @@ describe('executeRecipe — the restore guarantee holds on every failure path', 
 		expect(outcome.message).toContain('shorter than one replay frame');
 		expect(outcome.message).not.toContain('stopped rendering');
 		expectAnchorRestored(harness.events);
+	});
+
+	// The addon writes "no frames were accumulated during the exposure" whenever the
+	// accumulator is empty — including the sub-frame case, where that is the expected
+	// outcome and not a fault. Appending it would dress a non-problem up as one.
+	it('withholds the native cause on a sub-frame window', async () => {
+		const harness = makeHarness({
+			framesPerPoll: 1 / 16,
+			nativeOverrides: {
+				longExposureStats: () => ({
+					accepted: 0,
+					rejected: 0,
+					sawFrame: true,
+					frameWidth: 640,
+					frameHeight: 360,
+					error: 'no frames were accumulated during the exposure',
+				}),
+			},
+		});
+		const outcome = await executeRecipe(
+			recipe({ shutter: '1/1000', playbackSpeed: 16 }),
+			harness.deps
+		);
+		expect(outcome.message).toContain('shorter than one replay frame');
+		expect(outcome.message).not.toContain('no frames were accumulated');
 	});
 
 	it('restores when the GPU resolve returns nothing', async () => {
@@ -776,6 +857,51 @@ describe('executeRecipe — the restore guarantee holds on every failure path', 
 		const outcome = await executeRecipe(recipe(), harness.deps);
 		expect(outcome.failure).toBe('window-unavailable');
 		expectAnchorRestored(harness.events);
+	});
+
+	// #10, re-sampled after the resize raised iRacing. Main's own pre-flight runs
+	// while OUR window is foreground, so its attribution can never succeed on this
+	// path — this is the sample that can actually refuse.
+	it('refuses exclusive fullscreen found after the window is raised', async () => {
+		const harness = makeHarness({
+			fullscreenRefusal: 'iRacing is in exclusive fullscreen',
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.failure).toBe('exclusive-fullscreen');
+		expect(outcome.message).toContain('exclusive fullscreen');
+		// Refused BEFORE any GPU work: opening a session for a window that presents
+		// nothing is the multi-minute failure this check exists to prevent.
+		expect(harness.nativeCalls).not.toContain('begin');
+		// And it happens after the raise, not before it — that ordering is the whole
+		// point, since attribution is meaningless until iRacing is foreground.
+		expect(harness.events.indexOf('fullscreenCheck')).toBeGreaterThan(
+			harness.events.indexOf('resize')
+		);
+		expectAnchorRestored(harness.events);
+	});
+
+	it('restores the window it already resized when it refuses', async () => {
+		const harness = makeHarness({
+			fullscreenRefusal: 'iRacing is in exclusive fullscreen',
+		});
+		await executeRecipe(recipe(), harness.deps);
+		expect(harness.events).toContain('restoreWindow');
+	});
+
+	it('proceeds when the re-sample reports no exclusive fullscreen', async () => {
+		const harness = makeHarness({ fullscreenRefusal: null });
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(harness.events).toContain('fullscreenCheck');
+	});
+
+	// The dep is optional so an older caller keeps working; absent must mean
+	// "proceed", never "refuse".
+	it('captures normally when no fullscreen check is supplied', async () => {
+		const harness = makeHarness();
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(harness.events).not.toContain('fullscreenCheck');
 	});
 
 	// Tearing the GPU session down before resizing iRacing back matters: its VRAM

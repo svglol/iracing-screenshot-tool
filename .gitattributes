@@ -1,0 +1,26 @@
+# Line endings.
+#
+# Every blob in this repo is stored with LF, and .prettierrc leaves prettier's
+# `endOfLine` at its "lf" default. But core.autocrlf=true is the norm on Windows
+# — including GitHub's Windows runners — so `actions/checkout` writes CRLF into
+# the working tree and `prettier --check` then rejects every file it looks at.
+# That is invisible locally, where the files were authored as LF and never
+# re-checked-out, so the check passes here and fails in CI.
+#
+# Forcing eol=lf makes the working tree match the blobs on every machine, which
+# also silences git's persistent "LF will be replaced by CRLF" warnings.
+* text=auto eol=lf
+
+# Binaries git must never inspect or convert. The committed native addon is the
+# one that matters — a line-ending rewrite would corrupt it — but the image and
+# installer types are listed so a future addition cannot trip over this either.
+*.node binary
+*.dll binary
+*.exe binary
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary

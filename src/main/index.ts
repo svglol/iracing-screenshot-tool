@@ -17,7 +17,6 @@ import * as path from 'path';
 // read-ini-file has no @types/* published upstream; keep CommonJS require so we
 // can avoid a namespace-import mismatch. The loadIniFile.sync path is the only
 // API we call.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
@@ -31,12 +30,18 @@ import {
 	QUNS_RUNNING_D3D_FULL_SCREEN,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
-import { decideCaptureBackend, classifyWgcResult } from './capture-decisions';
+import {
+	decideCaptureBackend,
+	classifyWgcResult,
+	decideLongExposureAvailability,
+} from './capture-decisions';
 import {
 	captureIracingWindowNative,
 	getLastNativeFailureReason,
+	getWgcSupport,
 	getWgcUnavailableReason,
 	isWgcAvailable,
+	verifyWgcCapture,
 } from './wgc-capture';
 import {
 	getLongExposureApi,
@@ -81,20 +86,11 @@ import {
 	findDisplaySourceByDisplayId,
 } from '../utilities/desktop-capture';
 import {
-	isPlainObject,
 	mergePlainObjects,
-	serializeBounds,
 	serializeDisplay,
 	summarizeDesktopSource,
 	summarizeDesktopSources,
 	createScreenshotErrorPayload,
-	trimWrappedQuotes,
-	expandWindowsEnvironmentVariables,
-	normalizeComparableWindowsPath,
-	getWindowsUserProfileRoot,
-	resolveReshadeBasePath,
-	remapForeignUserProfileFolder,
-	createReshadeConfigError,
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
 	parseCameraState as parseCameraStateFromArray,
@@ -853,10 +849,63 @@ ipcMain.handle('get-iracing-fullscreen-state', () =>
 	getIracingExclusiveFullscreenState()
 );
 // #11: whether the WGC native-capture path loaded on this machine (addon present
-// + Win10 1903+). Settings uses this (sendSync) to disable the toggle on an
-// unsupported system. Fails open in the loader, so a false here is definitive.
+// + the OS floors in decideWgcSupport). Settings uses this (sendSync) to disable
+// the toggle on an unsupported system. Fails open in the loader, so a false here
+// is definitive.
 ipcMain.on('native-capture-available', (event) => {
 	event.returnValue = isWgcAvailable();
+});
+// The same verdict plus the sentence explaining it, for the toggle's description.
+ipcMain.on('native-capture-support', (event) => {
+	event.returnValue = getWgcSupport();
+});
+// Pre-flight the High-Fidelity Capture toggle at the moment the user turns it ON.
+//
+// Two tiers, because they answer different questions. getWgcSupport() is what the
+// OS advertises and is authoritative: if a required WinRT property is missing,
+// every capture WILL fail, so the toggle is refused outright. The trial grab then
+// proves a session really opens and delivers a frame, catching what no contract
+// lookup can (wedged compositor, driver fault). A trial-grab failure is reported
+// but does NOT refuse: it can fail for transient reasons, stills fall back on
+// their own, and refusing on it would lock a working machine out of the feature.
+//
+// The app's own window is the target — it is on screen whenever Settings is open,
+// it costs one small frame, and it needs iRacing to be running exactly never.
+ipcMain.on('native-capture-verify', (event) => {
+	const support = getWgcSupport();
+	if (!support.supported) {
+		log.warn('High-Fidelity Capture toggle refused', {
+			reason: support.reason,
+		});
+		event.returnValue = { ...support, verified: false, verifyError: null };
+		return;
+	}
+
+	let verified = false;
+	let verifyError: string | null = null;
+	try {
+		const handle = mainWindow?.getNativeWindowHandle();
+		if (!handle || handle.length < 4) {
+			verifyError = 'no window handle available for the trial capture';
+		} else {
+			// HWND is pointer-sized; readUInt32LE is the low word, which is all a
+			// window handle ever uses (it is a kernel index, not an address).
+			const check = verifyWgcCapture(handle.readUInt32LE(0));
+			verified = check.ok;
+			verifyError = check.error;
+		}
+	} catch (error) {
+		verifyError = (error as Error)?.message || String(error);
+	}
+
+	if (!verified) {
+		log.warn('High-Fidelity Capture trial grab failed', {
+			error: verifyError,
+		});
+	} else {
+		log.info('High-Fidelity Capture verified');
+	}
+	event.returnValue = { ...support, verified, verifyError };
 });
 
 // ---------------------------------------------------------------------------
@@ -947,9 +996,24 @@ function longExposureDefaults(live: ReplayState | null): LongExposureRecipe {
 // The renderer polls this to enable/disable the panel and explain why.
 ipcMain.handle('long-exposure:availability', () => {
 	const availability = getLongExposureAvailability();
+	// The machine probe is cached for the session (neither the addon nor the driver
+	// changes while we run), but the toggle can flip at any moment — so the gate is
+	// composed per poll rather than folded into the cache.
+	const gate = decideLongExposureAvailability({
+		nativeCapture: config.get('nativeCapture') === true,
+		machineAvailable: availability.available,
+		machineReason: availability.reason,
+	});
 	const state = replayController.state();
 	return {
 		...availability,
+		// The GATE, not the raw probe. The panel hides its controls on `available`,
+		// and long exposure is native-WGC-only, so High-Fidelity Capture has to be
+		// able to close it. `needsNativeCapture` is what lets the panel offer the
+		// switch instead of wrongly declaring the machine incapable.
+		available: gate.available,
+		reason: gate.reason,
+		needsNativeCapture: gate.needsNativeCapture,
 		// Whether the sim is giving us a replay position to anchor on — NOT whether
 		// the user has a replay open.
 		//
@@ -989,6 +1053,25 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		};
 	}
 
+	// The same gate the renderer polls, re-checked here. The panel hides the button
+	// when this is closed, but the IPC channel is reachable regardless of what the
+	// renderer chose to draw, so main refuses rather than trusting it.
+	const gate = decideLongExposureAvailability({
+		nativeCapture: config.get('nativeCapture') === true,
+		machineAvailable: getLongExposureAvailability().available,
+		machineReason: getLongExposureAvailability().reason,
+	});
+	if (!gate.available) {
+		return {
+			ok: false,
+			failure: 'backend-unavailable',
+			message: gate.needsNativeCapture
+				? 'Long exposure needs High-Fidelity Capture (WGC). Turn it on in Settings to use it.'
+				: gate.reason || 'Long exposure is not available on this machine.',
+			warnings: [],
+		};
+	}
+
 	const live = replayController.state();
 	if (!live) {
 		// See the note on `hasReplayData` above: this is "no telemetry", not "not in
@@ -1005,6 +1088,12 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 	// #10: the same exclusive-fullscreen pre-flight the still path runs. WGC is
 	// DWM-based, so exclusive fullscreen comes back black on this path too — and a
 	// long exposure would burn the full playback duration before finding out.
+	//
+	// BEST-EFFORT ONLY on this path, and it will essentially never fire: the user
+	// just clicked a button in OUR window, so `getIracingExclusiveFullscreenState`
+	// cannot attribute the shell's fullscreen state to iRacing. It is kept because it
+	// costs nothing and stashes `lastCaptureFullscreenState`; the sample that can
+	// actually refuse is `exclusiveFullscreenRefusal` below, taken after the raise.
 	const fullscreen = getIracingExclusiveFullscreenState();
 	lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
 	if (fullscreen && fullscreen.exclusiveFullscreen) {
@@ -1053,6 +1142,17 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			// Reuse the still path's restore exactly, so a long exposure leaves
 			// iRacing in the same state a normal screenshot would.
 			restoreWindow: () => restoreScreenshotState(),
+			// #10, re-sampled after the resize has raised iRacing — the only point on
+			// this path where GetForegroundWindow attribution can succeed. Same
+			// wording as the still path's early exit, deliberately: it is the same
+			// condition and the same remedy.
+			exclusiveFullscreenRefusal: () => {
+				const raised = getIracingExclusiveFullscreenState();
+				lastCaptureFullscreenState = raised ? raised.state : null;
+				return raised && raised.exclusiveFullscreen
+					? EXCLUSIVE_FULLSCREEN_MESSAGE
+					: null;
+			},
 			vramInfo: () => getVramInfo(),
 			baselineDims: () => getIracingWindowSizeNative(),
 			lossyInterpolationLoad: () =>

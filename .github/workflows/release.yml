@@ -1,0 +1,118 @@
+name: Release
+
+# `npm run release <major|minor|patch>` bumps, commits and tags locally, then
+# pushes the tag — which lands here. Everything from "build the installer"
+# onward is this workflow's job; release.js no longer builds or uploads.
+on:
+    push:
+        tags:
+            - 'v*'
+
+# electron-builder creates the draft release and uploads assets; the final step
+# flips it out of draft. Both need write access to contents.
+permissions:
+    contents: write
+
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    release:
+        # Pinned to windows-2022, NOT windows-latest — see the note in ci.yml.
+        # VS 2026 (the windows-latest default since June 2026) hits a C1001
+        # internal compiler error on node-addon-api while building
+        # @irsdk-node/native, which fails `npm ci`. This must stay in step with
+        # the runner ci.yml uses, so the release builds what CI tested.
+        runs-on: windows-2022
+        timeout-minutes: 60
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  # Release notes fall back to `git log <prevTag>..<tag>`, which
+                  # needs real history — the default shallow clone has none.
+                  fetch-depth: 0
+
+            # A tag whose semver disagrees with package.json produces an installer
+            # named for one version published under another. Fail before the
+            # 40-minute build rather than after it.
+            - name: Verify tag matches package.json
+              shell: bash
+              run: |
+                  tag="${GITHUB_REF_NAME#v}"
+                  pkg="$(node -p "require('./package.json').version")"
+                  if [ "$tag" != "$pkg" ]; then
+                    echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg"
+                    exit 1
+                  fi
+                  echo "Releasing $GITHUB_REF_NAME"
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: native/wgc-capture
+
+            # native/wgc-capture.node is committed for contributors' `npm run dev`,
+            # but a release must never ship a binary older than src/lib.rs.
+            # Rebuild and overwrite it before electron-builder packages it in.
+            - name: Build native WGC addon
+              shell: bash
+              run: |
+                  cargo build --release --manifest-path native/wgc-capture/Cargo.toml
+                  cp native/wgc-capture/target/release/wgc_capture.dll native/wgc-capture.node
+
+            # postinstall rebuilds irsdk-node and sharp against Electron's headers.
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Test
+              run: npm test
+
+            - name: Build bundles
+              run: npm run pack
+
+            # Publishes as a DRAFT (build.publish.releaseType), uploading the NSIS
+            # installer, the portable exe, the .blockmap and — critically —
+            # latest.yml, which electron-updater fetches to discover new versions.
+            - name: Package and upload artifacts
+              run: npx electron-builder --publish always
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # Attach the notes and take the release out of draft, so a failed build
+            # above never leaves a half-populated release visible to users.
+            - name: Publish release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  tag="$GITHUB_REF_NAME"
+                  notes="RELEASE-NOTES-${tag}.md"
+
+                  if [ -f "$notes" ]; then
+                    echo "Using curated notes: $notes"
+                  else
+                    echo "No $notes — falling back to the commit log."
+                    prev="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+                    range="${prev:+${prev}..}${tag}"
+                    notes=generated-notes.md
+                    {
+                      echo "## What's Changed"
+                      echo
+                      git log "$range" --pretty=format:'- %s (%h)' --no-merges
+                      echo
+                    } > "$notes"
+                  fi
+
+                  gh release edit "$tag" \
+                    --draft=false \
+                    --latest \
+                    --title "$tag" \
+                    --notes-file "$notes"

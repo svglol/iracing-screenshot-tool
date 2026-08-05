@@ -45,6 +45,14 @@
         "nsis": {
             "include": "_scripts/installer.nsh"
         },
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "svglol",
+                "repo": "iracing-screenshot-tool",
+                "releaseType": "draft"
+            }
+        ],
         "electronDist": "node_modules/electron/dist"
     },
     "main": "./out/main/index.js",
@@ -121,6 +129,8 @@
         "electron-vite-debug": "electron-vite dev --inspect=9222",
         "electron-vite-dev": "electron-vite dev",
         "lint": "eslint --fix ./",
+        "lint:check": "eslint ./",
+        "format:check": "prettier --check \"{src,_scripts}/**/*.{js,ts,vue}\"",
         "pack": "electron-vite build",
         "postinstall": "run-s electron-builder-install electron-rebuild",
         "prettier": "prettier --write \"{src,_scripts}/**/*.{js,ts,vue}\"",

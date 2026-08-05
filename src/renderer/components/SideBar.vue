@@ -507,7 +507,7 @@ export default {
 			ipcRenderer.send('request-iracing-status', '');
 		}, IRACING_STATUS_POLL_INTERVAL_MS);
 
-		ipcRenderer.on('hotkey-screenshot', (event, arg) => {
+		ipcRenderer.on('hotkey-screenshot', () => {
 			if (this.iracingOpen && !this.takingScreenshot) {
 				this.takeScreenshot();
 			}
@@ -521,11 +521,11 @@ export default {
 			}
 		});
 
-		ipcRenderer.on('iracing-connected', (event, arg) => {
+		ipcRenderer.on('iracing-connected', () => {
 			this.handleIracingConnected();
 		});
 
-		ipcRenderer.on('iracing-disconnected', (event, arg) => {
+		ipcRenderer.on('iracing-disconnected', () => {
 			this.iracingOpen = false;
 			// Clear the fullscreen warning at once — iRacing is gone, so any
 			// "exclusive fullscreen" banner is now stale (don't wait for the poll).
@@ -575,11 +575,11 @@ export default {
 			ipcRenderer.send('request-iracing-status', '');
 		});
 
-		config.onDidChange('disableTooltips', (newValue, oldValue) => {
+		config.onDidChange('disableTooltips', (newValue) => {
 			this.disableTooltips = newValue;
 		});
 
-		config.onDidChange('reshade', (newValue, oldValue) => {
+		config.onDidChange('reshade', (newValue) => {
 			this.reshade = newValue;
 		});
 

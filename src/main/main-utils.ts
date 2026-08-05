@@ -225,7 +225,7 @@ export function expandWindowsEnvironmentVariables(value: unknown = ''): string {
 export function normalizeComparableWindowsPath(value: unknown = ''): string {
 	return path.win32
 		.normalize(String(value || ''))
-		.replace(/[\\\/]+$/, '')
+		.replace(/[\\/]+$/, '')
 		.toLowerCase();
 }
 
@@ -283,7 +283,7 @@ export function remapForeignUserProfileFolder(folder: string): {
 		targetProfileRoot,
 		normalizedFolder
 	);
-	const [topLevelFolder] = relativePath.split(/[\\\/]+/);
+	const [topLevelFolder] = relativePath.split(/[\\/]+/);
 
 	if (
 		!relativePath ||

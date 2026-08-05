@@ -113,6 +113,21 @@ D3D11 feature level 11_0 (compute shader 5.0, typed UAV load/store on
 `R32G32B32A32_FLOAT`), `d3dcompiler_47.dll` (a Windows system component since 8.1;
 we compile the HLSL at session start via `D3DCompile`).
 
+> **The session settings carry their own, later floors — negotiate them, never demand them.**
+> `CursorCaptureSettings` and `DrawBorderSettings` are each gated on a WinRT property
+> that shipped after WGC itself (`IsCursorCaptureEnabled`, Win10 2004;
+> `IsBorderRequired`, Windows 11 22000), and `windows-capture` returns
+> `CursorConfigUnsupported` / `BorderConfigUnsupported` from `GraphicsCaptureApi::new`
+> rather than degrading. Asking for `WithoutBorder` unconditionally therefore made the
+> whole capture path Windows 11-only *in practice* while every gate and every doc still
+> said 1903 — stills hid it behind the getUserMedia fallback, and long exposure, which
+> has none, reported "iRacing did not present any frames to capture." That was the first
+> external bug report (v3.2.1). `negotiated_cursor_settings()` /
+> `negotiated_border_settings()` in `native/wgc-capture/src/lib.rs` now pick the
+> strongest setting the OS accepts; the border costs nothing to drop (Windows 10 draws
+> no capture border at all), the cursor is surfaced as a caveat. **Any new non-`Default`
+> setting must go through the same negotiation**, or it silently re-imposes a floor.
+
 **How the build satisfies it:** it does nothing special. There is no `-gencode`
 list, no PTX fallback, no toolkit version to pin, no redistributable to bundle. The
 shader source is `include_str!`-embedded in the addon and compiled at runtime.

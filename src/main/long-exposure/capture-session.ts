@@ -71,6 +71,7 @@ export type LongExposureFailure =
 	| 'insufficient-vram'
 	| 'backend-unavailable'
 	| 'window-unavailable'
+	| 'exclusive-fullscreen'
 	| 'seek-failed'
 	| 'playback-stalled'
 	| 'no-samples'
@@ -260,6 +261,13 @@ export interface CaptureSessionDeps {
 	resizeWindow(width: number, height: number): Promise<number | undefined>;
 	// Put iRacing's window back the way the user had it.
 	restoreWindow(): void;
+	// #10 exclusive-fullscreen check, re-sampled AFTER the window is raised. Returns
+	// the refusal message when iRacing is confidently in exclusive fullscreen, or
+	// null to proceed. Returns the MESSAGE rather than the raw state so the wording
+	// stays in one place (main owns it, shared with the still path) while this module
+	// stays free of electron. Optional: a caller that does not supply it simply keeps
+	// the old behaviour of never re-checking.
+	exclusiveFullscreenRefusal?(): string | null;
 	// Live VRAM measurement and iRacing's current window size, for the pre-flight.
 	vramInfo(): VramInfo | null;
 	baselineDims(): Dimensions | null;
@@ -758,6 +766,33 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		return { ...base(), failure: 'aborted', message: 'Capture cancelled.' };
 	}
 
+	// #10 AGAIN — and this is the sample that can actually fire.
+	//
+	// The pre-flight in main runs the instant the user clicks Long Exposure, while
+	// OUR window is still foreground. `isExclusiveFullscreenState` requires
+	// attribution (GetForegroundWindow() === iRacing) because
+	// SHQueryUserNotificationState is session-global and cannot say WHICH app is
+	// fullscreen — so on this path attribution is structurally guaranteed to fail and
+	// the guard can never return true. The still path gets away with sampling early
+	// because its global hotkey leaves iRacing foreground; long exposure has no
+	// hotkey, only the in-app button.
+	//
+	// `resizeWindow` raises iRacing (BringWindowToTop + SetForegroundWindow), so HERE
+	// is the first moment attribution means anything. Refuse now rather than after
+	// burning the whole exposure — WGC is DWM-based, so an exclusive-fullscreen
+	// window presents nothing to capture and the run would end in the generic
+	// "iRacing did not present any frames" with no way to tell why.
+	const fullscreenRefusal = deps.exclusiveFullscreenRefusal?.() ?? null;
+	if (fullscreenRefusal) {
+		// The window was already resized, but the `finally` in `executeRecipe`
+		// restores it unconditionally, so returning here leaves nothing behind.
+		return {
+			...base(),
+			failure: 'exclusive-fullscreen',
+			message: fullscreenRefusal,
+		};
+	}
+
 	// --- 2-4. Visit the exposure window, once per pass -----------------------
 	//
 	// PASSES SUM INTO ONE ACCUMULATOR, which is never cleared between them. That is
@@ -1221,21 +1256,49 @@ async function resolveCapture(
 	deps.onProgress?.({ phase: 'resolving' });
 	const preResolve = native.longExposureStats(session);
 	if (preResolve.accepted === 0) {
+		// EVERYTHING the native side knows, logged BEFORE the abort below destroys the
+		// session. This branch used to be a dead end in support: the addon records a
+		// concrete cause in `last_error` ("capture failed: ItemConvertFailed",
+		// "capture target closed during exposure"), returns it on every stats call, and
+		// we dropped it on the floor — leaving a bug report with one generic sentence
+		// and a log that said only that the shot produced no image.
+		log.warn('Long exposure accumulated no samples', {
+			sawFrame: preResolve.sawFrame,
+			nativeError: preResolve.error,
+			accepted: preResolve.accepted,
+			rejected: preResolve.rejected,
+			synthesized: preResolve.synthesized ?? null,
+			frame: {
+				width: preResolve.frameWidth,
+				height: preResolve.frameHeight,
+			},
+			render: { width: plan.renderWidth, height: plan.renderHeight },
+			passes,
+			subFrameWindow: plan.isSubFrameWindow,
+		});
 		releaseSession();
 		native.longExposureAbort(session, RESOLVE_TIMEOUT_MS);
+		// A sub-replay-frame window can legitimately catch no presents at all:
+		// 1/1000 at 1/16 playback is ~16 ms of wall clock, about one rendered
+		// frame, so landing between two of them is a coin toss rather than a
+		// malfunction. Blaming iRacing for that would send the user hunting a
+		// fault that isn't there.
+		const reason = !preResolve.sawFrame
+			? 'iRacing did not present any frames to capture.'
+			: plan.isSubFrameWindow
+				? `This shutter is shorter than one replay frame, and iRacing did not render a frame inside it. Try a slower playback speed, or the next slower shutter.`
+				: 'No frames were accumulated. iRacing may have stopped rendering during the exposure.';
+		// Append the native cause when there is one. It is a short, concrete string
+		// aimed at us rather than at the user, but a user who can paste it into a bug
+		// report turns an unfalsifiable "it doesn't work" into a named failure — which
+		// is worth more than the tidier sentence. Suppressed for the sub-frame case,
+		// where the native text ("no frames were accumulated during the exposure")
+		// merely restates the sentence above and would make a non-fault look like one.
+		const nativeError = plan.isSubFrameWindow ? null : preResolve.error;
 		return {
 			...base(),
 			failure: 'no-samples',
-			// A sub-replay-frame window can legitimately catch no presents at all:
-			// 1/1000 at 1/16 playback is ~16 ms of wall clock, about one rendered
-			// frame, so landing between two of them is a coin toss rather than a
-			// malfunction. Blaming iRacing for that would send the user hunting a
-			// fault that isn't there.
-			message: !preResolve.sawFrame
-				? 'iRacing did not present any frames to capture.'
-				: plan.isSubFrameWindow
-					? `This shutter is shorter than one replay frame, and iRacing did not render a frame inside it. Try a slower playback speed, or the next slower shutter.`
-					: 'No frames were accumulated. iRacing may have stopped rendering during the exposure.',
+			message: nativeError ? `${reason} (${nativeError})` : reason,
 		};
 	}
 

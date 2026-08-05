@@ -1,0 +1,87 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    # The JS/TS side. Windows rather than ubuntu because the postinstall hook
+    # rebuilds irsdk-node and sharp against Electron, and irsdk-node is
+    # Windows-only — it will not install on Linux.
+    #
+    # Pinned to windows-2022, NOT windows-latest. GitHub migrated windows-latest
+    # to Visual Studio 2026 (MSVC v18) in June 2026, and that compiler hits an
+    # internal compiler error (C1001, constexpr frontend) on node-addon-api's
+    # napi-inl.h while building @irsdk-node/native, which fails `npm ci` outright.
+    # windows-2022 is GitHub's documented path for anyone still needing VS 2022
+    # and is supported for roughly three more years. Revisit when irsdk-node or
+    # node-addon-api can build under VS 2026.
+    check:
+        runs-on: windows-2022
+        timeout-minutes: 30
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            # `npm run lint` is `eslint --fix ./` — it writes. CI must use the
+            # non-writing variant so a failure is reported, not silently repaired.
+            #
+            # Blocking: the error count is zero. 28 warnings remain (21 no-explicit-any
+            # plus 7 Vue advisories) and do not fail the step — `eslint` only exits
+            # non-zero on errors.
+            - name: Lint
+              run: npm run lint:check
+
+            - name: Format
+              run: npm run format:check
+
+            - name: Type check
+              run: npm run type-check
+
+            - name: Test
+              run: npm test
+
+    # native/wgc-capture.node is committed, so nothing in `check` would notice
+    # src/lib.rs failing to compile. This job is what catches that.
+    # Rust builds fine on VS 2026, but pinned alongside `check` so both jobs
+    # share one toolchain and the release build cannot diverge from either.
+    native:
+        runs-on: windows-2022
+        timeout-minutes: 30
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: native/wgc-capture
+
+            # Compilation is the gate. `cargo clippy -D warnings` is deliberately
+            # NOT run: it reports 20 findings on current code, and several are
+            # intentional — the PFNNVOF* type aliases in longexp/nvof.rs mirror the
+            # NVIDIA SDK header names on purpose, so upper_case_acronyms is noise
+            # here, not a defect.
+            # No staleness check against the committed native/wgc-capture.node:
+            # rustc embeds build metadata in the PE header, so two builds of
+            # byte-identical source already differ at offset 257. There is no cheap
+            # reliable comparison. It does not matter for correctness — the release
+            # workflow rebuilds the addon from source before packaging, so a stale
+            # committed binary can never reach users; it only affects a
+            # contributor's local `npm run dev` until they rebuild.
+            - name: Build addon
+              run: cargo build --release --manifest-path native/wgc-capture/Cargo.toml
