@@ -271,7 +271,12 @@
 							<span class="label" style="margin-bottom: 0px"
 								>High-Fidelity Capture (WGC)</span
 							>
-							<span class="description">
+							<span
+								class="description"
+								:class="{
+									'description--warning': nativeCaptureProblem,
+								}"
+							>
 								{{ nativeCaptureDescription }}
 							</span>
 						</label>
@@ -353,6 +358,20 @@ export default {
 			// Set from the main process in created(); assume supported until told
 			// otherwise so the toggle isn't briefly disabled on a capable machine.
 			nativeCaptureSupported: true,
+			// Main's sentence explaining an unsupported verdict — which Windows
+			// floor was missed. Null while supported, or if the query failed.
+			nativeCaptureReason: null,
+			// Set when the OS advertises support but the trial capture on toggle-on
+			// did not come back. Not a refusal (see the native-capture-verify
+			// handler), so the switch stays on and this explains what we saw.
+			nativeCaptureWarning: null,
+			// Capture works, but this OS build made us give something up — today
+			// only the cursor suppression, below Win10 2004. Not a problem, so it
+			// reads as an ordinary note appended to the description.
+			nativeCaptureCaveat: null,
+			// Guards the nativeCapture watcher against the write it performs itself
+			// when it reverts a refused toggle, which would otherwise re-enter.
+			nativeCaptureReverting: false,
 			customFilenameFormat: config.get('customFilenameFormat'),
 			filenameFormat: config.get('filenameFormat'),
 			outputFormat: config.get('outputFormat'),
@@ -400,11 +419,33 @@ export default {
 				return acc;
 			}, {});
 		},
+		// Whether the description is reporting a problem rather than describing the
+		// feature, which is the only thing the warning styling keys off.
+		nativeCaptureProblem() {
+			return (
+				!this.nativeCaptureSupported || this.nativeCaptureWarning !== null
+			);
+		},
 		nativeCaptureDescription() {
+			// Main names the specific reason. The old text here hard-coded
+			// "Requires Windows 10 (1903)", which was both the wrong floor and the
+			// wrong shape — the floor now comes from the machine, not this string.
 			if (!this.nativeCaptureSupported) {
-				return 'Requires Windows 10 (1903) or newer — unavailable on this system.';
+				return (
+					this.nativeCaptureReason ||
+					'Unavailable on this system — high-fidelity capture cannot run here.'
+				);
 			}
-			return 'Capture true un-subsampled color via Windows.Graphics.Capture instead of the default pipeline (which subsamples color). Falls back automatically if a capture fails.';
+			if (this.nativeCaptureWarning) {
+				return this.nativeCaptureWarning;
+			}
+			const base =
+				'Capture true un-subsampled color via Windows.Graphics.Capture instead of the default pipeline (which subsamples color). Falls back automatically if a capture fails.';
+			// A caveat means it works but gives something up, so it reads as an
+			// addition to the description rather than replacing it.
+			return this.nativeCaptureCaveat
+				? `${base} ${this.nativeCaptureCaveat}`
+				: base;
 		},
 	},
 	watch: {
@@ -438,8 +479,51 @@ export default {
 		reshade() {
 			config.set('reshade', this.reshade);
 		},
+		// Turning this ON pre-flights the capture path instead of taking the user's
+		// word for it. Before this check, an unsupported machine accepted the switch
+		// and only revealed the problem during an actual capture — silently for
+		// stills (they fall back to getUserMedia) and, for a long exposure, as a
+		// "no frames to capture" error minutes into the shot, because that path has
+		// no fallback at all. sendSync, so the revert lands in the same tick and the
+		// switch never visibly settles in the on position.
 		nativeCapture() {
-			config.set('nativeCapture', this.nativeCapture);
+			if (this.nativeCaptureReverting) {
+				return;
+			}
+			if (!this.nativeCapture) {
+				this.nativeCaptureWarning = null;
+				config.set('nativeCapture', false);
+				return;
+			}
+
+			let check = null;
+			try {
+				check = ipcRenderer.sendSync('native-capture-verify');
+			} catch {
+				// Query unavailable — fail open and let the capture paths' own
+				// fallbacks handle it, exactly as they did before this check existed.
+				check = null;
+			}
+
+			if (check && check.supported === false) {
+				this.nativeCaptureSupported = false;
+				this.nativeCaptureReason = check.message || null;
+				this.nativeCaptureWarning = null;
+				this.nativeCaptureReverting = true;
+				this.nativeCapture = false;
+				this.$nextTick(() => {
+					this.nativeCaptureReverting = false;
+				});
+				config.set('nativeCapture', false);
+				return;
+			}
+
+			this.nativeCaptureCaveat = check?.caveat ?? null;
+			this.nativeCaptureWarning =
+				check && check.verified === false
+					? 'Windows reports this is supported, but a test capture did not come back. Captures will fall back automatically if it keeps failing.'
+					: null;
+			config.set('nativeCapture', true);
 		},
 		manualWindowRestore() {
 			config.set('manualWindowRestore', this.manualWindowRestore);
@@ -481,13 +565,17 @@ export default {
 	},
 	created() {
 		// Reflect whether the WGC native-capture path actually loaded on this
-		// machine (addon present + Win10 1903+). Fail-open to supported if the
-		// query is unavailable for any reason.
+		// machine (addon present + every OS floor its session settings need).
+		// Fail-open to supported if the query is unavailable for any reason.
 		try {
-			this.nativeCaptureSupported =
-				ipcRenderer.sendSync('native-capture-available') !== false;
+			const support = ipcRenderer.sendSync('native-capture-support');
+			this.nativeCaptureSupported = support?.supported !== false;
+			this.nativeCaptureReason = support?.message ?? null;
+			this.nativeCaptureCaveat = support?.caveat ?? null;
 		} catch {
 			this.nativeCaptureSupported = true;
+			this.nativeCaptureReason = null;
+			this.nativeCaptureCaveat = null;
 		}
 
 		ipcRenderer.send('request-iracing-status', '');
@@ -625,6 +713,12 @@ hr {
 .description {
 	font-size: 0.8rem;
 	color: #aaaaaa;
+}
+
+/* The description doubles as the failure text for High-Fidelity Capture, so a
+   refusal reads as one rather than as ordinary help text. */
+.description--warning {
+	color: #ffb86c;
 }
 
 .modal-card {

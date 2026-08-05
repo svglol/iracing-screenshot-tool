@@ -3,9 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // The addon accessor is the seam under test: this suite drives every branch of the
 // availability gate without needing a real .node, a GPU, or a live window.
 const getLongExposureAddon = vi.fn();
+// The WGC support verdict, so the null-addon branch can be driven for both of its
+// causes: a .node predating the feature vs an OS that cannot host WGC at all.
+const getWgcSupport = vi.fn(() => ({
+	supported: true,
+	reason: null,
+	message: null,
+	caveat: null,
+}));
 
 vi.mock('../wgc-capture', () => ({
 	getLongExposureAddon: () => getLongExposureAddon(),
+	getWgcSupport: () => getWgcSupport(),
 }));
 
 vi.mock('../../utilities/logger', () => ({
@@ -57,6 +66,14 @@ function fakeAddon(
 beforeEach(() => {
 	__resetLongExposureAvailabilityForTests();
 	getLongExposureAddon.mockReset();
+	// Default to a healthy WGC verdict so every existing case keeps exercising the
+	// addon-shaped reason; the OS-unsupported case opts in explicitly.
+	getWgcSupport.mockReturnValue({
+		supported: true,
+		reason: null,
+		message: null,
+		caveat: null,
+	});
 });
 
 describe('getLongExposureAvailability', () => {
@@ -155,6 +172,23 @@ describe('getLongExposureAvailability', () => {
 		expect(availability.backend).toBeNull();
 		expect(availability.reason).toMatch(/does not provide long exposure/);
 		expect(getLongExposureApi()).toBeNull();
+	});
+
+	// Same null addon, different cause. Long exposure runs only on the WGC path, so
+	// when WGC itself is unusable that IS the reason — reporting the addon-shaped
+	// one would send the user hunting for a newer build that cannot help them.
+	it('reports the WGC verdict when WGC is what is unusable', () => {
+		getLongExposureAddon.mockReturnValue(null);
+		getWgcSupport.mockReturnValue({
+			supported: false,
+			reason: 'OS unsupported (needs Win10 1903+)',
+			message:
+				'Windows.Graphics.Capture is not available on this version of Windows. It needs Windows 10 version 1903 or newer.',
+			caveat: null,
+		});
+		const availability = getLongExposureAvailability();
+		expect(availability.available).toBe(false);
+		expect(availability.reason).toContain('1903');
 	});
 
 	// The probe compiles the compute kernels, so a driver that cannot build them

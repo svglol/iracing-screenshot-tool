@@ -274,6 +274,11 @@ export default defineComponent({
 		return {
 			available: false,
 			unavailableReason: null as string | null,
+			// True only when the machine is capable and the High-Fidelity Capture
+			// toggle is the sole thing standing in the way — i.e. the one refusal the
+			// user can clear with a switch. Distinct from `!available`, which also
+			// covers a machine that cannot run the compute backend at all.
+			needsNativeCapture: false,
 			// Optical-flow interpolation support, reported independently of the
 			// compute backend. Null until the first poll answers.
 			interpolationSupported: false,
@@ -409,6 +414,25 @@ export default defineComponent({
 		notices(): Notice[] {
 			const notices: Notice[] = [];
 
+			// Long exposure cannot run. Two very different reasons, and conflating them
+			// is the difference between a fix and a dead end.
+			//
+			// The setting case comes FIRST because it is the actionable one: the
+			// machine is capable and a single switch stands in the way. Long exposure
+			// accumulates through the native WGC path no matter which backend stills
+			// use, so High-Fidelity Capture is a hard prerequisite here — telling this
+			// user their machine is "unavailable" would be both false and unhelpful.
+			//
+			// The panel stays mounted either way. Only the controls and the button are
+			// gated on `available` (see the template); the notice below is what remains,
+			// which is the whole reason NoticeCard sits outside that gate.
+			if (this.needsNativeCapture) {
+				notices.push({
+					level: 'warning',
+					text: 'Long exposure needs High-Fidelity Capture (WGC), which is currently off. Turn it on in Settings to enable long exposure.',
+				});
+				return notices;
+			}
 			// The compute backend could not be built on this machine. A prerequisite
 			// rather than a mistake the user made, which is why it is a warning and not
 			// a danger.
@@ -691,6 +715,7 @@ export default defineComponent({
 				);
 				this.available = status.available;
 				this.unavailableReason = status.reason;
+				this.needsNativeCapture = status.needsNativeCapture === true;
 				this.adapter = status.adapter ?? null;
 				// Absent (older addon) is treated exactly like unsupported: the
 				// control stays hidden and shots are taken without interpolation.
@@ -703,8 +728,11 @@ export default defineComponent({
 				// while OUR capture is the thing making it busy.
 				this.externallyBusy = status.busy && !this.capturing;
 			} catch {
-				// Main is not ready yet; the next tick will pick it up.
+				// Main is not ready yet; the next tick will pick it up. Clear the hint
+				// too — offering a switch to flip on the strength of a failed poll
+				// would be guessing.
 				this.available = false;
+				this.needsNativeCapture = false;
 			}
 		},
 		async refreshPreview() {

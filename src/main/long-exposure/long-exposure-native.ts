@@ -12,7 +12,7 @@
 // Everything fails soft: an unavailable backend produces a reason string the UI can
 // show, never a crash.
 
-import { getLongExposureAddon } from '../wgc-capture';
+import { getLongExposureAddon, getWgcSupport } from '../wgc-capture';
 import type { WgcLongExposureAddon } from '../wgc-capture';
 import { createLogger } from '../../utilities/logger';
 
@@ -64,10 +64,19 @@ export function getLongExposureAvailability(): LongExposureAvailability {
 
 	const addon = getLongExposureAddon();
 	if (!addon) {
+		// getLongExposureAddon() returns null for two very different reasons: the
+		// .node predates the feature, or WGC itself is unusable here (wrong OS,
+		// addon missing). Report the second as itself — long exposure runs ONLY on
+		// the WGC path, so an OS that cannot host it is the whole answer, and
+		// "the addon does not provide long exposure" would send that user looking
+		// for a newer build that would not help them either.
+		const support = getWgcSupport();
 		cached = {
 			available: false,
 			backend: null,
-			reason: 'the native capture addon does not provide long exposure',
+			reason: support.supported
+				? 'the native capture addon does not provide long exposure'
+				: support.message || support.reason,
 			adapter: null,
 			isNvidia: null,
 			interpolation: null,

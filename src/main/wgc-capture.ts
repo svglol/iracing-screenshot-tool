@@ -1,6 +1,11 @@
 import { app } from 'electron';
 import path from 'node:path';
 import { createLogger } from '../utilities/logger';
+import {
+	decideWgcSupport,
+	type WgcCapabilities,
+	type WgcSupport,
+} from './capture-decisions';
 
 const log = createLogger('wgc-capture');
 
@@ -197,8 +202,13 @@ export interface WgcLongExposureAddon {
 
 interface WgcAddon {
 	// Whether Windows.Graphics.Capture is available on this OS build. WGC's
-	// CreateForWindow needs Win10 1903 (build 18362) or newer.
+	// CreateForWindow needs Win10 1903 (build 18362) or newer. NOT sufficient on
+	// its own — see probeCaptureSupport.
 	isSupported(): boolean;
+	// Per-capability report covering the session settings we actually request.
+	// Optional: an addon build predating it leaves the gate on isSupported()
+	// alone, which is exactly how this behaved before the probe existed.
+	probeCaptureSupport?(): WgcCapabilities;
 	// Capture one frame of the window identified by the numeric HWND. Throws on a
 	// bad handle, no frame, or timeout so the JS side can fall back.
 	captureWindow(hwnd: number, timeoutMs?: number): WgcCaptureResult;
@@ -212,6 +222,15 @@ let wgcApi: WgcAddon | null | undefined;
 // wgcAvailable:false. Set in each createWgcApi() null branch; cleared on success.
 let wgcUnavailableReason: string | null = null;
 
+// The same verdict with the user-facing sentence attached, for the Settings
+// toggle. Populated alongside wgcUnavailableReason in createWgcApi().
+let wgcSupport: WgcSupport = {
+	supported: false,
+	reason: null,
+	message: null,
+	caveat: null,
+};
+
 // The reason WGC is unavailable, or null when it IS available. Self-initializing:
 // forces createWgcApi() to run (via getWgcApi) so the reason is populated
 // regardless of call order — the invariant "reason===null iff isWgcAvailable()"
@@ -219,6 +238,13 @@ let wgcUnavailableReason: string | null = null;
 export function getWgcUnavailableReason(): string | null {
 	getWgcApi();
 	return wgcUnavailableReason;
+}
+
+// The full support verdict (supported + short reason + user-facing sentence).
+// Self-initializing for the same reason as getWgcUnavailableReason above.
+export function getWgcSupport(): WgcSupport {
+	getWgcApi();
+	return wgcSupport;
 }
 
 // Resolve the prebuilt addon on disk. Packaged: app.getAppPath() is
@@ -231,10 +257,20 @@ function resolveAddonPath(): string {
 	return path.join(base, 'native', 'wgc-capture.node');
 }
 
+// Record one unavailable verdict in both shapes at once, so wgcUnavailableReason
+// (diagnostics) and wgcSupport (UI) can never disagree about this session.
+function unavailable(reason: string, message: string): null {
+	wgcUnavailableReason = reason;
+	wgcSupport = { supported: false, reason, message, caveat: null };
+	return null;
+}
+
 function createWgcApi(): WgcAddon | null {
 	if (process.platform !== 'win32') {
-		wgcUnavailableReason = 'wgc-unavailable (non-Windows platform)';
-		return null;
+		return unavailable(
+			'wgc-unavailable (non-Windows platform)',
+			'High-fidelity capture is a Windows-only feature.'
+		);
 	}
 
 	// The addon is a prebuilt .node; require() only throws if it's missing or the
@@ -246,11 +282,13 @@ function createWgcApi(): WgcAddon | null {
 		addon = require(resolveAddonPath());
 	} catch (error) {
 		const msg = (error as Error)?.message || String(error);
-		wgcUnavailableReason = 'addon missing / ABI mismatch: ' + msg;
 		log.warn('WGC addon unavailable; native capture disabled', {
 			error: msg,
 		});
-		return null;
+		return unavailable(
+			'addon missing / ABI mismatch: ' + msg,
+			'The high-fidelity capture component could not be loaded on this system.'
+		);
 	}
 
 	if (
@@ -258,28 +296,72 @@ function createWgcApi(): WgcAddon | null {
 		typeof addon.captureWindow !== 'function' ||
 		typeof addon.isSupported !== 'function'
 	) {
-		wgcUnavailableReason = 'addon ABI unexpected';
 		log.error('WGC addon loaded but ABI is unexpected');
-		return null;
+		return unavailable(
+			'addon ABI unexpected',
+			'The high-fidelity capture component could not be loaded on this system.'
+		);
 	}
 
-	// Gate on OS support once, at load. isSupported() is a pure IsSupported() call
-	// and shouldn't throw, but guard it anyway so a broken addon can't take down
-	// the whole main process.
+	// Gate on OS support once, at load. Neither call touches a device or a window
+	// — they are contract/property lookups — but guard them anyway so a broken
+	// addon can't take down the whole main process.
+	let apiSupported: boolean;
+	let capabilities: WgcCapabilities | null = null;
 	try {
-		if (!addon.isSupported()) {
-			wgcUnavailableReason = 'OS unsupported (needs Win10 1903+)';
-			log.warn('Windows.Graphics.Capture not supported on this OS');
-			return null;
+		apiSupported = addon.isSupported();
+		// Absent on an addon build predating the probe; decideWgcSupport then falls
+		// back to apiSupported alone (the pre-probe behaviour).
+		if (typeof addon.probeCaptureSupport === 'function') {
+			capabilities = addon.probeCaptureSupport();
 		}
 	} catch (error) {
 		const msg = (error as Error)?.message || String(error);
-		wgcUnavailableReason = 'isSupported() threw: ' + msg;
-		log.error('WGC isSupported() threw; disabling', { error: msg });
+		log.error('WGC support probe threw; disabling', { error: msg });
+		return unavailable(
+			'support probe threw: ' + msg,
+			'The high-fidelity capture component could not be loaded on this system.'
+		);
+	}
+
+	const support = decideWgcSupport({
+		addonLoaded: true,
+		loaderReason: null,
+		apiSupported,
+		capabilities,
+	});
+	if (!support.supported) {
+		// The per-capability flags are the whole point of logging this: they say
+		// WHICH Windows floor was missed, which isSupported() alone cannot.
+		log.warn('Windows.Graphics.Capture unusable on this OS', {
+			reason: support.reason,
+			apiSupported,
+			capabilities,
+		});
+		wgcUnavailableReason = support.reason;
+		wgcSupport = support;
 		return null;
 	}
 
+	// Record what the session had to negotiate away even when everything works, so
+	// an image-quality report from an older Windows can be read against it rather
+	// than guessed at. Neither degradation stops the capture.
+	if (
+		capabilities &&
+		!(
+			capabilities.cursorConfigSupported &&
+			capabilities.borderConfigSupported
+		)
+	) {
+		log.info('WGC available with negotiated settings', {
+			cursorConfigSupported: capabilities.cursorConfigSupported,
+			borderConfigSupported: capabilities.borderConfigSupported,
+			caveat: support.caveat,
+		});
+	}
+
 	wgcUnavailableReason = null;
+	wgcSupport = support;
 	return addon;
 }
 
@@ -335,6 +417,47 @@ let lastNativeFailureReason: string | null = null;
 // succeeded or none has run). Read by the main-process failure diagnostics.
 export function getLastNativeFailureReason(): string | null {
 	return lastNativeFailureReason;
+}
+
+export interface WgcLiveCheck {
+	ok: boolean;
+	// The native message when the trial grab failed; null when it succeeded.
+	error: string | null;
+}
+
+// Open a real WGC session against `hwnd` and pull one frame, purely to prove the
+// path works end to end.
+//
+// getWgcSupport() answers what the OS ADVERTISES; this answers whether a session
+// actually opens and delivers on this machine, which also covers the faults no
+// contract lookup can predict (a wedged compositor, a driver that fails the
+// D3D device, a window that never composes). Used to validate the High-Fidelity
+// Capture toggle at the moment the user turns it on, instead of letting the first
+// real capture — or worse, a multi-minute long exposure — be the discovery.
+//
+// Deliberately does NOT write lastNativeFailureReason: that field means "why the
+// last CAPTURE fell back", and a settings probe is not a capture. Blocks the
+// caller for at most timeoutMs + ~500ms (the native wait's own headroom).
+export function verifyWgcCapture(hwnd: number, timeoutMs = 900): WgcLiveCheck {
+	const api = getWgcApi();
+	if (!api) {
+		return { ok: false, error: getWgcUnavailableReason() };
+	}
+	try {
+		const result = api.captureWindow(hwnd, timeoutMs);
+		if (!result || !result.width || !result.height || !result.data?.length) {
+			return { ok: false, error: 'trial capture produced an empty frame' };
+		}
+		return { ok: true, error: null };
+	} catch (error) {
+		return {
+			ok: false,
+			error:
+				(error as Error)?.message ||
+				String(error) ||
+				'unknown native error',
+		};
+	}
 }
 
 // Capture one true-RGBA frame of the given window handle, or null on any failure.
