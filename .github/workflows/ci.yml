@@ -10,11 +10,19 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    # The JS/TS side. Runs on windows-latest rather than ubuntu because the
-    # postinstall hook rebuilds irsdk-node and sharp against Electron, and
-    # irsdk-node is Windows-only — it will not install on Linux.
+    # The JS/TS side. Windows rather than ubuntu because the postinstall hook
+    # rebuilds irsdk-node and sharp against Electron, and irsdk-node is
+    # Windows-only — it will not install on Linux.
+    #
+    # Pinned to windows-2022, NOT windows-latest. GitHub migrated windows-latest
+    # to Visual Studio 2026 (MSVC v18) in June 2026, and that compiler hits an
+    # internal compiler error (C1001, constexpr frontend) on node-addon-api's
+    # napi-inl.h while building @irsdk-node/native, which fails `npm ci` outright.
+    # windows-2022 is GitHub's documented path for anyone still needing VS 2022
+    # and is supported for roughly three more years. Revisit when irsdk-node or
+    # node-addon-api can build under VS 2026.
     check:
-        runs-on: windows-latest
+        runs-on: windows-2022
         timeout-minutes: 30
 
         steps:
@@ -53,8 +61,10 @@ jobs:
 
     # native/wgc-capture.node is committed, so nothing in `check` would notice
     # src/lib.rs failing to compile. This job is what catches that.
+    # Rust builds fine on VS 2026, but pinned alongside `check` so both jobs
+    # share one toolchain and the release build cannot diverge from either.
     native:
-        runs-on: windows-latest
+        runs-on: windows-2022
         timeout-minutes: 30
 
         steps:

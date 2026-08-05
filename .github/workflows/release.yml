@@ -19,7 +19,12 @@ concurrency:
 
 jobs:
     release:
-        runs-on: windows-latest
+        # Pinned to windows-2022, NOT windows-latest — see the note in ci.yml.
+        # VS 2026 (the windows-latest default since June 2026) hits a C1001
+        # internal compiler error on node-addon-api while building
+        # @irsdk-node/native, which fails `npm ci`. This must stay in step with
+        # the runner ci.yml uses, so the release builds what CI tested.
+        runs-on: windows-2022
         timeout-minutes: 60
 
         steps:
