@@ -1,11 +1,20 @@
 'use strict';
 
+// Local half of the release. Validates, tests, bumps, commits, tags and pushes;
+// the tag push triggers .github/workflows/release.yml, which builds the
+// installer, uploads the artifacts (including latest.yml, which electron-updater
+// needs) and publishes the GitHub release.
+//
+// This script deliberately does NOT build or upload anything. It used to, which
+// meant a release depended on whatever was installed on the operator's machine,
+// and a mid-run failure could leave package.json bumped but untagged. Everything
+// that can fail a validation now runs before the first mutation.
+
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { resolveRemotes, parseReleaseArgs } = require('./release-helpers');
 
-const BUILD_DIR = path.resolve(__dirname, '..', 'build');
 const PKG_PATH = path.resolve(__dirname, '..', 'package.json');
 const ROOT = path.resolve(__dirname, '..');
 
@@ -49,17 +58,10 @@ if (status) {
 	fail('Working tree is not clean. Commit or stash your changes first.');
 }
 
-try {
-	runCapture('gh --version');
-} catch {
-	fail(
-		'GitHub CLI (gh) is required but not found. Install it from https://cli.github.com'
-	);
-}
-
-// Resolve publish target remotes ONCE, up front — before the expensive installer
-// build — so a bad --remote fails fast, and so we never fan the tag + installer
-// uploads out to every configured remote (e.g. a personal fork).
+// Resolve publish target remotes ONCE, up front, so a bad --remote fails fast
+// and so we never fan the tag out to every configured remote (e.g. a personal
+// fork). Note that every remote receiving the tag whose repo has this workflow
+// will run its own release build.
 let remotes;
 try {
 	const availableRemotes = runCapture('git remote')
@@ -72,13 +74,7 @@ try {
 console.log(`\n— Publish target remote(s): ${remotes.join(', ')}`);
 
 // ---------------------------------------------------------------------------
-// 3. Run tests
-// ---------------------------------------------------------------------------
-console.log('\n— Running tests…');
-run('npm test');
-
-// ---------------------------------------------------------------------------
-// 4. Determine previous tag (before any version changes)
+// 3. Determine previous tag and the version we are about to cut
 // ---------------------------------------------------------------------------
 let previousTag = '';
 try {
@@ -87,9 +83,6 @@ try {
 	// No tags exist yet
 }
 
-// ---------------------------------------------------------------------------
-// 5. Bump version
-// ---------------------------------------------------------------------------
 const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'));
 const oldVersion = pkg.version;
 const [major, minor, patch] = oldVersion.split('.').map(Number);
@@ -101,50 +94,60 @@ const newVersion =
 			? `${major}.${minor + 1}.0`
 			: `${major}.${minor}.${patch + 1}`;
 
+const tag = `v${newVersion}`;
+
+// ---------------------------------------------------------------------------
+// 4. Curated release notes check
+// ---------------------------------------------------------------------------
+// CI reads RELEASE-NOTES-v${version}.md *from the tagged commit*, so the file
+// must already be committed — the clean-tree check above guarantees that if it
+// exists at all. Warn here, before anything is mutated, rather than letting CI
+// quietly fall back to the raw commit log.
+const curatedNotes = `RELEASE-NOTES-${tag}.md`;
+if (fs.existsSync(path.join(ROOT, curatedNotes))) {
+	console.log(`\n— Curated notes found: ${curatedNotes}`);
+} else {
+	console.log(
+		`\n! No ${curatedNotes} in the working tree.\n` +
+			`  The release will use the auto-generated commit log instead.\n` +
+			`  Ctrl-C now if you meant to write curated notes first.`
+	);
+}
+
+// ---------------------------------------------------------------------------
+// 5. Run tests
+// ---------------------------------------------------------------------------
+// Before the bump, so an abort here leaves package.json untouched. CI runs these
+// again against the tagged commit; this is the fast local gate.
+console.log('\n— Running tests…');
+run('npm test');
+
+// ---------------------------------------------------------------------------
+// 6. Bump version — first mutation
+// ---------------------------------------------------------------------------
 console.log(`\n— Bumping version: ${oldVersion} → ${newVersion}`);
 
 pkg.version = newVersion;
 fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 4) + '\n', 'utf8');
 
 // ---------------------------------------------------------------------------
-// 6. Build installer
+// 7. Commit, tag
 // ---------------------------------------------------------------------------
-console.log('\n— Building installer…');
-run('npm run build:installer');
-
-// ---------------------------------------------------------------------------
-// 7. Collect build artifacts (current version only)
-// ---------------------------------------------------------------------------
-const versionPattern = newVersion.replace(/\./g, '\\.');
-const artifactRegex = new RegExp(
-	`${versionPattern}\\.(exe|msi|dmg|AppImage|snap|deb|rpm|zip)$`,
-	'i'
-);
-
-const artifacts = fs
-	.readdirSync(BUILD_DIR)
-	.filter((f) => artifactRegex.test(f))
-	.map((f) => path.join(BUILD_DIR, f));
-
-if (artifacts.length === 0) {
-	fail('No installer artifacts found in build/ for version ' + newVersion);
-}
-
-console.log(`\n— Found ${artifacts.length} artifact(s):`);
-artifacts.forEach((a) => console.log(`  ${path.basename(a)}`));
-
-// ---------------------------------------------------------------------------
-// 8. Commit, tag
-// ---------------------------------------------------------------------------
-const tag = `v${newVersion}`;
 console.log(`\n— Committing and tagging ${tag}…`);
 
-run('git add package.json');
-run(`git commit -m "Release ${tag}"`);
-run(`git tag ${tag}`);
+try {
+	run('git add package.json');
+	run(`git commit -m "Release ${tag}"`);
+	run(`git tag ${tag}`);
+} catch (error) {
+	fail(
+		`Failed to commit/tag ${tag}: ${error.message}\n` +
+			`  package.json may be left bumped — \`git checkout package.json\` before retrying.`
+	);
+}
 
 // ---------------------------------------------------------------------------
-// 9. Generate changelog from previous tag
+// 8. Show the changelog for the operator's benefit
 // ---------------------------------------------------------------------------
 const logRange = previousTag ? `${previousTag}..${tag}` : tag;
 const changelog = runCapture(
@@ -155,12 +158,12 @@ console.log('\n— Changelog:');
 console.log(changelog || '(no changes)');
 
 // ---------------------------------------------------------------------------
-// 10. Push commit + tag to all remotes
+// 9. Push commit + tag — this is what triggers the release build
 // ---------------------------------------------------------------------------
 const branch = runCapture('git rev-parse --abbrev-ref HEAD');
 
-// Accumulate any push/release failures so the run can exit non-zero at the end
-// instead of printing "Released successfully" over a partial/total no-publish.
+// Accumulate push failures so the run exits non-zero at the end instead of
+// printing a success line over a release that never reached CI.
 const publishFailures = [];
 
 for (const remote of remotes) {
@@ -174,58 +177,24 @@ for (const remote of remotes) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 11. Create GitHub release
-// ---------------------------------------------------------------------------
-console.log('\n— Creating GitHub releases…');
-
-// Prefer curated release notes at RELEASE-NOTES-v${newVersion}.md if present;
-// fall back to auto-generated changelog from `git log previousTag..HEAD`.
-const curatedNotesPath = path.join(ROOT, `RELEASE-NOTES-v${newVersion}.md`);
-let releaseNotes;
-if (fs.existsSync(curatedNotesPath)) {
-	console.log(
-		`  Using curated notes: ${path.relative(ROOT, curatedNotesPath)}`
-	);
-	releaseNotes = fs.readFileSync(curatedNotesPath, 'utf8');
-} else {
-	releaseNotes = `## What's Changed\n\n${changelog || 'No changes.'}\n`;
-}
-const notesFile = path.join(BUILD_DIR, 'release-notes.md');
-fs.writeFileSync(notesFile, releaseNotes, 'utf8');
-
-for (const remote of remotes) {
-	const repoSlug = getRepoSlug(remote);
-	console.log(`  Creating release on ${repoSlug}…`);
-	try {
-		run(
-			`gh release create ${tag} --repo ${repoSlug} --title "${tag}" --notes-file "${notesFile}"`
-		);
-		for (const artifact of artifacts) {
-			console.log(`  Uploading ${path.basename(artifact)}…`);
-			run(`gh release upload ${tag} --repo ${repoSlug} "${artifact}"`);
-		}
-	} catch (error) {
-		console.error(
-			`  Warning: failed to create release on ${repoSlug}, skipping.`
-		);
-		publishFailures.push(`GitHub release on ${repoSlug}: ${error.message}`);
-	}
-}
-
-fs.unlinkSync(notesFile);
-
-// A push or GitHub-release failure must NOT look like success to CI or a human.
-// The local commit + tag already exist, so the operator can retry the remote
-// steps manually rather than re-running the whole (already-committed) bump.
 if (publishFailures.length > 0) {
-	console.error('\n— Publish failures:');
+	console.error('\n— Push failures:');
 	publishFailures.forEach((f) => console.error(`  • ${f}`));
 	fail(
-		`Release ${tag} did NOT fully publish. The local commit + tag ${tag} exist; ` +
-			`fix the cause and re-run the pushes / \`gh release\` manually, or ` +
-			`\`git tag -d ${tag}\` and retry.`
+		`Release ${tag} was NOT pushed, so no release build was triggered. The ` +
+			`local commit + tag ${tag} exist; fix the cause and \`git push <remote> ${tag}\` ` +
+			`manually, or \`git tag -d ${tag}\` and retry.`
 	);
 }
 
-console.log(`\n✓ Released ${tag} successfully!`);
+// ---------------------------------------------------------------------------
+// 10. Hand off to CI
+// ---------------------------------------------------------------------------
+console.log(`\n✓ Pushed ${tag}. The release build is now running:`);
+for (const remote of remotes) {
+	console.log(`  https://github.com/${getRepoSlug(remote)}/actions`);
+}
+console.log(
+	`\n  It builds the installer, uploads the artifacts and publishes the\n` +
+		`  release. Nothing is visible to users until that finishes.`
+);
