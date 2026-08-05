@@ -751,8 +751,15 @@ async function fullscreenScreenshot(callback) {
 			const waitStart = performance.now();
 			let matched = false;
 
+			// `captureAborted` is assigned by the abort handler further down this
+			// file, never inside these loops. Both bodies await, so it genuinely can
+			// flip between iterations — eslint cannot see mutation across an await,
+			// which is why no-unmodified-loop-condition misfires here. Both loops
+			// also carry exits that do not depend on the flag (REACQUIRE_LIMIT here,
+			// dimsMatch plus the MAX_WAIT_MS budget below), so neither can hang on it.
 			for (
 				let attempt = 0;
+				// eslint-disable-next-line no-unmodified-loop-condition -- see above
 				attempt <= REACQUIRE_LIMIT && !captureAborted;
 				attempt += 1
 			) {
@@ -777,6 +784,7 @@ async function fullscreenScreenshot(callback) {
 				}
 
 				while (
+					// eslint-disable-next-line no-unmodified-loop-condition -- see for-loop note
 					!captureAborted &&
 					!dimsMatch(activeVideo.videoWidth, activeVideo.videoHeight) &&
 					performance.now() - waitStart < MAX_WAIT_MS

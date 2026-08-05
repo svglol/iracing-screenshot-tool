@@ -39,16 +39,11 @@ jobs:
             # `npm run lint` is `eslint --fix ./` — it writes. CI must use the
             # non-writing variant so a failure is reported, not silently repaired.
             #
-            # NON-BLOCKING on purpose. As of v3.2.1 the tree has ~139 pre-existing
-            # eslint errors, and some are deliberate: the `require()` calls in
-            # logger.ts / config.ts violate no-require-imports but are exactly what
-            # the vitest electron stubs hook via require.cache, so "fixing" them
-            # breaks the tests. Clearing that backlog is its own task; until then
-            # this step reports without gating. Flip continue-on-error off when the
-            # count reaches zero.
-            - name: Lint (informational)
+            # Blocking: the error count is zero. 28 warnings remain (21 no-explicit-any
+            # plus 7 Vue advisories) and do not fail the step — `eslint` only exits
+            # non-zero on errors.
+            - name: Lint
               run: npm run lint:check
-              continue-on-error: true
 
             - name: Format
               run: npm run format:check

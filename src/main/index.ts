@@ -17,7 +17,6 @@ import * as path from 'path';
 // read-ini-file has no @types/* published upstream; keep CommonJS require so we
 // can avoid a namespace-import mismatch. The loadIniFile.sync path is the only
 // API we call.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
@@ -87,20 +86,11 @@ import {
 	findDisplaySourceByDisplayId,
 } from '../utilities/desktop-capture';
 import {
-	isPlainObject,
 	mergePlainObjects,
-	serializeBounds,
 	serializeDisplay,
 	summarizeDesktopSource,
 	summarizeDesktopSources,
 	createScreenshotErrorPayload,
-	trimWrappedQuotes,
-	expandWindowsEnvironmentVariables,
-	normalizeComparableWindowsPath,
-	getWindowsUserProfileRoot,
-	resolveReshadeBasePath,
-	remapForeignUserProfileFolder,
-	createReshadeConfigError,
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
 	parseCameraState as parseCameraStateFromArray,

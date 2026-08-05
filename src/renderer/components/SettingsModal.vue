@@ -128,7 +128,7 @@
 									<o-tag
 										variant="primary"
 										style="cursor: pointer"
-										@click.native="insertField(field.token)"
+										@click="insertField(field.token)"
 									>
 										{{ field.label }}
 									</o-tag>

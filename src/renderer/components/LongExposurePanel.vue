@@ -682,10 +682,9 @@ export default defineComponent({
 		ipcRenderer.on('long-exposure:progress', this.onProgress);
 
 		void this.poll();
-		this.pollTimer = setInterval(
-			() => void this.poll(),
-			AVAILABILITY_POLL_MS
-		);
+		this.pollTimer = setInterval(() => {
+			void this.poll();
+		}, AVAILABILITY_POLL_MS);
 
 		// No outputFormat subscription here any more. It existed to refresh the
 		// preview so the panel's format line stayed current; the sidebar's Output

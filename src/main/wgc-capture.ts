@@ -278,7 +278,6 @@ function createWgcApi(): WgcAddon | null {
 	// typed via the WgcAddon interface rather than inferred.
 	let addon: WgcAddon;
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		addon = require(resolveAddonPath());
 	} catch (error) {
 		const msg = (error as Error)?.message || String(error);

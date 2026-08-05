@@ -64,6 +64,7 @@ describe('isPlainObject', () => {
 	});
 
 	test('returns true for objects created with new Object()', () => {
+		// eslint-disable-next-line no-object-constructor -- the constructor form is the subject of this test
 		expect(isPlainObject(new Object())).toBe(true);
 	});
 

@@ -63,6 +63,50 @@ module.exports = [
 			'generator-star-spacing': 'off',
 			semi: ['error', 'always'],
 			'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off',
+
+			// `require()` is the deliberate convention here, not an oversight.
+			// Renderer SFCs pull electron in through it (this app still runs with
+			// nodeIntegration; the contextIsolation migration is tracked separately),
+			// and in utilities/logger.ts + utilities/config.ts it is load-bearing:
+			// those modules are stubbed in vitest by planting into Node's
+			// require.cache, which only works while the call really is a require().
+			// Rewriting them to `import` would break the test suite.
+			'@typescript-eslint/no-require-imports': 'off',
+
+			// `void somePromise()` is the codebase's explicit "fire and forget, I
+			// know this is floating" marker. allowAsStatement keeps the rule's real
+			// job — catching `void` in an expression position — while permitting it.
+			'no-void': ['error', { allowAsStatement: true }],
+
+			// Timer handles declared up front, read by a cleanup closure defined
+			// before them, then assigned once when the watch actually starts, cannot
+			// be const — the read precedes the assignment. ignoreReadBeforeAssign is
+			// the option for exactly that shape.
+			'prefer-const': ['error', { ignoreReadBeforeAssign: true }],
+
+			// `const { data, ...rest } = entry` is the standard way to build an
+			// object minus one key — the binding is meant to be discarded, and
+			// ignoreRestSiblings is the option that exists for it. argsIgnorePattern
+			// keeps an explicit `_unused` parameter available where a callback's
+			// signature is fixed by its caller.
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{
+					ignoreRestSiblings: true,
+					argsIgnorePattern: '^_',
+					varsIgnorePattern: '^_',
+				},
+			],
+
+			// TODO: 21 sites, mostly IPC payloads and Electron event objects that
+			// need real interface definitions. Downgraded rather than silenced so the
+			// count stays visible; promote back to 'error' once they are typed.
+			'@typescript-eslint/no-explicit-any': 'warn',
+
+			// Home.vue, Worker.vue and Settings.vue are established route/view names
+			// that appear in the router config and in user-facing docs. Renaming them
+			// to satisfy a naming convention is churn with no benefit.
+			'vue/multi-word-component-names': 'off',
 		},
 	}),
 
@@ -98,6 +142,28 @@ module.exports = [
 		rules: {
 			'generator-star-spacing': 'off',
 			semi: ['error', 'always'],
+		},
+	},
+
+	// 6b. Vitest globals for the _scripts test files. Entry 6 gives _scripts/**/*.js
+	//     only `globals.node`, so describe/test/expect read as undefined there — the
+	//     src/**/*.test.ts files never showed this because typescript-eslint turns
+	//     no-undef off for TS (the compiler already checks it).
+	{
+		files: ['_scripts/**/*.test.js'],
+		languageOptions: {
+			globals: {
+				describe: 'readonly',
+				it: 'readonly',
+				test: 'readonly',
+				expect: 'readonly',
+				vi: 'readonly',
+				suite: 'readonly',
+				beforeAll: 'readonly',
+				afterAll: 'readonly',
+				beforeEach: 'readonly',
+				afterEach: 'readonly',
+			},
 		},
 	},
 
