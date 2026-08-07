@@ -43,6 +43,7 @@ import {
 import { assessLongExposureVram } from '../../utilities/long-exposure/vram-budget';
 import type { Dimensions, VramInfo } from '../../utilities/vram-prediction';
 import type { PlaybackSnapshot, ReplayState } from './replay-control';
+import { t } from '../../utilities/i18n';
 import {
 	ReplayController,
 	capturePlaybackSnapshot,
@@ -780,11 +781,15 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		return {
 			...base(),
 			failure: 'window-unavailable',
-			message: 'iRacing window not found.',
+			message: t('longExposureCapture.windowNotFound'),
 		};
 	}
 	if (aborted()) {
-		return { ...base(), failure: 'aborted', message: 'Capture cancelled.' };
+		return {
+			...base(),
+			failure: 'aborted',
+			message: t('longExposureCapture.cancelled'),
+		};
 	}
 
 	// #10 AGAIN — and this is the sample that can actually fire.
@@ -870,7 +875,9 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			return {
 				...base(),
 				failure: 'seek-failed',
-				message: `The replay did not reach frame ${sink.startFrame} in time. It may still be loading.`,
+				message: t('longExposureCapture.seekTimeout', {
+					frame: sink.startFrame,
+				}),
 			};
 		}
 
@@ -959,7 +966,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		return {
 			...base(),
 			failure: 'invalid-recipe',
-			message: 'A capture must run at least one pass.',
+			message: t('longExposureCapture.noPasses'),
 		};
 	}
 
@@ -1185,8 +1192,7 @@ async function accumulateWindow(
 			return {
 				...base(),
 				failure: 'playback-stalled',
-				message:
-					'The replay did not start playing. Check that iRacing is not paused by another tool.',
+				message: t('longExposureCapture.playbackStalled'),
 			};
 		}
 		if (elapsed > timeoutMs) {
@@ -1194,7 +1200,10 @@ async function accumulateWindow(
 			return {
 				...base(),
 				failure: 'playback-stalled',
-				message: `The exposure did not reach frame ${sink.endFrame} within ${Math.round(timeoutMs / 1000)}s.`,
+				message: t('longExposureCapture.exposureTimeout', {
+					frame: sink.endFrame,
+					seconds: Math.round(timeoutMs / 1000),
+				}),
 			};
 		}
 
@@ -1227,7 +1236,7 @@ async function accumulateWindow(
 		return {
 			...base(),
 			failure: 'playback-stalled',
-			message: 'The exposure ended before reaching the selected moment.',
+			message: t('longExposureCapture.endedEarly'),
 		};
 	}
 	return null;
@@ -1305,10 +1314,10 @@ async function resolveCapture(
 		// malfunction. Blaming iRacing for that would send the user hunting a
 		// fault that isn't there.
 		const reason = !preResolve.sawFrame
-			? 'iRacing did not present any frames to capture.'
+			? t('longExposureCapture.noFramesPresented')
 			: plan.isSubFrameWindow
-				? `This shutter is shorter than one replay frame, and iRacing did not render a frame inside it. Try a slower playback speed, or the next slower shutter.`
-				: 'No frames were accumulated. iRacing may have stopped rendering during the exposure.';
+				? t('longExposureCapture.subFrameNoSamples')
+				: t('longExposureCapture.noSamples');
 		// Append the native cause when there is one. It is a short, concrete string
 		// aimed at us rather than at the user, but a user who can paste it into a bug
 		// report turns an unfalsifiable "it doesn't work" into a named failure — which
@@ -1319,7 +1328,12 @@ async function resolveCapture(
 		return {
 			...base(),
 			failure: 'no-samples',
-			message: nativeError ? `${reason} (${nativeError})` : reason,
+			message: nativeError
+				? t('longExposureCapture.withNativeError', {
+						reason,
+						error: nativeError,
+					})
+				: reason,
 		};
 	}
 
@@ -1389,7 +1403,7 @@ async function resolveCapture(
 		return {
 			...base(),
 			failure: 'resolve-failed',
-			message: result.error || 'The GPU did not return an image.',
+			message: result.error || t('longExposureCapture.resolveFailed'),
 			stats,
 			backend: result.backend || deps.backendName,
 			interpolation,
@@ -1480,8 +1494,10 @@ async function resolveCapture(
 	}
 	if (sinks.length > 1 && resolvedImages.length < sinks.length) {
 		warnings.push(
-			`Bracketing asked for ${sinks.length} stops but ${resolvedImages.length} came back — ` +
-				'the rest failed to resolve, or this build of the capture addon predates bracketing.'
+			t('longExposureCapture.bracketShortfall', {
+				asked: sinks.length,
+				returned: resolvedImages.length,
+			})
 		);
 	}
 

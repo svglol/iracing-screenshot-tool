@@ -313,24 +313,6 @@ export default {
 			selected: 0,
 			galleryLoadId: 0,
 			generatingThumbs: new Set<string>(),
-			options: [
-				{
-					name: 'Open Externally',
-					slug: 'external',
-				},
-				{
-					name: 'Open Folder',
-					slug: 'folder',
-				},
-				{
-					name: 'Copy',
-					slug: 'copy',
-				},
-				{
-					name: 'Delete',
-					slug: 'delete',
-				},
-			],
 			// Held so beforeUnmount can tear them down — otherwise an HMR reload (or
 			// any future remount) stacks duplicate 'screenshot-response' handlers
 			// (N gallery unshifts per capture) and leaks the config subscription
@@ -343,6 +325,17 @@ export default {
 		};
 	},
 	computed: {
+		// A computed rather than a data field so the context menu re-labels itself
+		// when the language changes — data() runs once per instance and this
+		// component is never remounted.
+		options(): { name: string; slug: string }[] {
+			return [
+				{ name: this.$t('gallery.menu.openExternally'), slug: 'external' },
+				{ name: this.$t('gallery.menu.openFolder'), slug: 'folder' },
+				{ name: this.$t('gallery.menu.copy'), slug: 'copy' },
+				{ name: this.$t('gallery.menu.delete'), slug: 'delete' },
+			];
+		},
 		activeItem(): any | null {
 			return this.items[this.selected] || null;
 		},
@@ -469,7 +462,9 @@ export default {
 			// Oruga 0.13: programmatic interfaces live on `_programmatic`,
 			// not the Oruga instance directly. useOruga() returns _programmatic.
 			useOruga().notification.open({
-				message: `${this.fileName} copied to clipboard`,
+				message: this.$t('gallery.copiedToClipboard', {
+					name: this.fileName,
+				}),
 				variant: 'dark',
 			});
 		},

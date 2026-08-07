@@ -1,6 +1,8 @@
 import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
+import config from '../utilities/config';
+import { applyLocale, detectRendererLocale, i18n } from './i18n';
 import './assets/style/animations.scss';
 import './assets/style/main.scss';
 import VueLazyload from 'vue-lazyload';
@@ -61,8 +63,21 @@ library.add(
 	faDiscord
 );
 
+// Adopt the language BEFORE the app mounts, so the first paint is already in the
+// right one rather than flashing English. Main resolves and persists this from
+// the Windows UI language on first run; detectRendererLocale is only a safety net
+// for a window that somehow opens before that write lands.
+applyLocale(config.get('locale') || detectRendererLocale());
+// Follows the setting for the lifetime of the window. Main broadcasts
+// `config:changed:locale` to EVERY window, so the worker window re-languages
+// itself from the same event that re-languages this one.
+config.onDidChange?.('locale', (newValue) => {
+	applyLocale(newValue);
+});
+
 const app = createApp(App);
 app.use(router);
+app.use(i18n);
 app.use(VueLazyload);
 const oruga = createOruga();
 // Register Oruga component plugins (not raw components). Each plugin's

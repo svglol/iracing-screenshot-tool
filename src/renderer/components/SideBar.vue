@@ -1,14 +1,22 @@
 <template>
 	<div style="padding: 1rem; padding-top: 0.5rem">
-		<o-field label="Resolution">
-			<o-select v-model="resolution" expanded placeholder="Resolution">
+		<o-field :label="$t('sidebar.resolution')">
+			<o-select
+				v-model="resolution"
+				expanded
+				:placeholder="$t('sidebar.resolution')"
+			>
+				<!-- The VALUE stays the untranslated key ('Custom', '4k', ...) because
+				     it is what lands in config.json and what every comparison below
+				     tests. Only the visible label is translated, and only for 'Custom'
+				     — the resolution names are not words. -->
 				<option
 					v-for="option in items"
 					:key="option"
 					:value="option"
 					:style="optionStyle(option)"
 				>
-					{{ option }}
+					{{ resolutionLabel(option) }}
 				</option>
 			</o-select>
 		</o-field>
@@ -21,11 +29,11 @@
 			{{ vramStatusText }}
 		</p>
 
-		<o-field v-if="resolution === 'Custom'" label="Width">
+		<o-field v-if="resolution === 'Custom'" :label="$t('sidebar.width')">
 			<o-input v-model="customWidth" type="number" min="0" max="10000" />
 		</o-field>
 
-		<o-field v-if="resolution === 'Custom'" label="Height">
+		<o-field v-if="resolution === 'Custom'" :label="$t('sidebar.height')">
 			<o-input v-model="customHeight" type="number" min="0" max="10000" />
 		</o-field>
 
@@ -35,7 +43,7 @@
 		     the long-exposure panel used to carry one and it read as a second,
 		     competing answer to a question already answered here. -->
 		<p v-if="outputDimensions" class="sidebar-target-hint">
-			Output:
+			{{ $t('sidebar.output') }}
 			<span class="sidebar-target-hint__value"
 				>{{ outputDimensions.width }}×{{ outputDimensions.height }}
 				<template v-if="outputFormatLabel"
@@ -61,7 +69,9 @@
 				for="sidebar-crop-watermark-switch"
 				class="settings-toggle-row__text"
 			>
-				<span class="label" style="margin-bottom: 0px">Crop Watermark</span>
+				<span class="label" style="margin-bottom: 0px">{{
+					$t('sidebar.cropWatermark')
+				}}</span>
 			</label>
 		</o-field>
 
@@ -76,9 +86,9 @@
 				for="sidebar-keep-aspect-ratio-switch"
 				class="settings-toggle-row__text"
 			>
-				<span class="label" style="margin-bottom: 0px"
-					>Keep Aspect Ratio</span
-				>
+				<span class="label" style="margin-bottom: 0px">{{
+					$t('sidebar.keepAspectRatio')
+				}}</span>
 			</label>
 		</o-field>
 
@@ -99,7 +109,7 @@
 			style="margin-top: 0.5rem"
 			@click="takeScreenshot"
 		>
-			Screenshot
+			{{ $t('sidebar.screenshot') }}
 		</o-button>
 
 		<!-- Long exposure. Self-contained: it owns its own parameters, its own
@@ -132,6 +142,9 @@ import { resolveCropTarget } from '../../utilities/screenshot-output';
 import { useOruga } from '@oruga-ui/oruga-next';
 import LongExposurePanel from './LongExposurePanel.vue';
 import NoticeCard from './NoticeCard.vue';
+// Module-level `t` for the toast content component below, which is defined at
+// module scope and so has no `this.$t`.
+import { t } from '../../utilities/i18n';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 
@@ -173,7 +186,10 @@ const ScreenshotErrorContent = defineComponent({
 							{
 								class: 'screenshot-error-log',
 							},
-							['Log: ', h('code', null, props.logFile)]
+							[
+								t('sidebar.errorLogPrefix'),
+								h('code', null, props.logFile),
+							]
 						)
 					: null,
 			]);
@@ -333,10 +349,11 @@ export default {
 			) {
 				return '';
 			}
-			const name = info.adapterName ? `${info.adapterName}: ` : '';
-			return `${name}${formatVramGiB(
-				this.vramAssessment.freeBytes
-			)} free of ${formatVramGiB(info.totalBytes)}`;
+			return this.$t('sidebar.vramStatus', {
+				adapter: info.adapterName ? `${info.adapterName}: ` : '',
+				free: formatVramGiB(this.vramAssessment.freeBytes),
+				total: formatVramGiB(info.totalBytes),
+			});
 		},
 		// Dynamic VRAM warning replaces the static one whenever we can predict.
 		showDynamicVramWarning() {
@@ -375,10 +392,7 @@ export default {
 			if (this.exclusiveFullscreen && !this.reshade) {
 				notices.push({
 					level: 'danger',
-					text:
-						'iRacing is in exclusive fullscreen — screenshots will capture ' +
-						'black. In iRacing set Display > Full Screen to OFF ' +
-						'(Borderless or Windowed) to enable capture.',
+					text: this.$t('sidebar.notices.exclusiveFullscreen'),
 				});
 			}
 
@@ -387,20 +401,25 @@ export default {
 				notices.push({
 					level: risk ? 'danger' : 'warning',
 					text: risk
-						? `${this.resolution} needs about ${this.formatVram(
-								this.vramAssessment.deltaBytes
-							)} more VRAM but only ${this.formatVram(
-								this.vramAssessment.freeBytes
-							)} is free — iRacing will likely run out of memory and crash.`
-						: `${this.resolution} leaves little VRAM headroom (${this.formatVram(
-								this.vramAssessment.freeBytes
-							)} free) and may crash on heavy track/car combinations.`,
+						? this.$t('sidebar.notices.vramRisk', {
+								resolution: this.resolutionLabel(this.resolution),
+								needed: this.formatVram(this.vramAssessment.deltaBytes),
+								free: this.formatVram(this.vramAssessment.freeBytes),
+							})
+						: this.$t('sidebar.notices.vramCaution', {
+								resolution: this.resolutionLabel(this.resolution),
+								free: this.formatVram(this.vramAssessment.freeBytes),
+							}),
 					// The one-click fix travels with the sentence that motivates it.
 					action:
 						this.safeResolutionLabel &&
 						this.safeResolutionLabel !== this.resolution
 							? {
-									label: `Switch to ${this.safeResolutionLabel}`,
+									label: this.$t('sidebar.notices.switchResolution', {
+										resolution: this.resolutionLabel(
+											this.safeResolutionLabel
+										),
+									}),
 									run: () => this.applySafeResolution(),
 								}
 							: undefined,
@@ -410,12 +429,16 @@ export default {
 			if (this.showStaticVramWarning) {
 				notices.push({
 					level: 'warning',
-					text:
-						'High resolutions may crash iRacing if you run out of VRAM. ' +
-						'Certain track/car combinations will require more VRAM.',
+					text: this.$t('sidebar.notices.vramStatic'),
 				});
 			}
 
+			// checkIracingConfig phrases its warning through the core's module-level
+			// `t`, which Vue cannot see. Touching $locale is what makes this computed
+			// re-run — and re-read the warning in the new language — when the setting
+			// changes. Without it the banner would stay in the old language until
+			// something else happened to invalidate this computed.
+			void this.$locale;
 			this.configWarnings.forEach((warning) => {
 				notices.push({ level: 'warning', text: warning });
 			});
@@ -423,29 +446,21 @@ export default {
 			if (this.reshade && !this.disableTooltips) {
 				notices.push({
 					level: 'warning',
-					text:
-						'After pressing the screenshot button in the iRacing ' +
-						'Screenshot Tool, you will need to press the keybind for ' +
-						'taking a screenshot for ReShade.',
+					text: this.$t('sidebar.notices.reshade'),
 				});
 			}
 
 			if (this.crop && !this.disableTooltips) {
 				notices.push({
 					level: 'info',
-					text:
-						'Crop Watermark zooms the final picture in slightly. Regions ' +
-						'near the borders of the screen will be cut off.',
+					text: this.$t('sidebar.notices.crop'),
 				});
 			}
 
 			if (this.keepAspectRatio && !this.disableTooltips) {
 				notices.push({
 					level: 'info',
-					text:
-						"Keep Aspect Ratio adjusts the screenshot height to match your monitor's " +
-						'aspect ratio (e.g. 21:9 ultrawide) instead of the default 16:9. ' +
-						'The selected resolution sets the width.',
+					text: this.$t('sidebar.notices.aspectRatio'),
 				});
 			}
 
@@ -552,7 +567,7 @@ export default {
 				// not directly on the Oruga instance. useOruga() returns the
 				// _programmatic map, so useOruga().notification === $oruga._programmatic.notification.
 				useOruga().notification.open({
-					message: file + ' saved successfully',
+					message: this.$t('sidebar.savedSuccessfully', { name: file }),
 					variant: 'success',
 				});
 			}
@@ -565,7 +580,9 @@ export default {
 			useOruga().notification.open({
 				component: ScreenshotErrorContent,
 				props: {
-					message: `Screenshot failed: ${error.message}`,
+					message: this.$t('sidebar.screenshotFailed', {
+						message: error.message,
+					}),
 					logFile: error.logFile,
 				},
 				variant: 'danger',
@@ -647,13 +664,13 @@ export default {
 				!Array.isArray(payload)
 			) {
 				return {
-					message: payload.message || 'Unknown screenshot error',
+					message: payload.message || this.$t('capture.unknownError'),
 					logFile: payload.logFile || '',
 				};
 			}
 
 			return {
-				message: String(payload || 'Unknown screenshot error'),
+				message: String(payload || this.$t('capture.unknownError')),
 				logFile: '',
 			};
 		},
@@ -775,6 +792,12 @@ export default {
 		// Template helper (imported fns aren't accessible in the template scope).
 		formatVram(bytes) {
 			return formatVramGiB(bytes);
+		},
+		// Display name for a resolution option. Only 'Custom' is a word; the rest
+		// ('1080p', '4k', ...) are the same in every language and are also the
+		// values stored in config, so they are passed through untouched.
+		resolutionLabel(option) {
+			return option === 'Custom' ? this.$t('sidebar.custom') : option;
 		},
 		takeScreenshot() {
 			// targetDimensions already accounts for Keep Aspect Ratio when on,

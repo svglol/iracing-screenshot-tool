@@ -14,6 +14,8 @@
 // green arrow that clicking quit the app instantly. Each function below is one of
 // those behaviours made explicit and testable.
 
+import { t } from './i18n';
+
 // Where a pending update has got to. `idle` covers both "not checked yet" and
 // "checked, nothing newer" — `checkedAt` distinguishes them.
 export type UpdatePhase =
@@ -209,18 +211,18 @@ export function canStartDownload({
 	busy,
 }: UpdateBusyInput & { phase: UpdatePhase }): ActionVerdict {
 	if (phase === 'downloading') {
-		return { allowed: false, reason: 'The update is already downloading.' };
+		return { allowed: false, reason: t('update.alreadyDownloading') };
 	}
 	if (phase === 'downloaded') {
-		return { allowed: false, reason: 'The update is already downloaded.' };
+		return { allowed: false, reason: t('update.alreadyDownloaded') };
 	}
 	if (phase !== 'available') {
-		return { allowed: false, reason: 'There is no update to download.' };
+		return { allowed: false, reason: t('update.nothingToDownload') };
 	}
 	if (busy) {
 		return {
 			allowed: false,
-			reason: 'A capture is in progress. Try again once it finishes.',
+			reason: t('update.captureInProgress'),
 		};
 	}
 	return { allowed: true, reason: null };
@@ -233,15 +235,14 @@ export function canInstallNow({
 	busy,
 }: UpdateBusyInput & { phase: UpdatePhase }): ActionVerdict {
 	if (phase !== 'downloaded') {
-		return { allowed: false, reason: 'No update is ready to install.' };
+		return { allowed: false, reason: t('update.nothingToInstall') };
 	}
 	if (busy) {
 		return {
 			allowed: false,
 			// Accurate, not a consolation: autoInstallOnAppQuit defaults to true, so
 			// the downloaded update really does install on the next normal quit.
-			reason:
-				'A capture is in progress. The update will install by itself when you close the app.',
+			reason: t('update.captureInProgressInstall'),
 		};
 	}
 	return { allowed: true, reason: null };
@@ -255,37 +256,42 @@ export function describeUpdate(
 	currentVersion: string,
 	busy = false
 ): string {
-	const version = state.version ? `v${state.version}` : 'A new version';
+	const version = state.version ? `v${state.version}` : t('update.newVersion');
 
 	switch (state.phase) {
 		case 'checking':
-			return 'Checking for updates…';
+			return t('update.checking');
 
 		case 'available':
 			return busy
-				? `${version} is available. A capture is in progress — you can download it once that finishes.`
-				: `${version} is available. Click to download it.`;
+				? t('update.availableBusy', { version })
+				: t('update.available', { version });
 
 		case 'downloading':
 			return state.percent === null
-				? `Downloading ${version}…`
-				: `Downloading ${version} — ${state.percent}%`;
+				? t('update.downloading', { version })
+				: t('update.downloadingPercent', {
+						version,
+						percent: state.percent,
+					});
 
 		case 'downloaded':
 			return busy
-				? `${version} is ready. A capture is in progress, so it will install when you close the app.`
-				: `${version} is ready. Click to restart and install it.`;
+				? t('update.downloadedBusy', { version })
+				: t('update.downloaded', { version });
 
 		case 'error':
-			return `Update check failed: ${state.error ?? 'unknown error'}`;
+			return t('update.failed', {
+				error: state.error ?? t('update.unknownError'),
+			});
 
 		case 'idle':
 		default:
 			// Never claim freshness we have not established — before the first check
 			// resolves we genuinely do not know.
 			return state.checkedAt === null
-				? `Updates have not been checked yet (you're on v${currentVersion}).`
-				: `You're on the latest version (v${currentVersion}).`;
+				? t('update.neverChecked', { version: currentVersion })
+				: t('update.upToDate', { version: currentVersion });
 	}
 }
 

@@ -4,6 +4,8 @@
 // functions: no I/O, no module state, no electron. index.ts calls them where it
 // used to inline the same expressions; capture-decisions.test.ts locks the logic.
 
+import { t } from '../utilities/i18n';
+
 // Which capture backend a request uses.
 export type CaptureBackend = 'reshade' | 'wgc' | 'getUserMedia';
 
@@ -62,8 +64,11 @@ export interface WgcSupportInputs {
 
 // Shown when the cursor cannot be suppressed. The ONLY capability degradation a
 // user can see in the image, so it is the only one that gets a caveat.
-export const WGC_CURSOR_CAVEAT =
-	'The mouse cursor may appear in captures on this version of Windows. Windows 10 version 2004 added the control that hides it.';
+//
+// A function rather than a const because it is user-facing text: a module-scope
+// const is evaluated at import time, which is before the process has resolved the
+// user's language, and would freeze English into every caller.
+export const WGC_CURSOR_CAVEAT = (): string => t('wgc.cursorCaveat');
 
 export interface WgcSupport {
 	supported: boolean;
@@ -105,8 +110,7 @@ export function decideWgcSupport({
 		return {
 			supported: false,
 			reason: loaderReason,
-			message:
-				'The high-fidelity capture component could not be loaded on this system.',
+			message: t('wgc.addonUnavailable'),
 			caveat: null,
 		};
 	}
@@ -114,8 +118,7 @@ export function decideWgcSupport({
 		return {
 			supported: false,
 			reason: 'OS unsupported (needs Win10 1903+)',
-			message:
-				'Windows.Graphics.Capture is not available on this version of Windows. It needs Windows 10 version 1903 or newer.',
+			message: t('wgc.osUnsupported'),
 			caveat: null,
 		};
 	}
@@ -128,14 +131,14 @@ export function decideWgcSupport({
 		supported: true,
 		reason: null,
 		message: null,
-		caveat: capabilities.cursorConfigSupported ? null : WGC_CURSOR_CAVEAT,
+		caveat: capabilities.cursorConfigSupported ? null : WGC_CURSOR_CAVEAT(),
 	};
 }
 
 // Reason string for the one long-exposure refusal the user can fix with a switch.
 // Kept here beside the decision that produces it so the UI and main cannot drift.
-export const NATIVE_CAPTURE_REQUIRED_REASON =
-	'High-Fidelity Capture (WGC) is turned off';
+export const NATIVE_CAPTURE_REQUIRED_REASON = (): string =>
+	t('wgc.nativeCaptureOff');
 
 export interface LongExposureGateInputs {
 	// config.get('nativeCapture') — the WGC native path is enabled.
@@ -184,7 +187,7 @@ export function decideLongExposureAvailability({
 	if (!nativeCapture) {
 		return {
 			available: false,
-			reason: NATIVE_CAPTURE_REQUIRED_REASON,
+			reason: NATIVE_CAPTURE_REQUIRED_REASON(),
 			needsNativeCapture: true,
 		};
 	}

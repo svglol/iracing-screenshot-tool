@@ -16,6 +16,10 @@ import {
 	OUTPUT_EXTENSIONS,
 } from '../../utilities/screenshot-output';
 import { createLogger } from '../../utilities/logger';
+// The module-level `t`, not `this.$t`: these are thrown Errors and log payloads
+// built outside any render, so there is nothing to keep reactive — they only need
+// to be phrased in the language that is current when the capture fails.
+import { t } from '../../utilities/i18n';
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -182,7 +186,7 @@ function createScreenshotErrorPayload(errorLike, context, meta = {}) {
 		};
 	}
 
-	const message = String(errorLike || 'Unknown screenshot error');
+	const message = String(errorLike || t('capture.unknownError'));
 	const error = errorLike instanceof Error ? errorLike : new Error(message);
 
 	return {
@@ -497,7 +501,10 @@ async function fullscreenScreenshot(callback) {
 
 		if (outputWidth < 1 || outputHeight < 1) {
 			throw new Error(
-				`Capture output is too small (${outputWidth}x${outputHeight})`
+				t('capture.outputTooSmall', {
+					width: outputWidth,
+					height: outputHeight,
+				})
 			);
 		}
 
@@ -524,9 +531,7 @@ async function fullscreenScreenshot(callback) {
 		console.timeEnd('Create OffscreenCanvas');
 
 		if (isFrameBlack(offscreen)) {
-			throw new Error(
-				'Captured frame is black — the capture source may have failed (GPU-accelerated content can fail to capture on some Windows setups)'
-			);
+			throw new Error(t('capture.blackFrame'));
 		}
 
 		console.time('To Blob');
@@ -614,9 +619,7 @@ async function fullscreenScreenshot(callback) {
 		}
 
 		if (!sourceId) {
-			throw new Error(
-				'No desktop capture source found for window ' + windowID
-			);
+			throw new Error(t('capture.noSource', { windowId: windowID }));
 		}
 
 		// The desktop-capture pipeline can briefly keep delivering the prior
@@ -690,9 +693,7 @@ async function fullscreenScreenshot(callback) {
 				};
 				const timer = setTimeout(() => {
 					cleanup();
-					reject(
-						new Error('Timed out waiting for capture video metadata')
-					);
+					reject(new Error(t('capture.metadataTimeout')));
 				}, HANDLE_STREAM_TIMEOUT_MS);
 				v.addEventListener('loadedmetadata', onReady, { once: true });
 				v.addEventListener('error', onError, { once: true });
@@ -821,7 +822,7 @@ async function fullscreenScreenshot(callback) {
 			}
 
 			if (!video) {
-				throw new Error('Capture stream did not produce a video frame');
+				throw new Error(t('capture.noVideoFrame'));
 			}
 			const finalVideo = video;
 
@@ -837,7 +838,12 @@ async function fullscreenScreenshot(callback) {
 					elapsedMs: Math.round(performance.now() - waitStart),
 				});
 				console.warn(
-					`Timed out waiting for window dimensions ${windowWidth}x${windowHeight}; proceeding with ${finalVideo.videoWidth}x${finalVideo.videoHeight}`
+					t('capture.dimensionTimeout', {
+						width: windowWidth,
+						height: windowHeight,
+						actualWidth: finalVideo.videoWidth,
+						actualHeight: finalVideo.videoHeight,
+					})
 				);
 			} else if (wantDimCheck) {
 				log.debug('Stream dim confirmed', {

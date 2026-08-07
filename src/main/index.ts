@@ -106,6 +106,30 @@ import {
 	type UpdateEvent,
 	type UpdateState,
 } from '../utilities/update-decisions';
+import { detectLocale, setLocale, t } from '../utilities/i18n';
+
+// Language, resolved once at startup and re-applied whenever the setting changes.
+//
+// Main has to hold this itself rather than leaving it to the renderer: the
+// long-exposure validation warnings, the capture refusals and the WGC support
+// sentence are all phrased HERE and sent over IPC as finished text.
+//
+// app.getPreferredSystemLanguages() is the ordered list Windows itself would use,
+// so a user whose display language is Portuguese but whose second preference is
+// Spanish gets Spanish rather than English if we ever drop pt.
+function initLocale(): void {
+	const stored = configModule.get('locale');
+	const resolved = setLocale(
+		stored || detectLocale(app.getPreferredSystemLanguages())
+	);
+	// Write the RESOLVED code back on first run, so 'pt-BR' settles to 'pt' once
+	// instead of being re-resolved on every launch — and so the Settings dropdown
+	// has a value to show as selected.
+	if (stored !== resolved) {
+		configModule.set('locale', resolved);
+	}
+	log.info('Locale resolved', { stored: stored || null, locale: resolved });
+}
 
 let width: number;
 let height: number;
@@ -536,16 +560,19 @@ function writeScreenshotErrorLog(payload: {
 // #10: shown by the pre-capture early-exit, where we KNOW (state 3 + attributed)
 // iRacing is the exclusive-fullscreen app — the one deterministic, actionable
 // cause of a black capture.
-const EXCLUSIVE_FULLSCREEN_MESSAGE =
-	'iRacing is in exclusive fullscreen, so the screenshot would be black. In iRacing, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.';
+// Functions, not constants. A module-scope const is evaluated at import time,
+// which is before `app.on('ready')` has resolved the locale — it would freeze
+// English into every one of these before the language was even known.
+const EXCLUSIVE_FULLSCREEN_MESSAGE = (): string =>
+	t('capture.exclusiveFullscreen');
 
 // Softer variant for the black-frame backstop. Enrichment below only runs when
 // the pre-flight saw state 3 but could NOT attribute it to iRacing (an
 // attributed hit would have early-exited), and SHQueryUserNotificationState is
 // session-global — so some OTHER app could be the fullscreen one. Word it as a
 // likely cause, not a fact.
-const EXCLUSIVE_FULLSCREEN_MESSAGE_UNATTRIBUTED =
-	'An application is running in exclusive fullscreen, which produces a black capture. If iRacing is in Full Screen, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.';
+const EXCLUSIVE_FULLSCREEN_MESSAGE_UNATTRIBUTED = (): string =>
+	t('capture.exclusiveFullscreenUnattributed');
 
 // If a worker error is the generic "captured frame is black" AND the last
 // pre-flight saw exclusive fullscreen (state 3), rewrite it to the actionable
@@ -562,7 +589,7 @@ function enrichBlackFrameError(data: unknown): unknown {
 	if (typeof message === 'string' && message.toLowerCase().includes('black')) {
 		return {
 			...(data as object),
-			message: EXCLUSIVE_FULLSCREEN_MESSAGE_UNATTRIBUTED,
+			message: EXCLUSIVE_FULLSCREEN_MESSAGE_UNATTRIBUTED(),
 		};
 	}
 	return data;
@@ -817,6 +844,13 @@ ipcMain.on('config:set', (event, payload: { key: string; value: unknown }) => {
 
 	if (oldValue !== payload.value) {
 		log.debug('Config changed', { key: payload.key });
+		// Main phrases user-facing text of its own, so it has to re-language
+		// itself — not just tell the windows to. Done before the broadcast so a
+		// renderer that reacts by immediately asking main for something already
+		// gets the new language.
+		if (payload.key === 'locale') {
+			setLocale(payload.value);
+		}
 		broadcastToWindows(
 			`config:changed:${payload.key}`,
 			payload.value,
@@ -1071,7 +1105,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		return {
 			ok: false,
 			failure: 'busy',
-			message: 'A capture is already in progress.',
+			message: t('longExposureCapture.busy'),
 			warnings: [],
 		};
 	}
@@ -1089,8 +1123,8 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			ok: false,
 			failure: 'backend-unavailable',
 			message: gate.needsNativeCapture
-				? 'Long exposure needs High-Fidelity Capture (WGC). Turn it on in Settings to use it.'
-				: gate.reason || 'Long exposure is not available on this machine.',
+				? t('longExposureCapture.needsNativeCapture')
+				: gate.reason || t('longExposureCapture.unavailable'),
 			warnings: [],
 		};
 	}
@@ -1102,8 +1136,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		return {
 			ok: false,
 			failure: 'invalid-recipe',
-			message:
-				'Long exposure needs replay telemetry from iRacing. Check that the sim is running and in a session.',
+			message: t('longExposureCapture.noTelemetry'),
 			warnings: [],
 		};
 	}
@@ -1123,7 +1156,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		return {
 			ok: false,
 			failure: 'exclusive-fullscreen',
-			message: EXCLUSIVE_FULLSCREEN_MESSAGE,
+			message: EXCLUSIVE_FULLSCREEN_MESSAGE(),
 			warnings: [],
 		};
 	}
@@ -1173,7 +1206,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 				const raised = getIracingExclusiveFullscreenState();
 				lastCaptureFullscreenState = raised ? raised.state : null;
 				return raised && raised.exclusiveFullscreen
-					? EXCLUSIVE_FULLSCREEN_MESSAGE
+					? EXCLUSIVE_FULLSCREEN_MESSAGE()
 					: null;
 			},
 			vramInfo: () => getVramInfo(),
@@ -1557,6 +1590,9 @@ app.on('ready', async () => {
 	}
 
 	loadConfig();
+	// Before createWindow, so the renderer reads a settled `locale` from config
+	// and paints its first frame in the right language.
+	initLocale();
 	createWindow();
 
 	width = config.get('defaultScreenWidth');
@@ -1733,7 +1769,7 @@ app.on('ready', async () => {
 				log.info('Screenshot rejected', {
 					reason: 'exclusive-fullscreen',
 				});
-				reportScreenshotError(EXCLUSIVE_FULLSCREEN_MESSAGE, {
+				reportScreenshotError(EXCLUSIVE_FULLSCREEN_MESSAGE(), {
 					context: 'resize-screenshot:exclusive-fullscreen',
 					meta: { request: data },
 				});
@@ -2263,7 +2299,7 @@ ipcMain.handle('update:check', () => {
 	if (!app.isPackaged) {
 		return {
 			started: false,
-			reason: 'Update checks only run in an installed build.',
+			reason: t('update.devBuildOnly'),
 			state: updateStatePayload(),
 		};
 	}
@@ -2316,13 +2352,14 @@ ipcMain.handle('update:install', async () => {
 	// this covers everything else the user might be part-way through.
 	const { response } = await dialog.showMessageBox(mainWindow ?? undefined, {
 		type: 'question',
-		buttons: ['Restart and install', 'Later'],
+		buttons: [t('update.installConfirm'), t('update.installLater')],
 		defaultId: 0,
 		cancelId: 1,
-		title: 'Install update',
-		message: `Install version ${updateState.version ?? 'update'}?`,
-		detail:
-			'The app will close and reopen once the update is installed. If you choose Later, it will install by itself the next time you close the app.',
+		title: t('update.installTitle'),
+		message: t('update.installMessage', {
+			version: updateState.version ?? t('update.installFallbackVersion'),
+		}),
+		detail: t('update.installDetail'),
 	});
 
 	if (response !== 0) {

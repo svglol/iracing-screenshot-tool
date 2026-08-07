@@ -72,7 +72,7 @@ describe('decideWgcSupport', () => {
 			capabilities: { ...ALL_CAPABLE, cursorConfigSupported: false },
 		});
 		expect(result.supported).toBe(true);
-		expect(result.caveat).toBe(WGC_CURSOR_CAVEAT);
+		expect(result.caveat).toBe(WGC_CURSOR_CAVEAT());
 		// A caveat is not a refusal, so nothing that blocks the feature is set.
 		expect(result.reason).toBeNull();
 		expect(result.message).toBeNull();
@@ -141,7 +141,7 @@ describe('decideLongExposureAvailability', () => {
 			})
 		).toEqual({
 			available: false,
-			reason: NATIVE_CAPTURE_REQUIRED_REASON,
+			reason: NATIVE_CAPTURE_REQUIRED_REASON(),
 			needsNativeCapture: true,
 		});
 	});
