@@ -3,10 +3,17 @@
 type SessionInfo = any;
 type Telemetry = any;
 
-interface FilenameField {
+import { t } from './i18n';
+
+export interface FilenameField {
 	token: string;
-	label: string;
-	category: string;
+	// Translation KEYS, not text. These are shown in Settings, so they have to
+	// follow the user's language — but this array is a module-scope const built at
+	// import time, long before a locale is resolved, so it cannot hold finished
+	// sentences. The UI resolves them through `filenameFieldLabel` /
+	// `filenameFieldCategory` below at render time.
+	labelKey: string;
+	categoryKey: string;
 	resolve: (sessionInfo: SessionInfo, telemetry: Telemetry) => string;
 }
 
@@ -30,17 +37,17 @@ function findDriver(
 /**
  * All available filename format fields, organised by category.
  * Each field exposes:
- *   token    – the placeholder string (with braces)
- *   label    – human-readable name shown in the UI
- *   category – grouping name shown in the UI
- *   resolve  – function(sessionInfo, telemetry) => string value (may return '' on missing data)
+ *   token       – the placeholder string (with braces)
+ *   labelKey    – translation key for the name shown in the UI
+ *   categoryKey – translation key for the grouping shown in the UI
+ *   resolve     – function(sessionInfo, telemetry) => string value (may return '' on missing data)
  */
 export const FILENAME_FIELDS: FilenameField[] = [
 	// ── Track ─────────────────────────────────────────────────────────────────
 	{
 		token: '{track}',
-		label: 'Track',
-		category: 'Track',
+		labelKey: 'filenameFields.track',
+		categoryKey: 'filenameFields.categories.Track',
 		resolve(sessionInfo) {
 			return (
 				(sessionInfo &&
@@ -53,8 +60,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{trackFull}',
-		label: 'Track Full',
-		category: 'Track',
+		labelKey: 'filenameFields.trackFull',
+		categoryKey: 'filenameFields.categories.Track',
 		resolve(sessionInfo) {
 			return (
 				(sessionInfo &&
@@ -67,8 +74,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{trackCity}',
-		label: 'City',
-		category: 'Track',
+		labelKey: 'filenameFields.trackCity',
+		categoryKey: 'filenameFields.categories.Track',
 		resolve(sessionInfo) {
 			return (
 				(sessionInfo &&
@@ -81,8 +88,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{trackCountry}',
-		label: 'Country',
-		category: 'Track',
+		labelKey: 'filenameFields.trackCountry',
+		categoryKey: 'filenameFields.categories.Track',
 		resolve(sessionInfo) {
 			return (
 				(sessionInfo &&
@@ -95,8 +102,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{trackType}',
-		label: 'Track Type',
-		category: 'Track',
+		labelKey: 'filenameFields.trackType',
+		categoryKey: 'filenameFields.categories.Track',
 		resolve(sessionInfo) {
 			return (
 				(sessionInfo &&
@@ -111,8 +118,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	// ── Driver ────────────────────────────────────────────────────────────────
 	{
 		token: '{driver}',
-		label: 'Driver',
-		category: 'Driver',
+		labelKey: 'filenameFields.driver',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			if (!sessionInfo || !sessionInfo.data) return '';
 			if (
@@ -136,8 +143,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{driverAbbrev}',
-		label: 'Driver Abbrev',
-		category: 'Driver',
+		labelKey: 'filenameFields.driverAbbrev',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return (d && d.AbbrevName) || '';
@@ -145,8 +152,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{driverInitials}',
-		label: 'Initials',
-		category: 'Driver',
+		labelKey: 'filenameFields.driverInitials',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			if (!d || !d.UserName) return '';
@@ -157,8 +164,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{team}',
-		label: 'Team',
-		category: 'Driver',
+		labelKey: 'filenameFields.team',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return (d && d.TeamName) || '';
@@ -166,8 +173,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{carNumber}',
-		label: 'Car #',
-		category: 'Driver',
+		labelKey: 'filenameFields.carNumber',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return (d && d.CarNumber) || '';
@@ -175,8 +182,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{car}',
-		label: 'Car',
-		category: 'Driver',
+		labelKey: 'filenameFields.car',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return (d && d.CarScreenNameShort) || '';
@@ -184,8 +191,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{carFull}',
-		label: 'Car Full',
-		category: 'Driver',
+		labelKey: 'filenameFields.carFull',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return (d && d.CarScreenName) || '';
@@ -193,8 +200,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{carClass}',
-		label: 'Car Class',
-		category: 'Driver',
+		labelKey: 'filenameFields.carClass',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return (d && d.CarClassShortName) || '';
@@ -202,8 +209,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{iRating}',
-		label: 'iRating',
-		category: 'Driver',
+		labelKey: 'filenameFields.iRating',
+		categoryKey: 'filenameFields.categories.Driver',
 		resolve(sessionInfo, telemetry) {
 			const d = findDriver(sessionInfo, telemetry);
 			return d && d.IRating !== undefined ? String(d.IRating) : '';
@@ -213,8 +220,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	// ── Session ───────────────────────────────────────────────────────────────
 	{
 		token: '{sessionType}',
-		label: 'Session Type',
-		category: 'Session',
+		labelKey: 'filenameFields.sessionType',
+		categoryKey: 'filenameFields.categories.Session',
 		resolve(sessionInfo, telemetry) {
 			if (!sessionInfo || !sessionInfo.data || !sessionInfo.data.SessionInfo)
 				return '';
@@ -228,8 +235,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{sessionName}',
-		label: 'Session Name',
-		category: 'Session',
+		labelKey: 'filenameFields.sessionName',
+		categoryKey: 'filenameFields.categories.Session',
 		resolve(sessionInfo, telemetry) {
 			if (!sessionInfo || !sessionInfo.data || !sessionInfo.data.SessionInfo)
 				return '';
@@ -243,8 +250,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{lap}',
-		label: 'Lap',
-		category: 'Session',
+		labelKey: 'filenameFields.lap',
+		categoryKey: 'filenameFields.categories.Session',
 		resolve(sessionInfo, telemetry) {
 			if (!telemetry || !telemetry.values) return '';
 			return telemetry.values.Lap !== undefined
@@ -256,8 +263,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	// ── Meta ──────────────────────────────────────────────────────────────────
 	{
 		token: '{date}',
-		label: 'Date',
-		category: 'Meta',
+		labelKey: 'filenameFields.date',
+		categoryKey: 'filenameFields.categories.Meta',
 		resolve() {
 			const now = new Date();
 			const y = now.getFullYear();
@@ -268,8 +275,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{time}',
-		label: 'Time',
-		category: 'Meta',
+		labelKey: 'filenameFields.time',
+		categoryKey: 'filenameFields.categories.Meta',
 		resolve() {
 			const now = new Date();
 			const h = String(now.getHours()).padStart(2, '0');
@@ -280,8 +287,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{datetime}',
-		label: 'Date+Time',
-		category: 'Meta',
+		labelKey: 'filenameFields.datetime',
+		categoryKey: 'filenameFields.categories.Meta',
 		resolve() {
 			const now = new Date();
 			const y = now.getFullYear();
@@ -295,8 +302,8 @@ export const FILENAME_FIELDS: FilenameField[] = [
 	},
 	{
 		token: '{counter}',
-		label: 'Counter',
-		category: 'Meta',
+		labelKey: 'filenameFields.counter',
+		categoryKey: 'filenameFields.categories.Meta',
 		resolve() {
 			// Intentionally left unresolved here; Worker.vue handles counter separately.
 			return '{counter}';
@@ -368,4 +375,14 @@ export function resolveFilenameFormat(
 	}
 
 	return result;
+}
+
+/** The field's name in the user's language. */
+export function filenameFieldLabel(field: FilenameField): string {
+	return t(field.labelKey);
+}
+
+/** The field's group heading in the user's language. */
+export function filenameFieldCategory(field: FilenameField): string {
+	return t(field.categoryKey);
 }

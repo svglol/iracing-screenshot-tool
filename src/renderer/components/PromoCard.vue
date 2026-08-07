@@ -1,11 +1,7 @@
 <template>
 	<section class="maintainer-note">
-		<p class="maintainer-note__greeting">
-			Thanks for using iRacing Screenshot Tool!
-		</p>
-		<p class="maintainer-note__signature">
-			Built and maintained by AR Media Solutions.
-		</p>
+		<p class="maintainer-note__greeting">{{ $t('promo.greeting') }}</p>
+		<p class="maintainer-note__signature">{{ $t('promo.signature') }}</p>
 		<a class="maintainer-note__link" href="#" @click.prevent="openSite">
 			<span>armediasolutions.net</span>
 			<font-awesome-icon :icon="['fas', 'up-right-from-square']" />

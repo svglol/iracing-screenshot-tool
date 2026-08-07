@@ -19,7 +19,9 @@
 			>
 				<font-awesome-icon icon="chevron-right" />
 			</span>
-			<span class="label" style="margin-bottom: 0">Long Exposure</span>
+			<span class="label" style="margin-bottom: 0">{{
+				$t('longExposure.title')
+			}}</span>
 			<!-- No status text on the right. It carried the compute backend when
 			     open ("d3d11-compute") and the panel state when folded ("needs a
 			     replay"), neither of which is something to read every time the
@@ -30,7 +32,7 @@
 
 		<div v-show="!collapsed" id="long-exposure-body">
 			<template v-if="available">
-				<o-field label="Shutter">
+				<o-field :label="$t('longExposure.shutter')">
 					<o-select v-model="shutter" expanded :disabled="busy">
 						<option
 							v-for="stop in shutterOptions"
@@ -42,16 +44,23 @@
 					</o-select>
 				</o-field>
 
-				<o-field label="Playback speed">
+				<o-field :label="$t('longExposure.playbackSpeed')">
 					<o-select v-model="playbackSpeed" expanded :disabled="busy">
-						<option :value="0">Auto (from sample target)</option>
+						<option :value="0">
+							{{ $t('longExposure.playbackAuto') }}
+						</option>
 						<option v-for="d in playbackDivisors" :key="d" :value="d">
-							{{ d === 1 ? '1x (real time)' : '1/' + d }}
+							{{
+								d === 1 ? $t('longExposure.playbackRealTime') : '1/' + d
+							}}
 						</option>
 					</o-select>
 				</o-field>
 
-				<o-field v-if="playbackSpeed === 0" label="Target samples">
+				<o-field
+					v-if="playbackSpeed === 0"
+					:label="$t('longExposure.targetSamples')"
+				>
 					<o-input
 						v-model="targetSamples"
 						type="number"
@@ -81,7 +90,7 @@
 					>
 						<font-awesome-icon icon="chevron-right" />
 					</span>
-					<span>Advanced</span>
+					<span>{{ $t('longExposure.advanced') }}</span>
 					<span
 						class="long-exposure__summary"
 						:class="{ 'is-modified': advancedModified.length > 0 }"
@@ -91,12 +100,16 @@
 				</button>
 
 				<div v-show="advancedOpen" id="long-exposure-advanced">
-					<o-field label="Weighting">
+					<o-field :label="$t('longExposure.weighting')">
 						<o-select v-model="weighting" expanded :disabled="busy">
-							<option value="box">Box (even)</option>
-							<option value="linear">Linear (sharp at the end)</option>
+							<option value="box">
+								{{ $t('longExposure.weightingBox') }}
+							</option>
+							<option value="linear">
+								{{ $t('longExposure.weightingLinear') }}
+							</option>
 							<option value="ease">
-								Ease (sharper head, long tail)
+								{{ $t('longExposure.weightingEase') }}
 							</option>
 						</o-select>
 					</o-field>
@@ -116,13 +129,21 @@
 			     this. -->
 					<o-field
 						v-if="interpolationSupported"
-						label="Frame interpolation"
+						:label="$t('longExposure.interpolation')"
 					>
 						<o-select v-model="interpolation" expanded :disabled="busy">
-							<option :value="1">Off</option>
-							<option :value="2">2× (one in-between)</option>
-							<option :value="4">4× (three in-betweens)</option>
-							<option :value="8">8× (seven in-betweens)</option>
+							<option :value="1">
+								{{ $t('longExposure.interpolationOff') }}
+							</option>
+							<option :value="2">
+								{{ $t('longExposure.interpolation2') }}
+							</option>
+							<option :value="4">
+								{{ $t('longExposure.interpolation4') }}
+							</option>
+							<option :value="8">
+								{{ $t('longExposure.interpolation8') }}
+							</option>
 						</o-select>
 					</o-field>
 
@@ -130,12 +151,20 @@
 			     not companions: both buy sample density, one with GPU time we may
 			     not have and one with wall clock we always do. Needs no particular
 			     hardware, so unlike interpolation it is always offered. -->
-					<o-field label="Passes">
+					<o-field :label="$t('longExposure.passes')">
 						<o-select v-model="passes" expanded :disabled="busy">
-							<option :value="1">1 (single pass)</option>
-							<option :value="2">2× — twice the wait</option>
-							<option :value="4">4× — four times the wait</option>
-							<option :value="8">8× — eight times the wait</option>
+							<option :value="1">
+								{{ $t('longExposure.passes1') }}
+							</option>
+							<option :value="2">
+								{{ $t('longExposure.passes2') }}
+							</option>
+							<option :value="4">
+								{{ $t('longExposure.passes4') }}
+							</option>
+							<option :value="8">
+								{{ $t('longExposure.passes8') }}
+							</option>
 						</o-select>
 					</o-field>
 
@@ -156,9 +185,9 @@
 							for="long-exposure-bracket-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>Bracket shutters</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('longExposure.bracket')
+							}}</span>
 						</label>
 					</o-field>
 
@@ -170,7 +199,7 @@
 			     was 0 — i.e. permanently, since 0 is the default. A tip that fires on
 			     the default state is a nag, not guidance. The default stays 0, where
 			     it is exactly identity. -->
-					<o-field label="Highlight recovery (stops)">
+					<o-field :label="$t('longExposure.highlightRecovery')">
 						<o-input
 							v-model="highlightRecovery"
 							type="number"
@@ -210,7 +239,7 @@
 				style="margin-top: 0.5rem"
 				@click="capture"
 			>
-				{{ busy ? progressLabel : 'Long Exposure' }}
+				{{ busy ? progressLabel : $t('longExposure.title') }}
 			</o-button>
 
 			<o-button
@@ -221,7 +250,7 @@
 				style="margin-top: 0.35rem"
 				@click="abort"
 			>
-				Cancel
+				{{ $t('longExposure.cancel') }}
 			</o-button>
 
 			<!-- No shot summary here any more. The panel used to forecast samples,
@@ -375,22 +404,34 @@ export default defineComponent({
 		advancedModified(): string[] {
 			const active: string[] = [];
 			if (this.weighting !== 'box') {
-				active.push(this.weighting);
+				active.push(
+					this.$t(`longExposure.modified.weighting_${this.weighting}`)
+				);
 			}
 			if (this.interpolationSupported && Number(this.interpolation) > 1) {
-				active.push(`${this.interpolation}× interpolation`);
+				active.push(
+					this.$t('longExposure.modified.interpolation', {
+						factor: this.interpolation,
+					})
+				);
 			}
 			// Named rather than counted, and for the sharpest version of the reason
 			// this disclosure names anything: a forgotten 8 here is an eightfold wait.
 			if (Number(this.passes) > 1) {
-				active.push(`${this.passes} passes`);
+				active.push(
+					this.$t('longExposure.modified.passes', {
+						count: Number(this.passes),
+					})
+				);
 			}
 			if (this.bracket) {
-				active.push('bracketed');
+				active.push(this.$t('longExposure.modified.bracketed'));
 			}
 			const recovery = parseFloat(this.highlightRecovery);
 			if (Number.isFinite(recovery) && recovery !== 0) {
-				active.push(`${recovery} stop recovery`);
+				active.push(
+					this.$t('longExposure.modified.recovery', { stops: recovery })
+				);
 			}
 			return active;
 		},
@@ -429,7 +470,7 @@ export default defineComponent({
 			if (this.needsNativeCapture) {
 				notices.push({
 					level: 'warning',
-					text: 'Long exposure needs High-Fidelity Capture (WGC), which is currently off. Turn it on in Settings to enable long exposure.',
+					text: this.$t('longExposure.notices.needsNativeCapture'),
 				});
 				return notices;
 			}
@@ -439,9 +480,11 @@ export default defineComponent({
 			if (!this.available) {
 				notices.push({
 					level: 'warning',
-					text: `Long exposure is unavailable on this machine${
-						this.unavailableReason ? ': ' + this.unavailableReason : '.'
-					}`,
+					text: this.unavailableReason
+						? this.$t('longExposure.notices.unavailableWithReason', {
+								reason: this.unavailableReason,
+							})
+						: this.$t('longExposure.notices.unavailable'),
 				});
 				// Nothing below applies when the feature cannot run at all.
 				return notices;
@@ -465,7 +508,7 @@ export default defineComponent({
 			if (this.lastResult && !this.lastResult.ok) {
 				notices.push({
 					level: 'danger',
-					text: this.lastResult.message || 'Long exposure failed',
+					text: this.lastResult.message || this.$t('longExposure.failed'),
 				});
 			}
 			if (this.lastResult) {
@@ -491,11 +534,7 @@ export default defineComponent({
 			if (this.interpolationWillRun) {
 				notices.push({
 					level: 'warning',
-					text:
-						'Interpolation invents frames between the real ones to smooth the ' +
-						"streak. It costs GPU time per frame, so check the saved shot's " +
-						'real sample count against the same shot with it off — if that ' +
-						'number drops, it is buying invented samples with real ones.',
+					text: this.$t('longExposure.notices.interpolationCost'),
 				});
 			}
 
@@ -504,20 +543,14 @@ export default defineComponent({
 			if (Number(this.passes) > 1 && this.interpolationWillRun) {
 				notices.push({
 					level: 'warning',
-					text:
-						'Passes and interpolation compete for the same per-frame budget. ' +
-						'With both on, each pass captures fewer real frames — turning ' +
-						'interpolation off usually makes the better shot for the same wait.',
+					text: this.$t('longExposure.notices.passesAndInterpolation'),
 				});
 			}
 
 			if (Number(this.passes) > 1) {
 				notices.push({
 					level: 'info',
-					text:
-						'Each pass replays the same moment and catches frames the others ' +
-						'missed, so the streak gets smoother rather than brighter. Best on ' +
-						'fast shutters, where a single pass collects only a handful of samples.',
+					text: this.$t('longExposure.notices.passes'),
 				});
 			}
 
@@ -526,10 +559,13 @@ export default defineComponent({
 			if (!this.interpolationSupported && this.interpolationReason) {
 				notices.push({
 					level: 'info',
-					text:
-						'Frame interpolation needs an NVIDIA Turing or newer GPU' +
-						`${this.adapter ? ` (this capture runs on ${this.adapter})` : ''}. ` +
-						'Everything else about long exposure works as normal.',
+					text: this.$t('longExposure.notices.interpolationUnsupported', {
+						adapter: this.adapter
+							? this.$t('longExposure.notices.interpolationAdapter', {
+									adapter: this.adapter,
+								})
+							: '',
+					}),
 				});
 			}
 
@@ -539,9 +575,7 @@ export default defineComponent({
 			if (this.reshade) {
 				notices.push({
 					level: 'info',
-					text:
-						'Long exposure captures natively and does not use ReShade, so ' +
-						'ReShade effects will not appear in the result.',
+					text: this.$t('longExposure.notices.reshade'),
 				});
 			}
 
@@ -553,7 +587,9 @@ export default defineComponent({
 			}
 			return this.advancedModified.length > 0
 				? this.advancedModified.join(', ')
-				: `${this.advancedCount} defaults`;
+				: this.$t('longExposure.defaultsSummary', {
+						count: this.advancedCount,
+					});
 		},
 		// Multi-pass re-seeks between passes, so without the pass number the progress
 		// line would appear to restart part-way through and read as a fault.
@@ -561,23 +597,31 @@ export default defineComponent({
 			const total = this.progress?.passes ?? 0;
 			const current = this.progress?.pass;
 			if (total > 1 && typeof current === 'number') {
-				return ` (pass ${current + 1} of ${total})`;
+				return this.$t('longExposure.progress.pass', {
+					current: current + 1,
+					total,
+				});
 			}
 			return '';
 		},
 		progressLabel(): string {
-			if (!this.progress) return 'Working…';
+			if (!this.progress) return this.$t('longExposure.progress.working');
 			switch (this.progress.phase) {
 				case 'seeking':
-					return `Seeking…${this.passLabel}`;
+					return this.$t('longExposure.progress.seeking', {
+						pass: this.passLabel,
+					});
 				case 'accumulating':
-					return `Exposing… ${this.progress.accepted ?? 0} samples${this.passLabel}`;
+					return this.$t('longExposure.progress.accumulating', {
+						count: this.progress.accepted ?? 0,
+						pass: this.passLabel,
+					});
 				case 'resolving':
-					return 'Developing…';
+					return this.$t('longExposure.progress.resolving');
 				case 'restoring':
-					return 'Restoring replay…';
+					return this.$t('longExposure.progress.restoring');
 				default:
-					return 'Working…';
+					return this.$t('longExposure.progress.working');
 			}
 		},
 		// Everything the main process needs to execute the shot. Building this in
@@ -781,12 +825,14 @@ export default defineComponent({
 				this.lastResult = result;
 				if (result.ok) {
 					useOruga().notification.open({
-						message: `Long exposure saved — ${result.stats.accepted} samples`,
+						message: this.$t('longExposure.saved', {
+							count: result.stats.accepted,
+						}),
 						variant: 'success',
 					});
 				} else {
 					useOruga().notification.open({
-						message: result.message || 'Long exposure failed',
+						message: result.message || this.$t('longExposure.failed'),
 						variant: 'danger',
 					});
 				}

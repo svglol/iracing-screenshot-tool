@@ -6,6 +6,8 @@ const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 const os: typeof import('os') = require('os');
 
+import { t } from './i18n';
+
 const IRACING_INI_PATH = path.join(
 	os.homedir(),
 	'Documents',
@@ -61,9 +63,7 @@ export function checkIracingConfig(): string[] {
 			monitorSetup.RenderViewPerMonitor &&
 			monitorSetup.RenderViewPerMonitor !== '0'
 		) {
-			warnings.push(
-				'Disable "Render Scene Using 3 Projections" in iRacing (Display > Monitor tab) to avoid vertical bands in screenshots'
-			);
+			warnings.push(t('iracingConfig.projections'));
 		}
 	} catch {
 		// Skip check if file cannot be read

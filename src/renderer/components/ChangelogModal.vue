@@ -11,7 +11,7 @@
 				class="modal-card-title"
 				style="color: white; font-weight: 700; margin-bottom: 0rem"
 			>
-				Changelog
+				{{ $t('changelog.title') }}
 			</p>
 			<button type="button" class="delete" @click="$emit('close')" />
 		</header>
@@ -53,7 +53,10 @@ export default {
 
 			releases.forEach((release) => {
 				const releaseVersion = release.tag_name || release.name || '';
-				const releaseTitle = release.name || release.tag_name || 'Release';
+				const releaseTitle =
+					release.name ||
+					release.tag_name ||
+					this.$t('changelog.untitledRelease');
 				const compare = compareVer(version, releaseVersion);
 				if (compare === 0 || compare === 1) {
 					this.changelog += `## ${releaseTitle}\n ${release.body || ''}\n\n ___ \n`;

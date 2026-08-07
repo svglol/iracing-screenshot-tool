@@ -97,10 +97,12 @@ const ICONS: Record<NoticeLevel, string> = {
 	info: 'circle-info',
 };
 
-const TITLES: Record<NoticeLevel, string> = {
-	danger: 'Problems',
-	warning: 'Worth knowing',
-	info: 'Notes',
+// Translation keys rather than text: this is module scope, evaluated at import
+// time, and the heading has to follow the language for the life of the window.
+const TITLE_KEYS: Record<NoticeLevel, string> = {
+	danger: 'notice.danger',
+	warning: 'notice.warning',
+	info: 'notice.info',
 };
 
 // ONE card for every notice a panel wants to raise, replacing the stacks of
@@ -142,7 +144,7 @@ export default defineComponent({
 			return this.ordered.length > 0 ? this.ordered[0].level : 'info';
 		},
 		resolvedTitle(): string {
-			return this.title || TITLES[this.level];
+			return this.title || this.$t(TITLE_KEYS[this.level]);
 		},
 	},
 	methods: {

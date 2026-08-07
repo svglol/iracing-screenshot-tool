@@ -34,6 +34,7 @@ import {
 } from './exposure-math';
 import { plannedSinkCount } from './accumulator-sinks';
 import { resolveCropTarget } from '../screenshot-output';
+import { t } from '../i18n';
 
 export const TONEMAPPERS = ['none', 'reinhard', 'aces'] as const;
 export type Tonemapper = (typeof TONEMAPPERS)[number];
@@ -232,14 +233,17 @@ export const LONG_CAPTURE_ESCALATE_SECONDS = 16;
 // have to convert yourself).
 function describeDuration(seconds: number): string {
 	if (!Number.isFinite(seconds) || seconds <= 0) {
-		return '0 seconds';
+		return t('duration.zero');
 	}
 	if (seconds < 90) {
-		return `${Math.round(seconds)} seconds`;
+		const rounded = Math.round(seconds);
+		return t('duration.seconds', { count: rounded });
 	}
 	const minutes = Math.floor(seconds / 60);
 	const rest = Math.round(seconds - minutes * 60);
-	return rest === 0 ? `${minutes} minutes` : `${minutes} min ${rest} s`;
+	return rest === 0
+		? t('duration.minutes', { count: minutes })
+		: t('duration.minutesSeconds', { minutes, seconds: rest });
 }
 
 // A recipe with everything except the anchor, session and output directory, which
@@ -656,7 +660,10 @@ export function validatePlan(opts: {
 		// safe — we never need frames after it. Only an anchor closer than the
 		// window length to the START is constrained.
 		errors.push(
-			`The exposure needs ${plan.windowFrames} replay frames before the selected moment, but it is only ${recipe.anchorFrame} frames into the replay. Pick a later moment or a faster shutter.`
+			t('validation.windowBeforeStart', {
+				frames: plan.windowFrames,
+				anchor: recipe.anchorFrame,
+			})
 		);
 	}
 
@@ -668,23 +675,21 @@ export function validatePlan(opts: {
 		replayEndFrame > 0 &&
 		recipe.anchorFrame > replayEndFrame
 	) {
-		errors.push('The selected moment is past the end of the replay.');
+		errors.push(t('validation.pastEnd'));
 	}
 
 	if (
 		typeof currentSessionNum === 'number' &&
 		currentSessionNum !== recipe.sessionNum
 	) {
-		errors.push(
-			'The replay has moved to a different session since this shot was set up. Re-select the moment.'
-		);
+		errors.push(t('validation.sessionChanged'));
 	}
 
 	if (plan.isSingleSample) {
 		warnings.push(
 			plan.passes > 1
-				? `This shutter is short enough that only about one frame lands inside it per pass, so ${plan.passes} passes collect roughly ${plan.passes} samples. A slower playback speed or a slower shutter buys far more.`
-				: 'This shutter is short enough that only one frame will land inside it, so the result has no motion blur. A slower playback speed or a slower shutter buys samples.'
+				? t('validation.singleSampleMultiPass', { passes: plan.passes })
+				: t('validation.singleSample')
 		);
 	}
 
@@ -706,7 +711,9 @@ export function validatePlan(opts: {
 	// read-modify-write per sink from values already in registers.
 	if (bracketed && recipe.interpolationFactor > 1) {
 		warnings.push(
-			`Bracket shutters and ${recipe.interpolationFactor}x frame interpolation cannot both run, so this shot will be taken without interpolation. Turn bracketing off if the in-betweens matter more to you than the extra stops.`
+			t('validation.bracketVsInterpolation', {
+				factor: recipe.interpolationFactor,
+			})
 		);
 	}
 
@@ -720,7 +727,9 @@ export function validatePlan(opts: {
 	// them looking for a setting that is no longer doing anything.
 	if (!bracketed && plan.passes > 1 && recipe.interpolationFactor > 1) {
 		warnings.push(
-			`Multi-pass and ${recipe.interpolationFactor}x interpolation are both on. They compete: interpolation slows each pass enough to cost it real frames, so the same wait buys fewer real samples than passes alone would. Turning interpolation off is usually the better shot.`
+			t('validation.passesVsInterpolation', {
+				factor: recipe.interpolationFactor,
+			})
 		);
 	}
 
@@ -729,7 +738,11 @@ export function validatePlan(opts: {
 		plan.predictedSamples < recipe.targetSamples
 	) {
 		warnings.push(
-			`Even at 1/${plan.playbackDivisor} speed this exposure reaches about ${plan.predictedSamples} samples, short of the ${recipe.targetSamples} requested. Use a longer shutter for more.`
+			t('validation.shortOfTarget', {
+				divisor: plan.playbackDivisor,
+				samples: plan.predictedSamples,
+				target: recipe.targetSamples,
+			})
 		);
 	}
 
@@ -742,19 +755,27 @@ export function validatePlan(opts: {
 	// what makes multi-pass safe to expose in the UI at all: its whole cost is time.
 	const passSuffix =
 		plan.passes > 1
-			? ` across ${plan.passes} passes over the same moment`
+			? t('validation.passSuffix', { passes: plan.passes })
 			: '';
 	if (plan.predictedTotalWallClockSeconds > LONG_CAPTURE_ESCALATE_SECONDS) {
 		warnings.push(
-			`This capture runs the replay at 1/${plan.playbackDivisor} speed for about ${describeDuration(plan.predictedTotalWallClockSeconds)} of real time${passSuffix}, and cannot be hurried once started. ${
-				plan.passes > 1
-					? 'Fewer passes finish sooner with fewer samples.'
-					: 'A faster playback speed finishes sooner with fewer samples.'
-			}`
+			t('validation.longCaptureEscalate', {
+				divisor: plan.playbackDivisor,
+				duration: describeDuration(plan.predictedTotalWallClockSeconds),
+				passSuffix,
+				advice:
+					plan.passes > 1
+						? t('validation.adviceFewerPasses')
+						: t('validation.adviceFasterPlayback'),
+			})
 		);
 	} else if (plan.predictedTotalWallClockSeconds > LONG_CAPTURE_WARN_SECONDS) {
 		warnings.push(
-			`This capture will take about ${describeDuration(plan.predictedTotalWallClockSeconds)} of real time at 1/${plan.playbackDivisor} playback speed${passSuffix}.`
+			t('validation.longCaptureWarn', {
+				duration: describeDuration(plan.predictedTotalWallClockSeconds),
+				divisor: plan.playbackDivisor,
+				passSuffix,
+			})
 		);
 	}
 
@@ -763,7 +784,11 @@ export function validatePlan(opts: {
 	// the IMAGE is unaffected, only the diagnostics describe a prefix.
 	if (plan.predictedTotalSamples > NATIVE_SAMPLE_LOG_CAP) {
 		warnings.push(
-			`This capture is predicted to collect about ${Math.round(plan.predictedTotalSamples)} samples across ${plan.passes} passes, past the ${NATIVE_SAMPLE_LOG_CAP} the diagnostic log holds. The image is unaffected — only the evenness and gap figures will describe the first part of the capture.`
+			t('validation.pastLogCap', {
+				samples: Math.round(plan.predictedTotalSamples),
+				passes: plan.passes,
+				cap: NATIVE_SAMPLE_LOG_CAP,
+			})
 		);
 	}
 
@@ -782,7 +807,9 @@ export function validatePlan(opts: {
 		const limit = opts.lossyInterpolationLoad;
 		if (typeof limit === 'number' && limit > 0 && load >= limit) {
 			warnings.push(
-				`At this size, ${recipe.interpolationFactor}x interpolation has previously cost this machine real samples. Consider a lower factor, a lower Resolution, or more passes instead.`
+				t('validation.interpolationLossy', {
+					factor: recipe.interpolationFactor,
+				})
 			);
 		}
 	}

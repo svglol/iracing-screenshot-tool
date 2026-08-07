@@ -1,23 +1,33 @@
 <template>
 	<div class="modal-card">
 		<header class="modal-card-head">
-			<p class="modal-card-title settings-title">Settings</p>
+			<p class="modal-card-title settings-title">
+				{{ $t('settings.title') }}
+			</p>
 		</header>
 		<section class="modal-card-body settings-body">
 			<div class="settings-layout">
 				<aside class="settings-meta">
-					<span class="heading">Version - {{ toolVersion }}</span>
+					<span class="heading">{{
+						$t('settings.version', { version: toolVersion })
+					}}</span>
 					<span class="heading"
-						><a @click="$emit('changelog')">Changelog</a></span
+						><a @click="$emit('changelog')">{{
+							$t('settings.changelog')
+						}}</a></span
 					>
 					<span class="heading"
-						><a @click="openLogsFolder">Open Logs Folder</a></span
+						><a @click="openLogsFolder">{{
+							$t('settings.openLogsFolder')
+						}}</a></span
 					>
 					<!-- Somewhere to ASK. The updater is otherwise entirely passive,
 					     so a user who wanted to know whether they were current had no
 					     way to find out short of opening GitHub. -->
 					<span class="heading"
-						><a @click="checkForUpdates">Check for Updates</a></span
+						><a @click="checkForUpdates">{{
+							$t('settings.checkForUpdates')
+						}}</a></span
 					>
 					<span class="heading settings-meta__update">{{
 						updateStatus
@@ -25,7 +35,25 @@
 				</aside>
 
 				<div class="settings-form">
-					<o-field label="Screenshot Folder" />
+					<o-field :label="$t('settings.language')">
+						<o-select v-model="locale" expanded>
+							<!-- Each language named in ITSELF. Someone looking for their
+							     language in a list they cannot otherwise read still
+							     recognises its endonym; "Czech" helps nobody who needs it. -->
+							<option
+								v-for="option in localeOptions"
+								:key="option.code"
+								:value="option.code"
+							>
+								{{ option.name }}
+							</option>
+						</o-select>
+					</o-field>
+					<span class="description">{{
+						$t('settings.languageDescription')
+					}}</span>
+					<hr />
+					<o-field :label="$t('settings.screenshotFolder')" />
 
 					<o-field addons class="settings-inline-field">
 						<o-input
@@ -39,12 +67,12 @@
 								class="button is-primary settings-action"
 								@click="openFolderDialog"
 							>
-								Select Folder
+								{{ $t('settings.selectFolder') }}
 							</o-button>
 						</p>
 					</o-field>
 					<hr />
-					<o-field label="Screenshot Keybind" />
+					<o-field :label="$t('settings.screenshotKeybind')" />
 					<o-field addons class="settings-inline-field">
 						<o-input
 							expanded
@@ -58,7 +86,7 @@
 								:loading="bindingKey"
 								@click="bindScreenshotKeybind"
 							>
-								Edit Bind
+								{{ $t('settings.editBind') }}
 							</o-button>
 						</p>
 					</o-field>
@@ -74,21 +102,19 @@
 							for="settings-custom-filename-format-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>Custom Filename Format</span
-							>
-							<span class="description"
-								>Use a custom pattern instead of the default
-								({track}-{driver}-{counter})</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('settings.customFilenameFormat')
+							}}</span>
+							<span class="description">{{
+								$t('settings.customFilenameFormatDescription')
+							}}</span>
 						</label>
 					</o-field>
 					<div v-if="customFilenameFormat">
 						<o-field>
-							<span class="description"
-								>Click fields to add them to the format. Type separators
-								(-, _, etc.) directly.</span
-							>
+							<span class="description">{{
+								$t('settings.filenameFieldsHint')
+							}}</span>
 						</o-field>
 
 						<o-field>
@@ -104,14 +130,14 @@
 									style="width: 80px"
 									@click="filenameFormat = defaultFormat"
 								>
-									Reset
+									{{ $t('settings.reset') }}
 								</o-button>
 							</p>
 						</o-field>
 
 						<o-field>
 							<span class="description"
-								>Preview:
+								>{{ $t('settings.preview') }}
 								<strong style="color: #fff">{{
 									filenamePreview
 								}}</strong></span
@@ -119,18 +145,18 @@
 						</o-field>
 
 						<div
-							v-for="(fields, category) in fieldsByCategory"
-							:key="category"
+							v-for="group in fieldGroups"
+							:key="group.key"
 							style="margin-bottom: 0.5rem"
 						>
 							<span
 								class="description"
 								style="display: block; margin-bottom: 0.25rem"
-								>{{ category }}</span
+								>{{ group.name }}</span
 							>
 							<div class="field is-grouped is-grouped-multiline">
 								<div
-									v-for="field in fields"
+									v-for="field in group.fields"
 									:key="field.token"
 									class="control"
 								>
@@ -139,7 +165,7 @@
 										style="cursor: pointer"
 										@click="insertField(field.token)"
 									>
-										{{ field.label }}
+										{{ $t(field.labelKey) }}
 									</o-tag>
 								</div>
 							</div>
@@ -147,11 +173,17 @@
 					</div>
 
 					<hr />
-					<o-field label="Output Format">
+					<o-field :label="$t('settings.outputFormat')">
 						<o-select v-model="outputFormat">
-							<option value="jpeg">JPEG (max quality)</option>
-							<option value="png">PNG (lossless)</option>
-							<option value="webp">WebP (quality 95%)</option>
+							<option value="jpeg">
+								{{ $t('settings.formatJpeg') }}
+							</option>
+							<option value="png">
+								{{ $t('settings.formatPng') }}
+							</option>
+							<option value="webp">
+								{{ $t('settings.formatWebp') }}
+							</option>
 						</o-select>
 					</o-field>
 					<hr />
@@ -166,12 +198,12 @@
 							for="settings-disable-tooltips-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>Disable Tooltips</span
-							>
-							<span class="description"
-								>Leave me alone, I know what I'm doing</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('settings.disableTooltips')
+							}}</span>
+							<span class="description">{{
+								$t('settings.disableTooltipsDescription')
+							}}</span>
 						</label>
 					</o-field>
 					<hr />
@@ -186,14 +218,12 @@
 							for="settings-crop-top-left-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>Prefer top-left watermark crop</span
-							>
-							<span class="description"
-								>Crops only the bottom-right corner (3%). When off, the
-								screenshot is cropped (6% total) equally from all sides
-								for a centered result.</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('settings.cropTopLeft')
+							}}</span>
+							<span class="description">{{
+								$t('settings.cropTopLeftDescription')
+							}}</span>
 						</label>
 					</o-field>
 					<hr />
@@ -208,32 +238,30 @@
 							for="settings-manual-window-restore-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>Manual Window Restore</span
-							>
-							<span class="description"
-								>Override the automatic window restore with custom
-								position and size. Useful for people using an Ultrawide
-								or Nvidia Surround</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('settings.manualWindowRestore')
+							}}</span>
+							<span class="description">{{
+								$t('settings.manualWindowRestoreDescription')
+							}}</span>
 						</label>
 					</o-field>
 					<div v-if="manualWindowRestore">
 						<div class="columns settings-grid">
 							<div class="column">
-								<o-field label="Left">
+								<o-field :label="$t('settings.left')">
 									<o-input v-model="screenLeft" type="number" />
 								</o-field>
 							</div>
 							<div class="column">
-								<o-field label="Top">
+								<o-field :label="$t('settings.top')">
 									<o-input v-model="screenTop" type="number" />
 								</o-field>
 							</div>
 						</div>
 						<div class="columns settings-grid">
 							<div class="column">
-								<o-field label="Width">
+								<o-field :label="$t('settings.width')">
 									<o-input
 										v-model="screenWidth"
 										type="number"
@@ -243,7 +271,7 @@
 								</o-field>
 							</div>
 							<div class="column">
-								<o-field label="Height">
+								<o-field :label="$t('settings.height')">
 									<o-input
 										v-model="screenHeight"
 										type="number"
@@ -261,7 +289,7 @@
 							style="margin-top: 0.5rem"
 							@click="restoreNow"
 						>
-							Restore Now
+							{{ $t('settings.restoreNow') }}
 						</o-button>
 					</div>
 					<hr />
@@ -277,9 +305,9 @@
 							for="settings-native-capture-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>High-Fidelity Capture (WGC)</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('settings.nativeCapture')
+							}}</span>
 							<span
 								class="description"
 								:class="{
@@ -302,17 +330,15 @@
 							for="settings-reshade-switch"
 							class="settings-toggle-row__text"
 						>
-							<span class="label" style="margin-bottom: 0px"
-								>Reshade Compatibility Mode</span
-							>
+							<span class="label" style="margin-bottom: 0px">{{
+								$t('settings.reshade')
+							}}</span>
 						</label>
 					</o-field>
 					<span class="description">
-						When using reshade you will have to first use your hotkey for
-						the iRacing Screenshot Tool or press the button, then use your
-						reshade screenshot hotkey once the iRacing window has resized
+						{{ $t('settings.reshadeDescription') }}
 					</span>
-					<o-field label="Reshade INI" />
+					<o-field :label="$t('settings.reshadeIni')" />
 
 					<o-field addons class="settings-inline-field">
 						<o-input
@@ -327,7 +353,7 @@
 								class="button is-primary settings-action"
 								@click="openReshadeDialog"
 							>
-								Select File
+								{{ $t('settings.selectFile') }}
 							</o-button>
 						</p>
 					</o-field>
@@ -343,7 +369,10 @@ import { version } from '../../../package.json';
 import {
 	FILENAME_FIELDS,
 	DEFAULT_FORMAT,
+	type FilenameField,
 } from '../../utilities/filenameFormat';
+import { getLocale, SUPPORTED_LOCALES } from '../../utilities/i18n';
+import { applyLocale } from '../i18n';
 import {
 	describeUpdate,
 	initialUpdateState,
@@ -354,6 +383,12 @@ const path = require('path');
 export default {
 	data() {
 		return {
+			// `|| getLocale()` so the dropdown always has a selected row. Main
+			// resolves and persists `locale` before the window is created, so the
+			// config read normally wins — but an empty string would render a picker
+			// with nothing highlighted, which reads as "no language set".
+			locale: config.get('locale') || getLocale(),
+			localeOptions: SUPPORTED_LOCALES,
 			screenshotFolder: config.get('screenshotFolder'),
 			screenshotKeybind: config.get('screenshotKeybind'),
 			bindingKey: false,
@@ -437,16 +472,38 @@ export default {
 			const extMap = { jpeg: '.jpg', png: '.png', webp: '.webp' };
 			return preview + (extMap[this.outputFormat] || '.jpg');
 		},
-		fieldsByCategory() {
-			return this.filenameFields.reduce((acc, field) => {
-				if (!acc[field.category]) acc[field.category] = [];
-				acc[field.category].push(field);
-				return acc;
-			}, {});
+		// Grouped for display, with the group heading translated. Keyed by the
+		// UNtranslated category key so the v-for key is stable across a language
+		// change (and so two languages that happen to translate two categories the
+		// same way cannot collide).
+		fieldGroups(): {
+			key: string;
+			name: string;
+			fields: FilenameField[];
+		}[] {
+			const order: string[] = [];
+			const grouped: Record<string, FilenameField[]> = {};
+			for (const field of this.filenameFields as FilenameField[]) {
+				if (!grouped[field.categoryKey]) {
+					grouped[field.categoryKey] = [];
+					order.push(field.categoryKey);
+				}
+				grouped[field.categoryKey].push(field);
+			}
+			return order.map((key) => ({
+				key,
+				name: this.$t(key),
+				fields: grouped[key],
+			}));
 		},
 		// The same sentence the title-bar tooltip uses, from the same helper, so the
 		// two places that talk about updates cannot drift apart.
 		updateStatus() {
+			// describeUpdate phrases through the core's module-level `t`, which Vue
+			// cannot observe. Touching $locale is what re-runs this computed when
+			// the language changes — otherwise the line would keep the wording it
+			// had when it was last invalidated for some other reason.
+			void this.$locale;
 			return (
 				this.updateNotice ??
 				describeUpdate(
@@ -470,14 +527,13 @@ export default {
 			if (!this.nativeCaptureSupported) {
 				return (
 					this.nativeCaptureReason ||
-					'Unavailable on this system — high-fidelity capture cannot run here.'
+					this.$t('settings.nativeCaptureUnavailable')
 				);
 			}
 			if (this.nativeCaptureWarning) {
 				return this.nativeCaptureWarning;
 			}
-			const base =
-				'Capture true un-subsampled color via Windows.Graphics.Capture instead of the default pipeline (which subsamples color). Falls back automatically if a capture fails.';
+			const base = this.$t('settings.nativeCaptureDescription');
 			// A caveat means it works but gives something up, so it reads as an
 			// addition to the description rather than replacing it.
 			return this.nativeCaptureCaveat
@@ -486,6 +542,16 @@ export default {
 		},
 	},
 	watch: {
+		// Adopt the language in THIS window immediately, then persist. The write
+		// makes main re-language itself and broadcasts to every window, including
+		// this one — applyLocale is idempotent, so the echo is harmless, and doing
+		// it here as well means the picker never lags its own selection.
+		locale(value) {
+			const resolved = applyLocale(value);
+			if (config.get('locale') !== resolved) {
+				config.set('locale', resolved);
+			}
+		},
 		outputFormat() {
 			config.set('outputFormat', this.outputFormat);
 		},
@@ -558,7 +624,7 @@ export default {
 			this.nativeCaptureCaveat = check?.caveat ?? null;
 			this.nativeCaptureWarning =
 				check && check.verified === false
-					? 'Windows reports this is supported, but a test capture did not come back. Captures will fall back automatically if it keeps failing.'
+					? this.$t('settings.nativeCaptureUnverified')
 					: null;
 			config.set('nativeCapture', true);
 		},
@@ -658,9 +724,9 @@ export default {
 					this.updateNotice = result.reason;
 				}
 			} catch (error) {
-				this.updateNotice = `Update check failed: ${
-					(error as Error)?.message || String(error)
-				}`;
+				this.updateNotice = this.$t('settings.updateCheckFailed', {
+					message: (error as Error)?.message || String(error),
+				});
 			}
 		},
 		restoreNow() {
