@@ -111,8 +111,17 @@ jobs:
                     } > "$notes"
                   fi
 
+                  # --prerelease=false is load-bearing, not tidiness. With
+                  # allowPrerelease at its default, electron-updater resolves the
+                  # newest version through https://github.com/<owner>/<repo>/releases/latest
+                  # (GitHubProvider.getLatestTagName), and GitHub never points that
+                  # at a release flagged pre-release — nor does --latest override
+                  # the flag. v3.1.0, v3.2.1 and v3.2.2 all shipped pre-release, so
+                  # that redirect sat on v3.1.1, which predates latest.yml: every
+                  # update check would have 404'd on the channel file.
                   gh release edit "$tag" \
                     --draft=false \
+                    --prerelease=false \
                     --latest \
                     --title "$tag" \
                     --notes-file "$notes"
