@@ -32,6 +32,11 @@ import {
 	faCircleExclamation,
 	faTriangleExclamation,
 	faCircleInfo,
+	// TitleBar's update states. Two glyphs, because "download it" and "restart to
+	// install it" are different actions and one arrow for both told the user
+	// neither.
+	faCloudArrowDown,
+	faRotateRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -51,6 +56,8 @@ library.add(
 	faCircleExclamation,
 	faTriangleExclamation,
 	faCircleInfo,
+	faCloudArrowDown,
+	faRotateRight,
 	faDiscord
 );
 

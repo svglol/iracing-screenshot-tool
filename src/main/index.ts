@@ -95,6 +95,16 @@ import {
 	normalizeFileKey,
 	parseCameraState as parseCameraStateFromArray,
 } from './main-utils';
+import {
+	applyUpdateEvent,
+	canInstallNow,
+	canStartDownload,
+	initialUpdateState,
+	shouldCheckNow,
+	UPDATE_POLL_INTERVAL_MS,
+	type UpdateEvent,
+	type UpdateState,
+} from '../utilities/update-decisions';
 
 let width: number;
 let height: number;
@@ -762,6 +772,14 @@ function createWindow(): void {
 			mainWindow.show();
 			mainWindow.focus();
 		}
+	});
+
+	// Coming back to the app is the moment a stale answer is most likely and most
+	// worth refreshing — the user has probably been in iRacing for a while. Cheap
+	// because shouldCheckNow rations it to the same six-hour policy as the timer, so
+	// alt-tabbing between the sim and here cannot turn into a request per switch.
+	mainWindow.on('focus', () => {
+		runUpdateCheck();
 	});
 
 	mainWindow.on('close', () => {
@@ -2060,10 +2078,6 @@ app.on('ready', async () => {
 			resize(width, height, left, top);
 		}
 	});
-
-	ipcMain.on('install-update', () => {
-		autoUpdater.quitAndInstall();
-	});
 });
 
 app.on('window-all-closed', () => {
@@ -2078,45 +2092,246 @@ app.on('activate', () => {
 	}
 });
 
-// Auto-update observability (obs-lifecycle-telemetry#2 == obs-error-visibility#3):
-// previously only 'update-downloaded' was wired and checkForUpdates() was a
-// floating promise, so a failed update check (offline, 404 feed, signature error)
-// produced no app.log line and rejected unhandled. Wire the full event set; the
-// 'error' event and the checkForUpdates rejection log at ERROR so field triage can
-// filter them.
+// --- auto-update ----------------------------------------------------------
+//
+// The renderer never talks to electron-updater. Main owns one UpdateState, every
+// autoUpdater event is folded into it through the pure reducer in
+// update-decisions.ts, and each transition is both logged and broadcast. The
+// renderer can therefore be a pure view of `update:state` — and, because the state
+// is HELD rather than only announced, a window that mounts after the interesting
+// event still sees it (`update:state` invoke). The old code sent a single
+// fire-and-forget 'update-available' on download completion, so a renderer that was
+// not listening at that instant lost the notification for the whole session.
+//
+// Observability (obs-lifecycle-telemetry#2 == obs-error-visibility#3) is preserved:
+// every event still writes its app.log line, errors at ERROR.
+let updateState = initialUpdateState();
+let updatePollTimer: ReturnType<typeof setInterval> | null = null;
+
+// A capture in flight is the only thing that makes an update action unsafe. Asked
+// fresh at every decision point rather than cached, because it flips without any
+// update event to hang a recompute off.
+function updateBusy(): boolean {
+	return longExposureActive || takingScreenshot;
+}
+
+// The renderer's view of the state: the reduced state plus the busy flag it needs
+// to phrase things honestly. Sent on every transition and returned by the query.
+function updateStatePayload(): UpdateState & {
+	busy: boolean;
+	currentVersion: string;
+} {
+	return {
+		...updateState,
+		busy: updateBusy(),
+		currentVersion: app.getVersion(),
+	};
+}
+
+function pushUpdateEvent(event: UpdateEvent): void {
+	updateState = applyUpdateEvent(updateState, event, Date.now());
+	broadcastToWindows('update:state', updateStatePayload());
+}
+
 autoUpdater.on('checking-for-update', () => {
 	log.info('Auto-update checking');
+	pushUpdateEvent({ type: 'checking' });
 });
 
 autoUpdater.on('update-available', (info) => {
 	log.info('Auto-update available', { version: info?.version });
+	pushUpdateEvent({ type: 'available', version: info?.version ?? null });
 });
 
 autoUpdater.on('update-not-available', (info) => {
 	log.info('Auto-update not available', { version: info?.version });
+	pushUpdateEvent({ type: 'not-available', version: info?.version ?? null });
+});
+
+// Wired at last, so a 114 MB transfer is a progress bar instead of an unexplained
+// stall. Logged at DEBUG — one line per chunk would drown app.log.
+autoUpdater.on('download-progress', (progress) => {
+	log.debug('Auto-update download progress', {
+		percent: progress?.percent,
+		bytesPerSecond: progress?.bytesPerSecond,
+	});
+	pushUpdateEvent({ type: 'progress', percent: progress?.percent });
 });
 
 autoUpdater.on('error', (error) => {
 	log.error('Auto-update error', {
 		error: (error as Error)?.message || String(error),
 	});
+	pushUpdateEvent({
+		type: 'error',
+		message: (error as Error)?.message || String(error),
+	});
 });
 
 autoUpdater.on('update-downloaded', (info) => {
 	log.info('Auto-update downloaded', { version: info?.version });
-	if (mainWindow && !mainWindow.isDestroyed()) {
-		mainWindow.webContents.send('update-available', '');
+	pushUpdateEvent({ type: 'downloaded', version: info?.version ?? null });
+});
+
+// Consent, not surprise. autoDownload defaults to true, which meant the installer
+// started transferring the moment the app was ready — competing with iRacing for
+// bandwidth and disk while the user might be on track, with nothing on screen to
+// say so. Now the check runs freely (cheap: one atom feed + one small yml) and the
+// user decides when the bytes move.
+//
+// autoInstallOnAppQuit is deliberately LEFT at its default of true: once the user
+// has consented to the download, installing it on the next normal quit is the
+// least-interrupting way to finish, and it is what canInstallNow's busy message
+// promises.
+autoUpdater.autoDownload = false;
+
+// `app.isPackaged`, NOT `process.env.NODE_ENV === 'production'`. Nothing sets
+// NODE_ENV in a packaged build: Electron does not, and electron-vite — unlike the
+// webpack config it replaced in 13d84e1, whose `mode: 'production'` inlined the
+// value through optimization.nodeEnv — leaves `process.env.NODE_ENV` as a runtime
+// read in out/main/index.js. So this gate was dead from the migration onward and
+// no shipped build ever checked for an update; app.log across packaged v3.2.2 runs
+// has not one 'Auto-update checking' line. `!isDev` would be wrong too — it is
+// also true for an unpacked --dir run, where electron-updater has no app-update.yml
+// and only logs a skip. isPackaged is the condition electron-updater itself gates
+// on (AppUpdater.isUpdaterActive), so this asks exactly what it will answer.
+function runUpdateCheck({ force = false } = {}): boolean {
+	if (!app.isPackaged) {
+		return false;
+	}
+	if (
+		!shouldCheckNow({
+			phase: updateState.phase,
+			checkedAt: updateState.checkedAt,
+			nowMs: Date.now(),
+			force,
+		})
+	) {
+		return false;
+	}
+
+	autoUpdater.checkForUpdates().catch((error) => {
+		log.error('checkForUpdates failed', {
+			error: (error as Error)?.message || String(error),
+		});
+		// checkForUpdates can reject WITHOUT emitting 'error' (a malformed feed
+		// rejects out of getLatestVersion), so the reducer has to be told here too
+		// or the UI would sit on 'checking' forever.
+		pushUpdateEvent({
+			type: 'error',
+			message: (error as Error)?.message || String(error),
+		});
+	});
+	return true;
+}
+
+app.on('ready', () => {
+	runUpdateCheck();
+
+	// The app is left open for whole evenings alongside iRacing, so a startup-only
+	// check meant a release that landed at 8pm stayed invisible until the next
+	// launch. The timer ticks far more often than the policy allows a check, so a
+	// machine that slept through its slot re-checks shortly after waking instead of
+	// waiting for the next exact multiple; shouldCheckNow does the real rationing.
+	updatePollTimer = setInterval(() => {
+		runUpdateCheck();
+	}, UPDATE_POLL_INTERVAL_MS);
+});
+
+app.on('will-quit', () => {
+	if (updatePollTimer) {
+		clearInterval(updatePollTimer);
+		updatePollTimer = null;
 	}
 });
 
-app.on('ready', () => {
-	if (process.env.NODE_ENV === 'production') {
-		autoUpdater.checkForUpdates().catch((error) => {
-			log.error('checkForUpdates failed', {
-				error: (error as Error)?.message || String(error),
-			});
-		});
+// The current state, computed fresh. Called by every renderer on mount, which is
+// what makes the notification impossible to miss.
+ipcMain.handle('update:state', () => updateStatePayload());
+
+// The Settings button. `force` skips the six-hour interval but not the phase guard
+// — there is nothing useful to do mid-check or mid-download.
+ipcMain.handle('update:check', () => {
+	// Said out loud rather than failing silently: in a dev or --dir run
+	// electron-updater has no app-update.yml and the button would otherwise look
+	// broken to whoever is testing it.
+	if (!app.isPackaged) {
+		return {
+			started: false,
+			reason: 'Update checks only run in an installed build.',
+			state: updateStatePayload(),
+		};
 	}
+	const started = runUpdateCheck({ force: true });
+	// No reason when we declined: the state itself already reads "vX is available"
+	// or "downloading", which explains the no-op better than a second sentence.
+	return { started, reason: null, state: updateStatePayload() };
+});
+
+ipcMain.handle('update:download', () => {
+	const verdict = canStartDownload({
+		phase: updateState.phase,
+		busy: updateBusy(),
+	});
+	if (!verdict.allowed) {
+		log.info('Auto-update download refused', { reason: verdict.reason });
+		return { ok: false, reason: verdict.reason, state: updateStatePayload() };
+	}
+
+	log.info('Auto-update download requested', { version: updateState.version });
+	// Move to 'downloading' immediately rather than waiting for the first
+	// download-progress event: on a fast link the first chunk can be seconds away,
+	// and until then the button would still read "click to download".
+	pushUpdateEvent({ type: 'download-started' });
+	autoUpdater.downloadUpdate().catch((error) => {
+		log.error('downloadUpdate failed', {
+			error: (error as Error)?.message || String(error),
+		});
+		pushUpdateEvent({
+			type: 'error',
+			message: (error as Error)?.message || String(error),
+		});
+	});
+	return { ok: true, reason: null, state: updateStatePayload() };
+});
+
+ipcMain.handle('update:install', async () => {
+	const verdict = canInstallNow({
+		phase: updateState.phase,
+		busy: updateBusy(),
+	});
+	if (!verdict.allowed) {
+		log.info('Auto-update install refused', { reason: verdict.reason });
+		return { ok: false, reason: verdict.reason, state: updateStatePayload() };
+	}
+
+	// quitAndInstall() kills the app with no warning. Previously one click on an
+	// unlabelled arrow did exactly that, which could throw away a long exposure
+	// mid-accumulation. canInstallNow already refuses while a capture is running;
+	// this covers everything else the user might be part-way through.
+	const { response } = await dialog.showMessageBox(mainWindow ?? undefined, {
+		type: 'question',
+		buttons: ['Restart and install', 'Later'],
+		defaultId: 0,
+		cancelId: 1,
+		title: 'Install update',
+		message: `Install version ${updateState.version ?? 'update'}?`,
+		detail:
+			'The app will close and reopen once the update is installed. If you choose Later, it will install by itself the next time you close the app.',
+	});
+
+	if (response !== 0) {
+		log.info('Auto-update install deferred by user');
+		return {
+			ok: false,
+			reason: null,
+			state: updateStatePayload(),
+		};
+	}
+
+	log.info('Auto-update installing', { version: updateState.version });
+	autoUpdater.quitAndInstall();
+	return { ok: true, reason: null, state: updateStatePayload() };
 });
 
 function clearPendingReshadeWait(reason = 'Screenshot cancelled'): void {

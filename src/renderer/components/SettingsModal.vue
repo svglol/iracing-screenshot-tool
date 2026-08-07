@@ -13,6 +13,15 @@
 					<span class="heading"
 						><a @click="openLogsFolder">Open Logs Folder</a></span
 					>
+					<!-- Somewhere to ASK. The updater is otherwise entirely passive,
+					     so a user who wanted to know whether they were current had no
+					     way to find out short of opening GitHub. -->
+					<span class="heading"
+						><a @click="checkForUpdates">Check for Updates</a></span
+					>
+					<span class="heading settings-meta__update">{{
+						updateStatus
+					}}</span>
 				</aside>
 
 				<div class="settings-form">
@@ -335,6 +344,10 @@ import {
 	FILENAME_FIELDS,
 	DEFAULT_FORMAT,
 } from '../../utilities/filenameFormat';
+import {
+	describeUpdate,
+	initialUpdateState,
+} from '../../utilities/update-decisions';
 const { ipcRenderer, shell } = require('electron');
 const path = require('path');
 
@@ -378,6 +391,18 @@ export default {
 			filenameFields: FILENAME_FIELDS,
 			defaultFormat: DEFAULT_FORMAT,
 			iracingOpen: false,
+			// Mirrors main's update state so the status line stays live while the
+			// modal is open — it shows download percent as it climbs, not a frozen
+			// answer from whenever the modal was first created.
+			update: {
+				...initialUpdateState(),
+				busy: false,
+				currentVersion: version,
+			},
+			// A one-off message from update:check that the state cannot express
+			// (today: "only runs in an installed build"). Cleared by the next state
+			// broadcast so it can't linger past its truth.
+			updateNotice: null,
 		};
 	},
 	computed: {
@@ -418,6 +443,18 @@ export default {
 				acc[field.category].push(field);
 				return acc;
 			}, {});
+		},
+		// The same sentence the title-bar tooltip uses, from the same helper, so the
+		// two places that talk about updates cannot drift apart.
+		updateStatus() {
+			return (
+				this.updateNotice ??
+				describeUpdate(
+					this.update,
+					this.update.currentVersion,
+					this.update.busy
+				)
+			);
 		},
 		// Whether the description is reporting a problem rather than describing the
 		// feature, which is the only thing the warning styling keys off.
@@ -591,8 +628,41 @@ export default {
 		ipcRenderer.on('iracing-disconnected', () => {
 			this.iracingOpen = false;
 		});
+
+		// Not removed on unmount on purpose: under the v-show Oruga modal this
+		// component stays mounted for the app lifetime (see the screenWidth watcher
+		// note above), so created() runs once and this is a single listener, not a
+		// leak per open.
+		ipcRenderer.on('update:state', (event, state) => {
+			this.update = state;
+			this.updateNotice = null;
+		});
+		ipcRenderer
+			.invoke('update:state')
+			.then((state) => {
+				this.update = state;
+			})
+			.catch(() => {
+				// Main not ready; the broadcast will catch us up.
+			});
 	},
 	methods: {
+		async checkForUpdates() {
+			this.updateNotice = null;
+			try {
+				const result = await ipcRenderer.invoke('update:check');
+				if (result?.state) {
+					this.update = result.state;
+				}
+				if (result?.reason) {
+					this.updateNotice = result.reason;
+				}
+			} catch (error) {
+				this.updateNotice = `Update check failed: ${
+					(error as Error)?.message || String(error)
+				}`;
+			}
+		},
 		restoreNow() {
 			const w = parseInt(this.screenWidth, 10);
 			const h = parseInt(this.screenHeight, 10);
@@ -764,6 +834,18 @@ hr {
 	text-transform: uppercase;
 	font-size: 0.75rem;
 	letter-spacing: 0.05em;
+}
+
+/* A sentence, not a label — it must wrap rather than run off the aside, and it
+   keeps its case (the uppercase treatment above is for the links). */
+.settings-meta__update {
+	text-transform: none;
+	letter-spacing: normal;
+	font-size: 0.7rem;
+	line-height: 1.3;
+	opacity: 0.75;
+	white-space: normal;
+	margin-top: -0.25rem;
 }
 
 .settings-form {

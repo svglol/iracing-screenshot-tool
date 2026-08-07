@@ -16,11 +16,26 @@
 					title
 				}}</span>
 			</div>
-			<div v-if="updateReady" class="button" @click="onUpdate">
+			<!-- The tooltip is not decoration. This used to be a bare green arrow
+			     that appeared without explanation and, on one click, quit the app
+			     to install — so the title/aria-label naming the version and the
+			     action is the smallest thing that makes it honest. Hidden entirely
+			     unless there is something to act on (shouldShowUpdateBadge). -->
+			<div
+				v-if="showUpdate"
+				class="button update-button"
+				role="button"
+				:title="updateTooltip"
+				:aria-label="updateTooltip"
+				@click="onUpdate"
+			>
 				<font-awesome-icon
-					:style="{ color: 'green' }"
-					:icon="['fas', 'arrow-down']"
+					:style="{ color: updateColor }"
+					:icon="['fas', updateIcon]"
 				/>
+				<span v-if="updatePercent !== null" class="update-percent"
+					>{{ updatePercent }}%</span
+				>
 			</div>
 			<div class="button" @click="onMinimize">
 				<span class="dash">&#x2012;</span>
@@ -32,19 +47,90 @@
 </template>
 
 <script lang="ts">
+import { useOruga } from '@oruga-ui/oruga-next';
+import {
+	describeUpdate,
+	initialUpdateState,
+	shouldShowUpdateBadge,
+	type UpdateState,
+} from '../../utilities/update-decisions';
+import { version } from '../../../package.json';
+
 const { ipcRenderer } = require('electron');
+
+// What main sends on 'update:state' and returns from the query: the reduced state
+// plus the two things only main can answer.
+type UpdateStatePayload = UpdateState & {
+	busy: boolean;
+	currentVersion: string;
+};
 
 export default {
 	props: ['title', 'ico'],
 	data() {
 		return {
-			updateReady: false,
+			update: {
+				...initialUpdateState(),
+				busy: false,
+				currentVersion: version,
+			} as UpdateStatePayload,
+			// Hoisted so beforeUnmount can removeListener it — same pattern as
+			// LongExposurePanel's onProgress. The old code added an ipcRenderer
+			// listener in mounted and never removed it.
+			onUpdateState: null as
+				| ((event: unknown, state: UpdateStatePayload) => void)
+				| null,
 		};
 	},
-	mounted() {
-		ipcRenderer.on('update-available', () => {
-			this.updateReady = true;
-		});
+	computed: {
+		showUpdate(): boolean {
+			return shouldShowUpdateBadge(this.update);
+		},
+		updateTooltip(): string {
+			return describeUpdate(
+				this.update,
+				this.update.currentVersion,
+				this.update.busy
+			);
+		},
+		updateIcon(): string {
+			// Distinct glyphs per phase: "there is something to fetch" and "there is
+			// something ready to install" are different asks, and a single arrow for
+			// both was half of why the old affordance was unreadable.
+			return this.update.phase === 'downloaded'
+				? 'rotate-right'
+				: 'cloud-arrow-down';
+		},
+		updateColor(): string {
+			// Green only when it is ready — while downloading it is merely in flight.
+			return this.update.phase === 'downloaded' ? '#48c78e' : '#ffffff';
+		},
+		updatePercent(): number | null {
+			return this.update.phase === 'downloading'
+				? this.update.percent
+				: null;
+		},
+	},
+	async mounted() {
+		this.onUpdateState = (_event, state: UpdateStatePayload) => {
+			this.update = state;
+		};
+		ipcRenderer.on('update:state', this.onUpdateState);
+
+		// ASK, rather than only listening. The download can finish before this
+		// component mounts (or the renderer can reload), and the previous
+		// fire-and-forget send meant that lost the notification for the session.
+		try {
+			this.update = await ipcRenderer.invoke('update:state');
+		} catch {
+			// Main not ready yet; the broadcast will catch us up.
+		}
+	},
+	beforeUnmount() {
+		if (this.onUpdateState) {
+			ipcRenderer.removeListener('update:state', this.onUpdateState);
+			this.onUpdateState = null;
+		}
 	},
 	methods: {
 		onClose() {
@@ -56,8 +142,28 @@ export default {
 		onMaximize() {
 			ipcRenderer.send('window-control', 'toggle-maximize');
 		},
-		onUpdate() {
-			ipcRenderer.send('install-update', '');
+		async onUpdate() {
+			// One button, two actions, decided by main. The renderer does not get to
+			// guess: main re-checks the capture guard at the moment of the call, so
+			// its verdict is the authoritative one even if this state is a beat old.
+			const channel =
+				this.update.phase === 'downloaded'
+					? 'update:install'
+					: 'update:download';
+			const result = await ipcRenderer.invoke(channel);
+			if (result?.state) {
+				this.update = result.state;
+			}
+			// A refusal the user can do something about (a capture is running) is
+			// worth a toast; declining the install dialog returns no reason and
+			// deliberately says nothing.
+			if (result && !result.ok && result.reason) {
+				useOruga().notification.open({
+					message: result.reason,
+					variant: 'warning',
+					duration: 6000,
+				});
+			}
 		},
 	},
 };
@@ -112,6 +218,21 @@ img {
 }
 .button:hover {
 	background-color: rgba(255, 255, 255, 0.1);
+}
+/* Wider than the window controls because it can carry a percentage next to the
+   glyph; auto width keeps it from crowding the minimise button when it cannot. */
+.update-button {
+	width: auto;
+	min-width: 44px;
+	padding: 0 8px;
+	gap: 4px;
+	justify-content: center;
+}
+.update-percent {
+	font-size: 9pt;
+	color: white;
+	user-select: none;
+	font-variant-numeric: tabular-nums;
 }
 .close:hover {
 	background-color: red;
