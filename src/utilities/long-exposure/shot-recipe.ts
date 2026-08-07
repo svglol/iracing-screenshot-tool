@@ -623,8 +623,11 @@ export function interpolationLoad(opts: {
 export function validatePlan(opts: {
 	plan: ResolvedPlan;
 	recipe: LongExposureRecipe;
-	// Live replay bounds from telemetry.
-	replayFrameNumEnd: number | null;
+	// Live replay bounds from telemetry. `replayEndFrame` is the ABSOLUTE last frame
+	// of the tape — deliberately not the raw `ReplayFrameNumEnd` telemetry variable,
+	// which counts frames REMAINING ahead of the cursor rather than indexing one.
+	// Callers convert through `tapeEndFrame`.
+	replayEndFrame: number | null;
 	currentSessionNum: number | null;
 	// The smallest interpolation load THIS MACHINE has been observed to choke on,
 	// learned from previous captures. Null until there is evidence.
@@ -635,7 +638,7 @@ export function validatePlan(opts: {
 	// demonstrated a limit.
 	lossyInterpolationLoad?: number | null;
 }): RecipeValidation {
-	const { plan, recipe, replayFrameNumEnd, currentSessionNum } = opts;
+	const { plan, recipe, replayEndFrame, currentSessionNum } = opts;
 	const errors: string[] = [];
 	const warnings: string[] = [];
 	// Whether this recipe actually resolves to more than one accumulator. Asked once,
@@ -657,10 +660,13 @@ export function validatePlan(opts: {
 		);
 	}
 
+	// Only reachable for a recipe carrying an anchor from somewhere else — a sidecar
+	// re-shot into a shorter tape. A FRESH shot anchors on the live cursor, which is
+	// on the tape by construction, so this must never fire for one.
 	if (
-		typeof replayFrameNumEnd === 'number' &&
-		replayFrameNumEnd > 0 &&
-		recipe.anchorFrame > replayFrameNumEnd
+		typeof replayEndFrame === 'number' &&
+		replayEndFrame > 0 &&
+		recipe.anchorFrame > replayEndFrame
 	) {
 		errors.push('The selected moment is past the end of the replay.');
 	}

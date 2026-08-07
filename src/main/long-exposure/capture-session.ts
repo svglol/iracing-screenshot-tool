@@ -43,7 +43,11 @@ import {
 import { assessLongExposureVram } from '../../utilities/long-exposure/vram-budget';
 import type { Dimensions, VramInfo } from '../../utilities/vram-prediction';
 import type { PlaybackSnapshot, ReplayState } from './replay-control';
-import { ReplayController, capturePlaybackSnapshot } from './replay-control';
+import {
+	ReplayController,
+	capturePlaybackSnapshot,
+	tapeEndFrame,
+} from './replay-control';
 import { createLogger } from '../../utilities/logger';
 
 const log = createLogger('long-exposure/session');
@@ -477,11 +481,28 @@ export async function executeRecipe(
 	const validation = validatePlan({
 		plan,
 		recipe,
-		replayFrameNumEnd: live.replayFrameNumEnd,
+		replayEndFrame: tapeEndFrame(live),
 		currentSessionNum: live.replaySessionNum,
 		lossyInterpolationLoad: deps.lossyInterpolationLoad?.() ?? null,
 	});
 	if (validation.errors.length > 0) {
+		// Log the readings the refusal was computed FROM, not just its wording. Every
+		// error here is a claim about where the anchor sits relative to the tape, and
+		// the first field report of one ("past the end of the replay", in a live
+		// session, where it was plainly not) could not be adjudicated from the log
+		// because none of these numbers were in it.
+		log.warn('Long exposure refused before starting', {
+			errors: validation.errors,
+			anchorFrame: recipe.anchorFrame,
+			startFrame: plan.startFrame,
+			replayFrameNum: live.replayFrameNum,
+			// The raw countdown AND the position derived from it, because confusing the
+			// two is exactly the mistake this pair exists to make visible.
+			replayFrameNumEnd: live.replayFrameNumEnd,
+			replayEndFrame: tapeEndFrame(live),
+			recipeSessionNum: recipe.sessionNum,
+			replaySessionNum: live.replaySessionNum,
+		});
 		return failure('invalid-recipe', validation.errors.join(' '), { plan });
 	}
 

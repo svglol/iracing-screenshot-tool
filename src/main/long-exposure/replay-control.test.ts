@@ -7,6 +7,7 @@ import {
 	SEEK_LEAD_FRAMES,
 	capturePlaybackSnapshot,
 	readReplayState,
+	tapeEndFrame,
 	type ReplayControlDeps,
 	type ReplayState,
 } from './replay-control';
@@ -121,6 +122,44 @@ describe('readReplayState', () => {
 		expect(state?.replaySessionTime).toBeNull();
 		expect(state?.replayPlaySlowMotion).toBe(false);
 		expect(state?.isReplayPlaying).toBe(false);
+	});
+});
+
+describe('tapeEndFrame', () => {
+	const state = (
+		replayFrameNum: number,
+		replayFrameNumEnd: number | null
+	): ReplayState => ({
+		replayFrameNum,
+		replayFrameNumEnd,
+		replaySessionTime: null,
+		replaySessionNum: 1,
+		replayPlaySpeed: 0,
+		replayPlaySlowMotion: false,
+		isReplayPlaying: false,
+		frameRate: 60,
+	});
+
+	// The whole point of the helper: ReplayFrameNumEnd counts frames REMAINING, so
+	// the end of the tape is the sum and never the variable on its own.
+	it('adds the remaining count to the cursor', () => {
+		expect(tapeEndFrame(state(1000, 50000))).toBe(51000);
+		expect(tapeEndFrame(state(0, 51000))).toBe(51000);
+	});
+
+	// THE LIVE-SESSION REGRESSION. At the live edge the cursor is deep into the tape
+	// and the remaining count is ~0 — the exact reading that made validatePlan refuse
+	// every live shot as "past the end of the replay" when it compared the anchor
+	// against the raw countdown.
+	it('puts the live edge at or after the cursor, never before it', () => {
+		const live = state(11106, 0);
+		const end = tapeEndFrame(live);
+		expect(end).toBe(11106);
+		expect(end).toBeGreaterThanOrEqual(live.replayFrameNum);
+	});
+
+	it('is null when the sim does not report the remaining count', () => {
+		expect(tapeEndFrame(state(1000, null))).toBeNull();
 	});
 });
 

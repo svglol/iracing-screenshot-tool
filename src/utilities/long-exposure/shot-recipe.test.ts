@@ -475,7 +475,7 @@ describe('validatePlan', () => {
 	const validate = (
 		overrides: Partial<LongExposureRecipe>,
 		bounds: {
-			replayFrameNumEnd?: number | null;
+			replayEndFrame?: number | null;
 			currentSessionNum?: number | null;
 		} = {}
 	) => {
@@ -483,7 +483,7 @@ describe('validatePlan', () => {
 		return validatePlan({
 			plan: resolvePlan(recipe, { renderFps: 60 }),
 			recipe,
-			replayFrameNumEnd: bounds.replayFrameNumEnd ?? 100000,
+			replayEndFrame: bounds.replayEndFrame ?? 100000,
 			currentSessionNum: bounds.currentSessionNum ?? 2,
 		});
 	};
@@ -564,7 +564,7 @@ describe('validatePlan', () => {
 			validatePlan({
 				plan: resolvePlan(recipe),
 				recipe,
-				replayFrameNumEnd: 100000,
+				replayEndFrame: 100000,
 				currentSessionNum: 2,
 			}).errors
 		).toEqual([]);
@@ -575,7 +575,7 @@ describe('validatePlan', () => {
 		const result = validatePlan({
 			plan: resolvePlan(recipe),
 			recipe,
-			replayFrameNumEnd: 100000,
+			replayEndFrame: 100000,
 			currentSessionNum: 2,
 		});
 		expect(result.errors.join(' ')).toMatch(
@@ -587,9 +587,19 @@ describe('validatePlan', () => {
 		expect(
 			validate(
 				{ anchorFrame: 200000 },
-				{ replayFrameNumEnd: 100000 }
+				{ replayEndFrame: 100000 }
 			).errors.join(' ')
 		).toMatch(/past the end/);
+	});
+
+	// A LIVE session parks the cursor at the live edge, so the anchor IS the end of
+	// the tape. That has to pass: this check exists for a sidecar re-shot into a
+	// shorter replay, and it once refused every live shot because it was handed the
+	// raw `ReplayFrameNumEnd` countdown — ~0 at the edge — as if it were a position.
+	it('accepts an anchor sitting exactly at the live edge', () => {
+		expect(
+			validate({ anchorFrame: 11106 }, { replayEndFrame: 11106 }).errors
+		).toEqual([]);
 	});
 
 	// Re-shooting into a different session would silently produce a shot of
@@ -688,15 +698,14 @@ describe('validatePlan', () => {
 	it('refuses a long exposure that reaches past the start of the replay', () => {
 		const result = validate(
 			{ shutter: '10', anchorFrame: 120 },
-			{ replayFrameNumEnd: 100000, currentSessionNum: 2 }
+			{ replayEndFrame: 100000, currentSessionNum: 2 }
 		);
 		expect(result.errors.join(' ')).toMatch(/600 replay frames/);
 	});
 
 	it('fails open when replay bounds are unknown', () => {
 		expect(
-			validate({}, { replayFrameNumEnd: null, currentSessionNum: null })
-				.errors
+			validate({}, { replayEndFrame: null, currentSessionNum: null }).errors
 		).toEqual([]);
 	});
 });
@@ -718,7 +727,7 @@ describe('validatePlan — interpolation load', () => {
 			const { warnings } = validatePlan({
 				plan,
 				recipe,
-				replayFrameNumEnd: null,
+				replayEndFrame: null,
 				currentSessionNum: null,
 				lossyInterpolationLoad,
 			});
@@ -738,7 +747,7 @@ describe('validatePlan — interpolation load', () => {
 		const { warnings } = validatePlan({
 			plan,
 			recipe,
-			replayFrameNumEnd: null,
+			replayEndFrame: null,
 			currentSessionNum: null,
 			lossyInterpolationLoad: load,
 		});
@@ -754,7 +763,7 @@ describe('validatePlan — interpolation load', () => {
 		const { warnings } = validatePlan({
 			plan,
 			recipe,
-			replayFrameNumEnd: null,
+			replayEndFrame: null,
 			currentSessionNum: null,
 			// A limit measured at a much heavier configuration.
 			lossyInterpolationLoad: 100,
@@ -769,7 +778,7 @@ describe('validatePlan — interpolation load', () => {
 		const { warnings } = validatePlan({
 			plan,
 			recipe,
-			replayFrameNumEnd: null,
+			replayEndFrame: null,
 			currentSessionNum: null,
 			lossyInterpolationLoad: 0.0001,
 		});
