@@ -99,6 +99,15 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	// UI language. Empty means "never resolved" — the main process detects it from
+	// the Windows UI language on first run and writes the RESOLVED code back, so
+	// this is only ever blank once. Persisting the resolved code rather than the
+	// raw OS tag means a user who later switches Windows to a language we do not
+	// ship keeps the one they were already reading.
+	locale: {
+		type: 'string',
+		default: '',
+	},
 	version: {
 		type: 'string',
 		default: '',
