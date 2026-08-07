@@ -67,5 +67,5 @@ The tool speaks thirteen languages, and automatic updates finally work.
 
 ## Get it
 
-- **Installer** — `iRacing Screenshot Tool Setup 3.3.0.exe`
-- **Portable** — `iRacing Screenshot Tool 3.3.0.exe`
+- **Installer** — `iRacing-Screenshot-Tool-Setup-3.3.0.exe`
+- **Portable** — `iRacing-Screenshot-Tool-3.3.0.exe`
