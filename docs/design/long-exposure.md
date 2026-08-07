@@ -395,6 +395,14 @@ supplies the *continuous* position used for weighting (§5). `ReplayFrameNumEnd`
 `ReplayPlaySpeed`, `ReplayPlaySlowMotion` and `IsReplayPlaying` are read to
 pre-flight and to restore.
 
+`ReplayFrameNumEnd` is **not** an end index. The SDK defines it as the replay frame
+number *from the end of the tape* — the frames still AHEAD of the cursor. It counts
+down as `ReplayFrameNum` counts up, and only their sum is fixed. Always convert
+through `tapeEndFrame(state)` before comparing it to a frame. Read raw, it made the
+pre-flight refuse shots as "past the end of the replay" from anywhere past the
+midpoint of a tape — including every live session, where the cursor sits at the live
+edge so the count is ~0 while the anchor is the whole session (v3.2.2).
+
 **Wall-clock time is never used to decide replay position or termination. It is
 used as a timeout on operations that can fail, and — since sub-replay-frame windows
 — to place the START of a window shorter than one replay frame.** A stalled frame or

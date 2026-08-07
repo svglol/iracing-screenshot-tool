@@ -116,6 +116,25 @@ export function readReplayState(
 	};
 }
 
+// The ABSOLUTE frame the tape ends at, or null when telemetry cannot say.
+//
+// `ReplayFrameNumEnd` is not an end index, however much the name reads like one.
+// The SDK documents it as "Integer replay frame number from END of tape" — a
+// countdown of the frames still AHEAD of the cursor. So the two variables move in
+// opposite directions and only their SUM is fixed.
+//
+// Reading it as an absolute index refuses every shot taken from the back half of a
+// tape, and every shot in a live session — where the cursor sits at the live edge,
+// so `ReplayFrameNumEnd` is ~0 while `ReplayFrameNum` is however many frames the
+// session has run. That is the bug this helper exists to make unrepeatable: the
+// countdown must never reach a comparison without being turned into a position
+// first.
+export function tapeEndFrame(state: ReplayState): number | null {
+	return state.replayFrameNumEnd === null
+		? null
+		: state.replayFrameNum + state.replayFrameNumEnd;
+}
+
 // The playback state we owe the user back, captured before anything moves.
 export interface PlaybackSnapshot {
 	anchorFrame: number;

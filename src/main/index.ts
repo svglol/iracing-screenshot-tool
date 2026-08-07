@@ -50,6 +50,7 @@ import {
 import {
 	ReplayController,
 	readReplayState,
+	tapeEndFrame,
 	type ReplayState,
 } from './long-exposure/replay-control';
 import {
@@ -1024,7 +1025,11 @@ ipcMain.handle('long-exposure:availability', () => {
 		// means no telemetry at all.
 		hasReplayData: state !== null,
 		anchorFrame: state?.replayFrameNum ?? null,
-		replayFrameNumEnd: state?.replayFrameNumEnd ?? null,
+		// The ABSOLUTE last frame of the tape, not the raw `ReplayFrameNumEnd`
+		// countdown this used to forward — see `tapeEndFrame`. Handing a renderer a
+		// field named like a position but holding a remaining-frames count is how the
+		// refusal below it got written backwards in the first place.
+		replayEndFrame: state ? tapeEndFrame(state) : null,
 		sessionNum: state?.replaySessionNum ?? null,
 		frameRate: state?.frameRate ?? null,
 		busy: longExposureActive || takingScreenshot,
@@ -1331,7 +1336,7 @@ ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
 		validation: validatePlan({
 			plan,
 			recipe,
-			replayFrameNumEnd: live?.replayFrameNumEnd ?? null,
+			replayEndFrame: live ? tapeEndFrame(live) : null,
 			currentSessionNum: live?.replaySessionNum ?? null,
 			lossyInterpolationLoad:
 				config.get('longExposureLossyInterpolationLoad') || null,
