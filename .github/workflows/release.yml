@@ -78,9 +78,38 @@ jobs:
             - name: Build bundles
               run: npm run pack
 
-            # Publishes as a DRAFT (build.publish.releaseType), uploading the NSIS
-            # installer, the portable exe, the .blockmap and — critically —
-            # latest.yml, which electron-updater fetches to discover new versions.
+            # Create the draft BEFORE electron-builder runs.
+            #
+            # package.json builds two targets (nsis + portable), and
+            # electron-builder starts one GitHub publisher per target. They run
+            # concurrently, each asks "is there a release for this tag?", both
+            # get no, and both CREATE one. v3.3.0 came out of this with the
+            # installer, the portable exe and latest.yml attached to one release
+            # and the .blockmap to another, and the publish step below then
+            # flipped the wrong one out of draft — shipping a release with no
+            # installer on it. v3.2.2 won the same race by luck.
+            #
+            # With the draft already there, both publishers find it and upload
+            # into it. Idempotent on purpose: a re-run after a failed build
+            # reuses the existing draft rather than failing on "already exists".
+            - name: Create draft release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  tag="$GITHUB_REF_NAME"
+                  if gh release view "$tag" >/dev/null 2>&1; then
+                    echo "Release $tag already exists — reusing it."
+                  else
+                    gh release create "$tag" \
+                      --draft \
+                      --title "$tag" \
+                      --notes "Build in progress — this text is replaced when the release is published."
+                  fi
+
+            # Uploads the NSIS installer, the portable exe, the .blockmap and —
+            # critically — latest.yml, which electron-updater fetches to discover
+            # new versions. Attaches to the draft created above.
             - name: Package and upload artifacts
               run: npx electron-builder --publish always
               env:
@@ -94,7 +123,52 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   tag="$GITHUB_REF_NAME"
+                  version="${tag#v}"
                   notes="RELEASE-NOTES-${tag}.md"
+
+                  # Two guards, both learned from v3.3.0.
+                  #
+                  # The first catches the duplicate-release race directly: if the
+                  # step above ever fails to prevent it, `gh release edit` picks
+                  # one of the candidates arbitrarily and there is a 50% chance
+                  # of publishing the empty one. Fail loudly instead.
+                  count="$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+                    --jq "[.[] | select(.tag_name == \"${tag}\")] | length")"
+                  if [ "$count" != "1" ]; then
+                    echo "::error::Expected exactly 1 release for ${tag}, found ${count}. Refusing to publish."
+                    exit 1
+                  fi
+
+                  # The second is the check that would have caught v3.3.0 whatever
+                  # the cause: nothing goes public until the artifacts users
+                  # actually need are attached. latest.yml is the one that fails
+                  # silently — a release without it breaks auto-update for
+                  # everyone while looking perfectly fine on the releases page.
+                  #
+                  # Deliberately NOT matching exact filenames. The artifact naming
+                  # has already changed once (v3.1.1 shipped
+                  # "iRacing.Screenshot.Tool.Setup.3.1.1.exe", dot-separated), and
+                  # a guard pinned to today's convention would fail every release
+                  # after the next rename — turning a safety net into a tripwire.
+                  # latest.yml is safe to match exactly: electron-updater fixes
+                  # that name, artifactName cannot change it.
+                  assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+                  exe_count="$(printf '%s\n' "$assets" | grep -c '\.exe$' || true)"
+
+                  if ! printf '%s\n' "$assets" | grep -qxF 'latest.yml'; then
+                    echo "::error::Release ${tag} has no latest.yml — auto-update would be broken for every user. Refusing to publish."
+                    echo "Attached assets were:"; printf '  %s\n' $assets
+                    exit 1
+                  fi
+
+                  # nsis + portable, so two. Fewer means a publisher dropped one.
+                  if [ "$exe_count" -lt 2 ]; then
+                    echo "::error::Release ${tag} has ${exe_count} .exe asset(s); expected the installer and the portable build. Refusing to publish."
+                    echo "Attached assets were:"; printf '  %s\n' $assets
+                    exit 1
+                  fi
+
+                  echo "Artifacts verified: ${exe_count} .exe + latest.yml"
 
                   if [ -f "$notes" ]; then
                     echo "Using curated notes: $notes"
