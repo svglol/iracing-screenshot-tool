@@ -118,6 +118,37 @@ pub trait AccumulateBackend {
     /// what removes JRT's RAM wall entirely.
     fn create_sink(&mut self, sink_id: &str, width: u32, height: u32) -> Result<(), BackendError>;
 
+    /// Take a private copy of the frame's pixels and return the texture every later
+    /// pass must read instead of WGC's own. **Blocks until the copy has executed.**
+    ///
+    /// THIS IS A CORRECTNESS REQUIREMENT, NOT AN OPTIMISATION, and it is the one place
+    /// in this file that is allowed to stall.
+    ///
+    /// `windows-capture` creates the WGC frame pool with `numberOfBuffers = 1`
+    /// (`graphics_capture_api.rs`), so the session owns exactly ONE surface, and it
+    /// hands that surface back to the pool the instant `on_frame_arrived` returns.
+    /// Every other pass here merely RECORDS GPU commands; the D3D11 immediate context
+    /// orders them against our own work and against nothing else, because the
+    /// compositor writes the pool surface from outside our device. So a digest or an
+    /// accumulate that has been submitted but not yet executed reads whatever the
+    /// surface holds when the GPU eventually gets to it — the next frame, a frame the
+    /// pool has just recycled, or a surface `Direct3D11CaptureFramePool::Recreate`
+    /// has reallocated and not yet filled.
+    ///
+    /// The one-shot still-capture path never had this problem and that is exactly why
+    /// it kept working on a machine where this one did not: `Frame::buffer()` copies
+    /// to a staging texture and MAPS it — a full GPU sync — while the frame is still
+    /// alive. Consuming the pixels before releasing the frame is the contract; this
+    /// method is how the accumulation path finally honours it.
+    ///
+    /// The returned texture is owned by the backend and is stable across frames, so
+    /// callers may hold views on it. Implementations must accept being called once per
+    /// frame with the same dimensions.
+    fn retain_frame(
+        &mut self,
+        source: &ID3D11Texture2D,
+    ) -> Result<ID3D11Texture2D, BackendError>;
+
     /// Queue a content digest of a source frame. **Does not block.**
     ///
     /// This used to be a synchronous `digest()` that mapped the result back on the

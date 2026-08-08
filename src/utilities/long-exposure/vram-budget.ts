@@ -36,8 +36,15 @@ import {
 export const ACCUMULATOR_BYTES_PER_PIXEL = 16;
 
 // Per-session GPU surfaces beyond the accumulators: the WGC source texture (RGBA8),
-// the resolve target (RGBA16), and one staging texture for readback (RGBA16).
-export const WORKING_BYTES_PER_PIXEL = 4 + 8 + 8;
+// OUR PRIVATE COPY of it (RGBA8), the resolve target (RGBA16), and one staging
+// texture for readback (RGBA16).
+//
+// The private copy is not an optimisation we could drop to save the 4 B/px. WGC's
+// frame pool is one buffer deep and reclaims the surface the instant the frame
+// handler returns, so accumulating straight out of it races the compositor — see
+// `AccumulateBackend::retain_frame`. Budgeting it here is what keeps the hard-refuse
+// honest: the refusal names our own allocation, and this is part of it.
+export const WORKING_BYTES_PER_PIXEL = 4 + 4 + 8 + 8;
 
 // Extra surfaces the optical-flow interpolation path allocates, per render pixel:
 // TWO ping-ponged retained frames in full colour (RGBA8, 4 B each) plus two

@@ -330,7 +330,26 @@ impl Accumulator {
 
         let width = frame.width();
         let height = frame.height();
-        let texture = frame.as_raw_texture().clone();
+
+        // FIRST, BEFORE ANYTHING ELSE TOUCHES THE PIXELS, and before this function can
+        // return and hand the surface back to WGC: take our own copy and wait for it.
+        //
+        // The frame pool `windows-capture` creates is ONE buffer deep, and the frame is
+        // released the moment `on_frame_arrived` returns — so every pass below used to
+        // be reading a surface the compositor was free to overwrite, because the D3D11
+        // immediate context orders our submissions against our own work and against
+        // nothing the compositor does. It was a race whose outcome depended on how far
+        // behind the GPU happened to be running, which is why it never showed on the
+        // development machine and reproduced on every shot on a loaded one: a field
+        // report on Windows 10 22H2 came back with EVERY frame content-identical
+        // (`rejected == accepted - passes` on every run, against `rejected: 0` on every
+        // dev-box shot) and a black master, in the same app session where an ordinary
+        // still screenshot of the same window at the same size succeeded — that path
+        // maps the frame synchronously while it is still alive, and so was never
+        // exposed. See `AccumulateBackend::retain_frame`.
+        let texture = backend
+            .retain_frame(frame.as_raw_texture())
+            .map_err(|e| format!("retaining the captured frame failed: {e}"))?;
 
         if !self.sink_ready {
             // Every sink is created here, on the first real frame, because this is
