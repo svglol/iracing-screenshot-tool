@@ -207,6 +207,7 @@ const de: Catalog = {
 		sections: 'Hilfeabschnitte',
 		tabGeneral: 'Allgemein',
 		tabLongExposure: 'Langzeitbelichtung',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'iRacing-Einstellungen',
@@ -300,6 +301,22 @@ const de: Catalog = {
 				'<b>Ein schwarzes Bild</b> — iRacing läuft im exklusiven Vollbild. Stelle Display &gt; Full Screen auf OFF.',
 			troubleSidecar:
 				'Jede Aufnahme protokolliert die genau verwendeten Einstellungen, die Zahl der Abtastungen und wie gleichmäßig sie verteilt waren, als .json-Datei im Protokollordner neben app.log. Die letzten 20 Aufnahmen werden aufbewahrt — eine Reihe zählt als eine — sodass die Aufnahme, nach der du fragst, noch da ist, während du fragst.',
+		},
+
+		faq: {
+			blackShot:
+				'Die Aufnahme ist schwarz, aber die iRacing-Oberfläche ist darauf zu sehen',
+			blackShotBody:
+				'Die Aufnahme selbst hat funktioniert: Die Oberfläche wurde gezeichnet, es ist also ein echtes Bild beim Tool angekommen. Was fehlt, ist die 3D-Szene, weil iRacing sie schwarz gerendert hat. Mehrere der weniger gebräuchlichen Kameras tun das — die Fahrwerkskamera trifft es am häufigsten. Wechsle zu einer gewöhnlichen Kamera (Cockpit, Verfolgerkamera oder eine der TV-Kameras) und nimm denselben Moment erneut auf.',
+			blackShotFullscreenBody:
+				'Ist das Bild <i>einschließlich</i> der Oberfläche schwarz und verhält sich jede Kamera gleich, liegt es an etwas anderem: iRacing läuft im exklusiven Vollbild, das sich von außerhalb des Simulators nicht aufnehmen lässt. Stelle Display &gt; Full Screen auf OFF.',
+
+			cameraReset:
+				'iRacing verstellt meine Kamera, bevor die Aufnahme entsteht',
+			cameraResetBody:
+				'Das ist iRacings eigene automatische Kameraauswahl, nicht dieses Tool. Solange sie aktiv ist, wählt iRacing die Kameras weiterhin selbst und springt im Moment des Auslösens auf eine Standardeinstellung zurück, sodass du nicht die Aufnahme bekommst, die du eingerichtet hast.',
+			cameraResetFixBody:
+				'Schalte sie im Kamerawerkzeug von iRacing (Strg+F12) unter <b>Camera &gt; Config &gt; Preferences</b> aus: der Schalter <b>Shot Selection</b> mit der Beschriftung <b>Automatic</b>. Ist er aus, bleibt die Kamera genau dort, wo du sie hingestellt hast — bei normalen Screenshots wie bei Langzeitbelichtungen.',
 		},
 	},
 
@@ -426,6 +443,10 @@ const de: Catalog = {
 			'Diese Verschlusszeit ist kürzer als ein Replay-Bild, und iRacing hat darin kein Bild gerendert. Versuche eine langsamere Wiedergabegeschwindigkeit oder die nächstlängere Verschlusszeit.',
 		noSamples:
 			'Es wurden keine Bilder gesammelt. iRacing hat während der Belichtung möglicherweise aufgehört zu rendern.',
+		blankCapture:
+			'Alle aufgenommenen Bilder waren schwarz, es gibt also kein Bild zu speichern. Prüfen Sie, ob iRacing im Fenster- oder randlosen Modus statt im exklusiven Vollbild läuft und ob bei dieser Auflösung noch Grafikspeicher frei ist — eine niedrigere Aufnahmeauflösung ist am schnellsten ausprobiert.',
+		frozenCapture:
+			'iRacing hat während der Belichtung {samples} Bilder ausgegeben, die aber alle identisch waren — dieses Bild ist daher eine Einzelaufnahme und keine Langzeitbelichtung. iRacing hat während des Replays nichts Neues gerendert.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'Die GPU hat kein Bild zurückgegeben.',
 		bracketShortfall:

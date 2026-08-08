@@ -206,6 +206,7 @@ const pt: Catalog = {
 		sections: 'Secções de ajuda',
 		tabGeneral: 'Geral',
 		tabLongExposure: 'Longa exposição',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'Definições do iRacing',
@@ -299,6 +300,20 @@ const pt: Catalog = {
 				'<b>Uma imagem preta</b> — o iRacing está em ecrã inteiro exclusivo. Coloca Display &gt; Full Screen em OFF.',
 			troubleSidecar:
 				'Cada captura regista as definições exatas que usou, o número de amostras e a uniformidade com que caíram, num ficheiro .json na pasta de registos, junto ao app.log. São mantidas as últimas 20 capturas — um bracketing conta como uma — pelo que a captura sobre a qual estás a perguntar ainda lá está enquanto perguntas.',
+		},
+
+		faq: {
+			blackShot: 'A captura sai preta, mas a interface do iRacing aparece',
+			blackShotBody:
+				'A captura em si funcionou: a interface foi desenhada, portanto chegou um fotograma real à ferramenta. O que falta é a cena 3D, porque o iRacing a desenhou a preto. Várias das câmaras menos convencionais fazem isto, e a da suspensão é a mais frequente. Muda para uma câmara normal (habitáculo, perseguição ou uma das câmaras de TV) e repete a captura do mesmo momento.',
+			blackShotFullscreenBody:
+				'Se a imagem sair preta <i>incluindo</i> a interface e todas as câmaras se comportarem da mesma forma, a causa é outra: o iRacing está em ecrã inteiro exclusivo, que nada fora do simulador consegue capturar. Coloca Display &gt; Full Screen em OFF.',
+
+			cameraReset: 'O iRacing mexe na minha câmara antes de fazer a captura',
+			cameraResetBody:
+				'É a seleção automática de planos do próprio iRacing, não esta ferramenta. Enquanto estiver ligada, o iRacing continua a escolher as câmaras sozinho e volta a um enquadramento predefinido no instante em que a captura começa, pelo que o que recebes não é a captura que tinhas preparado.',
+			cameraResetFixBody:
+				'Desliga-a na ferramenta de câmaras do iRacing (Ctrl+F12), em <b>Camera &gt; Config &gt; Preferences</b>: o interruptor <b>Shot Selection</b> com a etiqueta <b>Automatic</b>. Com ele desligado a câmara fica exatamente onde a puseste, tanto nas capturas normais como nas longas exposições.',
 		},
 	},
 
@@ -426,6 +441,10 @@ const pt: Catalog = {
 			'Este obturador é mais curto do que um fotograma de repetição, e o iRacing não desenhou nenhum dentro dele. Experimenta uma velocidade de reprodução mais lenta, ou o passo de obturador imediatamente mais lento.',
 		noSamples:
 			'Não foi acumulado nenhum fotograma. O iRacing pode ter deixado de desenhar durante a exposição.',
+		blankCapture:
+			'Todos os fotogramas captados estavam pretos, por isso não há imagem para guardar. Verifique se o iRacing está em modo de janela ou sem margens em vez de ecrã inteiro exclusivo e se ainda tem memória de vídeo livre nesta resolução — baixar a resolução de captura é o mais rápido de experimentar.',
+		frozenCapture:
+			'O iRacing apresentou {samples} fotogramas durante a exposição, mas eram todos iguais, pelo que esta imagem é uma fotografia estática e não uma exposição longa. O iRacing não desenhou nada de novo enquanto a repetição avançava.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'A GPU não devolveu nenhuma imagem.',
 		bracketShortfall:

@@ -18,15 +18,16 @@ use windows::Win32::Graphics::Direct3D::{
     ID3DBlob, D3D_SRV_DIMENSION_BUFFEREX, D3D_SRV_DIMENSION_TEXTURE2D,
 };
 use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Buffer, ID3D11ComputeShader, ID3D11Device, ID3D11DeviceContext, ID3D11Resource,
-    ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11Texture2D, ID3D11UnorderedAccessView,
+    ID3D11Buffer, ID3D11ComputeShader, ID3D11Device, ID3D11DeviceContext, ID3D11Query,
+    ID3D11Resource, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11Texture2D,
+    ID3D11UnorderedAccessView,
     D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE,
     D3D11_BIND_UNORDERED_ACCESS, D3D11_BUFFER_DESC, D3D11_BUFFER_UAV, D3D11_BUFFER_UAV_FLAG_RAW,
     D3D11_BUFFEREX_SRV, D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_READ, D3D11_CPU_ACCESS_WRITE,
     D3D11_FEATURE_DATA_FORMAT_SUPPORT2, D3D11_FEATURE_FORMAT_SUPPORT2,
     D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE,
     D3D11_MAP_FLAG_DO_NOT_WAIT, D3D11_MAP_READ,
-    D3D11_MAP_WRITE_DISCARD, D3D11_MAPPED_SUBRESOURCE, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
+    D3D11_MAP_WRITE_DISCARD, D3D11_MAPPED_SUBRESOURCE, D3D11_QUERY_DESC, D3D11_QUERY_EVENT, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
     D3D11_SAMPLER_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0,
     D3D11_SUBRESOURCE_DATA, D3D11_TEX2D_SRV, D3D11_TEX2D_UAV, D3D11_TEXTURE2D_DESC,
     D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_UAV_DIMENSION_BUFFER, D3D11_UAV_DIMENSION_TEXTURE2D,
@@ -183,7 +184,36 @@ pub struct D3d11Backend {
     // Lazily created scratch texture used only when the WGC frame texture lacks the
     // SHADER_RESOURCE bind flag (so we can never fail on a bind-flag mismatch).
     scratch_source: Option<(ID3D11Texture2D, u32, u32)>,
+
+    /// Our private copy of the frame currently being consumed, and the query used to
+    /// prove the copy has actually run. See `retain_frame` on the trait for why this
+    /// exists at all — without it every pass here races the WGC frame pool.
+    frame_copy: Option<RetainedFrame>,
+    sync_query: ID3D11Query,
 }
+
+/// A backend-owned copy of one captured frame, plus the view every pass reads it
+/// through.
+///
+/// The SRV is created ONCE and reused for the life of the copy, which is also why
+/// this pays for itself: the digest and the accumulate each used to build a fresh
+/// `CreateShaderResourceView` over WGC's texture every frame, and both now share this
+/// one. The added `CopyResource` is therefore not purely additive cost.
+struct RetainedFrame {
+    texture: ID3D11Texture2D,
+    srv: ID3D11ShaderResourceView,
+    width: u32,
+    height: u32,
+    format: DXGI_FORMAT,
+}
+
+/// How long a single frame copy may take before we give up on it.
+///
+/// Generous — a full-resolution blit is sub-millisecond even at 8K — because the only
+/// thing this guards against is a wedged or removed device, where failing the frame
+/// beats hanging the capture thread. A frame we could not safely read is a frame we
+/// must not accumulate, so exceeding this is an error rather than a "carry on".
+const FRAME_COPY_TIMEOUT_MS: u128 = 100;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -318,6 +348,18 @@ impl D3d11Backend {
             .collect::<Result<Vec<_>, _>>()?;
         let digest_zero = create_immutable_buffer(&device, &[0u8; 8])?;
 
+        // An EVENT query is the only fence D3D11 offers: signalled once the GPU has
+        // passed the point in the command stream where it was ended.
+        let sync_query = {
+            let desc = D3D11_QUERY_DESC {
+                Query: D3D11_QUERY_EVENT,
+                MiscFlags: 0,
+            };
+            let mut query: Option<ID3D11Query> = None;
+            unsafe { device.CreateQuery(&desc, Some(&mut query))? };
+            query.ok_or_else(|| BackendError("CreateQuery(event) returned null".into()))?
+        };
+
         Ok(Self {
             device,
             context,
@@ -348,7 +390,79 @@ impl D3d11Backend {
             digest_zero,
             sinks: HashMap::new(),
             scratch_source: None,
+            frame_copy: None,
+            sync_query,
         })
+    }
+
+    /// Make sure the private frame copy matches what WGC is delivering.
+    ///
+    /// Reallocated only when the geometry or the format actually changes, which for a
+    /// long exposure means once — the window is fixed for the shot.
+    fn ensure_frame_copy(&mut self, desc: &D3D11_TEXTURE2D_DESC) -> Result<(), BackendError> {
+        if let Some(existing) = self.frame_copy.as_ref() {
+            if existing.width == desc.Width
+                && existing.height == desc.Height
+                && existing.format == desc.Format
+            {
+                return Ok(());
+            }
+        }
+
+        // SHADER_RESOURCE is all we need to read it; the interpolation path copies out
+        // of it into its own _TYPELESS retains, and `CopyResource` between members of
+        // one format group needs no bind flag on the source.
+        let copy_desc = texture_desc(
+            desc.Width,
+            desc.Height,
+            desc.Format,
+            D3D11_BIND_SHADER_RESOURCE.0 as u32,
+        );
+        let texture = create_texture(&self.device, &copy_desc)?;
+        let srv = create_texture_srv(&self.device, &texture, desc.Format)?;
+        self.frame_copy = Some(RetainedFrame {
+            texture,
+            srv,
+            width: desc.Width,
+            height: desc.Height,
+            format: desc.Format,
+        });
+        Ok(())
+    }
+
+    /// Block until the GPU has passed the last `End(sync_query)`.
+    ///
+    /// `Flush` first, deliberately: spinning on `GetData` for a query sitting in an
+    /// unsubmitted command buffer is the documented way to hang forever. The BOOL is
+    /// what carries the answer rather than the HRESULT, because `S_FALSE` ("not ready")
+    /// is a SUCCESS code and so arrives here as `Ok(())` — reading readiness off the
+    /// `Result` would silently never wait at all.
+    fn wait_for_gpu(&self) -> Result<(), BackendError> {
+        unsafe { self.context.Flush() };
+        let started = std::time::Instant::now();
+        loop {
+            let mut done: i32 = 0;
+            unsafe {
+                self.context.GetData(
+                    &self.sync_query,
+                    Some(&mut done as *mut i32 as *mut std::ffi::c_void),
+                    std::mem::size_of::<i32>() as u32,
+                    0,
+                )
+            }
+            .map_err(|e| BackendError(format!("frame copy fence failed: {e}")))?;
+            if done != 0 {
+                return Ok(());
+            }
+            if started.elapsed().as_millis() > FRAME_COPY_TIMEOUT_MS {
+                return Err(BackendError(
+                    "the GPU did not finish copying the captured frame in time".into(),
+                ));
+            }
+            // Yield rather than spin hot: this thread has nothing else to do and the
+            // capture's own message loop is not on it.
+            std::thread::yield_now();
+        }
     }
 
     /// Stand up every resource the interpolation path needs, or explain why not.
@@ -829,6 +943,16 @@ impl D3d11Backend {
         &mut self,
         source: &ID3D11Texture2D,
     ) -> Result<ID3D11ShaderResourceView, BackendError> {
+        // The common case since `retain_frame` landed: every pass is handed our own
+        // copy, whose view was built once. Identity is by COM pointer because that is
+        // what "this is the texture I own" actually means — two textures can share a
+        // descriptor and still be different resources.
+        if let Some(retained) = self.frame_copy.as_ref() {
+            if retained.texture.as_raw() == source.as_raw() {
+                return Ok(retained.srv.clone());
+            }
+        }
+
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         unsafe { source.GetDesc(&mut desc) };
 
@@ -951,6 +1075,36 @@ impl AccumulateBackend for D3d11Backend {
             },
         );
         Ok(())
+    }
+
+    fn retain_frame(
+        &mut self,
+        source: &ID3D11Texture2D,
+    ) -> Result<ID3D11Texture2D, BackendError> {
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        unsafe { source.GetDesc(&mut desc) };
+        self.ensure_frame_copy(&desc)?;
+
+        let texture = self
+            .frame_copy
+            .as_ref()
+            .ok_or_else(|| BackendError("retained frame missing".into()))?
+            .texture
+            .clone();
+
+        // SAFETY: same dimensions and format by construction (`ensure_frame_copy` is
+        // driven off this very descriptor), which is exactly what `CopyResource`
+        // requires.
+        unsafe {
+            self.context.CopyResource(&texture, source);
+            self.context.End(&self.sync_query);
+        }
+        // The stall that makes the whole path correct. It drains our own queue too, so
+        // the previous frame's accumulate has landed by the time this returns — which
+        // is the real cost, and it is bounded by one frame of GPU work rather than by
+        // a staging-buffer round trip the way the old blocking digest readback was.
+        self.wait_for_gpu()?;
+        Ok(texture)
     }
 
     fn submit_digest(&mut self, source: &ID3D11Texture2D) -> Result<(), BackendError> {

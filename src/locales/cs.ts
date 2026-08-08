@@ -214,6 +214,7 @@ const cs: Catalog = {
 		sections: 'Sekce nápovědy',
 		tabGeneral: 'Obecné',
 		tabLongExposure: 'Dlouhá expozice',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'Nastavení iRacingu',
@@ -307,6 +308,20 @@ const cs: Catalog = {
 				'<b>Černý obraz</b> — iRacing běží ve výhradním celoobrazovkovém režimu. Nastavte Display &gt; Full Screen na OFF.',
 			troubleSidecar:
 				'Každý snímek zaznamená přesně použité nastavení, počet vzorků a to, jak rovnoměrně byly rozloženy, do souboru .json ve složce protokolů vedle app.log. Uchovává se posledních 20 snímků — braketing se počítá jako jeden — takže snímek, na který se ptáte, tam ještě je, zatímco se na něj ptáte.',
+		},
+
+		faq: {
+			blackShot: 'Snímek je černý, ale rozhraní iRacingu je na něm vidět',
+			blackShotBody:
+				'Samotné zachycení proběhlo v pořádku: rozhraní se vykreslilo, takže do nástroje dorazil skutečný snímek. Chybí 3D scéna, protože ji iRacing vykreslil černě. Dělá to několik méně obvyklých kamer — nejčastěji kamera zavěšení. Přepněte na běžnou kameru (kokpit, sledovací nebo některou z TV kamer) a zachyťte stejný okamžik znovu.',
+			blackShotFullscreenBody:
+				'Pokud je obraz černý <i>včetně</i> rozhraní a všechny kamery se chovají stejně, je příčina jiná: iRacing běží ve výhradním celoobrazovkovém režimu, který nic mimo simulátor nezachytí. Nastavte Display &gt; Full Screen na OFF.',
+
+			cameraReset: 'iRacing mi před pořízením snímku přesune kameru',
+			cameraResetBody:
+				'To je vlastní automatický výběr záběrů iRacingu, ne tento nástroj. Dokud je zapnutý, iRacing si kamery vybírá sám a ve chvíli, kdy zachycení začne, se vrátí k výchozímu záběru, takže nedostanete snímek, který jste si připravili.',
+			cameraResetFixBody:
+				'Vypněte jej v nástroji kamer iRacingu (Ctrl+F12) v <b>Camera &gt; Config &gt; Preferences</b>: přepínač <b>Shot Selection</b> označený <b>Automatic</b>. Když je vypnutý, kamera zůstane přesně tam, kam jste ji dali — u běžných snímků obrazovky i u dlouhých expozic.',
 		},
 	},
 
@@ -428,6 +443,10 @@ const cs: Catalog = {
 			'Tato závěrka je kratší než jeden snímek záznamu a iRacing v ní žádný snímek nevykreslil. Zkuste pomalejší rychlost přehrávání nebo nejbližší pomalejší závěrku.',
 		noSamples:
 			'Nebyly nasbírány žádné snímky. iRacing možná během expozice přestal vykreslovat.',
+		blankCapture:
+			'Každý zachycený snímek byl černý, takže není co uložit. Zkontrolujte, že iRacing běží v okně nebo v režimu bez okrajů, a ne ve výhradním celoobrazovkovém režimu, a že mu při tomto rozlišení zbývá volná videopaměť — nejrychleji to ověříte nižším rozlišením snímku.',
+		frozenCapture:
+			'iRacing během expozice zobrazil {samples} snímků, ale všechny byly stejné, takže tento obrázek je statický snímek, nikoli dlouhá expozice. iRacing během přehrávání záznamu nevykreslil nic nového.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU nevrátila žádný obraz.',
 		bracketShortfall:

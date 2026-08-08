@@ -228,6 +228,7 @@ export default {
 		sections: 'Help sections',
 		tabGeneral: 'General',
 		tabLongExposure: 'Long Exposure',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'iRacing Settings',
@@ -321,6 +322,20 @@ export default {
 				'<b>A black image</b> — iRacing is in exclusive fullscreen. Set Display &gt; Full Screen to OFF.',
 			troubleSidecar:
 				'Every shot records the exact settings it used, the sample count and how evenly the samples landed, as a .json file in the log folder alongside app.log. The last 20 shots are kept — a bracket counts as one — so the shot you are asking about is still there while you are asking about it.',
+		},
+
+		faq: {
+			blackShot: 'The shot is black, but the iRacing UI is visible in it',
+			blackShotBody:
+				'The capture itself worked: the overlay drew, so a real frame reached the tool. What is missing is the 3D scene, because iRacing rendered it black. Several of the less conventional cameras do this — the suspension camera is the one people hit most. Move to an ordinary camera (cockpit, chase, or any of the TV cameras) and shoot the same moment again.',
+			blackShotFullscreenBody:
+				'If the image is black <i>including</i> the UI, and every camera behaves the same way, the cause is a different one: iRacing is in exclusive fullscreen, which nothing outside the sim can capture. Set Display &gt; Full Screen to OFF.',
+
+			cameraReset: 'iRacing moves my camera before it takes the shot',
+			cameraResetBody:
+				"That is iRacing's own automatic shot selection, not this tool. While it is on, iRacing keeps picking cameras for itself and will cut back to a default framing at the moment the capture starts, so what you get is not the shot you set up.",
+			cameraResetFixBody:
+				"Turn it off in iRacing's camera tool (Ctrl+F12), under <b>Camera &gt; Config &gt; Preferences</b>: the <b>Shot Selection</b> toggle labelled <b>Automatic</b>. With it off the camera stays exactly where you put it, for normal screenshots and long exposures alike.",
 		},
 	},
 
@@ -446,6 +461,14 @@ export default {
 			'This shutter is shorter than one replay frame, and iRacing did not render a frame inside it. Try a slower playback speed, or the next slower shutter.',
 		noSamples:
 			'No frames were accumulated. iRacing may have stopped rendering during the exposure.',
+		// Frames arrived and every one of them was black. High-fidelity capture reads
+		// what Windows composites, so it sees black whenever Windows is not
+		// compositing what iRacing draws — and iRacing failing to render at all looks
+		// the same from here.
+		blankCapture:
+			'Every frame captured was black, so there is no image to save. Check that iRacing is in windowed or borderless mode rather than exclusive fullscreen, and that it still has video memory free at this resolution — a lower capture resolution is the quickest thing to try.',
+		frozenCapture:
+			'iRacing presented {samples} frames during the exposure but every one was identical, so this image is a still rather than a long exposure. iRacing rendered nothing new while the replay rolled.',
 		// The native cause, appended when there is one.
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'The GPU did not return an image.',

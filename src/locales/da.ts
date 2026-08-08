@@ -204,6 +204,7 @@ const da: Catalog = {
 		sections: 'Hjælpeafsnit',
 		tabGeneral: 'Generelt',
 		tabLongExposure: 'Lang eksponering',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'iRacing-indstillinger',
@@ -297,6 +298,20 @@ const da: Catalog = {
 				'<b>Et sort billede</b> — iRacing kører i eksklusiv fuldskærm. Sæt Display &gt; Full Screen til OFF.',
 			troubleSidecar:
 				'Hvert billede registrerer de præcise indstillinger, det brugte, antallet af prøver og hvor jævnt de landede, som en .json-fil i logmappen ved siden af app.log. De seneste 20 billeder gemmes — en bracketing tæller som ét — så det billede, du spørger om, stadig er der, mens du spørger.',
+		},
+
+		faq: {
+			blackShot: 'Billedet er sort, men iRacings brugerflade kan ses på det',
+			blackShotBody:
+				'Selve optagelsen virkede: brugerfladen blev tegnet, så et rigtigt billede nåede frem til værktøjet. Det, der mangler, er 3D-scenen, fordi iRacing gengav den sort. Flere af de mindre almindelige kameraer gør det — ophængskameraet er det, folk oftest rammer. Skift til et almindeligt kamera (cockpit, forfølgelse eller et af tv-kameraerne), og tag det samme øjeblik igen.',
+			blackShotFullscreenBody:
+				'Er billedet sort <i>inklusive</i> brugerfladen, og opfører alle kameraer sig ens, er årsagen en anden: iRacing kører i eksklusiv fuldskærm, som intet uden for simulatoren kan optage. Sæt Display &gt; Full Screen til OFF.',
+
+			cameraReset: 'iRacing flytter mit kamera, lige før billedet tages',
+			cameraResetBody:
+				'Det er iRacings egen automatiske billedvalg, ikke dette værktøj. Så længe det er slået til, bliver iRacing ved med selv at vælge kameraer og skifter tilbage til en standardindstilling i det øjeblik, optagelsen starter, så du ikke får det billede, du havde sat op.',
+			cameraResetFixBody:
+				'Slå det fra i iRacings kameraværktøj (Ctrl+F12) under <b>Camera &gt; Config &gt; Preferences</b>: kontakten <b>Shot Selection</b> med teksten <b>Automatic</b>. Når den er slået fra, bliver kameraet præcis, hvor du satte det — både til almindelige skærmbilleder og til lange eksponeringer.',
 		},
 	},
 
@@ -422,6 +437,10 @@ const da: Catalog = {
 			'Denne lukkertid er kortere end ét replaybillede, og iRacing renderede ikke noget billede inden for den. Prøv en langsommere afspilningshastighed eller den næste længere lukkertid.',
 		noSamples:
 			'Der blev ikke akkumuleret nogen billeder. iRacing er måske holdt op med at rendere under eksponeringen.',
+		blankCapture:
+			'Alle optagne billeder var sorte, så der er intet billede at gemme. Kontrollér, at iRacing kører i vindue eller kantløs tilstand og ikke i eksklusiv fuldskærm, og at der stadig er ledig videohukommelse ved denne opløsning — en lavere optagelsesopløsning er det hurtigste at prøve.',
+		frozenCapture:
+			'iRacing viste {samples} billeder under eksponeringen, men de var alle ens, så dette er et stillbillede og ikke en lang eksponering. iRacing renderede intet nyt, mens replayet kørte.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU’en returnerede intet billede.',
 		bracketShortfall:

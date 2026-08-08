@@ -204,6 +204,7 @@ const nl: Catalog = {
 		sections: 'Helponderdelen',
 		tabGeneral: 'Algemeen',
 		tabLongExposure: 'Lange sluitertijd',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'iRacing-instellingen',
@@ -297,6 +298,20 @@ const nl: Catalog = {
 				'<b>Een zwarte afbeelding</b> — iRacing draait in exclusief volledig scherm. Zet Display &gt; Full Screen op OFF.',
 			troubleSidecar:
 				'Elke opname legt de precies gebruikte instellingen vast, het aantal samples en hoe gelijkmatig ze vielen, als een .json-bestand in de logboekmap naast app.log. De laatste 20 opnames worden bewaard — een reeks telt als één — zodat de opname waarover je een vraag hebt er nog is terwijl je die vraag stelt.',
+		},
+
+		faq: {
+			blackShot: 'De opname is zwart, maar de iRacing-interface is te zien',
+			blackShotBody:
+				'De opname zelf is gelukt: de interface is getekend, er is dus een echt beeld bij de tool aangekomen. Wat ontbreekt is de 3D-scène, omdat iRacing die zwart heeft gerenderd. Verschillende minder gebruikelijke camera’s doen dit — die van de wielophanging het vaakst. Ga naar een gewone camera (cockpit, achtervolging of een van de tv-camera’s) en neem hetzelfde moment opnieuw op.',
+			blackShotFullscreenBody:
+				'Is het beeld zwart <i>inclusief</i> de interface en gedraagt elke camera zich hetzelfde, dan is de oorzaak een andere: iRacing draait in exclusief volledig scherm, dat niets buiten de sim kan vastleggen. Zet Display &gt; Full Screen op OFF.',
+
+			cameraReset: 'iRacing verzet mijn camera vlak voor de opname',
+			cameraResetBody:
+				'Dat is iRacings eigen automatische shotkeuze, niet deze tool. Zolang die aanstaat, kiest iRacing zelf camera’s en springt het op het moment dat de opname begint terug naar een standaardkadrering, dus krijg je niet het beeld dat je had opgezet.',
+			cameraResetFixBody:
+				'Zet die uit in het camerascherm van iRacing (Ctrl+F12), onder <b>Camera &gt; Config &gt; Preferences</b>: de schakelaar <b>Shot Selection</b> met het label <b>Automatic</b>. Staat die uit, dan blijft de camera precies waar je hem hebt gezet — bij gewone screenshots én bij lange sluitertijden.',
 		},
 	},
 
@@ -423,6 +438,10 @@ const nl: Catalog = {
 			'Deze sluitertijd is korter dan één replaybeeld, en iRacing heeft er geen beeld binnen gerenderd. Probeer een tragere afspeelsnelheid of de eerstvolgende langere sluitertijd.',
 		noSamples:
 			'Er zijn geen beelden verzameld. Mogelijk is iRacing tijdens de belichting gestopt met renderen.',
+		blankCapture:
+			'Alle vastgelegde beelden waren zwart, dus er is geen afbeelding om op te slaan. Controleer of iRacing in venster- of randloze modus draait in plaats van exclusief volledig scherm, en of er bij deze resolutie nog videogeheugen vrij is — een lagere opnameresolutie is het snelst te proberen.',
+		frozenCapture:
+			'iRacing toonde tijdens de belichting {samples} beelden, maar ze waren allemaal identiek, dus dit is een stilstaand beeld en geen lange belichting. iRacing renderde niets nieuws terwijl de replay liep.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'De GPU gaf geen afbeelding terug.',
 		bracketShortfall:

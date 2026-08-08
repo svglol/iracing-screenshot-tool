@@ -40,6 +40,7 @@ import {
 	type SampleLogEntry,
 	type SampleStats,
 } from '../../utilities/long-exposure/sample-stats';
+import { summarizeFrameContent } from '../../utilities/long-exposure/frame-content';
 import { assessLongExposureVram } from '../../utilities/long-exposure/vram-budget';
 import type { Dimensions, VramInfo } from '../../utilities/vram-prediction';
 import type { PlaybackSnapshot, ReplayState } from './replay-control';
@@ -80,6 +81,11 @@ export type LongExposureFailure =
 	| 'seek-failed'
 	| 'playback-stalled'
 	| 'no-samples'
+	// Frames arrived, were accumulated, and every one of them was black — so the
+	// exposure integrated nothing. Distinct from 'no-samples' (nothing arrived at
+	// all) and from 'resolve-failed' (the GPU returned nothing): here every stage
+	// worked and the INPUT was empty, which is a different thing to tell the user.
+	| 'blank-capture'
 	| 'resolve-failed'
 	| 'aborted';
 
@@ -1379,6 +1385,17 @@ async function resolveCapture(
 	// and a half short of the truth.
 	const stats = summarizeSamples(samples, { acceptedTotal: result.accepted });
 
+	// What the frames CONTAINED, which nothing else here can answer. The sampling
+	// report describes how evenly frames arrived and says nothing about whether any
+	// of them held an image — and its metrics degenerate to "perfect" in exactly the
+	// case where they do not (one distinct frame means no gaps, so evenness reads
+	// 100%). Measured against the DELIVERED size, because that is what the digest was
+	// computed over.
+	const content = summarizeFrameContent(samples, {
+		width: preResolve.frameWidth,
+		height: preResolve.frameHeight,
+	});
+
 	const interpolation = buildInterpolationReport({
 		// What was ASKED for, always — a bracket that dropped interpolation must still
 		// record that it was requested, or the sidecar reads as though the user never
@@ -1417,6 +1434,18 @@ async function resolveCapture(
 		accepted: result.accepted,
 		synthesized: result.synthesized ?? 0,
 		rejected: result.rejected,
+		// Logged on EVERY shot, healthy or not, because it is the one line that says
+		// which side of the boundary a bad image fell on: many distinct digests with a
+		// bad picture is our GPU path, few or all-black digests is the capture never
+		// having anything in it. Without this a black-output report costs a round trip
+		// to the user for evidence we already had.
+		content: {
+			digested: content.digested,
+			distinct: content.distinct,
+			black: content.blackSamples,
+			allBlack: content.allBlack,
+			frozen: content.frozen,
+		},
 		evenness: Number(stats.evenness.toFixed(3)),
 		dimensions: { width: result.width, height: result.height },
 		backend: result.backend,
@@ -1437,6 +1466,38 @@ async function resolveCapture(
 					: Number(interpolation.maxFrameMs.toFixed(2)),
 		},
 	});
+
+	// Every frame was black, so there is no image in the accumulator — only a black
+	// file that would be saved, sidecar'd and reported as a success. Refuse instead.
+	//
+	// This is a hard equality against the digest an all-black frame of THIS size
+	// would produce, not a brightness heuristic, so it cannot fire on a merely dark
+	// shot: one lit texel anywhere on the sampled grid moves the value. What it
+	// cannot say is WHY the capture was empty — WGC is DWM-based, so it reads black
+	// whenever Windows is not compositing what iRacing draws, and iRacing failing to
+	// render at all (out of video memory at the chosen resolution) looks identical
+	// from here. The message names both because we cannot distinguish them and the
+	// user can check both in under a minute.
+	if (content.allBlack) {
+		return {
+			...base(),
+			failure: 'blank-capture',
+			message: t('longExposureCapture.blankCapture'),
+			stats,
+			backend: result.backend || deps.backendName,
+			interpolation,
+		};
+	}
+
+	// Frames arrived and they all held the same picture, so the "exposure" is a
+	// still. Not black — so there IS an image and the user should have it — but they
+	// must not be left thinking this is what their shutter setting looks like.
+	const contentWarnings: string[] = [];
+	if (content.frozen) {
+		contentWarnings.push(
+			t('longExposureCapture.frozenCapture', { samples: content.digested })
+		);
+	}
 
 	const interpolationWarnings: string[] = [];
 	// Asked for it, did not get it. Say so — silently producing the un-interpolated
@@ -1513,6 +1574,7 @@ async function resolveCapture(
 		// failure — the shot exists and the user should judge it.
 		warnings: [
 			...warnings,
+			...contentWarnings,
 			...interpolationWarnings,
 			...(result.error ? [result.error] : []),
 		],

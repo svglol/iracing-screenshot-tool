@@ -208,6 +208,7 @@ const fi: Catalog = {
 		sections: 'Ohjeen osiot',
 		tabGeneral: 'Yleistä',
 		tabLongExposure: 'Pitkä valotus',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'iRacingin asetukset',
@@ -301,6 +302,20 @@ const fi: Catalog = {
 				'<b>Musta kuva</b> — iRacing on yksinomaisessa koko näytön tilassa. Aseta Display &gt; Full Screen tilaan OFF.',
 			troubleSidecar:
 				'Jokainen otos kirjaa käyttämänsä tarkat asetukset, näytteiden määrän ja sen, miten tasaisesti ne osuivat, .json-tiedostoon lokikansioon app.log-tiedoston viereen. Viimeiset 20 otosta säilytetään — haarukointi lasketaan yhdeksi — joten otos, josta kysyt, on yhä tallessa silloin kun kysyt siitä.',
+		},
+
+		faq: {
+			blackShot: 'Otos on musta, mutta iRacingin käyttöliittymä näkyy siinä',
+			blackShotBody:
+				'Itse kaappaus onnistui: käyttöliittymä piirtyi, joten työkalulle saapui aito ruutu. Puuttumaan jää 3D-näkymä, koska iRacing piirsi sen mustana. Useat epätavallisemmista kameroista tekevät näin — jousituskamera on niistä yleisin. Vaihda tavalliseen kameraan (ohjaamo, seuranta tai jokin tv-kameroista) ja ota sama hetki uudelleen.',
+			blackShotFullscreenBody:
+				'Jos kuva on musta <i>käyttöliittymää myöten</i> ja kaikki kamerat käyttäytyvät samoin, syy on toinen: iRacing on yksinomaisessa koko näytön tilassa, jota mikään simulaattorin ulkopuolinen ei voi kaapata. Aseta Display &gt; Full Screen tilaan OFF.',
+
+			cameraReset: 'iRacing siirtää kameraani juuri ennen otosta',
+			cameraResetBody:
+				'Kyse on iRacingin omasta automaattisesta kuvavalinnasta, ei tästä työkalusta. Niin kauan kuin se on päällä, iRacing valitsee kamerat itse ja palaa oletusrajaukseen juuri sillä hetkellä, kun kaappaus alkaa, joten et saa sitä otosta, jonka asettelit.',
+			cameraResetFixBody:
+				'Kytke se pois iRacingin kameratyökalussa (Ctrl+F12) kohdassa <b>Camera &gt; Config &gt; Preferences</b>: kytkin <b>Shot Selection</b>, jonka nimenä on <b>Automatic</b>. Kun se on pois päältä, kamera pysyy täsmälleen siinä mihin sen asetit — sekä tavallisissa kuvakaappauksissa että pitkissä valotuksissa.',
 		},
 	},
 
@@ -424,6 +439,10 @@ const fi: Catalog = {
 			'Tämä suljinaika on lyhyempi kuin yksi uusintaruutu, eikä iRacing piirtänyt sen sisällä yhtään ruutua. Kokeile hitaampaa toistonopeutta tai seuraavaksi pidempää suljinaikaa.',
 		noSamples:
 			'Yhtään ruutua ei kertynyt. iRacing on saattanut lopettaa piirtämisen valotuksen aikana.',
+		blankCapture:
+			'Kaikki kaapatut ruudut olivat mustia, joten tallennettavaa kuvaa ei ole. Tarkista, että iRacing on ikkuna- tai reunattomassa tilassa eikä yksinomaisessa koko näytön tilassa ja että sillä on tällä tarkkuudella vielä vapaata näytönohjaimen muistia — pienempi kaappaustarkkuus on nopein kokeilla.',
+		frozenCapture:
+			'iRacing näytti valotuksen aikana {samples} ruutua, mutta kaikki olivat samanlaisia, joten tämä kuva on pysäytyskuva eikä pitkä valotus. iRacing ei piirtänyt mitään uutta uusinnan pyöriessä.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'Näytönohjain ei palauttanut kuvaa.',
 		bracketShortfall:

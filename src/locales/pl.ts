@@ -214,6 +214,7 @@ const pl: Catalog = {
 		sections: 'Sekcje pomocy',
 		tabGeneral: 'Ogólne',
 		tabLongExposure: 'Długie naświetlanie',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'Ustawienia iRacing',
@@ -307,6 +308,21 @@ const pl: Catalog = {
 				'<b>Czarny obraz</b> — iRacing działa w wyłącznym trybie pełnoekranowym. Ustaw Display &gt; Full Screen na OFF.',
 			troubleSidecar:
 				'Każde ujęcie zapisuje dokładnie użyte ustawienia, liczbę próbek i to, jak równomiernie były rozłożone, w pliku .json w folderze dzienników obok app.log. Przechowywanych jest ostatnich 20 ujęć — bracketing liczy się jako jedno — więc ujęcie, o które pytasz, wciąż tam jest, gdy o nie pytasz.',
+		},
+
+		faq: {
+			blackShot: 'Ujęcie jest czarne, ale widać na nim interfejs iRacinga',
+			blackShotBody:
+				'Samo przechwytywanie zadziałało: interfejs się narysował, więc do narzędzia dotarła prawdziwa klatka. Brakuje sceny 3D, bo iRacing wyrenderował ją na czarno. Robi tak kilka mniej typowych kamer — najczęściej kamera zawieszenia. Przełącz się na zwykłą kamerę (kokpit, pościgowa lub jedna z kamer TV) i uchwyć ten sam moment ponownie.',
+			blackShotFullscreenBody:
+				'Jeśli obraz jest czarny <i>razem z</i> interfejsem, a wszystkie kamery zachowują się tak samo, przyczyna jest inna: iRacing działa w wyłącznym trybie pełnoekranowym, którego nic spoza symulatora nie przechwyci. Ustaw Display &gt; Full Screen na OFF.',
+
+			cameraReset:
+				'iRacing przestawia mi kamerę tuż przed zrobieniem ujęcia',
+			cameraResetBody:
+				'To własny automatyczny dobór ujęć iRacinga, a nie to narzędzie. Dopóki jest włączony, iRacing sam wybiera kamery i w chwili rozpoczęcia przechwytywania wraca do domyślnego kadru, więc zamiast przygotowanego ujęcia dostajesz inne.',
+			cameraResetFixBody:
+				'Wyłącz go w narzędziu kamer iRacinga (Ctrl+F12), w <b>Camera &gt; Config &gt; Preferences</b>: przełącznik <b>Shot Selection</b> z etykietą <b>Automatic</b>. Gdy jest wyłączony, kamera zostaje dokładnie tam, gdzie ją ustawisz — zarówno przy zwykłych zrzutach, jak i przy długim naświetlaniu.',
 		},
 	},
 
@@ -436,6 +452,10 @@ const pl: Catalog = {
 			'Ten czas migawki jest krótszy niż jedna klatka powtórki, a iRacing nie wyrenderował w nim żadnej klatki. Spróbuj wolniejszej prędkości odtwarzania albo kolejnego dłuższego czasu migawki.',
 		noSamples:
 			'Nie zebrano żadnych klatek. iRacing mógł przestać renderować w trakcie naświetlania.',
+		blankCapture:
+			'Każda przechwycona klatka była czarna, więc nie ma czego zapisać. Sprawdź, czy iRacing działa w trybie okna lub bez obramowania, a nie w wyłącznym trybie pełnoekranowym, oraz czy przy tej rozdzielczości ma jeszcze wolną pamięć karty graficznej — najszybciej to sprawdzić, obniżając rozdzielczość przechwytywania.',
+		frozenCapture:
+			'iRacing wyświetlił podczas naświetlania {samples} klatek, ale wszystkie były identyczne, więc ten obraz to zdjęcie statyczne, a nie długie naświetlanie. iRacing nie wyrenderował nic nowego w trakcie odtwarzania powtórki.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU nie zwróciło obrazu.',
 		bracketShortfall:

@@ -107,6 +107,22 @@
 				</div>
 
 				<div
+					v-show="active === 'faq'"
+					id="help-panel-faq"
+					role="tabpanel"
+					aria-labelledby="help-tab-faq"
+					tabindex="0"
+				>
+					<span class="heading">{{ $t('help.faq.blackShot') }}</span>
+					<p>{{ $t('help.faq.blackShotBody') }}</p>
+					<p v-html="$t('help.faq.blackShotFullscreenBody')"></p>
+
+					<span class="heading">{{ $t('help.faq.cameraReset') }}</span>
+					<p>{{ $t('help.faq.cameraResetBody') }}</p>
+					<p v-html="$t('help.faq.cameraResetFixBody')"></p>
+				</div>
+
+				<div
 					v-show="active === 'long-exposure'"
 					id="help-panel-long-exposure"
 					role="tabpanel"
@@ -194,6 +210,7 @@ export default {
 		tabs(): { id: string; label: string }[] {
 			return [
 				{ id: 'general', label: this.$t('help.tabGeneral') },
+				{ id: 'faq', label: this.$t('help.tabFaq') },
 				{
 					id: 'long-exposure',
 					label: this.$t('help.tabLongExposure'),

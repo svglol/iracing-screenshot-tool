@@ -206,6 +206,7 @@ const fr: Catalog = {
 		sections: 'Sections d’aide',
 		tabGeneral: 'Général',
 		tabLongExposure: 'Pose longue',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'Paramètres iRacing',
@@ -301,6 +302,21 @@ const fr: Catalog = {
 				'<b>Une image noire</b> — iRacing est en plein écran exclusif. Mettez Display &gt; Full Screen sur OFF.',
 			troubleSidecar:
 				'Chaque prise consigne les réglages exacts utilisés, le nombre d’échantillons et leur régularité, dans un fichier .json placé dans le dossier des journaux à côté d’app.log. Les 20 dernières prises sont conservées — un bracketing compte pour une — de sorte que la prise sur laquelle vous vous interrogez est encore là pendant que vous vous interrogez.',
+		},
+
+		faq: {
+			blackShot:
+				'La prise est noire, mais l’interface d’iRacing y est visible',
+			blackShotBody:
+				'La capture a bien fonctionné : l’interface a été dessinée, donc une vraie image est parvenue à l’outil. Ce qui manque, c’est la scène 3D, parce qu’iRacing l’a rendue en noir. Plusieurs des caméras les moins classiques font cela — celle des suspensions est la plus fréquente. Passez à une caméra ordinaire (cockpit, poursuite ou l’une des caméras TV) et reprenez le même instant.',
+			blackShotFullscreenBody:
+				'Si l’image est noire <i>y compris</i> l’interface et que toutes les caméras se comportent pareil, la cause est différente : iRacing est en plein écran exclusif, que rien en dehors du simulateur ne peut capturer. Mettez Display &gt; Full Screen sur OFF.',
+
+			cameraReset: 'iRacing déplace ma caméra avant de prendre la vue',
+			cameraResetBody:
+				'C’est la sélection automatique des plans propre à iRacing, pas cet outil. Tant qu’elle est active, iRacing continue de choisir les caméras lui-même et revient à un cadrage par défaut à l’instant où la capture démarre : vous n’obtenez donc pas la vue que vous aviez préparée.',
+			cameraResetFixBody:
+				'Désactivez-la dans l’outil caméra d’iRacing (Ctrl+F12), sous <b>Camera &gt; Config &gt; Preferences</b> : l’interrupteur <b>Shot Selection</b> intitulé <b>Automatic</b>. Une fois désactivé, la caméra reste exactement là où vous l’avez placée, pour les captures normales comme pour les poses longues.',
 		},
 	},
 
@@ -428,6 +444,10 @@ const fr: Catalog = {
 			'Cette vitesse d’obturation est plus courte qu’une image de replay, et iRacing n’a rendu aucune image pendant ce laps de temps. Essayez une vitesse de lecture plus lente, ou le cran d’obturation immédiatement plus lent.',
 		noSamples:
 			'Aucune image n’a été accumulée. iRacing a peut-être cessé de rendre pendant l’exposition.',
+		blankCapture:
+			'Toutes les images capturées étaient noires : il n’y a donc pas d’image à enregistrer. Vérifiez qu’iRacing est en mode fenêtré ou sans bordure plutôt qu’en plein écran exclusif, et qu’il lui reste de la mémoire vidéo à cette résolution — baisser la résolution de capture est le plus rapide à essayer.',
+		frozenCapture:
+			'iRacing a présenté {samples} images pendant l’exposition, mais toutes étaient identiques : cette image est donc un instantané et non une pose longue. iRacing n’a rien rendu de nouveau pendant le défilement du replay.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'Le GPU n’a renvoyé aucune image.',
 		bracketShortfall:
