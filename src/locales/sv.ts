@@ -205,6 +205,7 @@ const sv: Catalog = {
 		sections: 'Hjälpavsnitt',
 		tabGeneral: 'Allmänt',
 		tabLongExposure: 'Långtidsexponering',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'iRacing-inställningar',
@@ -298,6 +299,20 @@ const sv: Catalog = {
 				'<b>En svart bild</b> — iRacing körs i exklusivt helskärmsläge. Ställ Display &gt; Full Screen på OFF.',
 			troubleSidecar:
 				'Varje bild registrerar exakt vilka inställningar som användes, antalet sampel och hur jämnt de landade, som en .json-fil i loggmappen bredvid app.log. De 20 senaste bilderna sparas — en gaffling räknas som en — så den bild du frågar om finns kvar medan du frågar om den.',
+		},
+
+		faq: {
+			blackShot: 'Bilden är svart, men iRacings gränssnitt syns på den',
+			blackShotBody:
+				'Själva tagningen fungerade: gränssnittet ritades, så en riktig bildruta nådde verktyget. Det som saknas är 3D-scenen, eftersom iRacing renderade den svart. Flera av de mindre vanliga kamerorna gör detta — fjädringskameran är den folk oftast råkar på. Byt till en vanlig kamera (cockpit, förföljande eller någon av tv-kamerorna) och ta samma ögonblick igen.',
+			blackShotFullscreenBody:
+				'Är bilden svart <i>inklusive</i> gränssnittet, och beter sig alla kameror likadant, är orsaken en annan: iRacing körs i exklusivt helskärmsläge, som inget utanför simulatorn kan fånga. Ställ Display &gt; Full Screen på OFF.',
+
+			cameraReset: 'iRacing flyttar min kamera precis innan bilden tas',
+			cameraResetBody:
+				'Det är iRacings eget automatiska bildval, inte det här verktyget. Så länge det är på fortsätter iRacing att välja kameror själv och hoppar tillbaka till en standardbildvinkel i samma ögonblick som tagningen startar, så du får inte den bild du ställt i ordning.',
+			cameraResetFixBody:
+				'Stäng av det i iRacings kameraverktyg (Ctrl+F12), under <b>Camera &gt; Config &gt; Preferences</b>: reglaget <b>Shot Selection</b> märkt <b>Automatic</b>. Med det avstängt stannar kameran exakt där du satte den — både för vanliga skärmbilder och för långtidsexponeringar.',
 		},
 	},
 

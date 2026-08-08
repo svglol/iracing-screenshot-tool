@@ -205,6 +205,7 @@ const it: Catalog = {
 		sections: 'Sezioni della guida',
 		tabGeneral: 'Generale',
 		tabLongExposure: 'Lunga esposizione',
+		tabFaq: 'FAQ',
 
 		general: {
 			iracingSettings: 'Impostazioni di iRacing',
@@ -298,6 +299,20 @@ const it: Catalog = {
 				'<b>Un’immagine nera</b> — iRacing è a schermo intero esclusivo. Imposta Display &gt; Full Screen su OFF.',
 			troubleSidecar:
 				'Ogni scatto registra le impostazioni esatte usate, il numero di campioni e quanto uniformemente sono caduti, in un file .json nella cartella dei registri accanto ad app.log. Vengono conservati gli ultimi 20 scatti — un bracketing conta come uno — così lo scatto di cui stai chiedendo è ancora lì mentre lo chiedi.',
+		},
+
+		faq: {
+			blackShot: 'Lo scatto è nero, ma l’interfaccia di iRacing si vede',
+			blackShotBody:
+				'La cattura ha funzionato: l’interfaccia è stata disegnata, quindi un fotogramma vero è arrivato allo strumento. A mancare è la scena 3D, perché iRacing l’ha resa nera. Diverse telecamere meno convenzionali fanno così — quella delle sospensioni è la più frequente. Passa a una telecamera normale (abitacolo, inseguimento o una delle telecamere TV) e riprendi lo stesso momento.',
+			blackShotFullscreenBody:
+				'Se l’immagine è nera <i>compresa</i> l’interfaccia e ogni telecamera si comporta allo stesso modo, la causa è un’altra: iRacing è a schermo intero esclusivo, che nulla al di fuori del simulatore può catturare. Imposta Display &gt; Full Screen su OFF.',
+
+			cameraReset: 'iRacing sposta la mia telecamera prima di scattare',
+			cameraResetBody:
+				'È la selezione automatica delle inquadrature di iRacing, non questo strumento. Finché è attiva, iRacing continua a scegliere le telecamere da sé e torna a un’inquadratura predefinita nell’istante in cui parte la cattura, così quello che ottieni non è lo scatto che avevi preparato.',
+			cameraResetFixBody:
+				'Disattivala nello strumento telecamere di iRacing (Ctrl+F12), in <b>Camera &gt; Config &gt; Preferences</b>: l’interruttore <b>Shot Selection</b> etichettato <b>Automatic</b>. Con quello spento la telecamera resta esattamente dove l’hai messa, sia per gli screenshot normali sia per le lunghe esposizioni.',
 		},
 	},
 
