@@ -446,6 +446,14 @@ export default {
 			'This shutter is shorter than one replay frame, and iRacing did not render a frame inside it. Try a slower playback speed, or the next slower shutter.',
 		noSamples:
 			'No frames were accumulated. iRacing may have stopped rendering during the exposure.',
+		// Frames arrived and every one of them was black. High-fidelity capture reads
+		// what Windows composites, so it sees black whenever Windows is not
+		// compositing what iRacing draws — and iRacing failing to render at all looks
+		// the same from here.
+		blankCapture:
+			'Every frame captured was black, so there is no image to save. Check that iRacing is in windowed or borderless mode rather than exclusive fullscreen, and that it still has video memory free at this resolution — a lower capture resolution is the quickest thing to try.',
+		frozenCapture:
+			'iRacing presented {samples} frames during the exposure but every one was identical, so this image is a still rather than a long exposure. iRacing rendered nothing new while the replay rolled.',
 		// The native cause, appended when there is one.
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'The GPU did not return an image.',

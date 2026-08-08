@@ -424,6 +424,10 @@ const fi: Catalog = {
 			'Tämä suljinaika on lyhyempi kuin yksi uusintaruutu, eikä iRacing piirtänyt sen sisällä yhtään ruutua. Kokeile hitaampaa toistonopeutta tai seuraavaksi pidempää suljinaikaa.',
 		noSamples:
 			'Yhtään ruutua ei kertynyt. iRacing on saattanut lopettaa piirtämisen valotuksen aikana.',
+		blankCapture:
+			'Kaikki kaapatut ruudut olivat mustia, joten tallennettavaa kuvaa ei ole. Tarkista, että iRacing on ikkuna- tai reunattomassa tilassa eikä yksinomaisessa koko näytön tilassa ja että sillä on tällä tarkkuudella vielä vapaata näytönohjaimen muistia — pienempi kaappaustarkkuus on nopein kokeilla.',
+		frozenCapture:
+			'iRacing näytti valotuksen aikana {samples} ruutua, mutta kaikki olivat samanlaisia, joten tämä kuva on pysäytyskuva eikä pitkä valotus. iRacing ei piirtänyt mitään uutta uusinnan pyöriessä.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'Näytönohjain ei palauttanut kuvaa.',
 		bracketShortfall:

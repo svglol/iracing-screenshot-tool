@@ -426,6 +426,10 @@ const it: Catalog = {
 			'Questo tempo di posa è più breve di un fotogramma di replay e iRacing non ne ha renderizzato nessuno al suo interno. Prova una velocità di riproduzione più lenta, o il tempo di posa immediatamente più lungo.',
 		noSamples:
 			'Non è stato accumulato alcun fotogramma. iRacing potrebbe aver smesso di renderizzare durante l’esposizione.',
+		blankCapture:
+			'Tutti i fotogrammi catturati erano neri, quindi non c’è alcuna immagine da salvare. Verifica che iRacing sia in modalità finestra o senza bordi anziché a schermo intero esclusivo e che gli resti memoria video libera a questa risoluzione: abbassare la risoluzione di cattura è la prova più rapida.',
+		frozenCapture:
+			'iRacing ha presentato {samples} fotogrammi durante l’esposizione, ma erano tutti identici: questa immagine è uno scatto singolo e non una lunga esposizione. iRacing non ha renderizzato nulla di nuovo mentre il replay scorreva.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'La GPU non ha restituito alcuna immagine.',
 		bracketShortfall:

@@ -436,6 +436,10 @@ const pl: Catalog = {
 			'Ten czas migawki jest krótszy niż jedna klatka powtórki, a iRacing nie wyrenderował w nim żadnej klatki. Spróbuj wolniejszej prędkości odtwarzania albo kolejnego dłuższego czasu migawki.',
 		noSamples:
 			'Nie zebrano żadnych klatek. iRacing mógł przestać renderować w trakcie naświetlania.',
+		blankCapture:
+			'Każda przechwycona klatka była czarna, więc nie ma czego zapisać. Sprawdź, czy iRacing działa w trybie okna lub bez obramowania, a nie w wyłącznym trybie pełnoekranowym, oraz czy przy tej rozdzielczości ma jeszcze wolną pamięć karty graficznej — najszybciej to sprawdzić, obniżając rozdzielczość przechwytywania.',
+		frozenCapture:
+			'iRacing wyświetlił podczas naświetlania {samples} klatek, ale wszystkie były identyczne, więc ten obraz to zdjęcie statyczne, a nie długie naświetlanie. iRacing nie wyrenderował nic nowego w trakcie odtwarzania powtórki.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU nie zwróciło obrazu.',
 		bracketShortfall:

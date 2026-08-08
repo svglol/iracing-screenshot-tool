@@ -421,6 +421,10 @@ const sv: Catalog = {
 			'Den här slutartiden är kortare än en replaybildruta, och iRacing renderade ingen bildruta inom den. Prova en långsammare uppspelningshastighet, eller nästa längre slutartid.',
 		noSamples:
 			'Inga bildrutor ackumulerades. iRacing kan ha slutat rendera under exponeringen.',
+		blankCapture:
+			'Alla infångade bildrutor var svarta, så det finns ingen bild att spara. Kontrollera att iRacing körs i fönster- eller kantlöst läge i stället för exklusivt helskärmsläge, och att det fortfarande finns ledigt grafikminne vid den här upplösningen — en lägre infångningsupplösning är det snabbaste att prova.',
+		frozenCapture:
+			'iRacing visade {samples} bildrutor under exponeringen, men alla var identiska, så den här bilden är en stillbild och inte en lång exponering. iRacing renderade inget nytt medan replayen rullade.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU:n returnerade ingen bild.',
 		bracketShortfall:

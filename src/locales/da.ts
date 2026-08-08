@@ -422,6 +422,10 @@ const da: Catalog = {
 			'Denne lukkertid er kortere end ét replaybillede, og iRacing renderede ikke noget billede inden for den. Prøv en langsommere afspilningshastighed eller den næste længere lukkertid.',
 		noSamples:
 			'Der blev ikke akkumuleret nogen billeder. iRacing er måske holdt op med at rendere under eksponeringen.',
+		blankCapture:
+			'Alle optagne billeder var sorte, så der er intet billede at gemme. Kontrollér, at iRacing kører i vindue eller kantløs tilstand og ikke i eksklusiv fuldskærm, og at der stadig er ledig videohukommelse ved denne opløsning — en lavere optagelsesopløsning er det hurtigste at prøve.',
+		frozenCapture:
+			'iRacing viste {samples} billeder under eksponeringen, men de var alle ens, så dette er et stillbillede og ikke en lang eksponering. iRacing renderede intet nyt, mens replayet kørte.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU’en returnerede intet billede.',
 		bracketShortfall:

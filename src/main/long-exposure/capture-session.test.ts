@@ -5,6 +5,10 @@ import {
 	normalizeRecipe,
 	type LongExposureRecipe,
 } from '../../utilities/long-exposure/shot-recipe';
+import {
+	blackFrameDigest,
+	referenceDigest,
+} from '../../utilities/long-exposure/frame-content';
 import { ReplayController, type ReplayState } from './replay-control';
 import {
 	buildInterpolationReport,
@@ -1587,5 +1591,122 @@ describe('executeRecipe — reporting', () => {
 		// WGC delivered 1280x720 rather than the requested size, and since
 		// supersampling was removed the saved image IS the delivered frame.
 		expect(captured).toEqual([1280, 720]);
+	});
+});
+
+// The v3.3.0 field report (Windows 10 22H2): black images on every attempt while
+// the pipeline reported total success — hundreds of frames accepted, evenness 100%,
+// a 16-bit master written. Nothing here knew what the frames CONTAINED, so a capture
+// of nothing was indistinguishable from a good one all the way to the saved file.
+describe('executeRecipe — blank and frozen captures', () => {
+	// The addon reports digests over the DELIVERED frame, which the harness fixes at
+	// 640x360, so this is the value a black capture on it would really produce.
+	const BLACK = blackFrameDigest(640, 360) as string;
+
+	function finishWith(digests: string[]) {
+		return {
+			longExposureFinish: () => ({
+				data: Buffer.alloc(640 * 360 * 8),
+				width: 640,
+				height: 360,
+				accepted: digests.length,
+				rejected: Math.max(0, digests.length - 1),
+				backend: 'd3d11-compute',
+				samples: digests.map((digest, i) => ({
+					u: i / Math.max(1, digests.length - 1),
+					sessionTime: 500 + i / 60,
+					replayFrameNum: ANCHOR - digests.length + i,
+					digest,
+					presentedAt: String(i),
+					// Only the first carries new content when they are all identical,
+					// exactly as absorb_digests marks them natively.
+					accepted: i === 0 || digest !== digests[i - 1],
+				})),
+				error: null,
+			}),
+		};
+	}
+
+	it('refuses to save a capture whose every frame was black', async () => {
+		const harness = makeHarness({
+			nativeOverrides: finishWith(Array.from({ length: 64 }, () => BLACK)),
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(false);
+		expect(outcome.failure).toBe('blank-capture');
+		expect(outcome.image).toBeNull();
+		// The message has to name what the user can actually check, because we
+		// cannot tell "Windows was not compositing iRacing" from "iRacing could not
+		// render at this size" from here.
+		expect(outcome.message).toMatch(/exclusive fullscreen/i);
+		expect(outcome.message).toMatch(/video memory/i);
+	});
+
+	// The refusal still owes the user their cursor and their window back.
+	it('still restores the anchor and the window on a blank capture', async () => {
+		const harness = makeHarness({
+			nativeOverrides: finishWith(Array.from({ length: 8 }, () => BLACK)),
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.failure).toBe('blank-capture');
+		expect(outcome.restore.attempted).toBe(true);
+		expect(harness.events).toContain('restoreWindow');
+	});
+
+	// A dark scene is not a blank capture. One lit texel on the digest's sampled
+	// grid moves the value, so this is an equality test and not a brightness one.
+	it('does not refuse a merely dark capture', async () => {
+		const nearlyBlack = referenceDigest(640, 360, (x, y) =>
+			x === 320 && y === 180 ? [1, 0, 0] : [0, 0, 0]
+		);
+		const harness = makeHarness({
+			nativeOverrides: finishWith(
+				Array.from({ length: 64 }, () => nearlyBlack)
+			),
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.failure).toBeNull();
+	});
+
+	// Frames arrived and all held the same picture. There IS an image, so it is
+	// saved — but the user must not think this is what their shutter looks like.
+	it('warns when every frame was identical but not black', async () => {
+		const harness = makeHarness({
+			nativeOverrides: finishWith(
+				Array.from({ length: 64 }, () => 'a1b2c3d4e5f60718')
+			),
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warnings.join(' ')).toMatch(/every one was identical/);
+		expect(outcome.warnings.join(' ')).toMatch(/64/);
+	});
+
+	it('leaves a healthy capture unwarned and unrefused', async () => {
+		const harness = makeHarness();
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warnings.join(' ')).not.toMatch(/identical/);
+	});
+
+	// A one-sample exposure is the correct result for a fast enough shutter and has
+	// exactly one distinct frame. It must not be called frozen for it.
+	it('does not call a single-sample exposure frozen', async () => {
+		const harness = makeHarness({
+			nativeOverrides: finishWith(['a1b2c3d4e5f60718']),
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warnings.join(' ')).not.toMatch(/identical/);
+	});
+
+	// An addon build that reports no digests must not be read as a blank capture —
+	// absence of evidence is not evidence of a black frame.
+	it('says nothing when the addon reported no digests at all', async () => {
+		const harness = makeHarness({ nativeOverrides: finishWith([]) });
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.failure).toBeNull();
 	});
 });

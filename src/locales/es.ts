@@ -424,6 +424,10 @@ const es: Catalog = {
 			'Esta obturación es más corta que un fotograma de repetición, e iRacing no renderizó ninguno dentro de ella. Prueba una velocidad de reproducción más lenta o el siguiente paso de obturación más lento.',
 		noSamples:
 			'No se acumuló ningún fotograma. Puede que iRacing dejara de renderizar durante la exposición.',
+		blankCapture:
+			'Todos los fotogramas capturados eran negros, así que no hay imagen que guardar. Comprueba que iRacing esté en modo ventana o sin bordes en lugar de pantalla completa exclusiva, y que aún le quede memoria de vídeo libre a esta resolución: bajar la resolución de captura es lo más rápido de probar.',
+		frozenCapture:
+			'iRacing mostró {samples} fotogramas durante la exposición, pero todos eran idénticos, así que esta imagen es una foto fija y no una exposición larga. iRacing no renderizó nada nuevo mientras avanzaba la repetición.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'La GPU no devolvió ninguna imagen.',
 		bracketShortfall:

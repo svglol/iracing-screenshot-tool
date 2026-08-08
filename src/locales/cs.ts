@@ -428,6 +428,10 @@ const cs: Catalog = {
 			'Tato závěrka je kratší než jeden snímek záznamu a iRacing v ní žádný snímek nevykreslil. Zkuste pomalejší rychlost přehrávání nebo nejbližší pomalejší závěrku.',
 		noSamples:
 			'Nebyly nasbírány žádné snímky. iRacing možná během expozice přestal vykreslovat.',
+		blankCapture:
+			'Každý zachycený snímek byl černý, takže není co uložit. Zkontrolujte, že iRacing běží v okně nebo v režimu bez okrajů, a ne ve výhradním celoobrazovkovém režimu, a že mu při tomto rozlišení zbývá volná videopaměť — nejrychleji to ověříte nižším rozlišením snímku.',
+		frozenCapture:
+			'iRacing během expozice zobrazil {samples} snímků, ale všechny byly stejné, takže tento obrázek je statický snímek, nikoli dlouhá expozice. iRacing během přehrávání záznamu nevykreslil nic nového.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'GPU nevrátila žádný obraz.',
 		bracketShortfall:

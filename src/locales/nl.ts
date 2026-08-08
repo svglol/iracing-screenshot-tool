@@ -423,6 +423,10 @@ const nl: Catalog = {
 			'Deze sluitertijd is korter dan één replaybeeld, en iRacing heeft er geen beeld binnen gerenderd. Probeer een tragere afspeelsnelheid of de eerstvolgende langere sluitertijd.',
 		noSamples:
 			'Er zijn geen beelden verzameld. Mogelijk is iRacing tijdens de belichting gestopt met renderen.',
+		blankCapture:
+			'Alle vastgelegde beelden waren zwart, dus er is geen afbeelding om op te slaan. Controleer of iRacing in venster- of randloze modus draait in plaats van exclusief volledig scherm, en of er bij deze resolutie nog videogeheugen vrij is — een lagere opnameresolutie is het snelst te proberen.',
+		frozenCapture:
+			'iRacing toonde tijdens de belichting {samples} beelden, maar ze waren allemaal identiek, dus dit is een stilstaand beeld en geen lange belichting. iRacing renderde niets nieuws terwijl de replay liep.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'De GPU gaf geen afbeelding terug.',
 		bracketShortfall:

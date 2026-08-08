@@ -428,6 +428,10 @@ const fr: Catalog = {
 			'Cette vitesse d’obturation est plus courte qu’une image de replay, et iRacing n’a rendu aucune image pendant ce laps de temps. Essayez une vitesse de lecture plus lente, ou le cran d’obturation immédiatement plus lent.',
 		noSamples:
 			'Aucune image n’a été accumulée. iRacing a peut-être cessé de rendre pendant l’exposition.',
+		blankCapture:
+			'Toutes les images capturées étaient noires : il n’y a donc pas d’image à enregistrer. Vérifiez qu’iRacing est en mode fenêtré ou sans bordure plutôt qu’en plein écran exclusif, et qu’il lui reste de la mémoire vidéo à cette résolution — baisser la résolution de capture est le plus rapide à essayer.',
+		frozenCapture:
+			'iRacing a présenté {samples} images pendant l’exposition, mais toutes étaient identiques : cette image est donc un instantané et non une pose longue. iRacing n’a rien rendu de nouveau pendant le défilement du replay.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'Le GPU n’a renvoyé aucune image.',
 		bracketShortfall:

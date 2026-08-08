@@ -426,6 +426,10 @@ const de: Catalog = {
 			'Diese Verschlusszeit ist kürzer als ein Replay-Bild, und iRacing hat darin kein Bild gerendert. Versuche eine langsamere Wiedergabegeschwindigkeit oder die nächstlängere Verschlusszeit.',
 		noSamples:
 			'Es wurden keine Bilder gesammelt. iRacing hat während der Belichtung möglicherweise aufgehört zu rendern.',
+		blankCapture:
+			'Alle aufgenommenen Bilder waren schwarz, es gibt also kein Bild zu speichern. Prüfen Sie, ob iRacing im Fenster- oder randlosen Modus statt im exklusiven Vollbild läuft und ob bei dieser Auflösung noch Grafikspeicher frei ist — eine niedrigere Aufnahmeauflösung ist am schnellsten ausprobiert.',
+		frozenCapture:
+			'iRacing hat während der Belichtung {samples} Bilder ausgegeben, die aber alle identisch waren — dieses Bild ist daher eine Einzelaufnahme und keine Langzeitbelichtung. iRacing hat während des Replays nichts Neues gerendert.',
 		withNativeError: '{reason} ({error})',
 		resolveFailed: 'Die GPU hat kein Bild zurückgegeben.',
 		bracketShortfall:
