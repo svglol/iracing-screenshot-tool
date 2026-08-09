@@ -79,8 +79,13 @@ export interface StoreContext {
 // `object` rather than `Record<string, never>` as the default: intersecting the
 // latter with `{ ok: true }` yields a type nothing can satisfy, because `ok`
 // collides with its `never` index signature.
+//
+// `error?: undefined` on the success branch is load-bearing for the same reason
+// as NameCheck: with `strictNullChecks: false` TypeScript will not narrow a
+// union by a boolean discriminant, so without it `result.error` is inaccessible
+// in the `else` of an `if (result.ok)`. Do not remove it.
 export type StoreResult<T = object> =
-	| ({ ok: true } & T)
+	| ({ ok: true; error?: undefined } & T)
 	| { ok: false; error: StoreError | NameError };
 
 // --- location ---------------------------------------------------------------
