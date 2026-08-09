@@ -12,6 +12,7 @@ Created using Electron and Vue.
 * Auto Crop the iRacing watermark - user must resize iRacing UI to smallest size
 * Global Screenshot Hotkey (Control+PrintScreen)
 * Track and Driver Names included in filename, so you can keep track of screenshots easier
+* Graphics Profiles - store iRacing graphics configurations and switch between them (e.g. a triple-screen setup for racing and a single-screen one for screenshots)
 
 # Limitations
 * iRacing must be run in Borderless Windowed mode
