@@ -67,9 +67,16 @@ export interface IniValidation {
 	warnings: IniWarning[];
 }
 
+/**
+ * The optional `error?: undefined` / `name?: undefined` members are load-bearing:
+ * this project compiles with `strictNullChecks: false`, and TypeScript cannot
+ * narrow a union by a BOOLEAN discriminant in that mode. Declaring both members
+ * on both branches keeps `check.error` accessible after an `if (!check.ok)`
+ * without every call site needing a cast. Do not "tidy" them away.
+ */
 export type NameCheck =
-	| { ok: true; name: string }
-	| { ok: false; error: NameError };
+	| { ok: true; name: string; error?: undefined }
+	| { ok: false; error: NameError; name?: undefined };
 
 /** The three states the active config can be in, relative to what we stored. */
 export type ActiveState = 'clean' | 'modified' | 'unknown';
