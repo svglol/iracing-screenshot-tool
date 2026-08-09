@@ -892,6 +892,17 @@ ipcMain.handle(
 		);
 	}
 );
+
+ipcMain.handle(
+	'dialog:showSave',
+	(event, options: Electron.SaveDialogOptions) => {
+		const browserWindow = BrowserWindow.fromWebContents(event.sender);
+		return dialog.showSaveDialog(
+			browserWindow || (undefined as unknown as BrowserWindow),
+			options
+		);
+	}
+);
 // Live GPU VRAM (total + used) for the sidebar's headroom guardrail. koffi FFI
 // runs main-side only; the renderer polls this (every few seconds) and does the
 // pure prediction. Includes iRacing's current window size (physical px) as the
