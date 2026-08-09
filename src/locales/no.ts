@@ -393,6 +393,81 @@ const no: Catalog = {
 			'Slå av «Render Scene Using 3 Projections» i iRacing (fanen Display > Monitor) for å unngå loddrette bånd i skjermbildene',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafikkprofiler',
+		description:
+			'Lagre iRacing-grafikkonfigurasjoner og bytt mellom dem — et treskjermsoppsett for kjøring og et enkeltskjermsoppsett for skjermbilder.',
+		iracingRunning:
+			'Lukk iRacing før du bytter. Det skriver grafikkonfigurasjonen sin tilbake når det avsluttes, noe som ville omgjort endringen.',
+		activeHeading: 'Gjeldende konfigurasjon',
+		active: {
+			clean: 'Samsvarer med profilen {name}.',
+			modified: {
+				one: 'Bygger på {name}, med {count} innstilling endret siden.',
+				other: 'Bygger på {name}, med {count} innstillinger endret siden.',
+			},
+			modifiedUnknownCount: 'Bygger på {name}, endret siden.',
+			unknown: 'Samsvarer ikke med noen lagret profil.',
+			missing: 'Fant ingen iRacing-grafikkonfigurasjon.',
+		},
+		badge: {
+			active: 'Aktiv',
+			modified: 'Endret',
+		},
+		empty: {
+			title: 'Ingen profiler lagret ennå.',
+			body: 'Lagre den gjeldende iRacing-konfigurasjonen som en profil, eller importer en eksisterende .ini-fil.',
+		},
+		invalidProfile: 'Ikke en grafikkonfigurasjon',
+		warnings: {
+			autoCfgIncomplete: 'Tilbakestilles av iRacing',
+		},
+		actions: {
+			apply: 'Bruk',
+			overwrite: 'Oppdater fra gjeldende',
+			rename: 'Gi nytt navn',
+			export: 'Eksporter',
+			delete: 'Slett',
+			save: 'Lagre',
+			cancel: 'Avbryt',
+			saveCurrent: 'Lagre gjeldende som…',
+			import: 'Importer…',
+			openFolder: 'Åpne mappe',
+		},
+		prompt: {
+			namePlaceholder: 'Profilnavn',
+			deleteConfirm: 'Slette {name}?',
+		},
+		feedback: {
+			applied:
+				'{name} tatt i bruk. Start iRacing for at det skal tre i kraft.',
+			saved: 'Lagret som {name}.',
+			overwritten: '{name} oppdatert fra gjeldende konfigurasjon.',
+			renamed: 'Fikk nytt navn: {name}.',
+			deleted: '{name} slettet.',
+			imported: 'Importert som {name}.',
+			exported: '{name} eksportert.',
+		},
+		errors: {
+			empty: 'Skriv inn et navn på profilen.',
+			illegalCharacters:
+				'Et profilnavn kan ikke inneholde noen av disse: < > : " / \\ | ? *',
+			reservedName: 'Det navnet er reservert av Windows. Velg et annet.',
+			trailingDotOrSpace:
+				'Et profilnavn kan ikke slutte med punktum eller mellomrom.',
+			tooLong: 'Det navnet er for langt.',
+			duplicate: 'Det finnes allerede en profil med det navnet.',
+			profileNotFound: 'Fant ikke lenger den profilen.',
+			profileExists: 'Det finnes allerede en profil med det navnet.',
+			noActiveConfig: 'Fant ingen iRacing-grafikkonfigurasjon å lagre.',
+			invalidIni:
+				'Den filen er ikke en iRacing-grafikkonfigurasjon, så den ble ikke brukt.',
+			iracingRunning:
+				'Lukk iRacing først — det ville overskrevet endringen når det avsluttes.',
+			ioError: 'Filen kunne ikke skrives. Ingenting ble endret.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'Musepekeren kan vises i opptak på denne versjonen av Windows. Windows 10 versjon 2004 la til innstillingen som skjuler den.',

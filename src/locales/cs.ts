@@ -396,6 +396,82 @@ const cs: Catalog = {
 			'Vypněte „Render Scene Using 3 Projections“ v iRacingu (karta Display > Monitor), abyste na snímcích předešli svislým pruhům',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafické profily',
+		description:
+			'Ukládejte konfigurace grafiky iRacingu a přepínejte mezi nimi — třímonitorové nastavení pro závodění, jednomonitorové pro snímky.',
+		iracingRunning:
+			'Před přepnutím zavřete iRacing. Při ukončení přepíše svou konfiguraci grafiky, čímž by změnu vrátil zpět.',
+		activeHeading: 'Aktuální konfigurace',
+		active: {
+			clean: 'Odpovídá profilu {name}.',
+			modified: {
+				one: 'Vychází z profilu {name}, od té doby se změnilo {count} nastavení.',
+				few: 'Vychází z profilu {name}, od té doby se změnila {count} nastavení.',
+				other: 'Vychází z profilu {name}, od té doby se změnilo {count} nastavení.',
+			},
+			modifiedUnknownCount:
+				'Vychází z profilu {name}, od té doby byl změněn.',
+			unknown: 'Neodpovídá žádnému uloženému profilu.',
+			missing: 'Nebyla nalezena žádná konfigurace grafiky iRacingu.',
+		},
+		badge: {
+			active: 'Aktivní',
+			modified: 'Změněno',
+		},
+		empty: {
+			title: 'Zatím nejsou uloženy žádné profily.',
+			body: 'Uložte aktuální konfiguraci iRacingu jako profil nebo importujte existující soubor .ini.',
+		},
+		invalidProfile: 'Není konfigurace grafiky',
+		warnings: {
+			autoCfgIncomplete: 'iRacing jej resetuje',
+		},
+		actions: {
+			apply: 'Použít',
+			overwrite: 'Aktualizovat z aktuální',
+			rename: 'Přejmenovat',
+			export: 'Exportovat',
+			delete: 'Smazat',
+			save: 'Uložit',
+			cancel: 'Zrušit',
+			saveCurrent: 'Uložit aktuální jako…',
+			import: 'Importovat…',
+			openFolder: 'Otevřít složku',
+		},
+		prompt: {
+			namePlaceholder: 'Název profilu',
+			deleteConfirm: 'Smazat {name}?',
+		},
+		feedback: {
+			applied: 'Profil {name} byl použit. Aby se projevil, spusťte iRacing.',
+			saved: 'Uloženo jako {name}.',
+			overwritten: 'Profil {name} byl aktualizován z aktuální konfigurace.',
+			renamed: 'Přejmenováno na {name}.',
+			deleted: 'Profil {name} byl smazán.',
+			imported: 'Importováno jako {name}.',
+			exported: 'Profil {name} byl exportován.',
+		},
+		errors: {
+			empty: 'Zadejte název profilu.',
+			illegalCharacters:
+				'Název profilu nesmí obsahovat žádný z těchto znaků: < > : " / \\ | ? *',
+			reservedName: 'Tento název je ve Windows vyhrazen. Zvolte jiný.',
+			trailingDotOrSpace: 'Název profilu nesmí končit tečkou ani mezerou.',
+			tooLong: 'Tento název je příliš dlouhý.',
+			duplicate: 'Profil s tímto názvem již existuje.',
+			profileNotFound: 'Tento profil se již nepodařilo najít.',
+			profileExists: 'Profil s tímto názvem již existuje.',
+			noActiveConfig:
+				'Nebyla nalezena žádná konfigurace grafiky iRacingu k uložení.',
+			invalidIni:
+				'Tento soubor není konfigurací grafiky iRacingu, proto nebyl použit.',
+			iracingRunning:
+				'Nejprve zavřete iRacing — při ukončení by změnu přepsal.',
+			ioError: 'Soubor se nepodařilo zapsat. Nic nebylo změněno.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'V této verzi Windows se může na snímcích objevit kurzor myši. Windows 10 verze 2004 přidaly nastavení, které jej skrývá.',

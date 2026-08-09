@@ -388,6 +388,81 @@ const it: Catalog = {
 			'Disattiva «Render Scene Using 3 Projections» in iRacing (scheda Display > Monitor) per evitare bande verticali negli screenshot',
 	},
 
+	graphicsProfiles: {
+		title: 'Profili grafici',
+		description:
+			'Salva configurazioni grafiche di iRacing e passa dall’una all’altra: un assetto a tre schermi per correre e uno a schermo singolo per gli screenshot.',
+		iracingRunning:
+			'Chiudi iRacing prima di cambiare. All’uscita riscrive la propria configurazione grafica, annullando la modifica.',
+		activeHeading: 'Configurazione attuale',
+		active: {
+			clean: 'Corrisponde al profilo {name}.',
+			modified: {
+				one: 'Basata su {name}, con {count} impostazione modificata da allora.',
+				other: 'Basata su {name}, con {count} impostazioni modificate da allora.',
+			},
+			modifiedUnknownCount: 'Basata su {name}, modificata da allora.',
+			unknown: 'Non corrisponde a nessun profilo salvato.',
+			missing: 'Nessuna configurazione grafica di iRacing trovata.',
+		},
+		badge: {
+			active: 'Attivo',
+			modified: 'Modificato',
+		},
+		empty: {
+			title: 'Nessun profilo salvato per ora.',
+			body: 'Salva la configurazione attuale di iRacing come profilo oppure importa un file .ini esistente.',
+		},
+		invalidProfile: 'Non è una configurazione grafica',
+		warnings: {
+			autoCfgIncomplete: 'Verrà reimpostato da iRacing',
+		},
+		actions: {
+			apply: 'Applica',
+			overwrite: 'Aggiorna dall’attuale',
+			rename: 'Rinomina',
+			export: 'Esporta',
+			delete: 'Elimina',
+			save: 'Salva',
+			cancel: 'Annulla',
+			saveCurrent: 'Salva l’attuale come…',
+			import: 'Importa…',
+			openFolder: 'Apri cartella',
+		},
+		prompt: {
+			namePlaceholder: 'Nome del profilo',
+			deleteConfirm: 'Eliminare {name}?',
+		},
+		feedback: {
+			applied: '{name} applicato. Avvia iRacing perché abbia effetto.',
+			saved: 'Salvato come {name}.',
+			overwritten: '{name} aggiornato dalla configurazione attuale.',
+			renamed: 'Rinominato in {name}.',
+			deleted: '{name} eliminato.',
+			imported: 'Importato come {name}.',
+			exported: '{name} esportato.',
+		},
+		errors: {
+			empty: 'Inserisci un nome per il profilo.',
+			illegalCharacters:
+				'Il nome di un profilo non può contenere nessuno di questi caratteri: < > : " / \\ | ? *',
+			reservedName: 'Quel nome è riservato da Windows. Scegline un altro.',
+			trailingDotOrSpace:
+				'Il nome di un profilo non può terminare con un punto o uno spazio.',
+			tooLong: 'Quel nome è troppo lungo.',
+			duplicate: 'Esiste già un profilo con quel nome.',
+			profileNotFound: 'Non è stato più possibile trovare quel profilo.',
+			profileExists: 'Esiste già un profilo con quel nome.',
+			noActiveConfig:
+				'Non è stata trovata alcuna configurazione grafica di iRacing da salvare.',
+			invalidIni:
+				'Quel file non è una configurazione grafica di iRacing, quindi non è stato usato.',
+			iracingRunning:
+				'Chiudi prima iRacing: all’uscita sovrascriverebbe la modifica.',
+			ioError: 'Impossibile scrivere il file. Non è stato modificato nulla.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'Il puntatore del mouse può comparire nelle catture su questa versione di Windows. Windows 10 versione 2004 ha introdotto il controllo che lo nasconde.',

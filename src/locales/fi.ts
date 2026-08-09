@@ -391,6 +391,83 @@ const fi: Catalog = {
 			'Poista ”Render Scene Using 3 Projections” käytöstä iRacingissa (Display > Monitor -välilehti), jotta kuvakaappauksiin ei tule pystyraitoja',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafiikkaprofiilit',
+		description:
+			'Tallenna iRacingin grafiikka-asetuksia ja vaihda niiden välillä — kolmen näytön kokoonpano ajamiseen ja yhden näytön kokoonpano kuvakaappauksiin.',
+		iracingRunning:
+			'Sulje iRacing ennen vaihtoa. Se kirjoittaa grafiikka-asetuksensa takaisin sulkeutuessaan, mikä kumoaisi muutoksen.',
+		activeHeading: 'Nykyinen kokoonpano',
+		active: {
+			clean: 'Vastaa profiiliasi {name}.',
+			modified: {
+				one: 'Perustuu profiiliin {name}, sen jälkeen {count} asetus on muuttunut.',
+				other: 'Perustuu profiiliin {name}, sen jälkeen {count} asetusta on muuttunut.',
+			},
+			modifiedUnknownCount:
+				'Perustuu profiiliin {name}, sitä on muutettu sen jälkeen.',
+			unknown: 'Ei vastaa mitään tallennettua profiilia.',
+			missing: 'iRacingin grafiikka-asetuksia ei löytynyt.',
+		},
+		badge: {
+			active: 'Aktiivinen',
+			modified: 'Muokattu',
+		},
+		empty: {
+			title: 'Profiileja ei ole vielä tallennettu.',
+			body: 'Tallenna nykyinen iRacing-kokoonpanosi profiiliksi tai tuo olemassa oleva .ini-tiedosto.',
+		},
+		invalidProfile: 'Ei grafiikka-asetustiedosto',
+		warnings: {
+			autoCfgIncomplete: 'iRacing nollaa tämän',
+		},
+		actions: {
+			apply: 'Ota käyttöön',
+			overwrite: 'Päivitä nykyisestä',
+			rename: 'Nimeä uudelleen',
+			export: 'Vie',
+			delete: 'Poista',
+			save: 'Tallenna',
+			cancel: 'Peruuta',
+			saveCurrent: 'Tallenna nykyinen nimellä…',
+			import: 'Tuo…',
+			openFolder: 'Avaa kansio',
+		},
+		prompt: {
+			namePlaceholder: 'Profiilin nimi',
+			deleteConfirm: 'Poistetaanko {name}?',
+		},
+		feedback: {
+			applied:
+				'{name} otettiin käyttöön. Käynnistä iRacing, jotta se tulee voimaan.',
+			saved: 'Tallennettu nimellä {name}.',
+			overwritten: '{name} päivitettiin nykyisestä kokoonpanosta.',
+			renamed: 'Uusi nimi: {name}.',
+			deleted: '{name} poistettiin.',
+			imported: 'Tuotu nimellä {name}.',
+			exported: '{name} vietiin.',
+		},
+		errors: {
+			empty: 'Anna profiilille nimi.',
+			illegalCharacters:
+				'Profiilin nimi ei saa sisältää näitä merkkejä: < > : " / \\ | ? *',
+			reservedName: 'Nimi on Windowsin varaama. Valitse toinen.',
+			trailingDotOrSpace:
+				'Profiilin nimi ei saa päättyä pisteeseen tai välilyöntiin.',
+			tooLong: 'Nimi on liian pitkä.',
+			duplicate: 'Samanniminen profiili on jo olemassa.',
+			profileNotFound: 'Profiilia ei enää löytynyt.',
+			profileExists: 'Samanniminen profiili on jo olemassa.',
+			noActiveConfig:
+				'Tallennettavaa iRacingin grafiikka-asetustiedostoa ei löytynyt.',
+			invalidIni:
+				'Tiedosto ei ole iRacingin grafiikka-asetustiedosto, joten sitä ei käytetty.',
+			iracingRunning:
+				'Sulje ensin iRacing — se ylikirjoittaisi muutoksen sulkeutuessaan.',
+			ioError: 'Tiedostoa ei voitu kirjoittaa. Mitään ei muutettu.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'Hiiren osoitin voi näkyä kaappauksissa tässä Windowsin versiossa. Windows 10 versio 2004 lisäsi asetuksen, joka piilottaa sen.',
