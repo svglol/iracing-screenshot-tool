@@ -4,38 +4,20 @@ const fs: typeof import('fs') = require('fs');
 
 import { t } from './i18n';
 import { getRendererIniPath } from './iracing-paths';
+import { parseIni } from './iracing-profiles';
 
+/**
+ * One section of an ini as key/value pairs, or `{}` when it is absent.
+ *
+ * Delegates to the shared parser in iracing-profiles so the rules for stripping
+ * iRacing's inline `; explanation` trailers live in exactly one place — the
+ * profile hashing depends on parsing values identically to this check.
+ */
 export function parseIniSection(
 	content: string,
 	section: string
 ): Record<string, string> {
-	const sectionPattern = new RegExp(`^\\[${section}\\]\\s*$`, 'm');
-	const match = content.search(sectionPattern);
-	if (match === -1) {
-		return {};
-	}
-
-	const afterHeader = content.slice(match);
-	const lines = afterHeader.split(/\r?\n/).slice(1);
-	const result: Record<string, string> = {};
-
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (trimmed.startsWith('[')) {
-			break;
-		}
-		const eqIndex = trimmed.indexOf('=');
-		if (eqIndex > 0) {
-			const rawValue = trimmed.slice(eqIndex + 1);
-			const commentIndex = rawValue.indexOf(';');
-			const value = (
-				commentIndex >= 0 ? rawValue.slice(0, commentIndex) : rawValue
-			).trim();
-			result[trimmed.slice(0, eqIndex).trim()] = value;
-		}
-	}
-
-	return result;
+	return parseIni(content)[section] || {};
 }
 
 /**
