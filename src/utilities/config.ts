@@ -130,6 +130,16 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	// --- iRacing configuration folder ------------------------------------
+	// Override for the folder holding rendererDX11Monitor.ini. Empty means
+	// "resolve it from the Windows Documents known folder", which is right for
+	// essentially everyone including OneDrive-redirected setups. This exists for
+	// the installs we cannot discover — Documents moved to another drive, or a
+	// relocated iRacing directory. Names the iRacing folder ITSELF, not its parent.
+	iracingFolder: {
+		type: 'string',
+		default: '',
+	},
 	// --- Long exposure (docs/design/long-exposure.md) ---------------------
 	// The last parameter set the user shot with, so re-opening the panel resumes
 	// where they left off. The anchor is deliberately NOT persisted: it belongs to

@@ -1,19 +1,9 @@
 // Use CJS require for fs so tests can spy on fs methods via `vi.spyOn(fs, ...)`;
 // ESM namespace imports are sealed and vi.spyOn cannot redefine their properties.
-// path/os use CJS require because Vite rewrites `import ... from 'path'` to a
-// browser shim that lacks `join`/`homedir` (same convention as utilities/config.ts).
 const fs: typeof import('fs') = require('fs');
-const path: typeof import('path') = require('path');
-const os: typeof import('os') = require('os');
 
 import { t } from './i18n';
-
-const IRACING_INI_PATH = path.join(
-	os.homedir(),
-	'Documents',
-	'iRacing',
-	'rendererDX11Monitor.ini'
-);
+import { getRendererIniPath } from './iracing-paths';
 
 export function parseIniSection(
 	content: string,
@@ -48,15 +38,21 @@ export function parseIniSection(
 	return result;
 }
 
-export function checkIracingConfig(): string[] {
+/**
+ * `folderOverride` is the stored `iracingFolder` setting, passed in rather than
+ * read here so this module stays importable without an Electron host (see the
+ * note in iracing-paths). Empty means "auto-resolve", which is the normal case.
+ */
+export function checkIracingConfig(folderOverride = ''): string[] {
 	const warnings: string[] = [];
+	const iniPath = getRendererIniPath(folderOverride);
 
 	try {
-		if (!fs.existsSync(IRACING_INI_PATH)) {
+		if (!fs.existsSync(iniPath)) {
 			return warnings;
 		}
 
-		const content = fs.readFileSync(IRACING_INI_PATH, 'utf8');
+		const content = fs.readFileSync(iniPath, 'utf8');
 		const monitorSetup = parseIniSection(content, 'MonitorSetup');
 
 		if (

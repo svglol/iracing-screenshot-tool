@@ -229,7 +229,10 @@ export default {
 			// some unrelated change happened to re-evaluate.
 			outputFormat: config.get('outputFormat'),
 			cropTopLeft: config.get('cropTopLeft'),
-			configWarnings: checkIracingConfig(),
+			// The folder override is read HERE and passed down: iracing-config-checks
+			// deliberately does not import config, so it stays unit-testable outside
+			// an Electron host.
+			configWarnings: checkIracingConfig(config.get('iracingFolder')),
 			// Live GPU VRAM from main (null until first poll / unavailable).
 			vramInfo: null,
 			vramTimer: null,
