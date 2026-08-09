@@ -271,6 +271,7 @@ import {
 	SHUTTER_LADDER,
 } from '../../utilities/long-exposure/exposure-math';
 import { plannedSinkCount } from '../../utilities/long-exposure/accumulator-sinks';
+import { dedupeNotices } from '../../utilities/long-exposure/notices';
 import { useOruga } from '@oruga-ui/oruga-next';
 import NoticeCard, { type Notice } from './NoticeCard.vue';
 const { ipcRenderer } = require('electron');
@@ -348,6 +349,10 @@ export default defineComponent({
 				passes?: number;
 			} | null,
 			lastResult: null as CaptureResult | null,
+			// The recipe that produced lastResult, serialised. The outcome's
+			// warnings are validatePlan's verdict on THOSE settings, so this is what
+			// tells us whether they still describe the shot the user is set up for.
+			lastResultRecipe: null as string | null,
 
 			pollTimer: null as ReturnType<typeof setInterval> | null,
 			previewToken: 0,
@@ -511,7 +516,15 @@ export default defineComponent({
 					text: this.lastResult.message || this.$t('longExposure.failed'),
 				});
 			}
-			if (this.lastResult) {
+			// Only while they still describe the settings on screen. These are
+			// validatePlan's verdict on the recipe AS CAPTURED, and lastResult is not
+			// cleared when a setting changes — so without this guard, capturing at 4
+			// passes and then switching to 1 leaves the outcome's "…about one frame
+			// per pass…" sitting directly above the live "…only one frame will land
+			// inside it…". Two sentences opening with the same clause, reading as a
+			// duplicate rather than as history. The failure message below is
+			// deliberately NOT gated: a capture that failed still needs explaining.
+			if (this.lastResult && this.lastResultIsCurrent) {
 				this.lastResult.warnings.forEach((warning) => {
 					notices.push({ level: 'warning', text: warning });
 				});
@@ -579,7 +592,11 @@ export default defineComponent({
 				});
 			}
 
-			return notices;
+			// The pre-flight above and the last capture's outcome both carry
+			// validatePlan's warnings, and lastResult is only cleared when the NEXT
+			// capture starts — so after any completed shot every plan warning was
+			// rendered twice. See utilities/long-exposure/notices.
+			return dedupeNotices(notices);
 		},
 		advancedSummary(): string {
 			if (this.advancedOpen) {
@@ -627,6 +644,15 @@ export default defineComponent({
 		// Everything the main process needs to execute the shot. Building this in
 		// one place means the preview and the capture can never disagree about what
 		// the current settings mean.
+		// Whether the last capture's outcome still describes the current settings.
+		// Compared on the recipe, which deliberately carries no anchor frame — so
+		// scrubbing the replay does not retire a still-valid outcome.
+		lastResultIsCurrent(): boolean {
+			return (
+				this.lastResultRecipe !== null &&
+				this.lastResultRecipe === JSON.stringify(this.recipe)
+			);
+		},
 		recipe(): Record<string, unknown> {
 			return {
 				// anchorFrame and sessionNum are deliberately absent, so main reads
@@ -816,6 +842,9 @@ export default defineComponent({
 			this.capturing = true;
 			this.progress = { phase: 'seeking' };
 			this.lastResult = null;
+			// Snapshot the settings this shot is being taken with, so its warnings
+			// can be retired the moment they stop describing them.
+			this.lastResultRecipe = JSON.stringify(this.recipe);
 
 			try {
 				const result = await ipcRenderer.invoke(
