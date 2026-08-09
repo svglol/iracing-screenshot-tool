@@ -197,8 +197,12 @@
 </template>
 
 <script lang="ts">
-import config from '../../utilities/config';
-
+// Deliberately no utilities/config import. Everything this component needs about
+// paths comes from the snapshot, which main resolves properly — reading the raw
+// `iracingFolder` setting here would give the empty string on nearly every
+// machine, since it is only ever set as an escape hatch. Keeping config out also
+// keeps the module mountable in a test (it constructs an electron-store at import
+// time, which throws outside Electron).
 const { ipcRenderer } = require('electron');
 
 export default {
@@ -211,6 +215,9 @@ export default {
 			activeState: 'unknown',
 			activeDifferences: null,
 			activeExists: false,
+			// The live config's full path, as main resolved it. Used to open the
+			// import dialog where the user's hand-managed variants already live.
+			activeIniPath: '',
 			iracingRunning: false,
 			busy: null,
 			// Separate from `busy`, which is keyed by profile name: the save bar has
@@ -279,6 +286,7 @@ export default {
 				this.activeState = snapshot.active.state;
 				this.activeDifferences = snapshot.activeDifferences;
 				this.activeExists = snapshot.activeExists;
+				this.activeIniPath = snapshot.activeIniPath;
 				this.iracingRunning = snapshot.iracingRunning;
 			} finally {
 				this.loading = false;
@@ -424,9 +432,9 @@ export default {
 			this.clearFeedback();
 			const result = await ipcRenderer.invoke('dialog:showOpen', {
 				title: this.$t('graphicsProfiles.actions.import'),
-				// Their existing hand-managed variants live beside the active config,
-				// so open there.
-				defaultPath: config.get('iracingFolder') || undefined,
+				// Open where the live config lives — that is exactly where the
+				// hand-managed "rendererDX11Monitor - Racing.ini" variants sit.
+				defaultPath: this.activeIniPath || undefined,
 				filters: [{ name: 'iRacing config', extensions: ['ini'] }],
 				properties: ['openFile'],
 			});
