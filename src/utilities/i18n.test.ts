@@ -205,7 +205,46 @@ function placeholders(text: string): Set<string> {
 	);
 }
 
+// Paths of every English message that varies by count.
+function pluralPaths(node: unknown, prefix: string[] = []): string[] {
+	if (!node || typeof node !== 'object') {
+		return [];
+	}
+	if (isPluralNode(node)) {
+		return [prefix.join('.')];
+	}
+	return Object.entries(node as Record<string, unknown>).flatMap(
+		([key, value]) => pluralPaths(value, [...prefix, key])
+	);
+}
+
+// The plural categories a language actually reaches for the WHOLE-NUMBER counts
+// these messages carry — sample counts, changed settings, passes. Deliberately
+// not every category the language defines: Czech's `many` exists only for
+// fractions, so demanding it would fail a perfectly correct translation.
+function integerPluralCategories(locale: string): string[] {
+	const rules = new Intl.PluralRules(locale);
+	const categories = new Set<string>();
+	for (let count = 0; count <= 200; count++) {
+		categories.add(rules.select(count));
+	}
+	return [...categories].sort();
+}
+
+function messageAt(root: unknown, path: string): unknown {
+	return path
+		.split('.')
+		.reduce<unknown>(
+			(node, key) =>
+				node && typeof node === 'object'
+					? (node as Record<string, unknown>)[key]
+					: undefined,
+			root
+		);
+}
+
 const englishPaths = messagePaths(en).sort();
+const englishPluralPaths = pluralPaths(en);
 const englishLeaves = new Map(
 	flatten(en).map((leaf) => [leaf.path, leaf.value])
 );
@@ -269,6 +308,52 @@ describe('catalogue integrity', () => {
 						allowed.has(name),
 						`${code}: ${leaf.path} uses {${name}}, which English does not define`
 					).toBe(true);
+				}
+			}
+		});
+
+		// The test above checks a translation ADDS no placeholder English lacks.
+		// This is the other direction, and the one that actually loses meaning: a
+		// translation that DROPS {name} renders a sentence with a hole in it, and
+		// neither the catalogue type nor the key-parity check can see that. A
+		// profile-applied toast reading "applied. Start iRacing…" would ship.
+		it(`${code} keeps every placeholder English defines`, () => {
+			for (const leaf of flatten(catalog as MessageCatalog)) {
+				const source =
+					englishLeaves.get(leaf.path) ??
+					englishLeaves.get(
+						leaf.path.split('.').slice(0, -1).join('.') + '.other'
+					);
+				if (source === undefined) {
+					continue;
+				}
+				const present = placeholders(leaf.value);
+				for (const name of placeholders(source)) {
+					expect(
+						present.has(name),
+						`${code}: ${leaf.path} drops {${name}}`
+					).toBe(true);
+				}
+			}
+		});
+
+		// `other` alone is not enough for every language. Czech needs a distinct
+		// form for 2-4 and Polish for 5+; falling back to `other` there yields a
+		// grammatically WRONG sentence rather than an obviously missing one, which
+		// is the harder kind of bug to notice.
+		it(`${code} supplies every plural form its own grammar needs`, () => {
+			for (const path of englishPluralPaths) {
+				const node = messageAt(catalog, path) as
+					| Record<string, unknown>
+					| undefined;
+				if (!node) {
+					continue;
+				}
+				for (const category of integerPluralCategories(code)) {
+					expect(
+						typeof node[category],
+						`${code}: ${path} has no '${category}' form, which this language needs for whole-number counts`
+					).toBe('string');
 				}
 			}
 		});
