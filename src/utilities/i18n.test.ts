@@ -82,7 +82,7 @@ describe('detectLocale', () => {
 	});
 
 	it('falls back to English when nothing matches', () => {
-		expect(detectLocale(['th-TH', 'el-GR'])).toBe('en');
+		expect(detectLocale(['th-TH', 'vi-VN'])).toBe('en');
 		expect(detectLocale([])).toBe('en');
 	});
 

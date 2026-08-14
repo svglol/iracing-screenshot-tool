@@ -34,9 +34,9 @@ export interface LocaleDescriptor {
 
 // Ordered by endonym, because that is the order the picker renders and a user
 // scanning it is reading the endonyms, not the codes. Latin scripts sort
-// alphabetically; the other scripts follow as a block (Cyrillic, Arabic, then
-// CJK), so a reader hunting for their own script finds it grouped rather than
-// interleaved by a collation they do not use.
+// alphabetically; the other scripts follow as a block (Cyrillic, Greek, Arabic,
+// then CJK), so a reader hunting for their own script finds it grouped rather
+// than interleaved by a collation they do not use.
 export const SUPPORTED_LOCALES: readonly LocaleDescriptor[] = [
 	{ code: 'cs', name: 'Čeština' },
 	{ code: 'da', name: 'Dansk' },
@@ -51,7 +51,9 @@ export const SUPPORTED_LOCALES: readonly LocaleDescriptor[] = [
 	{ code: 'pt', name: 'Português' },
 	{ code: 'fi', name: 'Suomi' },
 	{ code: 'sv', name: 'Svenska' },
+	{ code: 'tr', name: 'Türkçe' },
 	{ code: 'ru', name: 'Русский' },
+	{ code: 'el', name: 'Ελληνικά' },
 	{ code: 'ar', name: 'العربية' },
 	{ code: 'ja', name: '日本語' },
 	{ code: 'zh-tw', name: '繁體中文' },

@@ -1,7 +1,7 @@
 // The catalogue registry.
 //
 // Every locale is imported eagerly rather than fetched on demand. They are text,
-// they total well under a megabyte across all eighteen, and both processes need
+// they total well under a megabyte across all twenty, and both processes need
 // them synchronously — main phrases a capture refusal inside an IPC handler that
 // has nowhere to await a dynamic import.
 
@@ -11,6 +11,7 @@ import ar from './ar';
 import cs from './cs';
 import da from './da';
 import de from './de';
+import el from './el';
 import es from './es';
 import fi from './fi';
 import fr from './fr';
@@ -23,6 +24,7 @@ import pl from './pl';
 import pt from './pt';
 import ru from './ru';
 import sv from './sv';
+import tr from './tr';
 import zhTW from './zh-tw';
 
 // The shape every translation must have, derived from the English catalogue so
@@ -56,6 +58,7 @@ export const CATALOGS: Record<string, MessageCatalog> = {
 	cs: asCatalog(cs),
 	da: asCatalog(da),
 	de: asCatalog(de),
+	el: asCatalog(el),
 	es: asCatalog(es),
 	fi: asCatalog(fi),
 	fr: asCatalog(fr),
@@ -68,6 +71,7 @@ export const CATALOGS: Record<string, MessageCatalog> = {
 	pt: asCatalog(pt),
 	ru: asCatalog(ru),
 	sv: asCatalog(sv),
+	tr: asCatalog(tr),
 	// The one registry key with a region: the catalogue is Traditional-script
 	// Chinese specifically, and resolveLocale maps zh-Hant/zh-HK/zh-MO onto it.
 	'zh-tw': asCatalog(zhTW),
