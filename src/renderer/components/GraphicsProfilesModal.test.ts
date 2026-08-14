@@ -345,6 +345,86 @@ describe('saving and deleting', () => {
 		expect(flagged.text()).toContain('Screenshots');
 	});
 
+	test('clicking the name turns it into an editor seeded with the name', async () => {
+		// There is no Rename button; the name itself is the control.
+		const wrapper = await mountModal();
+		await wrapper
+			.find('[data-profile-name="Racing"] .profiles-row__name')
+			.trigger('click');
+
+		const editor = wrapper.find(
+			'[data-profile-name="Racing"] .profiles-row__name-edit'
+		);
+		expect(editor.exists()).toBe(true);
+		expect(wrapper.vm.nameInput).toBe('Racing');
+	});
+
+	test('Enter commits the rename', async () => {
+		const wrapper = await mountModal();
+		invokeResults['profiles:rename'] = { ok: true, name: 'Endurance' };
+
+		await wrapper
+			.find('[data-profile-name="Racing"] .profiles-row__name')
+			.trigger('click');
+		wrapper.vm.nameInput = 'Endurance';
+		await wrapper
+			.find('.profiles-row__name-edit')
+			.trigger('keyup', { key: 'Enter' });
+		await flushPromises();
+
+		const rename = invoked.find((call) => call.channel === 'profiles:rename');
+		expect(rename?.args).toEqual([{ from: 'Racing', to: 'Endurance' }]);
+	});
+
+	test('Escape abandons the rename without a call', async () => {
+		const wrapper = await mountModal();
+		await wrapper
+			.find('[data-profile-name="Racing"] .profiles-row__name')
+			.trigger('click');
+		wrapper.vm.nameInput = 'Endur';
+		await wrapper
+			.find('.profiles-row__name-edit')
+			.trigger('keyup', { key: 'Escape' });
+		await flushPromises();
+
+		expect(wrapper.find('.profiles-row__name-edit').exists()).toBe(false);
+		expect(invoked.some((call) => call.channel === 'profiles:rename')).toBe(
+			false
+		);
+	});
+
+	test('blur commits a real change', async () => {
+		const wrapper = await mountModal();
+		invokeResults['profiles:rename'] = { ok: true, name: 'Endurance' };
+
+		await wrapper
+			.find('[data-profile-name="Racing"] .profiles-row__name')
+			.trigger('click');
+		wrapper.vm.nameInput = 'Endurance';
+		await wrapper.find('.profiles-row__name-edit').trigger('blur');
+		await flushPromises();
+
+		const rename = invoked.find((call) => call.channel === 'profiles:rename');
+		expect(rename?.args).toEqual([{ from: 'Racing', to: 'Endurance' }]);
+	});
+
+	test('blur with the name unchanged is a silent no-op', async () => {
+		// A click into the name followed by a click elsewhere must not rename,
+		// toast, or error.
+		const wrapper = await mountModal();
+		await wrapper
+			.find('[data-profile-name="Racing"] .profiles-row__name')
+			.trigger('click');
+		await wrapper.find('.profiles-row__name-edit').trigger('blur');
+		await flushPromises();
+
+		expect(wrapper.find('.profiles-row__name-edit').exists()).toBe(false);
+		expect(invoked.some((call) => call.channel === 'profiles:rename')).toBe(
+			false
+		);
+		expect(wrapper.vm.feedback).toBe('');
+	});
+
 	test('asks before deleting', async () => {
 		const wrapper = await mountModal();
 		await wrapper.vm.startDelete('Racing');

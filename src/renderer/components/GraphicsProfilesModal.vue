@@ -53,7 +53,35 @@
 					:data-profile-name="profile.name"
 				>
 					<div class="profiles-row__main">
-						<span class="profiles-row__name">{{ profile.name }}</span>
+						<!-- The name IS the rename control: click (or Enter) turns it
+						     into an input in place. Enter commits, Escape cancels, and
+						     blur commits a real change but silently drops a
+						     click-in-click-out. -->
+						<input
+							v-if="
+								pending.mode === 'rename' &&
+								pending.target === profile.name
+							"
+							v-model="nameInput"
+							class="profiles-row__name-edit"
+							:placeholder="
+								$t('graphicsProfiles.prompt.namePlaceholder')
+							"
+							@keyup.enter="confirmRename(profile.name)"
+							@keyup.esc="cancelPending"
+							@blur="commitRenameOnBlur(profile.name)"
+						/>
+						<span
+							v-else
+							class="profiles-row__name"
+							role="button"
+							tabindex="0"
+							:title="$t('graphicsProfiles.actions.rename')"
+							:aria-label="$t('graphicsProfiles.actions.rename')"
+							@click="startRename(profile.name)"
+							@keyup.enter="startRename(profile.name)"
+							>{{ profile.name }}</span
+						>
 						<span
 							v-if="profile.name === activeName"
 							class="profiles-row__badge"
@@ -100,34 +128,6 @@
 						</o-button>
 					</div>
 
-					<div
-						v-else-if="
-							pending.mode === 'rename' &&
-							pending.target === profile.name
-						"
-						class="profiles-row__actions"
-					>
-						<o-input
-							v-model="nameInput"
-							class="profiles-name-input"
-							size="small"
-							:placeholder="
-								$t('graphicsProfiles.prompt.namePlaceholder')
-							"
-							@keyup.enter="confirmRename(profile.name)"
-						/>
-						<o-button class="button is-small" @click="cancelPending">
-							{{ $t('graphicsProfiles.actions.cancel') }}
-						</o-button>
-						<o-button
-							class="button is-small is-primary"
-							:loading="busy === profile.name"
-							@click="confirmRename(profile.name)"
-						>
-							{{ $t('graphicsProfiles.actions.save') }}
-						</o-button>
-					</div>
-
 					<div v-else class="profiles-row__actions">
 						<o-button
 							class="button is-small is-primary"
@@ -143,12 +143,6 @@
 							@click="overwrite(profile.name)"
 						>
 							{{ $t('graphicsProfiles.actions.overwrite') }}
-						</o-button>
-						<o-button
-							class="button is-small"
-							@click="startRename(profile.name)"
-						>
-							{{ $t('graphicsProfiles.actions.rename') }}
 						</o-button>
 						<o-button
 							class="button is-small"
@@ -318,6 +312,37 @@ export default {
 			this.clearFeedback();
 			this.nameInput = name;
 			this.pending = { mode: 'rename', target: name };
+			// The input renders on the next tick; put the caret in it with the text
+			// selected, so typing replaces the old name outright.
+			this.$nextTick(() => {
+				const input = this.$el.querySelector('.profiles-row__name-edit');
+				if (input) {
+					input.focus();
+					if (typeof input.select === 'function') {
+						input.select();
+					}
+				}
+			});
+		},
+		// Blur commits like Enter does — an inline editor that silently discarded
+		// the edit when focus wandered would lose work. Three exceptions: the
+		// rename already resolved (Enter or Escape got there first), a commit for
+		// this profile is in flight, or the name is unchanged or empty — a
+		// click-in-click-out, which should not toast "Renamed" or raise an error.
+		commitRenameOnBlur(from) {
+			if (
+				this.pending.mode !== 'rename' ||
+				this.pending.target !== from ||
+				this.busy === from
+			) {
+				return;
+			}
+			const to = this.nameInput.trim();
+			if (!to || to === from) {
+				this.cancelPending();
+				return;
+			}
+			this.confirmRename(from);
 		},
 		startDelete(name) {
 			this.clearFeedback();
@@ -684,11 +709,46 @@ export default {
 	min-width: 0;
 }
 
+/* The name IS the rename control — there is no button. The hover/focus
+   treatment below is the entire affordance, so it has to read as "editable":
+   text cursor, a faint field background, and an underline where the caret
+   would go. */
 .profiles-row__name {
 	font-weight: 600;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	cursor: text;
+	border-radius: 3px;
+	padding: 0.1rem 0.3rem;
+	margin: -0.1rem -0.3rem;
+}
+
+.profiles-row__name:hover,
+.profiles-row__name:focus-visible {
+	background: rgba(255, 255, 255, 0.08);
+	box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.35);
+	outline: none;
+}
+
+/* The in-place editor keeps the name's typography so the row does not jump
+   when the swap happens. */
+.profiles-row__name-edit {
+	font-family: inherit;
+	font-size: inherit;
+	font-weight: 600;
+	color: inherit;
+	background: rgba(255, 255, 255, 0.08);
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 3px;
+	padding: 0.1rem 0.3rem;
+	margin: -0.1rem -0.3rem;
+	min-width: 11rem;
+}
+
+.profiles-row__name-edit:focus {
+	outline: none;
+	border-color: rgba(255, 255, 255, 0.45);
 }
 
 .profiles-row__badge {
