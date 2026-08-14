@@ -452,6 +452,8 @@ const da: Catalog = {
 			duplicate: 'Der findes allerede en profil med det navn.',
 			profileNotFound: 'Den profil kunne ikke længere findes.',
 			profileExists: 'Der findes allerede en profil med det navn.',
+			duplicateContent:
+				'Der findes allerede en profil med præcis disse indstillinger: {name}.',
 			noActiveConfig:
 				'Der blev ikke fundet nogen iRacing-grafikkonfiguration at gemme.',
 			invalidIni:

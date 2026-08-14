@@ -322,13 +322,18 @@ export default {
 				this.feedbackClass = 'is-success';
 				return true;
 			}
-			this.feedback = this.errorText(result && result.error);
+			// duplicateContent arrives with the name of the profile that already
+			// holds these settings; the message points the user at it.
+			this.feedback = this.errorText(
+				result && result.error,
+				result && result.duplicateOf ? { name: result.duplicateOf } : {}
+			);
 			this.feedbackClass = 'is-danger';
 			return false;
 		},
 		// Store and name errors arrive as codes precisely so they can be phrased in
 		// the user's language here.
-		errorText(code) {
+		errorText(code, params = {}) {
 			const known = [
 				'empty',
 				'illegalCharacters',
@@ -338,13 +343,14 @@ export default {
 				'duplicate',
 				'profileNotFound',
 				'profileExists',
+				'duplicateContent',
 				'noActiveConfig',
 				'invalidIni',
 				'iracingRunning',
 				'ioError',
 			];
 			return known.includes(code)
-				? this.$t('graphicsProfiles.errors.' + code)
+				? this.$t('graphicsProfiles.errors.' + code, params)
 				: this.$t('graphicsProfiles.errors.ioError');
 		},
 		async apply(name) {

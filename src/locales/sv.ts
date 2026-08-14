@@ -452,6 +452,8 @@ const sv: Catalog = {
 			duplicate: 'Det finns redan en profil med det namnet.',
 			profileNotFound: 'Den profilen gick inte längre att hitta.',
 			profileExists: 'Det finns redan en profil med det namnet.',
+			duplicateContent:
+				'Det finns redan en profil med exakt dessa inställningar: {name}.',
 			noActiveConfig:
 				'Ingen iRacing-grafikkonfiguration hittades att spara.',
 			invalidIni:

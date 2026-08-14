@@ -318,6 +318,25 @@ describe('saving and deleting', () => {
 		);
 	});
 
+	test('a duplicate CONFIGURATION names the profile that already holds it', async () => {
+		// Telling the user "duplicate" without saying which profile would send
+		// them diffing ini files by hand.
+		const wrapper = await mountModal();
+		invokeResults['profiles:save'] = {
+			ok: false,
+			error: 'duplicateContent',
+			duplicateOf: 'Screenshots',
+		};
+		wrapper.vm.nameInput = 'Racing copy';
+
+		await wrapper.vm.confirmSave();
+		await flushPromises();
+
+		expect(wrapper.text()).toContain(
+			'A profile with these exact settings already exists: Screenshots.'
+		);
+	});
+
 	test('asks before deleting', async () => {
 		const wrapper = await mountModal();
 		await wrapper.vm.startDelete('Racing');

@@ -462,6 +462,8 @@ const cs: Catalog = {
 			duplicate: 'Profil s tímto názvem již existuje.',
 			profileNotFound: 'Tento profil se již nepodařilo najít.',
 			profileExists: 'Profil s tímto názvem již existuje.',
+			duplicateContent:
+				'Profil s přesně tímto nastavením již existuje: {name}.',
 			noActiveConfig:
 				'Nebyla nalezena žádná konfigurace grafiky iRacingu k uložení.',
 			invalidIni:

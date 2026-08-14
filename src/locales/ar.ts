@@ -487,6 +487,8 @@ const ar: Catalog = {
 			duplicate: 'يوجد بالفعل ملف تعريف بهذا الاسم.',
 			profileNotFound: 'لم يعد من الممكن العثور على ملف التعريف هذا.',
 			profileExists: 'يوجد بالفعل ملف تعريف بهذا الاسم.',
+			duplicateContent:
+				'يوجد بالفعل ملف تعريف بهذه الإعدادات نفسها: {name}.',
 			noActiveConfig: 'لم يُعثر على إعدادات رسومات iRacing لحفظها.',
 			invalidIni: 'هذا الملف ليس إعدادات رسومات iRacing، لذا لم يُستخدم.',
 			iracingRunning:

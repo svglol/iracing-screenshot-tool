@@ -37,6 +37,18 @@ const TRIPLE_INI = VALID_INI.replace(
 	'fullScreenWidth=2560',
 	'fullScreenWidth=7680'
 );
+// VALID_INI with sections reordered, comments stripped and LF endings —
+// different bytes, identical SETTINGS, so the same fingerprint. This is what a
+// re-exported or hand-edited copy of a stored profile looks like.
+const VALID_INI_RESHUFFLED = [
+	'[Display]',
+	'fullScreenWidth=2560',
+	'[Graphics Options]',
+	'SSAO=1',
+	'[AutoCfg]',
+	'AutoCfgCompleted=1',
+	'',
+].join('\n');
 // A real file that lives in the same folder with the same extension, and would
 // wreck the graphics config if applied.
 const APP_INI = '[Replay]\nlastReplay=1\n[Misc]\nfoo=bar\n';
@@ -303,6 +315,46 @@ describe('saveActiveAs', () => {
 		).toBe(TRIPLE_INI);
 	});
 
+	test('refuses to store the same configuration under a second name', () => {
+		// The stored copy differs in bytes (comments, ordering, line endings) but
+		// not in settings — the fingerprint sees through the cosmetics.
+		writeProfile('Racing', VALID_INI_RESHUFFLED);
+		fs.writeFileSync(activeIniPath(), VALID_INI);
+		expect(saveActiveAs('Racing copy', ctx())).toEqual({
+			ok: false,
+			error: 'duplicateContent',
+			duplicateOf: 'Racing',
+		});
+		expect(fs.existsSync(path.join(profilesDir, 'Racing copy.ini'))).toBe(
+			false
+		);
+	});
+
+	test('overwrite may re-save a profile over its own identical content', () => {
+		writeProfile('Racing', VALID_INI);
+		fs.writeFileSync(activeIniPath(), VALID_INI);
+		expect(saveActiveAs('Racing', ctx(), { overwrite: true })).toEqual({
+			ok: true,
+			name: 'Racing',
+		});
+	});
+
+	test('overwrite refuses content that duplicates a DIFFERENT profile', () => {
+		// Updating Racing from a live config that IS Screenshots would leave two
+		// names for one configuration — the exact state the invariant forbids.
+		writeProfile('Racing', TRIPLE_INI);
+		writeProfile('Screenshots', VALID_INI);
+		fs.writeFileSync(activeIniPath(), VALID_INI);
+		expect(saveActiveAs('Racing', ctx(), { overwrite: true })).toEqual({
+			ok: false,
+			error: 'duplicateContent',
+			duplicateOf: 'Screenshots',
+		});
+		expect(
+			fs.readFileSync(path.join(profilesDir, 'Racing.ini'), 'utf8')
+		).toBe(TRIPLE_INI);
+	});
+
 	test('overwrite updates the profile and backs up what it replaced', () => {
 		// The answer to a drifted config: make the profile catch up.
 		writeProfile('Racing', TRIPLE_INI);
@@ -373,6 +425,18 @@ describe('importProfile', () => {
 			ok: false,
 			error: 'duplicate',
 		});
+	});
+
+	test('refuses an import whose settings match a stored profile', () => {
+		writeProfile('Racing', VALID_INI);
+		const source = path.join(root, 'reexport.ini');
+		fs.writeFileSync(source, VALID_INI_RESHUFFLED);
+		expect(importProfile(source, 'Racing 2')).toEqual({
+			ok: false,
+			error: 'duplicateContent',
+			duplicateOf: 'Racing',
+		});
+		expect(listProfiles().map((p) => p.name)).toEqual(['Racing']);
 	});
 
 	test('reports a missing source file', () => {

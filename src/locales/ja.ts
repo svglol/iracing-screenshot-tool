@@ -467,6 +467,8 @@ const ja: Catalog = {
 			duplicate: 'その名前のプロファイルはすでに存在します。',
 			profileNotFound: 'そのプロファイルは見つからなくなりました。',
 			profileExists: 'その名前のプロファイルはすでに存在します。',
+			duplicateContent:
+				'まったく同じ設定のプロファイル（{name}）がすでに存在します。',
 			noActiveConfig:
 				'保存できる iRacing のグラフィック設定が見つかりませんでした。',
 			invalidIni:

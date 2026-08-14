@@ -473,6 +473,8 @@ const ru: Catalog = {
 			duplicate: 'Профиль с таким именем уже существует.',
 			profileNotFound: 'Этот профиль больше не удалось найти.',
 			profileExists: 'Профиль с таким именем уже существует.',
+			duplicateContent:
+				'Профиль с точно такими же настройками уже существует: {name}.',
 			noActiveConfig:
 				'Не найдена графическая конфигурация iRacing для сохранения.',
 			invalidIni:

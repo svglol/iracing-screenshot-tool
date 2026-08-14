@@ -281,6 +281,36 @@ export function checkProfileName(
 	return { ok: true, name };
 }
 
+/**
+ * The stored profile whose settings hash equals `hash`, or null.
+ *
+ * This is the guard behind the invariant that no two profiles may hold the
+ * same configuration under different names: save, overwrite and import all ask
+ * before writing. The hash is hashIni's — canonicalised settings, not file
+ * bytes — so a re-exported file with reshuffled comments still counts as the
+ * same configuration.
+ *
+ * `excludeName` is the profile being overwritten: updating a profile with the
+ * content it already holds is a no-op, not a duplicate. Compared
+ * case-insensitively like every other name comparison here, because profile
+ * names are Windows filenames.
+ */
+export function findDuplicateProfile(
+	hash: string,
+	profiles: ProfileFingerprint[],
+	excludeName = ''
+): string | null {
+	if (!hash) {
+		return null;
+	}
+	const excluded = String(excludeName ?? '').toLowerCase();
+	const match = profiles.find(
+		(profile) =>
+			profile.hash === hash && profile.name.toLowerCase() !== excluded
+	);
+	return match ? match.name : null;
+}
+
 /** Profile name -> the file it is stored in. */
 export function profileFileName(name: string): string {
 	return `${name}.ini`;

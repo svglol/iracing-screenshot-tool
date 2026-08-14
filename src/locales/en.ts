@@ -484,6 +484,8 @@ export default {
 			duplicate: 'A profile with that name already exists.',
 			profileNotFound: 'That profile could no longer be found.',
 			profileExists: 'A profile with that name already exists.',
+			duplicateContent:
+				'A profile with these exact settings already exists: {name}.',
 			noActiveConfig: 'No iRacing graphics configuration was found to save.',
 			invalidIni:
 				'That file is not an iRacing graphics configuration, so it was not used.',

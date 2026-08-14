@@ -5,6 +5,7 @@ import {
 	countIniDifferences,
 	validateRendererIni,
 	checkProfileName,
+	findDuplicateProfile,
 	profileFileName,
 	profileNameFromFile,
 	resolveActiveProfile,
@@ -313,6 +314,44 @@ describe('profileFileName / profileNameFromFile', () => {
 	test('ignores non-ini files', () => {
 		expect(profileNameFromFile('notes.txt')).toBeNull();
 		expect(profileNameFromFile('.ini')).toBeNull();
+	});
+});
+
+describe('findDuplicateProfile', () => {
+	const profiles = [
+		{ name: 'Racing', hash: 'hash-racing' },
+		{ name: 'Screenshots', hash: 'hash-screenshots' },
+	];
+
+	test('names the profile already holding the hash', () => {
+		expect(findDuplicateProfile('hash-screenshots', profiles)).toBe(
+			'Screenshots'
+		);
+	});
+
+	test('returns null for settings no profile holds', () => {
+		expect(findDuplicateProfile('hash-new', profiles)).toBeNull();
+	});
+
+	// Overwriting a profile with the content it already has is a no-op, not a
+	// duplicate — and profile names are Windows filenames, so the exemption has
+	// to be case-insensitive like every other name comparison.
+	test('exempts the profile being overwritten, case-insensitively', () => {
+		expect(
+			findDuplicateProfile('hash-racing', profiles, 'racing')
+		).toBeNull();
+	});
+
+	test('still reports a duplicate that is not the exempted profile', () => {
+		const duplicates = [
+			{ name: 'A', hash: 'same' },
+			{ name: 'B', hash: 'same' },
+		];
+		expect(findDuplicateProfile('same', duplicates, 'A')).toBe('B');
+	});
+
+	test('never matches on an absent hash', () => {
+		expect(findDuplicateProfile('', profiles)).toBeNull();
 	});
 });
 

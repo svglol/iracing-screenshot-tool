@@ -455,6 +455,8 @@ const nl: Catalog = {
 			duplicate: 'Er bestaat al een profiel met die naam.',
 			profileNotFound: 'Dat profiel kon niet meer worden gevonden.',
 			profileExists: 'Er bestaat al een profiel met die naam.',
+			duplicateContent:
+				'Er bestaat al een profiel met precies deze instellingen: {name}.',
 			noActiveConfig:
 				'Er is geen iRacing-grafische configuratie gevonden om op te slaan.',
 			invalidIni:

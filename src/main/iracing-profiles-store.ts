@@ -19,6 +19,7 @@ import * as path from 'path';
 
 import {
 	checkProfileName,
+	findDuplicateProfile,
 	hashIni,
 	countIniDifferences,
 	profileFileName,
@@ -42,6 +43,7 @@ const TEMP_SUFFIX = '.iRST-tmp';
 export type StoreError =
 	| 'profileNotFound'
 	| 'profileExists'
+	| 'duplicateContent'
 	| 'noActiveConfig'
 	| 'invalidIni'
 	| 'iracingRunning'
@@ -84,9 +86,13 @@ export interface StoreContext {
 // as NameCheck: with `strictNullChecks: false` TypeScript will not narrow a
 // union by a boolean discriminant, so without it `result.error` is inaccessible
 // in the `else` of an `if (result.ok)`. Do not remove it.
+//
+// `duplicateOf` accompanies exactly the 'duplicateContent' error: the name of
+// the profile that already holds these settings, so the message can point the
+// user at it instead of leaving them to diff configs by hand.
 export type StoreResult<T = object> =
-	| ({ ok: true; error?: undefined } & T)
-	| { ok: false; error: StoreError | NameError };
+	| ({ ok: true; error?: undefined; duplicateOf?: undefined } & T)
+	| { ok: false; error: StoreError | NameError; duplicateOf?: string };
 
 // --- location ---------------------------------------------------------------
 
@@ -357,7 +363,8 @@ export function saveActiveAs(
 	ctx: StoreContext,
 	options: { overwrite?: boolean } = {}
 ): StoreResult<{ name: string }> {
-	const existing = listProfiles().map((profile) => profile.name);
+	const profiles = listProfiles();
+	const existing = profiles.map((profile) => profile.name);
 	// When overwriting, the target legitimately already exists, so it must not
 	// count as a collision — but every other naming rule still applies.
 	const check = checkProfileName(
@@ -382,6 +389,20 @@ export function saveActiveAs(
 	}
 	if (!validateRendererIni(content).valid) {
 		return { ok: false, error: 'invalidIni' };
+	}
+
+	// No two profiles may store the same configuration under different names —
+	// the second copy adds nothing and later leaves the active-profile display
+	// picking a name by tie-break. When overwriting, the target itself is
+	// exempt: re-saving a profile over its own content is a no-op, not a
+	// duplicate.
+	const duplicateOf = findDuplicateProfile(
+		hashIni(content),
+		profiles,
+		options.overwrite ? check.name : ''
+	);
+	if (duplicateOf !== null) {
+		return { ok: false, error: 'duplicateContent', duplicateOf };
 	}
 
 	const destination = profilePath(check.name);
@@ -432,9 +453,10 @@ export function importProfile(
 	sourcePath: string,
 	rawName: string
 ): StoreResult<{ name: string }> {
+	const profiles = listProfiles();
 	const check = checkProfileName(
 		rawName,
-		listProfiles().map((profile) => profile.name)
+		profiles.map((profile) => profile.name)
 	);
 	if (!check.ok) {
 		return { ok: false, error: check.error };
@@ -450,6 +472,17 @@ export function importProfile(
 	// The guard that stops app.ini becoming a graphics profile.
 	if (!validateRendererIni(bytes.toString('utf8')).valid) {
 		return { ok: false, error: 'invalidIni' };
+	}
+
+	// Same invariant as saveActiveAs: an import whose SETTINGS match a stored
+	// profile is the same configuration wearing a different filename — the
+	// hash ignores comments and ordering, so a re-exported copy still counts.
+	const duplicateOf = findDuplicateProfile(
+		hashIni(bytes.toString('utf8')),
+		profiles
+	);
+	if (duplicateOf !== null) {
+		return { ok: false, error: 'duplicateContent', duplicateOf };
 	}
 
 	try {

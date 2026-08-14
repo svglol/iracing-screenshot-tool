@@ -452,6 +452,7 @@ const zhTW: Catalog = {
 			duplicate: '已經有同名的設定檔了。',
 			profileNotFound: '已經找不到那個設定檔了。',
 			profileExists: '已經有同名的設定檔了。',
+			duplicateContent: '已有設定完全相同的設定檔（{name}）。',
 			noActiveConfig: '找不到可以儲存的 iRacing 顯示設定。',
 			invalidIni: '這個檔案不是 iRacing 的顯示設定，因此沒有使用它。',
 			iracingRunning: '請先關閉 iRacing，它結束時會覆蓋這次的變更。',

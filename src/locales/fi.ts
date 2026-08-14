@@ -458,6 +458,8 @@ const fi: Catalog = {
 			duplicate: 'Samanniminen profiili on jo olemassa.',
 			profileNotFound: 'Profiilia ei enää löytynyt.',
 			profileExists: 'Samanniminen profiili on jo olemassa.',
+			duplicateContent:
+				'Profiili, jossa on täsmälleen samat asetukset, on jo olemassa: {name}.',
 			noActiveConfig:
 				'Tallennettavaa iRacingin grafiikka-asetustiedostoa ei löytynyt.',
 			invalidIni:

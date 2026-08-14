@@ -455,6 +455,7 @@ const ko: Catalog = {
 			duplicate: '같은 이름의 프로필이 이미 있습니다.',
 			profileNotFound: '해당 프로필을 더 이상 찾을 수 없습니다.',
 			profileExists: '같은 이름의 프로필이 이미 있습니다.',
+			duplicateContent: '설정이 완전히 같은 프로필({name})이 이미 있습니다.',
 			noActiveConfig: '저장할 iRacing 그래픽 설정을 찾을 수 없습니다.',
 			invalidIni:
 				'이 파일은 iRacing 그래픽 설정이 아니므로 사용하지 않았습니다.',

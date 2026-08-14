@@ -144,6 +144,19 @@ and key order, then hashes. `[Debug]` is dropped entirely — iRacing fills it w
 the detected driver DLL, version and vendor, which is machine state. Without that
 exclusion a graphics-driver update would read as an edited profile.
 
+### 4.3 No two profiles may hold the same configuration
+
+Save, overwrite and import all refuse content whose hash matches a stored
+profile (`findDuplicateProfile`), reporting `duplicateContent` with the name of
+the profile that already holds it. Because the check uses the settings hash of
+4.2, a re-exported copy with reshuffled comments still counts as the same
+configuration. The one exemption is overwriting a profile with its own content —
+a no-op, not a duplicate.
+
+The invariant is enforced at the store's write paths only: a duplicate dropped
+into the folder by hand still lists, and `resolveActiveProfile` keeps its
+tie-break for that case.
+
 ---
 
 ## 5. Scope

@@ -460,6 +460,8 @@ const fr: Catalog = {
 			duplicate: 'Un profil portant ce nom existe déjà.',
 			profileNotFound: 'Ce profil est introuvable.',
 			profileExists: 'Un profil portant ce nom existe déjà.',
+			duplicateContent:
+				'Un profil avec exactement ces réglages existe déjà : {name}.',
 			noActiveConfig:
 				'Aucune configuration graphique iRacing à enregistrer n’a été trouvée.',
 			invalidIni:
