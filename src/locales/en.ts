@@ -4,7 +4,7 @@
 // Two rules for anyone editing this file:
 //
 //   1. Changing English text here is a translation-invalidating edit. The other
-//      twelve catalogues still hold the OLD wording and will keep showing it —
+//      seventeen catalogues still hold the OLD wording and will keep showing it —
 //      key-parity tests cannot see that a sentence changed meaning. Update them
 //      too, or the change ships to English speakers only.
 //

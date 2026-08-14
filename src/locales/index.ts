@@ -1,12 +1,13 @@
 // The catalogue registry.
 //
 // Every locale is imported eagerly rather than fetched on demand. They are text,
-// they total well under a megabyte across all thirteen, and both processes need
+// they total well under a megabyte across all eighteen, and both processes need
 // them synchronously — main phrases a capture refusal inside an IPC handler that
 // has nowhere to await a dynamic import.
 
 import type { MessageCatalog, PluralForms } from '../utilities/i18n';
 import en from './en';
+import ar from './ar';
 import cs from './cs';
 import da from './da';
 import de from './de';
@@ -14,11 +15,15 @@ import es from './es';
 import fi from './fi';
 import fr from './fr';
 import it from './it';
+import ja from './ja';
+import ko from './ko';
 import nl from './nl';
 import no from './no';
 import pl from './pl';
 import pt from './pt';
+import ru from './ru';
 import sv from './sv';
+import zhTW from './zh-tw';
 
 // The shape every translation must have, derived from the English catalogue so
 // that a missing or misspelled key is a COMPILE error rather than something the
@@ -41,12 +46,13 @@ export type Catalog = Localized<typeof en>;
 
 // Concrete object types have no string index signature, so they are not directly
 // assignable to MessageCatalog even though they satisfy it structurally. The
-// assertion is confined to this one helper rather than repeated thirteen times.
+// assertion is confined to this one helper rather than repeated eighteen times.
 const asCatalog = (catalog: Catalog): MessageCatalog =>
 	catalog as unknown as MessageCatalog;
 
 export const CATALOGS: Record<string, MessageCatalog> = {
 	en: asCatalog(en),
+	ar: asCatalog(ar),
 	cs: asCatalog(cs),
 	da: asCatalog(da),
 	de: asCatalog(de),
@@ -54,9 +60,15 @@ export const CATALOGS: Record<string, MessageCatalog> = {
 	fi: asCatalog(fi),
 	fr: asCatalog(fr),
 	it: asCatalog(it),
+	ja: asCatalog(ja),
+	ko: asCatalog(ko),
 	nl: asCatalog(nl),
 	no: asCatalog(no),
 	pl: asCatalog(pl),
 	pt: asCatalog(pt),
+	ru: asCatalog(ru),
 	sv: asCatalog(sv),
+	// The one registry key with a region: the catalogue is Traditional-script
+	// Chinese specifically, and resolveLocale maps zh-Hant/zh-HK/zh-MO onto it.
+	'zh-tw': asCatalog(zhTW),
 };

@@ -84,7 +84,7 @@ describe('renderer i18n plugin', () => {
 	test('applyLocale resolves and returns the adopted locale', () => {
 		expect(applyLocale('de-DE')).toBe('de');
 		// Unsupported falls back rather than being adopted verbatim.
-		expect(applyLocale('ja-JP')).toBe('en');
+		expect(applyLocale('th-TH')).toBe('en');
 	});
 
 	test('applyLocale also moves the shared core, so main-authored text follows', () => {
@@ -101,7 +101,7 @@ describe('detectRendererLocale', () => {
 			'languages'
 		);
 		Object.defineProperty(window.navigator, 'languages', {
-			value: ['ja-JP', 'pl-PL', 'de-DE'],
+			value: ['th-TH', 'pl-PL', 'de-DE'],
 			configurable: true,
 		});
 		expect(detectRendererLocale()).toBe('pl');

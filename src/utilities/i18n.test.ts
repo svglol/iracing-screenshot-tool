@@ -42,8 +42,24 @@ describe('resolveLocale', () => {
 		expect(resolveLocale('no')).toBe('no');
 	});
 
+	// Chinese ships in Traditional script only, so the script subtag decides:
+	// Traditional tags (region or explicit script) map onto zh-tw, while
+	// Simplified would be the wrong written form entirely and falls back to
+	// English instead.
+	it('maps Traditional Chinese tags onto zh-tw and Simplified onto English', () => {
+		expect(resolveLocale('zh-TW')).toBe('zh-tw');
+		expect(resolveLocale('zh-HK')).toBe('zh-tw');
+		expect(resolveLocale('zh-MO')).toBe('zh-tw');
+		expect(resolveLocale('zh-Hant')).toBe('zh-tw');
+		expect(resolveLocale('zh-Hant-TW')).toBe('zh-tw');
+		expect(resolveLocale('zh')).toBe('en');
+		expect(resolveLocale('zh-CN')).toBe('en');
+		expect(resolveLocale('zh-Hans')).toBe('en');
+		expect(resolveLocale('zh-SG')).toBe('en');
+	});
+
 	it('falls back to English for anything unshipped or unusable', () => {
-		expect(resolveLocale('ja')).toBe('en');
+		expect(resolveLocale('th')).toBe('en');
 		expect(resolveLocale('')).toBe('en');
 		expect(resolveLocale('   ')).toBe('en');
 		expect(resolveLocale(null)).toBe('en');
@@ -54,11 +70,19 @@ describe('resolveLocale', () => {
 
 describe('detectLocale', () => {
 	it('takes the first supported entry, not merely the first', () => {
-		expect(detectLocale(['ja-JP', 'zh-CN', 'sv-SE', 'de-DE'])).toBe('sv');
+		expect(detectLocale(['th-TH', 'zh-CN', 'sv-SE', 'de-DE'])).toBe('sv');
+	});
+
+	// Simplified Chinese has no catalogue, but it must not end the search either:
+	// a user listing zh-CN before ja-JP still reads Japanese far better than
+	// English.
+	it('skips Simplified Chinese rather than stopping on it', () => {
+		expect(detectLocale(['zh-CN', 'ja-JP'])).toBe('ja');
+		expect(detectLocale(['zh-CN', 'zh-TW'])).toBe('zh-tw');
 	});
 
 	it('falls back to English when nothing matches', () => {
-		expect(detectLocale(['ja-JP', 'ko-KR'])).toBe('en');
+		expect(detectLocale(['th-TH', 'el-GR'])).toBe('en');
 		expect(detectLocale([])).toBe('en');
 	});
 
@@ -74,7 +98,7 @@ describe('setLocale', () => {
 	});
 
 	it('resolves an unsupported request to English rather than storing it', () => {
-		expect(setLocale('ja')).toBe('en');
+		expect(setLocale('th')).toBe('en');
 		expect(getLocale()).toBe('en');
 	});
 });
@@ -83,9 +107,12 @@ describe('isSupportedLocale', () => {
 	it('accepts exactly the shipped codes', () => {
 		expect(isSupportedLocale('de')).toBe(true);
 		expect(isSupportedLocale('en')).toBe(true);
+		// The one shipped code that carries a region, because the catalogue is
+		// script-specific.
+		expect(isSupportedLocale('zh-tw')).toBe(true);
 		// A full tag is not itself a shipped code — resolveLocale is what narrows.
 		expect(isSupportedLocale('de-DE')).toBe(false);
-		expect(isSupportedLocale('ja')).toBe(false);
+		expect(isSupportedLocale('th')).toBe(false);
 		expect(isSupportedLocale(null)).toBe(false);
 	});
 });
@@ -126,7 +153,7 @@ describe('translate', () => {
 
 	it('falls back to English when a locale is missing the key', () => {
 		// Deliberately not a shipped locale: resolveLocale sends it to English.
-		expect(translate('ja', 'settings.title')).toBe('Settings');
+		expect(translate('th', 'settings.title')).toBe('Settings');
 	});
 
 	it('selects the English plural forms by count', () => {
