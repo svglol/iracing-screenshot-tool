@@ -418,7 +418,7 @@ const nl: Catalog = {
 			autoCfgIncomplete: 'Wordt door iRacing gereset',
 		},
 		actions: {
-			apply: 'Toepassen',
+			load: 'Laden',
 			overwrite: 'Bijwerken vanuit huidige',
 			rename: 'Hernoemen',
 			export: 'Exporteren',
@@ -434,8 +434,8 @@ const nl: Catalog = {
 			deleteConfirm: '{name} verwijderen?',
 		},
 		feedback: {
-			applied:
-				'{name} toegepast. Start iRacing om het van kracht te laten worden.',
+			loaded:
+				'{name} geladen. Start iRacing om het van kracht te laten worden.',
 			saved: 'Opgeslagen als {name}.',
 			overwritten: '{name} bijgewerkt vanuit de huidige configuratie.',
 			renamed: 'Hernoemd naar {name}.',

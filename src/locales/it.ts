@@ -418,7 +418,7 @@ const it: Catalog = {
 			autoCfgIncomplete: 'Verrà reimpostato da iRacing',
 		},
 		actions: {
-			apply: 'Applica',
+			load: 'Carica',
 			overwrite: 'Aggiorna dall’attuale',
 			rename: 'Rinomina',
 			export: 'Esporta',
@@ -434,7 +434,7 @@ const it: Catalog = {
 			deleteConfirm: 'Eliminare {name}?',
 		},
 		feedback: {
-			applied: '{name} applicato. Avvia iRacing perché abbia effetto.',
+			loaded: '{name} caricato. Avvia iRacing perché abbia effetto.',
 			saved: 'Salvato come {name}.',
 			overwritten: '{name} aggiornato dalla configurazione attuale.',
 			renamed: 'Rinominato in {name}.',

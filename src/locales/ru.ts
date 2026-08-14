@@ -437,7 +437,7 @@ const ru: Catalog = {
 			autoCfgIncomplete: 'Будет сброшен iRacing',
 		},
 		actions: {
-			apply: 'Применить',
+			load: 'Загрузить',
 			overwrite: 'Обновить из текущей',
 			rename: 'Переименовать',
 			export: 'Экспортировать',
@@ -453,8 +453,8 @@ const ru: Catalog = {
 			deleteConfirm: 'Удалить {name}?',
 		},
 		feedback: {
-			applied:
-				'Профиль {name} применён. Запустите iRacing, чтобы изменения вступили в силу.',
+			loaded:
+				'Профиль {name} загружен. Запустите iRacing, чтобы изменения вступили в силу.',
 			saved: 'Сохранено как {name}.',
 			overwritten: 'Профиль {name} обновлён из текущей конфигурации.',
 			renamed: 'Переименовано в {name}.',

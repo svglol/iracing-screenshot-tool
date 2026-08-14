@@ -422,7 +422,7 @@ const fi: Catalog = {
 			autoCfgIncomplete: 'iRacing nollaa tämän',
 		},
 		actions: {
-			apply: 'Ota käyttöön',
+			load: 'Lataa',
 			overwrite: 'Päivitä nykyisestä',
 			rename: 'Nimeä uudelleen',
 			export: 'Vie',
@@ -438,8 +438,7 @@ const fi: Catalog = {
 			deleteConfirm: 'Poistetaanko {name}?',
 		},
 		feedback: {
-			applied:
-				'{name} otettiin käyttöön. Käynnistä iRacing, jotta se tulee voimaan.',
+			loaded: '{name} ladattiin. Käynnistä iRacing, jotta se tulee voimaan.',
 			saved: 'Tallennettu nimellä {name}.',
 			overwritten: '{name} päivitettiin nykyisestä kokoonpanosta.',
 			renamed: 'Uusi nimi: {name}.',

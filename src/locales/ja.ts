@@ -428,7 +428,7 @@ const ja: Catalog = {
 			autoCfgIncomplete: 'iRacing にリセットされます',
 		},
 		actions: {
-			apply: '適用',
+			load: '読み込む',
 			overwrite: '現在の設定で更新',
 			rename: '名前を変更',
 			export: 'エクスポート',
@@ -446,8 +446,8 @@ const ja: Catalog = {
 		feedback: {
 			// The restart caveat is part of the success message: the swap only takes
 			// effect at iRacing's next launch.
-			applied:
-				'{name} を適用しました。反映するには iRacing を起動してください。',
+			loaded:
+				'{name} を読み込みました。反映するには iRacing を起動してください。',
 			saved: '{name} として保存しました。',
 			overwritten: '{name} を現在の設定で更新しました。',
 			renamed: '{name} に名前を変更しました。',

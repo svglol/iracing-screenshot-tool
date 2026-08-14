@@ -420,7 +420,7 @@ const ko: Catalog = {
 			autoCfgIncomplete: 'iRacing이 초기화함',
 		},
 		actions: {
-			apply: '적용',
+			load: '불러오기',
 			overwrite: '현재 설정으로 업데이트',
 			rename: '이름 변경',
 			export: '내보내기',
@@ -436,7 +436,7 @@ const ko: Catalog = {
 			deleteConfirm: '{name}을(를) 삭제할까요?',
 		},
 		feedback: {
-			applied: '{name}을(를) 적용했습니다. 반영하려면 iRacing을 실행하세요.',
+			loaded: '{name}을(를) 불러왔습니다. 반영하려면 iRacing을 실행하세요.',
 			saved: '{name}(으)로 저장했습니다.',
 			overwritten: '{name}을(를) 현재 설정으로 업데이트했습니다.',
 			renamed: '{name}(으)로 이름을 바꿨습니다.',

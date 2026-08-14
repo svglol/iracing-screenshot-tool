@@ -449,7 +449,7 @@ export default {
 			autoCfgIncomplete: 'Will be reset by iRacing',
 		},
 		actions: {
-			apply: 'Apply',
+			load: 'Load',
 			overwrite: 'Update from current',
 			rename: 'Rename',
 			export: 'Export',
@@ -468,7 +468,7 @@ export default {
 			// The restart caveat is part of the success message: the swap only takes
 			// effect at iRacing's next launch, and without saying so the user has
 			// every reason to believe it silently failed.
-			applied: '{name} applied. Start iRacing for it to take effect.',
+			loaded: '{name} loaded. Start iRacing for it to take effect.',
 			saved: 'Saved as {name}.',
 			overwritten: '{name} updated from the current configuration.',
 			renamed: 'Renamed to {name}.',

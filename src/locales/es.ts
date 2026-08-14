@@ -418,7 +418,7 @@ const es: Catalog = {
 			autoCfgIncomplete: 'iRacing lo restablecerá',
 		},
 		actions: {
-			apply: 'Aplicar',
+			load: 'Cargar',
 			overwrite: 'Actualizar desde la actual',
 			rename: 'Renombrar',
 			export: 'Exportar',
@@ -434,7 +434,7 @@ const es: Catalog = {
 			deleteConfirm: '¿Eliminar {name}?',
 		},
 		feedback: {
-			applied: '{name} aplicado. Inicia iRacing para que tenga efecto.',
+			loaded: '{name} cargado. Inicia iRacing para que tenga efecto.',
 			saved: 'Guardado como {name}.',
 			overwritten: '{name} actualizado a partir de la configuración actual.',
 			renamed: 'Renombrado a {name}.',

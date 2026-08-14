@@ -416,7 +416,7 @@ const sv: Catalog = {
 			autoCfgIncomplete: 'Återställs av iRacing',
 		},
 		actions: {
-			apply: 'Använd',
+			load: 'Läs in',
 			overwrite: 'Uppdatera från nuvarande',
 			rename: 'Byt namn',
 			export: 'Exportera',
@@ -432,8 +432,7 @@ const sv: Catalog = {
 			deleteConfirm: 'Ta bort {name}?',
 		},
 		feedback: {
-			applied:
-				'{name} används nu. Starta iRacing för att det ska träda i kraft.',
+			loaded: '{name} inläst. Starta iRacing för att det ska träda i kraft.',
 			saved: 'Sparad som {name}.',
 			overwritten: '{name} uppdaterad från den nuvarande konfigurationen.',
 			renamed: 'Namnet ändrat till {name}.',

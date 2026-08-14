@@ -418,7 +418,7 @@ const zhTW: Catalog = {
 			autoCfgIncomplete: '會被 iRacing 重設',
 		},
 		actions: {
-			apply: '套用',
+			load: '載入',
 			overwrite: '以目前設定更新',
 			rename: '重新命名',
 			export: '匯出',
@@ -434,7 +434,7 @@ const zhTW: Catalog = {
 			deleteConfirm: '要刪除 {name} 嗎？',
 		},
 		feedback: {
-			applied: '已套用 {name}。請啟動 iRacing 讓它生效。',
+			loaded: '已載入 {name}。請啟動 iRacing 讓它生效。',
 			saved: '已儲存為 {name}。',
 			overwritten: '已用目前的設定更新 {name}。',
 			renamed: '已重新命名為 {name}。',

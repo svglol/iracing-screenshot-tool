@@ -428,7 +428,7 @@ const cs: Catalog = {
 			autoCfgIncomplete: 'iRacing jej resetuje',
 		},
 		actions: {
-			apply: 'Použít',
+			load: 'Načíst',
 			overwrite: 'Aktualizovat z aktuální',
 			rename: 'Přejmenovat',
 			export: 'Exportovat',
@@ -444,7 +444,7 @@ const cs: Catalog = {
 			deleteConfirm: 'Smazat {name}?',
 		},
 		feedback: {
-			applied: 'Profil {name} byl použit. Aby se projevil, spusťte iRacing.',
+			loaded: 'Profil {name} byl načten. Aby se projevil, spusťte iRacing.',
 			saved: 'Uloženo jako {name}.',
 			overwritten: 'Profil {name} byl aktualizován z aktuální konfigurace.',
 			renamed: 'Přejmenováno na {name}.',

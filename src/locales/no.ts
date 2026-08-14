@@ -423,7 +423,7 @@ const no: Catalog = {
 			autoCfgIncomplete: 'Tilbakestilles av iRacing',
 		},
 		actions: {
-			apply: 'Bruk',
+			load: 'Last inn',
 			overwrite: 'Oppdater fra gjeldende',
 			rename: 'Gi nytt navn',
 			export: 'Eksporter',
@@ -439,8 +439,8 @@ const no: Catalog = {
 			deleteConfirm: 'Slette {name}?',
 		},
 		feedback: {
-			applied:
-				'{name} tatt i bruk. Start iRacing for at det skal tre i kraft.',
+			loaded:
+				'{name} lastet inn. Start iRacing for at det skal tre i kraft.',
 			saved: 'Lagret som {name}.',
 			overwritten: '{name} oppdatert fra gjeldende konfigurasjon.',
 			renamed: 'Fikk nytt navn: {name}.',

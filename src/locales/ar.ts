@@ -451,7 +451,7 @@ const ar: Catalog = {
 			autoCfgIncomplete: 'سيعيد iRacing ضبطه',
 		},
 		actions: {
-			apply: 'تطبيق',
+			load: 'تحميل',
 			overwrite: 'تحديث من الحالي',
 			rename: 'إعادة تسمية',
 			export: 'تصدير',
@@ -469,7 +469,7 @@ const ar: Catalog = {
 		feedback: {
 			// The restart caveat is part of the success message: the swap only takes
 			// effect at iRacing's next launch.
-			applied: 'تم تطبيق {name}. شغّل iRacing ليسري مفعوله.',
+			loaded: 'تم تحميل {name}. شغّل iRacing ليسري مفعوله.',
 			saved: 'تم الحفظ باسم {name}.',
 			overwritten: 'تم تحديث {name} من الإعدادات الحالية.',
 			renamed: 'تمت إعادة التسمية إلى {name}.',

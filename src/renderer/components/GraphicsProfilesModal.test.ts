@@ -208,29 +208,50 @@ describe('the iRacing-running guard', () => {
 		expect(wrapper.text()).toContain('Close iRacing before switching');
 	});
 
-	test('disables every Apply button while iRacing is running', async () => {
+	test('disables every Load button while iRacing is running', async () => {
 		// The reason the whole feature needs a guard: iRacing rewrites the ini
-		// from memory on exit, so an apply now would be silently undone.
+		// from memory on exit, so a load now would be silently undone.
 		const wrapper = await mountModal(snapshot({ iracingRunning: true }));
-		const applyButtons = wrapper
+		const loadButtons = wrapper
 			.findAll('button')
-			.filter((button) => button.text() === 'Apply');
-		expect(applyButtons.length).toBe(2);
-		for (const button of applyButtons) {
+			.filter((button) => button.text() === 'Load');
+		expect(loadButtons.length).toBe(2);
+		for (const button of loadButtons) {
 			expect(button.attributes('disabled')).toBeDefined();
 		}
 	});
 
-	test('enables Apply when iRacing is closed', async () => {
+	test('disables Load only for the profile that is already the live config', async () => {
+		// Default snapshot: Screenshots is the active profile with a CLEAN match,
+		// so loading it again would change nothing. Racing stays loadable.
 		const wrapper = await mountModal();
-		const applyButtons = wrapper
-			.findAll('button')
-			.filter((button) => button.text() === 'Apply');
-		expect(applyButtons.length).toBe(2);
-		expect(applyButtons[0].attributes('disabled')).toBeUndefined();
+		const rowButton = (name: string) =>
+			wrapper
+				.find(`[data-profile-name="${name}"]`)
+				.findAll('button')
+				.find((button) => button.text() === 'Load');
+		expect(rowButton('Screenshots')?.attributes('disabled')).toBeDefined();
+		expect(rowButton('Racing')?.attributes('disabled')).toBeUndefined();
 	});
 
-	test('disables Apply for a profile that is not a graphics config', async () => {
+	test('keeps Load enabled for a MODIFIED active profile', async () => {
+		// A drifted config based on Screenshots is not Screenshots any more:
+		// loading it then is a real action — restore the stored version and
+		// discard the drift.
+		const wrapper = await mountModal(
+			snapshot({
+				active: { name: 'Screenshots', state: 'modified' },
+				activeDifferences: 3,
+			})
+		);
+		const load = wrapper
+			.find('[data-profile-name="Screenshots"]')
+			.findAll('button')
+			.find((button) => button.text() === 'Load');
+		expect(load?.attributes('disabled')).toBeUndefined();
+	});
+
+	test('disables Load for a profile that is not a graphics config', async () => {
 		const wrapper = await mountModal(
 			snapshot({
 				profiles: [
@@ -239,10 +260,10 @@ describe('the iRacing-running guard', () => {
 			})
 		);
 		expect(wrapper.text()).toContain('Not a graphics config');
-		const apply = wrapper
+		const load = wrapper
 			.findAll('button')
-			.find((button) => button.text() === 'Apply');
-		expect(apply?.attributes('disabled')).toBeDefined();
+			.find((button) => button.text() === 'Load');
+		expect(load?.attributes('disabled')).toBeDefined();
 	});
 
 	test('flags a profile iRacing would reset', async () => {

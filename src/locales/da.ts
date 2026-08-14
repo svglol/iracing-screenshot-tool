@@ -417,7 +417,7 @@ const da: Catalog = {
 			autoCfgIncomplete: 'Nulstilles af iRacing',
 		},
 		actions: {
-			apply: 'Anvend',
+			load: 'Indlæs',
 			overwrite: 'Opdatér fra nuværende',
 			rename: 'Omdøb',
 			export: 'Eksportér',
@@ -433,7 +433,7 @@ const da: Catalog = {
 			deleteConfirm: 'Slet {name}?',
 		},
 		feedback: {
-			applied: '{name} anvendt. Start iRacing for at det træder i kraft.',
+			loaded: '{name} indlæst. Start iRacing for at det træder i kraft.',
 			saved: 'Gemt som {name}.',
 			overwritten: '{name} opdateret ud fra den nuværende konfiguration.',
 			renamed: 'Omdøbt til {name}.',

@@ -423,7 +423,7 @@ const de: Catalog = {
 			autoCfgIncomplete: 'Wird von iRacing zurückgesetzt',
 		},
 		actions: {
-			apply: 'Anwenden',
+			load: 'Laden',
 			overwrite: 'Aus aktueller aktualisieren',
 			rename: 'Umbenennen',
 			export: 'Exportieren',
@@ -439,7 +439,7 @@ const de: Catalog = {
 			deleteConfirm: '{name} löschen?',
 		},
 		feedback: {
-			applied: '{name} angewendet. Starte iRacing, damit es wirksam wird.',
+			loaded: '{name} geladen. Starte iRacing, damit es wirksam wird.',
 			saved: 'Als {name} gespeichert.',
 			overwritten: '{name} aus der aktuellen Konfiguration aktualisiert.',
 			renamed: 'In {name} umbenannt.',

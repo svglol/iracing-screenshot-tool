@@ -129,13 +129,21 @@
 					</div>
 
 					<div v-else class="profiles-row__actions">
+						<!-- Load is also disabled for the profile that IS the live
+						     config (clean match) — loading it again would change
+						     nothing. A modified match keeps its Load: that press
+						     restores the stored version and discards the drift. -->
 						<o-button
 							class="button is-small is-primary"
-							:disabled="iracingRunning || !profile.valid"
+							:disabled="
+								iracingRunning ||
+								!profile.valid ||
+								isLoaded(profile.name)
+							"
 							:loading="busy === profile.name"
 							@click="apply(profile.name)"
 						>
-							{{ $t('graphicsProfiles.actions.apply') }}
+							{{ $t('graphicsProfiles.actions.load') }}
 						</o-button>
 						<o-button
 							class="button is-small"
@@ -282,6 +290,12 @@ export default {
 		handleIracingChange() {
 			this.refresh();
 		},
+		// True only for a CLEAN match: the live config already has exactly this
+		// profile's settings. A drifted config based on this profile returns
+		// false, because loading it then is a real action (restore the profile).
+		isLoaded(name) {
+			return this.activeState === 'clean' && name === this.activeName;
+		},
 		async refresh() {
 			this.loading = true;
 			try {
@@ -420,7 +434,7 @@ export default {
 				// The success message carries the restart caveat: the swap only takes
 				// effect at iRacing's next launch, and without saying so the user has
 				// every reason to think it silently failed.
-				this.report(result, 'graphicsProfiles.feedback.applied', { name });
+				this.report(result, 'graphicsProfiles.feedback.loaded', { name });
 				await this.refresh();
 			} finally {
 				this.busy = null;
