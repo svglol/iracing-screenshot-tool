@@ -252,6 +252,17 @@ jobs:
 
                   echo "Artifacts verified: ${exe_count} .exe + latest.yml (sha512 matches ${manifest_path})"
 
+                  # A prerelease-suffixed tag (v3.4.0-signing.1) is a pipeline
+                  # rehearsal, not a release: run every guard above, then STOP,
+                  # leaving the draft in place for inspection and deletion.
+                  # Flipping it public with --latest would offer the build to
+                  # every auto-updating user — which for a rehearsal may be a
+                  # test-signed binary Windows does not trust.
+                  if [[ "$version" == *-* ]]; then
+                    echo "Prerelease tag ${tag}: all checks passed. Leaving the release as a draft."
+                    exit 0
+                  fi
+
                   if [ -f "$notes" ]; then
                     echo "Using curated notes: $notes"
                   else
