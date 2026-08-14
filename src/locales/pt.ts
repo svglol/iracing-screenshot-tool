@@ -392,7 +392,7 @@ const pt: Catalog = {
 	graphicsProfiles: {
 		title: 'Perfis gráficos',
 		description:
-			'Guarda configurações gráficas do iRacing e alterna entre elas — uma configuração de três monitores para correr e outra de um só para capturas.',
+			'Guarda configurações gráficas do iRacing e alterna entre elas — uma para correr, uma para capturas, uma para gravar vídeo. O iRacing carrega a configuração ao arrancar e volta a escrevê-la ao sair, por isso uma troca feita com ele a correr é desfeita: <b>troca de configuração apenas com o simulador fechado</b>.',
 		iracingRunning:
 			'Fecha o iRacing antes de trocar. Ao sair, volta a escrever a sua configuração gráfica, o que anularia a alteração.',
 		activeHeading: 'Configuração atual',

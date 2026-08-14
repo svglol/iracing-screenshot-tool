@@ -412,8 +412,10 @@ export default {
 
 	graphicsProfiles: {
 		title: 'Graphics Profiles',
+		// Carries inline <b> emphasis — rendered with v-html, so keep it to markup
+		// the modal expects (see GraphicsProfilesModal.vue).
 		description:
-			'Store iRacing graphics configurations and switch between them — a triple-screen setup for racing, a single-screen one for screenshots.',
+			'Store iRacing graphics configurations and switch between them — one for racing, one for screenshots, one for recording video. iRacing loads the configuration when it starts and writes it back when it exits, so a switch made while it is running is undone: <b>only switch configurations while the sim is closed</b>.',
 		// The most important sentence here. iRacing keeps its graphics settings in
 		// memory and writes them back over the file when it exits, so a swap made
 		// while it is running is undone with no sign anything failed.

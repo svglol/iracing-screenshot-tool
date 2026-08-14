@@ -399,7 +399,7 @@ const cs: Catalog = {
 	graphicsProfiles: {
 		title: 'Grafické profily',
 		description:
-			'Ukládejte konfigurace grafiky iRacingu a přepínejte mezi nimi — třímonitorové nastavení pro závodění, jednomonitorové pro snímky.',
+			'Ukládejte konfigurace grafiky iRacingu a přepínejte mezi nimi — jednu na závodění, jednu na snímky obrazovky, jednu na natáčení videa. iRacing načítá konfiguraci při spuštění a při ukončení ji zapisuje zpět, takže přepnutí provedené za běhu se ztratí: <b>konfigurace přepínejte jen při vypnutém simulátoru</b>.',
 		iracingRunning:
 			'Před přepnutím zavřete iRacing. Při ukončení přepíše svou konfiguraci grafiky, čímž by změnu vrátil zpět.',
 		activeHeading: 'Aktuální konfigurace',

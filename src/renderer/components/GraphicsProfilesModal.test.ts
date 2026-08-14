@@ -331,10 +331,18 @@ describe('saving and deleting', () => {
 
 		await wrapper.vm.confirmSave();
 		await flushPromises();
+		// flagDuplicate re-applies the class on the next tick so the animation can
+		// restart on a repeat refusal; let that tick land before asserting.
+		await flushPromises();
 
 		expect(wrapper.text()).toContain(
 			'A profile with these exact settings already exists: Screenshots.'
 		);
+		// The row itself is flagged too — the class drives the shake and glow
+		// that point the eye at the right line in the list.
+		const flagged = wrapper.find('.profiles-row.is-duplicate');
+		expect(flagged.exists()).toBe(true);
+		expect(flagged.text()).toContain('Screenshots');
 	});
 
 	test('asks before deleting', async () => {

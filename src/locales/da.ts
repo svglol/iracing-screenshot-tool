@@ -390,7 +390,7 @@ const da: Catalog = {
 	graphicsProfiles: {
 		title: 'Grafikprofiler',
 		description:
-			'Gem iRacing-grafikkonfigurationer og skift mellem dem — en tre-skærmsopsætning til ræs, en enkelt-skærmsopsætning til skærmbilleder.',
+			'Gem iRacing-grafikkonfigurationer og skift mellem dem — én til ræs, én til skærmbilleder, én til videooptagelse. iRacing indlæser konfigurationen ved start og skriver den tilbage ved lukning, så et skift foretaget, mens simulatoren kører, bliver fortrudt: <b>skift kun konfiguration, mens simulatoren er lukket</b>.',
 		iracingRunning:
 			'Luk iRacing, før du skifter. Det skriver sin grafikkonfiguration tilbage, når det afsluttes, hvilket ville fortryde ændringen.',
 		activeHeading: 'Nuværende konfiguration',

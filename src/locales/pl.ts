@@ -402,7 +402,7 @@ const pl: Catalog = {
 	graphicsProfiles: {
 		title: 'Profile graficzne',
 		description:
-			'Zapisuj konfiguracje grafiki iRacing i przełączaj się między nimi — zestaw na trzy monitory do ścigania i na jeden do zrzutów ekranu.',
+			'Zapisuj konfiguracje grafiki iRacing i przełączaj się między nimi — jedną do ścigania, jedną do zrzutów ekranu, jedną do nagrywania wideo. iRacing wczytuje konfigurację przy starcie i zapisuje ją z powrotem przy zamknięciu, więc zmiana zrobiona w trakcie działania zostanie cofnięta: <b>konfigurację przełączaj tylko przy wyłączonym symulatorze</b>.',
 		iracingRunning:
 			'Zamknij iRacing przed przełączeniem. Przy zamykaniu zapisuje swoją konfigurację grafiki z powrotem, co cofnęłoby zmianę.',
 		activeHeading: 'Bieżąca konfiguracja',

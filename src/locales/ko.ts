@@ -393,7 +393,7 @@ const ko: Catalog = {
 	graphicsProfiles: {
 		title: '그래픽 프로필',
 		description:
-			'iRacing 그래픽 설정을 저장해 두고 서로 전환합니다 — 레이싱용 삼중 화면 구성과 스크린샷용 단일 화면 구성처럼.',
+			'iRacing 그래픽 설정을 저장해 두고 서로 전환합니다 — 레이싱용, 스크린샷용, 영상 녹화용처럼 나눠 쓸 수 있습니다. iRacing은 시작할 때 설정을 읽고 종료할 때 다시 기록하므로, 실행 중에 전환하면 되돌아갑니다. <b>설정 전환은 반드시 심을 종료한 상태에서 하세요.</b>',
 		iracingRunning:
 			'전환하기 전에 iRacing을 종료하세요. iRacing은 종료할 때 그래픽 설정을 다시 기록하므로 변경한 내용이 되돌려집니다.',
 		activeHeading: '현재 설정',

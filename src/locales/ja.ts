@@ -399,7 +399,7 @@ const ja: Catalog = {
 	graphicsProfiles: {
 		title: 'グラフィックプロファイル',
 		description:
-			'iRacing のグラフィック設定を保存して切り替えられます。レース用のトリプルスクリーン構成と、スクリーンショット用のシングルスクリーン構成といった使い分けができます。',
+			'iRacing のグラフィック設定を保存して切り替えられます。レース用、スクリーンショット用、動画撮影用と使い分けられます。iRacing は起動時に設定を読み込み、終了時に書き戻すため、起動中に切り替えても元に戻ってしまいます。<b>設定の切り替えは必ずシムを終了してから行ってください。</b>',
 		// The most important sentence here: a swap made while iRacing is running is
 		// undone at exit with no sign anything failed.
 		iracingRunning:

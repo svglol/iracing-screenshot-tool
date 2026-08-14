@@ -391,7 +391,7 @@ const nl: Catalog = {
 	graphicsProfiles: {
 		title: 'Grafische profielen',
 		description:
-			'Bewaar iRacing-grafische configuraties en wissel ertussen — een drieschermsopstelling om te racen, een enkelscherm voor schermafbeeldingen.',
+			'Bewaar iRacing-grafische configuraties en wissel ertussen — één om te racen, één voor schermafbeeldingen, één voor video-opnames. iRacing laadt de configuratie bij het starten en schrijft die bij het afsluiten terug, dus een wissel terwijl de sim draait wordt ongedaan gemaakt: <b>wissel alleen van configuratie als de sim gesloten is</b>.',
 		iracingRunning:
 			'Sluit iRacing voordat je wisselt. Bij het afsluiten schrijft het zijn grafische configuratie terug, waardoor de wijziging ongedaan wordt gemaakt.',
 		activeHeading: 'Huidige configuratie',

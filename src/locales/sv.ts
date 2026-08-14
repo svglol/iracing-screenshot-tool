@@ -389,7 +389,7 @@ const sv: Catalog = {
 	graphicsProfiles: {
 		title: 'Grafikprofiler',
 		description:
-			'Spara iRacing-grafikkonfigurationer och växla mellan dem — en treskärmsuppsättning för att köra och en enskärmsuppsättning för skärmbilder.',
+			'Spara iRacing-grafikkonfigurationer och växla mellan dem — en för att köra, en för skärmbilder, en för videoinspelning. iRacing läser konfigurationen vid start och skriver tillbaka den när det avslutas, så ett byte som görs medan simulatorn kör görs ogjort: <b>byt konfiguration bara när simulatorn är stängd</b>.',
 		iracingRunning:
 			'Stäng iRacing innan du växlar. Vid avslut skriver det tillbaka sin grafikkonfiguration, vilket skulle upphäva ändringen.',
 		activeHeading: 'Nuvarande konfiguration',

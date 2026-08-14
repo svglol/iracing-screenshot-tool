@@ -8,7 +8,11 @@
 		</header>
 
 		<section class="modal-card-body profiles-body">
-			<p class="description">{{ $t('graphicsProfiles.description') }}</p>
+			<!-- v-html because the copy carries inline <b> emphasis on the one rule
+			     that matters (switch while the sim is closed). Catalogue text, not
+			     user input — same reasoning as HelpModal. -->
+			<!-- eslint-disable-next-line vue/no-v-html -->
+			<p class="description" v-html="$t('graphicsProfiles.description')"></p>
 
 			<!-- The single most important thing on this screen. iRacing rewrites its
 			     graphics config from memory when it exits, so a swap made while it is
@@ -42,7 +46,11 @@
 					v-for="profile in profiles"
 					:key="profile.name"
 					class="profiles-row"
-					:class="{ 'is-active': profile.name === activeName }"
+					:class="{
+						'is-active': profile.name === activeName,
+						'is-duplicate': profile.name === duplicateHighlight,
+					}"
+					:data-profile-name="profile.name"
 				>
 					<div class="profiles-row__main">
 						<span class="profiles-row__name">{{ profile.name }}</span>
@@ -228,6 +236,9 @@ export default {
 			nameInput: '',
 			feedback: '',
 			feedbackClass: '',
+			// Name of the profile to shake and glow: the one that already holds the
+			// configuration the user just tried to save or import.
+			duplicateHighlight: '',
 		};
 	},
 	computed: {
@@ -315,6 +326,7 @@ export default {
 		clearFeedback() {
 			this.feedback = '';
 			this.feedbackClass = '';
+			this.duplicateHighlight = '';
 		},
 		report(result, successKey, params = {}) {
 			if (result && result.ok) {
@@ -323,13 +335,35 @@ export default {
 				return true;
 			}
 			// duplicateContent arrives with the name of the profile that already
-			// holds these settings; the message points the user at it.
+			// holds these settings; the message points the user at it and the row
+			// itself shakes so the eye lands on the right line.
 			this.feedback = this.errorText(
 				result && result.error,
 				result && result.duplicateOf ? { name: result.duplicateOf } : {}
 			);
 			this.feedbackClass = 'is-danger';
+			if (result && result.duplicateOf) {
+				this.flagDuplicate(result.duplicateOf);
+			}
 			return false;
+		},
+		flagDuplicate(name) {
+			// Drop the class for a frame before re-applying it, so a second refusal
+			// against the SAME profile restarts the animation instead of doing
+			// nothing visible.
+			this.duplicateHighlight = '';
+			this.$nextTick(() => {
+				this.duplicateHighlight = name;
+				// Safe to interpolate unescaped: profile names are Windows filenames,
+				// and the two characters that could break a double-quoted attribute
+				// selector — `"` and `\` — are both illegal in them.
+				const row = this.$el.querySelector(`[data-profile-name="${name}"]`);
+				// The row may be scrolled out of view in a long list, and a shake
+				// nobody sees identifies nothing.
+				if (row && typeof row.scrollIntoView === 'function') {
+					row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+				}
+			});
 		},
 		// Store and name errors arrive as codes precisely so they can be phrased in
 		// the user's language here.
@@ -595,6 +629,52 @@ export default {
 
 .profiles-row.is-active {
 	background: rgba(255, 255, 255, 0.09);
+}
+
+/* Points at the profile that already holds the configuration the user just
+   tried to save or import: a shake to catch the eye, a red glow that fades.
+   The glow animates to fully transparent and holds there (forwards), so the
+   class can stay on the row until the next action without leaving a lit
+   border behind. The shake is gated on prefers-reduced-motion; the fading
+   glow alone still identifies the row for users who opt out of motion. */
+.profiles-row.is-duplicate {
+	animation: duplicate-glow 1.6s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.profiles-row.is-duplicate {
+		animation:
+			duplicate-shake 0.5s ease,
+			duplicate-glow 1.6s ease-out forwards;
+	}
+}
+
+@keyframes duplicate-shake {
+	0%,
+	100% {
+		transform: translateX(0);
+	}
+	20%,
+	60% {
+		transform: translateX(-6px);
+	}
+	40%,
+	80% {
+		transform: translateX(6px);
+	}
+}
+
+@keyframes duplicate-glow {
+	0% {
+		box-shadow:
+			0 0 0 2px rgba(241, 70, 104, 0.9),
+			0 0 14px rgba(241, 70, 104, 0.55);
+	}
+	100% {
+		box-shadow:
+			0 0 0 2px rgba(241, 70, 104, 0),
+			0 0 14px rgba(241, 70, 104, 0);
+	}
 }
 
 .profiles-row__main {

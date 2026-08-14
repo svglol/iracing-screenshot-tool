@@ -396,7 +396,7 @@ const fr: Catalog = {
 	graphicsProfiles: {
 		title: 'Profils graphiques',
 		description:
-			'Enregistrez des configurations graphiques iRacing et basculez entre elles : un montage triple écran pour courir, un écran unique pour les captures.',
+			'Enregistrez des configurations graphiques iRacing et basculez entre elles : une pour courir, une pour les captures, une pour l’enregistrement vidéo. iRacing charge la configuration au démarrage et la réécrit en quittant ; un changement fait pendant qu’il tourne est donc annulé : <b>ne changez de configuration que simulateur fermé</b>.',
 		iracingRunning:
 			'Fermez iRacing avant de changer. Il réécrit sa configuration graphique en quittant, ce qui annulerait la modification.',
 		activeHeading: 'Configuration actuelle',
