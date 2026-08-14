@@ -396,6 +396,84 @@ const cs: Catalog = {
 			'Vypněte „Render Scene Using 3 Projections“ v iRacingu (karta Display > Monitor), abyste na snímcích předešli svislým pruhům',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafické profily',
+		description:
+			'Ukládejte konfigurace grafiky iRacingu a přepínejte mezi nimi — jednu na závodění, jednu na snímky obrazovky, jednu na natáčení videa. iRacing načítá konfiguraci při spuštění a při ukončení ji zapisuje zpět, takže přepnutí provedené za běhu se ztratí: <b>konfigurace přepínejte jen při vypnutém simulátoru</b>.',
+		iracingRunning:
+			'Před přepnutím zavřete iRacing. Při ukončení přepíše svou konfiguraci grafiky, čímž by změnu vrátil zpět.',
+		activeHeading: 'Aktuální konfigurace',
+		active: {
+			clean: 'Odpovídá profilu {name}.',
+			modified: {
+				one: 'Vychází z profilu {name}, od té doby se změnilo {count} nastavení.',
+				few: 'Vychází z profilu {name}, od té doby se změnila {count} nastavení.',
+				other: 'Vychází z profilu {name}, od té doby se změnilo {count} nastavení.',
+			},
+			modifiedUnknownCount:
+				'Vychází z profilu {name}, od té doby byl změněn.',
+			unknown: 'Neodpovídá žádnému uloženému profilu.',
+			missing: 'Nebyla nalezena žádná konfigurace grafiky iRacingu.',
+		},
+		badge: {
+			active: 'Aktivní',
+			modified: 'Změněno',
+		},
+		empty: {
+			title: 'Zatím nejsou uloženy žádné profily.',
+			body: 'Uložte aktuální konfiguraci iRacingu jako profil nebo importujte existující soubor .ini.',
+		},
+		invalidProfile: 'Není konfigurace grafiky',
+		warnings: {
+			autoCfgIncomplete: 'iRacing jej resetuje',
+		},
+		actions: {
+			load: 'Načíst',
+			overwrite: 'Aktualizovat z aktuální',
+			rename: 'Přejmenovat',
+			export: 'Exportovat',
+			delete: 'Smazat',
+			save: 'Uložit',
+			cancel: 'Zrušit',
+			saveCurrent: 'Uložit aktuální jako…',
+			import: 'Importovat…',
+			openFolder: 'Otevřít složku',
+		},
+		prompt: {
+			namePlaceholder: 'Název profilu',
+			deleteConfirm: 'Smazat {name}?',
+		},
+		feedback: {
+			loaded: 'Profil {name} byl načten. Aby se projevil, spusťte iRacing.',
+			saved: 'Uloženo jako {name}.',
+			overwritten: 'Profil {name} byl aktualizován z aktuální konfigurace.',
+			renamed: 'Přejmenováno na {name}.',
+			deleted: 'Profil {name} byl smazán.',
+			imported: 'Importováno jako {name}.',
+			exported: 'Profil {name} byl exportován.',
+		},
+		errors: {
+			empty: 'Zadejte název profilu.',
+			illegalCharacters:
+				'Název profilu nesmí obsahovat žádný z těchto znaků: < > : " / \\ | ? *',
+			reservedName: 'Tento název je ve Windows vyhrazen. Zvolte jiný.',
+			trailingDotOrSpace: 'Název profilu nesmí končit tečkou ani mezerou.',
+			tooLong: 'Tento název je příliš dlouhý.',
+			duplicate: 'Profil s tímto názvem již existuje.',
+			profileNotFound: 'Tento profil se již nepodařilo najít.',
+			profileExists: 'Profil s tímto názvem již existuje.',
+			duplicateContent:
+				'Profil s přesně tímto nastavením již existuje: {name}.',
+			noActiveConfig:
+				'Nebyla nalezena žádná konfigurace grafiky iRacingu k uložení.',
+			invalidIni:
+				'Tento soubor není konfigurací grafiky iRacingu, proto nebyl použit.',
+			iracingRunning:
+				'Nejprve zavřete iRacing — při ukončení by změnu přepsal.',
+			ioError: 'Soubor se nepodařilo zapsat. Nic nebylo změněno.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'V této verzi Windows se může na snímcích objevit kurzor myši. Windows 10 verze 2004 přidaly nastavení, které jej skrývá.',

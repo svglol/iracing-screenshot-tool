@@ -16,6 +16,14 @@
 			</li>
 
 			<li>
+				<a
+					:title="$t('graphicsProfiles.title')"
+					@click="showProfiles = true"
+					><font-awesome-icon :icon="['fas', 'sliders']"
+				/></a>
+			</li>
+
+			<li>
 				<a @click="openDiscord"
 					><font-awesome-icon :icon="['fab', 'discord']"
 				/></a>
@@ -52,6 +60,17 @@
 		>
 			<ChangelogModal @close="showChangelog = false" />
 		</o-modal>
+
+		<o-modal
+			v-model:active="showProfiles"
+			has-modal-card
+			trap-focus
+			:can-cancel="false"
+			aria-role="dialog"
+			aria-modal
+		>
+			<GraphicsProfilesModal @close="showProfiles = false" />
+		</o-modal>
 	</div>
 </template>
 
@@ -59,6 +78,7 @@
 import HelpModal from '../components/HelpModal.vue';
 import SettingsModal from '../components/SettingsModal.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
+import GraphicsProfilesModal from '../components/GraphicsProfilesModal.vue';
 import config from '../../utilities/config';
 import { version, repository } from '../../../package.json';
 
@@ -93,6 +113,7 @@ export default {
 		HelpModal,
 		SettingsModal,
 		ChangelogModal,
+		GraphicsProfilesModal,
 	},
 	data() {
 		return {
@@ -100,6 +121,7 @@ export default {
 			showHelp: false,
 			showConfig: false,
 			showChangelog: false,
+			showProfiles: false,
 		};
 	},
 	mounted() {

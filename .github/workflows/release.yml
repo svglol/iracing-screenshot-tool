@@ -8,8 +8,8 @@ on:
         tags:
             - 'v*'
 
-# electron-builder creates the draft release and uploads assets; the final step
-# flips it out of draft. Both need write access to contents.
+# The workflow creates a draft release, uploads the signed assets into it with
+# gh, and the final step flips it out of draft. All need write access.
 permissions:
     contents: write
 
@@ -25,7 +25,22 @@ jobs:
         # @irsdk-node/native, which fails `npm ci`. This must stay in step with
         # the runner ci.yml uses, so the release builds what CI tested.
         runs-on: windows-2022
-        timeout-minutes: 60
+        # ~40 minutes of build plus up to 30 minutes waiting for a signing
+        # approval (see the SignPath step).
+        timeout-minutes: 90
+
+        env:
+            # Which SignPath policy signs this release.
+            #
+            # test-signing uses the self-signed test certificate: it proves the
+            # pipeline end to end but Windows does not trust it, so releases
+            # signed with it must not ship to users. Flip to release-signing
+            # once the Foundation's release certificate shows VALID in SignPath
+            # — and in the SAME change add
+            #     "publisherName": ["SignPath Foundation"]
+            # to package.json's build.win, so electron-updater starts verifying
+            # the signature of every downloaded update.
+            SIGNPATH_SIGNING_POLICY: test-signing
 
         steps:
             - uses: actions/checkout@v4
@@ -78,20 +93,18 @@ jobs:
             - name: Build bundles
               run: npm run pack
 
-            # Create the draft BEFORE electron-builder runs.
+            # Create the draft BEFORE anything uploads, and flip it public only
+            # at the very end, so a failed run never leaves a half-populated
+            # release visible to users. Idempotent on purpose: a re-run after a
+            # failed build reuses the existing draft rather than failing on
+            # "already exists".
             #
-            # package.json builds two targets (nsis + portable), and
-            # electron-builder starts one GitHub publisher per target. They run
-            # concurrently, each asks "is there a release for this tag?", both
-            # get no, and both CREATE one. v3.3.0 came out of this with the
-            # installer, the portable exe and latest.yml attached to one release
-            # and the .blockmap to another, and the publish step below then
-            # flipped the wrong one out of draft — shipping a release with no
-            # installer on it. v3.2.2 won the same race by luck.
-            #
-            # With the draft already there, both publishers find it and upload
-            # into it. Idempotent on purpose: a re-run after a failed build
-            # reuses the existing draft rather than failing on "already exists".
+            # (This step predates the signing split, when two concurrent
+            # electron-builder GitHub publishers — one per target — would race
+            # to create the release and split the assets between them; v3.3.0
+            # shipped without its installer that way. electron-builder no
+            # longer uploads anything, so the race is gone, but the pre-created
+            # draft still keeps re-runs and the publish flip safe.)
             - name: Create draft release
               shell: bash
               env:
@@ -107,13 +120,68 @@ jobs:
                       --notes "Build in progress — this text is replaced when the release is published."
                   fi
 
-            # Uploads the NSIS installer, the portable exe, the .blockmap and —
-            # critically — latest.yml, which electron-updater fetches to discover
-            # new versions. Attaches to the draft created above.
-            - name: Package and upload artifacts
-              run: npx electron-builder --publish always
+            # Produces the NSIS installer, the portable exe, the .blockmap and
+            # latest.yml in build/ WITHOUT publishing. Signing has to happen
+            # between packaging and upload, so the electron-builder publishers
+            # are out of the loop entirely — gh uploads the finished assets
+            # below.
+            - name: Package installers
+              run: npx electron-builder --publish never
+
+            # The unsigned executables travel to SignPath as a workflow
+            # artifact. GitHub delivers those as a ZIP, which is why the
+            # SignPath project's artifact configuration must have a <zip-file>
+            # root containing the pe-file entries for both executables.
+            - name: Stage unsigned executables
+              id: unsigned
+              uses: actions/upload-artifact@v4
+              with:
+                  name: unsigned-executables
+                  path: build/*.exe
+                  if-no-files-found: error
+
+            # Submits the signing request and waits for the signed artifact.
+            #
+            # Under release-signing this PAUSES mid-run until someone approves
+            # the request in the SignPath UI — approve within the timeout below
+            # or the job fails. A re-run rebuilds and resubmits; the draft
+            # release is reused.
+            - name: Sign executables
+              uses: signpath/github-action-submit-signing-request@v2
+              with:
+                  api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+                  organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+                  project-slug: iracing-screenshot-tool
+                  signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY }}
+                  github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+                  wait-for-completion: true
+                  wait-for-completion-timeout-in-seconds: 1800
+                  output-artifact-directory: build/signed
+
+            # Signing changed every byte electron-builder hashed, so the
+            # update manifest and blockmap must be rebuilt from the SIGNED
+            # executables — electron-updater verifies sha512 before applying an
+            # update, and a stale manifest means every client downloads the
+            # update and then refuses it. The script also renames the
+            # artifacts to the dash-separated names latest.yml's `url` field
+            # already points at (see sign-helpers.js for why gh must not upload
+            # the space-named files).
+            - name: Rebuild update manifest from signed executables
+              shell: bash
+              run: |
+                  cp build/signed/*.exe build/
+                  node _scripts/finalize-signed-artifacts.js build
+
+            - name: Upload artifacts
+              shell: bash
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release upload "$GITHUB_REF_NAME" \
+                    build/*.exe \
+                    build/*.exe.blockmap \
+                    build/latest.yml \
+                    --clobber
 
             # Attach the notes and take the release out of draft, so a failed build
             # above never leaves a half-populated release visible to users.
@@ -168,7 +236,32 @@ jobs:
                     exit 1
                   fi
 
-                  echo "Artifacts verified: ${exe_count} .exe + latest.yml"
+                  # The one thing the presence checks above cannot see is
+                  # latest.yml CORRECTNESS: a manifest whose sha512 describes
+                  # the unsigned build would make every client download the
+                  # update and then refuse to apply it. Compare the manifest as
+                  # released against the signed installer on disk.
+                  gh release download "$tag" --pattern latest.yml -O released-latest.yml
+                  manifest_path="$(grep -m1 '^path:' released-latest.yml | awk '{print $2}')"
+                  manifest_sha="$(grep -m1 '^sha512:' released-latest.yml | awk '{print $2}')"
+                  local_sha="$(node -e "const c=require('crypto'),f=require('fs');console.log(c.createHash('sha512').update(f.readFileSync('build/'+process.argv[1])).digest('base64'))" "$manifest_path")"
+                  if [ "$manifest_sha" != "$local_sha" ]; then
+                    echo "::error::latest.yml's sha512 does not match the uploaded installer (${manifest_path}). Auto-update would reject every download. Refusing to publish."
+                    exit 1
+                  fi
+
+                  echo "Artifacts verified: ${exe_count} .exe + latest.yml (sha512 matches ${manifest_path})"
+
+                  # A prerelease-suffixed tag (v3.4.0-signing.1) is a pipeline
+                  # rehearsal, not a release: run every guard above, then STOP,
+                  # leaving the draft in place for inspection and deletion.
+                  # Flipping it public with --latest would offer the build to
+                  # every auto-updating user — which for a rehearsal may be a
+                  # test-signed binary Windows does not trust.
+                  if [[ "$version" == *-* ]]; then
+                    echo "Prerelease tag ${tag}: all checks passed. Leaving the release as a draft."
+                    exit 0
+                  fi
 
                   if [ -f "$notes" ]; then
                     echo "Using curated notes: $notes"

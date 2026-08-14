@@ -130,6 +130,28 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	// --- iRacing configuration folder ------------------------------------
+	// Override for the folder holding rendererDX11Monitor.ini. Empty means
+	// "resolve it from the Windows Documents known folder", which is right for
+	// essentially everyone including OneDrive-redirected setups. This exists for
+	// the installs we cannot discover — Documents moved to another drive, or a
+	// relocated iRacing directory. Names the iRacing folder ITSELF, not its parent.
+	iracingFolder: {
+		type: 'string',
+		default: '',
+	},
+	// The graphics profile we last wrote over rendererDX11Monitor.ini. Empty means
+	// nothing has been applied yet.
+	//
+	// This is what lets a DRIFTED config still be named. iRacing rewrites the ini
+	// on exit, so the moment the user changes a graphics setting in-sim the live
+	// file stops matching the profile it came from. Without this record the app
+	// could only say "no profile active"; with it, it says "Screenshots, with
+	// changes" — which is the answer the user actually needs.
+	activeGraphicsProfile: {
+		type: 'string',
+		default: '',
+	},
 	// --- Long exposure (docs/design/long-exposure.md) ---------------------
 	// The last parameter set the user shot with, so re-opening the panel resumes
 	// where they left off. The anchor is deliberately NOT persisted: it belongs to

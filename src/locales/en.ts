@@ -4,7 +4,7 @@
 // Two rules for anyone editing this file:
 //
 //   1. Changing English text here is a translation-invalidating edit. The other
-//      twelve catalogues still hold the OLD wording and will keep showing it —
+//      seventeen catalogues still hold the OLD wording and will keep showing it —
 //      key-parity tests cannot see that a sentence changed meaning. Update them
 //      too, or the change ships to English speakers only.
 //
@@ -408,6 +408,93 @@ export default {
 	iracingConfig: {
 		projections:
 			'Disable "Render Scene Using 3 Projections" in iRacing (Display > Monitor tab) to avoid vertical bands in screenshots',
+	},
+
+	graphicsProfiles: {
+		title: 'Graphics Profiles',
+		// Carries inline <b> emphasis — rendered with v-html, so keep it to markup
+		// the modal expects (see GraphicsProfilesModal.vue).
+		description:
+			'Store iRacing graphics configurations and switch between them — one for racing, one for screenshots, one for recording video. iRacing loads the configuration when it starts and writes it back when it exits, so a switch made while it is running is undone: <b>only switch configurations while the sim is closed</b>.',
+		// The most important sentence here. iRacing keeps its graphics settings in
+		// memory and writes them back over the file when it exits, so a swap made
+		// while it is running is undone with no sign anything failed.
+		iracingRunning:
+			'Close iRacing before switching. It rewrites its graphics configuration when it exits, which would undo the change.',
+		activeHeading: 'Current configuration',
+		active: {
+			clean: 'Matches your {name} profile.',
+			// The count is what separates "I nudged one slider" from "this is a
+			// different setup entirely".
+			modified: {
+				one: 'Based on {name}, with {count} setting changed since.',
+				other: 'Based on {name}, with {count} settings changed since.',
+			},
+			modifiedUnknownCount: 'Based on {name}, with changes since.',
+			unknown: 'Does not match any stored profile.',
+			missing: 'No iRacing graphics configuration was found.',
+		},
+		badge: {
+			active: 'Active',
+			modified: 'Modified',
+		},
+		empty: {
+			title: 'No profiles stored yet.',
+			body: 'Save your current iRacing configuration as a profile, or import an existing .ini file.',
+		},
+		invalidProfile: 'Not a graphics config',
+		warnings: {
+			// iRacing re-runs its 3D auto-configuration at startup when it sees this
+			// and overwrites the whole file, so the profile appears not to stick.
+			autoCfgIncomplete: 'Will be reset by iRacing',
+		},
+		actions: {
+			load: 'Load',
+			overwrite: 'Update from current',
+			rename: 'Rename',
+			export: 'Export',
+			delete: 'Delete',
+			save: 'Save',
+			cancel: 'Cancel',
+			saveCurrent: 'Save current as…',
+			import: 'Import…',
+			openFolder: 'Open folder',
+		},
+		prompt: {
+			namePlaceholder: 'Profile name',
+			deleteConfirm: 'Delete {name}?',
+		},
+		feedback: {
+			// The restart caveat is part of the success message: the swap only takes
+			// effect at iRacing's next launch, and without saying so the user has
+			// every reason to believe it silently failed.
+			loaded: '{name} loaded. Start iRacing for it to take effect.',
+			saved: 'Saved as {name}.',
+			overwritten: '{name} updated from the current configuration.',
+			renamed: 'Renamed to {name}.',
+			deleted: '{name} deleted.',
+			imported: 'Imported as {name}.',
+			exported: '{name} exported.',
+		},
+		errors: {
+			empty: 'Enter a name for the profile.',
+			illegalCharacters:
+				'A profile name cannot contain any of: < > : " / \\ | ? *',
+			reservedName: 'That name is reserved by Windows. Choose another.',
+			trailingDotOrSpace: 'A profile name cannot end with a dot or a space.',
+			tooLong: 'That name is too long.',
+			duplicate: 'A profile with that name already exists.',
+			profileNotFound: 'That profile could no longer be found.',
+			profileExists: 'A profile with that name already exists.',
+			duplicateContent:
+				'A profile with these exact settings already exists: {name}.',
+			noActiveConfig: 'No iRacing graphics configuration was found to save.',
+			invalidIni:
+				'That file is not an iRacing graphics configuration, so it was not used.',
+			iracingRunning:
+				'Close iRacing first — it would overwrite the change when it exits.',
+			ioError: 'The file could not be written. Nothing was changed.',
+		},
 	},
 
 	wgc: {

@@ -42,8 +42,24 @@ describe('resolveLocale', () => {
 		expect(resolveLocale('no')).toBe('no');
 	});
 
+	// Chinese ships in Traditional script only, so the script subtag decides:
+	// Traditional tags (region or explicit script) map onto zh-tw, while
+	// Simplified would be the wrong written form entirely and falls back to
+	// English instead.
+	it('maps Traditional Chinese tags onto zh-tw and Simplified onto English', () => {
+		expect(resolveLocale('zh-TW')).toBe('zh-tw');
+		expect(resolveLocale('zh-HK')).toBe('zh-tw');
+		expect(resolveLocale('zh-MO')).toBe('zh-tw');
+		expect(resolveLocale('zh-Hant')).toBe('zh-tw');
+		expect(resolveLocale('zh-Hant-TW')).toBe('zh-tw');
+		expect(resolveLocale('zh')).toBe('en');
+		expect(resolveLocale('zh-CN')).toBe('en');
+		expect(resolveLocale('zh-Hans')).toBe('en');
+		expect(resolveLocale('zh-SG')).toBe('en');
+	});
+
 	it('falls back to English for anything unshipped or unusable', () => {
-		expect(resolveLocale('ja')).toBe('en');
+		expect(resolveLocale('th')).toBe('en');
 		expect(resolveLocale('')).toBe('en');
 		expect(resolveLocale('   ')).toBe('en');
 		expect(resolveLocale(null)).toBe('en');
@@ -54,11 +70,19 @@ describe('resolveLocale', () => {
 
 describe('detectLocale', () => {
 	it('takes the first supported entry, not merely the first', () => {
-		expect(detectLocale(['ja-JP', 'zh-CN', 'sv-SE', 'de-DE'])).toBe('sv');
+		expect(detectLocale(['th-TH', 'zh-CN', 'sv-SE', 'de-DE'])).toBe('sv');
+	});
+
+	// Simplified Chinese has no catalogue, but it must not end the search either:
+	// a user listing zh-CN before ja-JP still reads Japanese far better than
+	// English.
+	it('skips Simplified Chinese rather than stopping on it', () => {
+		expect(detectLocale(['zh-CN', 'ja-JP'])).toBe('ja');
+		expect(detectLocale(['zh-CN', 'zh-TW'])).toBe('zh-tw');
 	});
 
 	it('falls back to English when nothing matches', () => {
-		expect(detectLocale(['ja-JP', 'ko-KR'])).toBe('en');
+		expect(detectLocale(['th-TH', 'vi-VN'])).toBe('en');
 		expect(detectLocale([])).toBe('en');
 	});
 
@@ -74,7 +98,7 @@ describe('setLocale', () => {
 	});
 
 	it('resolves an unsupported request to English rather than storing it', () => {
-		expect(setLocale('ja')).toBe('en');
+		expect(setLocale('th')).toBe('en');
 		expect(getLocale()).toBe('en');
 	});
 });
@@ -83,9 +107,12 @@ describe('isSupportedLocale', () => {
 	it('accepts exactly the shipped codes', () => {
 		expect(isSupportedLocale('de')).toBe(true);
 		expect(isSupportedLocale('en')).toBe(true);
+		// The one shipped code that carries a region, because the catalogue is
+		// script-specific.
+		expect(isSupportedLocale('zh-tw')).toBe(true);
 		// A full tag is not itself a shipped code — resolveLocale is what narrows.
 		expect(isSupportedLocale('de-DE')).toBe(false);
-		expect(isSupportedLocale('ja')).toBe(false);
+		expect(isSupportedLocale('th')).toBe(false);
 		expect(isSupportedLocale(null)).toBe(false);
 	});
 });
@@ -126,7 +153,7 @@ describe('translate', () => {
 
 	it('falls back to English when a locale is missing the key', () => {
 		// Deliberately not a shipped locale: resolveLocale sends it to English.
-		expect(translate('ja', 'settings.title')).toBe('Settings');
+		expect(translate('th', 'settings.title')).toBe('Settings');
 	});
 
 	it('selects the English plural forms by count', () => {
@@ -205,7 +232,46 @@ function placeholders(text: string): Set<string> {
 	);
 }
 
+// Paths of every English message that varies by count.
+function pluralPaths(node: unknown, prefix: string[] = []): string[] {
+	if (!node || typeof node !== 'object') {
+		return [];
+	}
+	if (isPluralNode(node)) {
+		return [prefix.join('.')];
+	}
+	return Object.entries(node as Record<string, unknown>).flatMap(
+		([key, value]) => pluralPaths(value, [...prefix, key])
+	);
+}
+
+// The plural categories a language actually reaches for the WHOLE-NUMBER counts
+// these messages carry — sample counts, changed settings, passes. Deliberately
+// not every category the language defines: Czech's `many` exists only for
+// fractions, so demanding it would fail a perfectly correct translation.
+function integerPluralCategories(locale: string): string[] {
+	const rules = new Intl.PluralRules(locale);
+	const categories = new Set<string>();
+	for (let count = 0; count <= 200; count++) {
+		categories.add(rules.select(count));
+	}
+	return [...categories].sort();
+}
+
+function messageAt(root: unknown, path: string): unknown {
+	return path
+		.split('.')
+		.reduce<unknown>(
+			(node, key) =>
+				node && typeof node === 'object'
+					? (node as Record<string, unknown>)[key]
+					: undefined,
+			root
+		);
+}
+
 const englishPaths = messagePaths(en).sort();
+const englishPluralPaths = pluralPaths(en);
 const englishLeaves = new Map(
 	flatten(en).map((leaf) => [leaf.path, leaf.value])
 );
@@ -269,6 +335,52 @@ describe('catalogue integrity', () => {
 						allowed.has(name),
 						`${code}: ${leaf.path} uses {${name}}, which English does not define`
 					).toBe(true);
+				}
+			}
+		});
+
+		// The test above checks a translation ADDS no placeholder English lacks.
+		// This is the other direction, and the one that actually loses meaning: a
+		// translation that DROPS {name} renders a sentence with a hole in it, and
+		// neither the catalogue type nor the key-parity check can see that. A
+		// profile-applied toast reading "applied. Start iRacing…" would ship.
+		it(`${code} keeps every placeholder English defines`, () => {
+			for (const leaf of flatten(catalog as MessageCatalog)) {
+				const source =
+					englishLeaves.get(leaf.path) ??
+					englishLeaves.get(
+						leaf.path.split('.').slice(0, -1).join('.') + '.other'
+					);
+				if (source === undefined) {
+					continue;
+				}
+				const present = placeholders(leaf.value);
+				for (const name of placeholders(source)) {
+					expect(
+						present.has(name),
+						`${code}: ${leaf.path} drops {${name}}`
+					).toBe(true);
+				}
+			}
+		});
+
+		// `other` alone is not enough for every language. Czech needs a distinct
+		// form for 2-4 and Polish for 5+; falling back to `other` there yields a
+		// grammatically WRONG sentence rather than an obviously missing one, which
+		// is the harder kind of bug to notice.
+		it(`${code} supplies every plural form its own grammar needs`, () => {
+			for (const path of englishPluralPaths) {
+				const node = messageAt(catalog, path) as
+					| Record<string, unknown>
+					| undefined;
+				if (!node) {
+					continue;
+				}
+				for (const category of integerPluralCategories(code)) {
+					expect(
+						typeof node[category],
+						`${code}: ${path} has no '${category}' form, which this language needs for whole-number counts`
+					).toBe('string');
 				}
 			}
 		});

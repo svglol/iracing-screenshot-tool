@@ -388,6 +388,86 @@ const nl: Catalog = {
 			'Schakel „Render Scene Using 3 Projections” uit in iRacing (tabblad Display > Monitor) om verticale banden in schermafbeeldingen te voorkomen',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafische profielen',
+		description:
+			'Bewaar iRacing-grafische configuraties en wissel ertussen — één om te racen, één voor schermafbeeldingen, één voor video-opnames. iRacing laadt de configuratie bij het starten en schrijft die bij het afsluiten terug, dus een wissel terwijl de sim draait wordt ongedaan gemaakt: <b>wissel alleen van configuratie als de sim gesloten is</b>.',
+		iracingRunning:
+			'Sluit iRacing voordat je wisselt. Bij het afsluiten schrijft het zijn grafische configuratie terug, waardoor de wijziging ongedaan wordt gemaakt.',
+		activeHeading: 'Huidige configuratie',
+		active: {
+			clean: 'Komt overeen met je profiel {name}.',
+			modified: {
+				one: 'Gebaseerd op {name}, met sindsdien {count} instelling gewijzigd.',
+				other: 'Gebaseerd op {name}, met sindsdien {count} instellingen gewijzigd.',
+			},
+			modifiedUnknownCount: 'Gebaseerd op {name}, sindsdien gewijzigd.',
+			unknown: 'Komt met geen enkel opgeslagen profiel overeen.',
+			missing: 'Er is geen iRacing-grafische configuratie gevonden.',
+		},
+		badge: {
+			active: 'Actief',
+			modified: 'Gewijzigd',
+		},
+		empty: {
+			title: 'Nog geen profielen opgeslagen.',
+			body: 'Sla je huidige iRacing-configuratie op als profiel of importeer een bestaand .ini-bestand.',
+		},
+		invalidProfile: 'Geen grafische configuratie',
+		warnings: {
+			autoCfgIncomplete: 'Wordt door iRacing gereset',
+		},
+		actions: {
+			load: 'Laden',
+			overwrite: 'Bijwerken vanuit huidige',
+			rename: 'Hernoemen',
+			export: 'Exporteren',
+			delete: 'Verwijderen',
+			save: 'Opslaan',
+			cancel: 'Annuleren',
+			saveCurrent: 'Huidige opslaan als…',
+			import: 'Importeren…',
+			openFolder: 'Map openen',
+		},
+		prompt: {
+			namePlaceholder: 'Profielnaam',
+			deleteConfirm: '{name} verwijderen?',
+		},
+		feedback: {
+			loaded:
+				'{name} geladen. Start iRacing om het van kracht te laten worden.',
+			saved: 'Opgeslagen als {name}.',
+			overwritten: '{name} bijgewerkt vanuit de huidige configuratie.',
+			renamed: 'Hernoemd naar {name}.',
+			deleted: '{name} verwijderd.',
+			imported: 'Geïmporteerd als {name}.',
+			exported: '{name} geëxporteerd.',
+		},
+		errors: {
+			empty: 'Voer een naam voor het profiel in.',
+			illegalCharacters:
+				'Een profielnaam mag geen van deze tekens bevatten: < > : " / \\ | ? *',
+			reservedName:
+				'Die naam is gereserveerd door Windows. Kies een andere.',
+			trailingDotOrSpace:
+				'Een profielnaam mag niet eindigen op een punt of een spatie.',
+			tooLong: 'Die naam is te lang.',
+			duplicate: 'Er bestaat al een profiel met die naam.',
+			profileNotFound: 'Dat profiel kon niet meer worden gevonden.',
+			profileExists: 'Er bestaat al een profiel met die naam.',
+			duplicateContent:
+				'Er bestaat al een profiel met precies deze instellingen: {name}.',
+			noActiveConfig:
+				'Er is geen iRacing-grafische configuratie gevonden om op te slaan.',
+			invalidIni:
+				'Dat bestand is geen iRacing-grafische configuratie en is daarom niet gebruikt.',
+			iracingRunning:
+				'Sluit eerst iRacing — het zou de wijziging bij het afsluiten overschrijven.',
+			ioError:
+				'Het bestand kon niet worden geschreven. Er is niets gewijzigd.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'De muisaanwijzer kan in opnames verschijnen op deze versie van Windows. Windows 10 versie 2004 introduceerde de instelling die hem verbergt.',

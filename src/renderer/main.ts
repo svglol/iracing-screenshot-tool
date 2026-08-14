@@ -39,6 +39,8 @@ import {
 	// neither.
 	faCloudArrowDown,
 	faRotateRight,
+	// Graphics profile switcher's toolbar entry.
+	faSliders,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -60,6 +62,7 @@ library.add(
 	faCircleInfo,
 	faCloudArrowDown,
 	faRotateRight,
+	faSliders,
 	faDiscord
 );
 

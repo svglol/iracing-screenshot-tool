@@ -386,6 +386,83 @@ const sv: Catalog = {
 			'Stäng av ”Render Scene Using 3 Projections” i iRacing (fliken Display > Monitor) för att undvika lodräta band i skärmbilderna',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafikprofiler',
+		description:
+			'Spara iRacing-grafikkonfigurationer och växla mellan dem — en för att köra, en för skärmbilder, en för videoinspelning. iRacing läser konfigurationen vid start och skriver tillbaka den när det avslutas, så ett byte som görs medan simulatorn kör görs ogjort: <b>byt konfiguration bara när simulatorn är stängd</b>.',
+		iracingRunning:
+			'Stäng iRacing innan du växlar. Vid avslut skriver det tillbaka sin grafikkonfiguration, vilket skulle upphäva ändringen.',
+		activeHeading: 'Nuvarande konfiguration',
+		active: {
+			clean: 'Motsvarar din profil {name}.',
+			modified: {
+				one: 'Bygger på {name}, med {count} inställning ändrad sedan dess.',
+				other: 'Bygger på {name}, med {count} inställningar ändrade sedan dess.',
+			},
+			modifiedUnknownCount: 'Bygger på {name}, ändrad sedan dess.',
+			unknown: 'Motsvarar ingen sparad profil.',
+			missing: 'Ingen iRacing-grafikkonfiguration hittades.',
+		},
+		badge: {
+			active: 'Aktiv',
+			modified: 'Ändrad',
+		},
+		empty: {
+			title: 'Inga profiler sparade ännu.',
+			body: 'Spara din nuvarande iRacing-konfiguration som en profil, eller importera en befintlig .ini-fil.',
+		},
+		invalidProfile: 'Inte en grafikkonfiguration',
+		warnings: {
+			autoCfgIncomplete: 'Återställs av iRacing',
+		},
+		actions: {
+			load: 'Läs in',
+			overwrite: 'Uppdatera från nuvarande',
+			rename: 'Byt namn',
+			export: 'Exportera',
+			delete: 'Ta bort',
+			save: 'Spara',
+			cancel: 'Avbryt',
+			saveCurrent: 'Spara nuvarande som…',
+			import: 'Importera…',
+			openFolder: 'Öppna mapp',
+		},
+		prompt: {
+			namePlaceholder: 'Profilnamn',
+			deleteConfirm: 'Ta bort {name}?',
+		},
+		feedback: {
+			loaded: '{name} inläst. Starta iRacing för att det ska träda i kraft.',
+			saved: 'Sparad som {name}.',
+			overwritten: '{name} uppdaterad från den nuvarande konfigurationen.',
+			renamed: 'Namnet ändrat till {name}.',
+			deleted: '{name} borttagen.',
+			imported: 'Importerad som {name}.',
+			exported: '{name} exporterad.',
+		},
+		errors: {
+			empty: 'Ange ett namn för profilen.',
+			illegalCharacters:
+				'Ett profilnamn får inte innehålla något av dessa tecken: < > : " / \\ | ? *',
+			reservedName: 'Det namnet är reserverat av Windows. Välj ett annat.',
+			trailingDotOrSpace:
+				'Ett profilnamn får inte sluta med punkt eller mellanslag.',
+			tooLong: 'Det namnet är för långt.',
+			duplicate: 'Det finns redan en profil med det namnet.',
+			profileNotFound: 'Den profilen gick inte längre att hitta.',
+			profileExists: 'Det finns redan en profil med det namnet.',
+			duplicateContent:
+				'Det finns redan en profil med exakt dessa inställningar: {name}.',
+			noActiveConfig:
+				'Ingen iRacing-grafikkonfiguration hittades att spara.',
+			invalidIni:
+				'Den filen är inte en iRacing-grafikkonfiguration, så den användes inte.',
+			iracingRunning:
+				'Stäng iRacing först — det skulle skriva över ändringen vid avslut.',
+			ioError: 'Filen kunde inte skrivas. Ingenting ändrades.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'Muspekaren kan synas i inspelningar på den här versionen av Windows. Windows 10 version 2004 lade till inställningen som döljer den.',

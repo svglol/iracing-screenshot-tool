@@ -10,6 +10,7 @@ import {
 	dialog,
 	desktopCapturer,
 	nativeImage,
+	shell,
 } from 'electron';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -66,6 +67,17 @@ import {
 	validatePlan,
 	type LongExposureRecipe,
 } from '../utilities/long-exposure/shot-recipe';
+import {
+	applyProfile,
+	deleteProfile,
+	exportProfile,
+	getProfilesDir,
+	getSnapshot,
+	importProfile,
+	renameProfile,
+	saveActiveAs,
+	type StoreContext as ProfilesStoreContext,
+} from './iracing-profiles-store';
 import { resolveCaptureDimensions } from '../utilities/capture-resolution';
 import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
 import sharp from 'sharp';
@@ -880,6 +892,17 @@ ipcMain.handle(
 		);
 	}
 );
+
+ipcMain.handle(
+	'dialog:showSave',
+	(event, options: Electron.SaveDialogOptions) => {
+		const browserWindow = BrowserWindow.fromWebContents(event.sender);
+		return dialog.showSaveDialog(
+			browserWindow || (undefined as unknown as BrowserWindow),
+			options
+		);
+	}
+);
 // Live GPU VRAM (total + used) for the sidebar's headroom guardrail. koffi FFI
 // runs main-side only; the renderer polls this (every few seconds) and does the
 // pure prediction. Includes iRacing's current window size (physical px) as the
@@ -959,6 +982,113 @@ ipcMain.on('native-capture-verify', (event) => {
 		log.info('High-Fidelity Capture verified');
 	}
 	event.returnValue = { ...support, verified, verifyError };
+});
+
+// ---------------------------------------------------------------------------
+// Graphics config profiles
+//
+// See docs/design/graphics-profiles.md. All the file handling lives in
+// iracing-profiles-store; these handlers only supply the state the store needs
+// (the folder override, which profile was last applied, whether iRacing is up)
+// and persist the one fact it hands back.
+// ---------------------------------------------------------------------------
+
+function profilesContext(): ProfilesStoreContext {
+	return {
+		iracingFolder: configModule.get('iracingFolder'),
+		lastAppliedName: configModule.get('activeGraphicsProfile'),
+		// The same readiness signal the sidebar's status heartbeat uses. It is the
+		// apply guard: iRacing rewrites the ini from memory when it exits, so a
+		// swap made while it is running would be silently undone.
+		iracingRunning: iracing.telemetry != null,
+	};
+}
+
+ipcMain.handle('profiles:list', () => getSnapshot(profilesContext()));
+
+ipcMain.handle('profiles:apply', (_event, name: string) => {
+	const result = applyProfile(name, profilesContext());
+	if (result.ok) {
+		// Record it BEFORE reporting success: this is what lets the config still be
+		// named once the user edits it in-sim and it stops matching the profile.
+		configModule.set('activeGraphicsProfile', name);
+		log.info('Graphics profile applied', {
+			profile: name,
+			backedUp: result.backedUp,
+		});
+	} else {
+		log.warn('Graphics profile apply refused', {
+			profile: name,
+			reason: result.error,
+		});
+	}
+	return result;
+});
+
+ipcMain.handle(
+	'profiles:save',
+	(_event, payload: { name: string; overwrite?: boolean }) => {
+		const result = saveActiveAs(payload.name, profilesContext(), {
+			overwrite: payload.overwrite,
+		});
+		if (result.ok) {
+			// Saving the live config makes it, by definition, an exact copy of that
+			// profile — so it becomes the active one.
+			configModule.set('activeGraphicsProfile', result.name);
+			log.info('Graphics profile saved', {
+				profile: result.name,
+				overwrite: Boolean(payload.overwrite),
+			});
+		}
+		return result;
+	}
+);
+
+ipcMain.handle(
+	'profiles:rename',
+	(_event, payload: { from: string; to: string }) => {
+		const result = renameProfile(payload.from, payload.to);
+		if (
+			result.ok &&
+			configModule.get('activeGraphicsProfile') === payload.from
+		) {
+			// Follow the rename, or the active config would report as unknown.
+			configModule.set('activeGraphicsProfile', result.name);
+		}
+		return result;
+	}
+);
+
+ipcMain.handle('profiles:delete', async (_event, name: string) => {
+	const result = await deleteProfile(name);
+	if (result.ok && configModule.get('activeGraphicsProfile') === name) {
+		// The live config is untouched, but there is no longer a profile to call it.
+		configModule.set('activeGraphicsProfile', '');
+		log.info('Graphics profile deleted', { profile: name });
+	}
+	return result;
+});
+
+ipcMain.handle(
+	'profiles:import',
+	(_event, payload: { sourcePath: string; name: string }) =>
+		importProfile(payload.sourcePath, payload.name)
+);
+
+ipcMain.handle(
+	'profiles:export',
+	(_event, payload: { name: string; destinationPath: string }) =>
+		exportProfile(payload.name, payload.destinationPath)
+);
+
+ipcMain.handle('profiles:revealFolder', async () => {
+	const dir = getProfilesDir();
+	try {
+		fs.mkdirSync(dir, { recursive: true });
+	} catch {
+		// Explorer will report it if the folder genuinely cannot be created.
+	}
+	await shell.openPath(dir);
 });
 
 // ---------------------------------------------------------------------------

@@ -33,7 +33,10 @@ export interface LocaleDescriptor {
 }
 
 // Ordered by endonym, because that is the order the picker renders and a user
-// scanning it is reading the endonyms, not the codes.
+// scanning it is reading the endonyms, not the codes. Latin scripts sort
+// alphabetically; the other scripts follow as a block (Cyrillic, Greek, Arabic,
+// then CJK), so a reader hunting for their own script finds it grouped rather
+// than interleaved by a collation they do not use.
 export const SUPPORTED_LOCALES: readonly LocaleDescriptor[] = [
 	{ code: 'cs', name: 'Čeština' },
 	{ code: 'da', name: 'Dansk' },
@@ -48,6 +51,13 @@ export const SUPPORTED_LOCALES: readonly LocaleDescriptor[] = [
 	{ code: 'pt', name: 'Português' },
 	{ code: 'fi', name: 'Suomi' },
 	{ code: 'sv', name: 'Svenska' },
+	{ code: 'tr', name: 'Türkçe' },
+	{ code: 'ru', name: 'Русский' },
+	{ code: 'el', name: 'Ελληνικά' },
+	{ code: 'ar', name: 'العربية' },
+	{ code: 'ja', name: '日本語' },
+	{ code: 'zh-tw', name: '繁體中文' },
+	{ code: 'ko', name: '한국어' },
 ] as const;
 
 // The source language. Every other catalogue is checked against it (see
@@ -74,12 +84,27 @@ export function isSupportedLocale(code: unknown): boolean {
 	return typeof code === 'string' && SUPPORTED_CODES.has(code);
 }
 
+// Chinese is the one language where the subtags cannot simply be dropped: the
+// shipped catalogue is written in Traditional characters, which is what zh-TW,
+// zh-HK, zh-MO and zh-Hant readers expect, while Simplified tags name a
+// different written form of the language entirely. Showing Traditional to a
+// zh-CN user is not a regional accent, it is the wrong script — so Simplified
+// resolves to nothing here and the caller decides what that falls back to.
+const TRADITIONAL_CHINESE_SUBTAGS = new Set(['hant', 'tw', 'hk', 'mo']);
+
+function resolveChinese(subtags: readonly string[]): string | null {
+	return subtags.some((tag) => TRADITIONAL_CHINESE_SUBTAGS.has(tag))
+		? 'zh-tw'
+		: null;
+}
+
 // Normalise anything a caller might hand us to a code we actually ship.
 //
 // Windows reports UI languages as BCP 47 tags ('de-DE', 'pt-BR', 'nb-NO'), so the
-// region has to be dropped before the lookup. Norwegian is the one case where
+// region has to be dropped before the lookup. Norwegian is one case where
 // dropping it is not enough: Windows uses `nb` (Bokmål) or `nn` (Nynorsk) and
 // almost never the macrolanguage `no` that we ship under, so both map onto it.
+// Chinese is the other — see resolveChinese above.
 export function resolveLocale(candidate: unknown): string {
 	if (typeof candidate !== 'string') {
 		return FALLBACK_LOCALE;
@@ -88,9 +113,13 @@ export function resolveLocale(candidate: unknown): string {
 	if (!normalized) {
 		return FALLBACK_LOCALE;
 	}
-	const base = normalized.split('-')[0];
+	const subtags = normalized.split('-');
+	const base = subtags[0];
 	if (base === 'nb' || base === 'nn') {
 		return 'no';
+	}
+	if (base === 'zh') {
+		return resolveChinese(subtags) ?? FALLBACK_LOCALE;
 	}
 	return SUPPORTED_CODES.has(base) ? base : FALLBACK_LOCALE;
 }
@@ -106,9 +135,19 @@ export function detectLocale(candidates: readonly unknown[]): string {
 			continue;
 		}
 		const normalized = candidate.trim().toLowerCase().replace(/_/g, '-');
-		const base = normalized.split('-')[0];
+		const subtags = normalized.split('-');
+		const base = subtags[0];
 		if (base === 'nb' || base === 'nn') {
 			return 'no';
+		}
+		if (base === 'zh') {
+			const traditional = resolveChinese(subtags);
+			if (traditional) {
+				return traditional;
+			}
+			// Simplified Chinese is not shipped, but a LATER preference may still
+			// match — skip rather than give up on the whole list.
+			continue;
 		}
 		if (SUPPORTED_CODES.has(base)) {
 			return base;

@@ -3,6 +3,8 @@ import { parseIniSection, checkIracingConfig } from './iracing-config-checks';
 // CJS require for fs: ESM namespace imports are sealed and `vi.spyOn` requires
 // a mutable object target. Tests below spy on fs methods to simulate ini I/O.
 const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 describe('parseIniSection', () => {
 	test('parses key=value pairs from a section', () => {
@@ -116,5 +118,33 @@ describe('checkIracingConfig', () => {
 			throw new Error('EACCES');
 		});
 		expect(checkIracingConfig()).toEqual([]);
+	});
+
+	test('reads the ini from a folder override when one is set', () => {
+		const existsSync = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+		vi.spyOn(fs, 'readFileSync').mockReturnValue(
+			'[MonitorSetup]\nRenderViewPerMonitor=0\n'
+		);
+
+		checkIracingConfig('D:\\iR');
+
+		expect(existsSync).toHaveBeenCalledWith(
+			path.join('D:\\iR', 'rendererDX11Monitor.ini')
+		);
+	});
+
+	test('reads from the resolved Documents folder when no override is set', () => {
+		const existsSync = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+		checkIracingConfig();
+
+		expect(existsSync).toHaveBeenCalledWith(
+			path.join(
+				os.homedir(),
+				'Documents',
+				'iRacing',
+				'rendererDX11Monitor.ini'
+			)
+		);
 	});
 });

@@ -387,6 +387,83 @@ const da: Catalog = {
 			'Slå „Render Scene Using 3 Projections“ fra i iRacing (fanen Display > Monitor) for at undgå lodrette bånd i skærmbillederne',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafikprofiler',
+		description:
+			'Gem iRacing-grafikkonfigurationer og skift mellem dem — én til ræs, én til skærmbilleder, én til videooptagelse. iRacing indlæser konfigurationen ved start og skriver den tilbage ved lukning, så et skift foretaget, mens simulatoren kører, bliver fortrudt: <b>skift kun konfiguration, mens simulatoren er lukket</b>.',
+		iracingRunning:
+			'Luk iRacing, før du skifter. Det skriver sin grafikkonfiguration tilbage, når det afsluttes, hvilket ville fortryde ændringen.',
+		activeHeading: 'Nuværende konfiguration',
+		active: {
+			clean: 'Svarer til din {name}-profil.',
+			modified: {
+				one: 'Bygger på {name}, med {count} indstilling ændret siden.',
+				other: 'Bygger på {name}, med {count} indstillinger ændret siden.',
+			},
+			modifiedUnknownCount: 'Bygger på {name}, med ændringer siden.',
+			unknown: 'Svarer ikke til nogen gemt profil.',
+			missing: 'Der blev ikke fundet nogen iRacing-grafikkonfiguration.',
+		},
+		badge: {
+			active: 'Aktiv',
+			modified: 'Ændret',
+		},
+		empty: {
+			title: 'Ingen profiler gemt endnu.',
+			body: 'Gem din nuværende iRacing-konfiguration som en profil, eller importér en eksisterende .ini-fil.',
+		},
+		invalidProfile: 'Ikke en grafikkonfiguration',
+		warnings: {
+			autoCfgIncomplete: 'Nulstilles af iRacing',
+		},
+		actions: {
+			load: 'Indlæs',
+			overwrite: 'Opdatér fra nuværende',
+			rename: 'Omdøb',
+			export: 'Eksportér',
+			delete: 'Slet',
+			save: 'Gem',
+			cancel: 'Annullér',
+			saveCurrent: 'Gem nuværende som…',
+			import: 'Importér…',
+			openFolder: 'Åbn mappe',
+		},
+		prompt: {
+			namePlaceholder: 'Profilnavn',
+			deleteConfirm: 'Slet {name}?',
+		},
+		feedback: {
+			loaded: '{name} indlæst. Start iRacing for at det træder i kraft.',
+			saved: 'Gemt som {name}.',
+			overwritten: '{name} opdateret ud fra den nuværende konfiguration.',
+			renamed: 'Omdøbt til {name}.',
+			deleted: '{name} slettet.',
+			imported: 'Importeret som {name}.',
+			exported: '{name} eksporteret.',
+		},
+		errors: {
+			empty: 'Indtast et navn til profilen.',
+			illegalCharacters:
+				'Et profilnavn må ikke indeholde nogen af disse: < > : " / \\ | ? *',
+			reservedName: 'Det navn er reserveret af Windows. Vælg et andet.',
+			trailingDotOrSpace:
+				'Et profilnavn må ikke slutte med punktum eller mellemrum.',
+			tooLong: 'Det navn er for langt.',
+			duplicate: 'Der findes allerede en profil med det navn.',
+			profileNotFound: 'Den profil kunne ikke længere findes.',
+			profileExists: 'Der findes allerede en profil med det navn.',
+			duplicateContent:
+				'Der findes allerede en profil med præcis disse indstillinger: {name}.',
+			noActiveConfig:
+				'Der blev ikke fundet nogen iRacing-grafikkonfiguration at gemme.',
+			invalidIni:
+				'Den fil er ikke en iRacing-grafikkonfiguration, så den blev ikke brugt.',
+			iracingRunning:
+				'Luk iRacing først — det ville overskrive ændringen, når det afsluttes.',
+			ioError: 'Filen kunne ikke skrives. Intet blev ændret.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'Musemarkøren kan optræde i optagelser på denne version af Windows. Windows 10 version 2004 tilføjede indstillingen, der skjuler den.',

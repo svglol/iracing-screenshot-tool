@@ -393,6 +393,85 @@ const de: Catalog = {
 			'Deaktiviere „Render Scene Using 3 Projections“ in iRacing (Display > Monitor), um vertikale Streifen in Screenshots zu vermeiden',
 	},
 
+	graphicsProfiles: {
+		title: 'Grafikprofile',
+		description:
+			'Speichere iRacing-Grafikkonfigurationen und wechsle zwischen ihnen — eine fürs Fahren, eine für Screenshots, eine für Videoaufnahmen. iRacing lädt die Konfiguration beim Start und schreibt sie beim Beenden zurück; ein Wechsel bei laufender Sim wird also rückgängig gemacht: <b>Konfigurationen nur bei geschlossener Sim wechseln</b>.',
+		iracingRunning:
+			'Schließe iRacing vor dem Wechsel. Beim Beenden schreibt es seine Grafikkonfiguration zurück und würde die Änderung rückgängig machen.',
+		activeHeading: 'Aktuelle Konfiguration',
+		active: {
+			clean: 'Entspricht deinem Profil {name}.',
+			modified: {
+				one: 'Basiert auf {name}, seitdem wurde {count} Einstellung geändert.',
+				other: 'Basiert auf {name}, seitdem wurden {count} Einstellungen geändert.',
+			},
+			modifiedUnknownCount: 'Basiert auf {name}, wurde seitdem geändert.',
+			unknown: 'Entspricht keinem gespeicherten Profil.',
+			missing: 'Es wurde keine iRacing-Grafikkonfiguration gefunden.',
+		},
+		badge: {
+			active: 'Aktiv',
+			modified: 'Geändert',
+		},
+		empty: {
+			title: 'Noch keine Profile gespeichert.',
+			body: 'Speichere deine aktuelle iRacing-Konfiguration als Profil oder importiere eine vorhandene .ini-Datei.',
+		},
+		invalidProfile: 'Keine Grafikkonfiguration',
+		warnings: {
+			autoCfgIncomplete: 'Wird von iRacing zurückgesetzt',
+		},
+		actions: {
+			load: 'Laden',
+			overwrite: 'Aus aktueller aktualisieren',
+			rename: 'Umbenennen',
+			export: 'Exportieren',
+			delete: 'Löschen',
+			save: 'Speichern',
+			cancel: 'Abbrechen',
+			saveCurrent: 'Aktuelle speichern als…',
+			import: 'Importieren…',
+			openFolder: 'Ordner öffnen',
+		},
+		prompt: {
+			namePlaceholder: 'Profilname',
+			deleteConfirm: '{name} löschen?',
+		},
+		feedback: {
+			loaded: '{name} geladen. Starte iRacing, damit es wirksam wird.',
+			saved: 'Als {name} gespeichert.',
+			overwritten: '{name} aus der aktuellen Konfiguration aktualisiert.',
+			renamed: 'In {name} umbenannt.',
+			deleted: '{name} gelöscht.',
+			imported: 'Als {name} importiert.',
+			exported: '{name} exportiert.',
+		},
+		errors: {
+			empty: 'Gib einen Namen für das Profil ein.',
+			illegalCharacters:
+				'Ein Profilname darf keines dieser Zeichen enthalten: < > : " / \\ | ? *',
+			reservedName:
+				'Dieser Name ist von Windows reserviert. Wähle einen anderen.',
+			trailingDotOrSpace:
+				'Ein Profilname darf nicht mit einem Punkt oder Leerzeichen enden.',
+			tooLong: 'Dieser Name ist zu lang.',
+			duplicate: 'Ein Profil mit diesem Namen existiert bereits.',
+			profileNotFound: 'Dieses Profil wurde nicht mehr gefunden.',
+			profileExists: 'Ein Profil mit diesem Namen existiert bereits.',
+			duplicateContent:
+				'Ein Profil mit genau diesen Einstellungen existiert bereits: {name}.',
+			noActiveConfig:
+				'Es wurde keine iRacing-Grafikkonfiguration zum Speichern gefunden.',
+			invalidIni:
+				'Diese Datei ist keine iRacing-Grafikkonfiguration und wurde daher nicht verwendet.',
+			iracingRunning:
+				'Schließe zuerst iRacing — beim Beenden würde es die Änderung überschreiben.',
+			ioError:
+				'Die Datei konnte nicht geschrieben werden. Es wurde nichts geändert.',
+		},
+	},
+
 	wgc: {
 		cursorCaveat:
 			'Der Mauszeiger kann bei dieser Windows-Version in Aufnahmen erscheinen. Windows 10 Version 2004 hat die Einstellung eingeführt, die ihn ausblendet.',
