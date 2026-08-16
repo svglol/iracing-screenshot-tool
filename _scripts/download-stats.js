@@ -19,6 +19,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const README_PATH = path.join(ROOT, 'README.md');
+const BADGE_PATH = path.join(ROOT, '.github', 'badges', 'downloads.json');
 const START_MARKER = '<!-- download-stats:start -->';
 const END_MARKER = '<!-- download-stats:end -->';
 
@@ -167,6 +168,20 @@ function renderMarkdown({ rows, totals }, updatedOn) {
 	return lines.join('\n');
 }
 
+// The README's downloads badge is a shields.io endpoint badge fed by this
+// file. Shields' built-in github/downloads counter cannot exclude latest.yml,
+// so it would permanently read ~127k instead of the real download count.
+function writeBadge(combined) {
+	const badge = {
+		schemaVersion: 1,
+		label: 'downloads',
+		message: formatCount(combined),
+		color: 'brightgreen',
+	};
+	fs.mkdirSync(path.dirname(BADGE_PATH), { recursive: true });
+	fs.writeFileSync(BADGE_PATH, JSON.stringify(badge, null, '\t') + '\n');
+}
+
 function spliceReadme(markdown) {
 	const readme = fs.readFileSync(README_PATH, 'utf8');
 	const start = readme.indexOf(START_MARKER);
@@ -193,7 +208,11 @@ async function main() {
 		console.log(markdown);
 	} else {
 		spliceReadme(markdown);
-		console.log(`Updated ${path.relative(ROOT, README_PATH)}`);
+		writeBadge(summary.totals.installer + summary.totals.portable);
+		console.log(
+			`Updated ${path.relative(ROOT, README_PATH)} and ` +
+				path.relative(ROOT, BADGE_PATH)
+		);
 	}
 	const { totals, rows } = summary;
 	console.log(

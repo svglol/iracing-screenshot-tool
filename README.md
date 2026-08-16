@@ -1,5 +1,5 @@
 # iRacing Screenshot Tool
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/svglol/iracing-screenshot-tool)](https://github.com/svglol/iracing-screenshot-tool/releases) [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/svglol/iracing-screenshot-tool)](https://github.com/svglol/iracing-screenshot-tool/releases) [![Build](https://img.shields.io/github/actions/workflow/status/svglol/iracing-screenshot-tool/ci.yml?branch=master)](https://github.com/svglol/iracing-screenshot-tool/actions/workflows/ci.yml) [![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsvglol%2Firacing-screenshot-tool%2Fmaster%2F.github%2Fbadges%2Fdownloads.json)](https://github.com/svglol/iracing-screenshot-tool/releases) [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
 
 ![](https://raw.githubusercontent.com/svglol/iracing-screenshot-tool/master/static/screenshot.png?v=6)
 
@@ -43,7 +43,7 @@ Created using Electron and Vue.
 
 | Version | Released | Installer | Portable | Update checks | All assets |
 | :------ | :------- | --------: | -------: | ------------: | ---------: |
-| v3.3.0 | 2026-08-07 | 260 | 32 | 676 | 1,167 |
+| v3.3.0 | 2026-08-07 | 260 | 32 | 679 | 1,170 |
 | v3.2.2 | 2026-08-05 | 29 | 4 | 2 | 35 |
 | v3.2.1 | 2026-08-04 | 4 | 2 | 0 | 6 |
 | v3.1.1 | 2026-07-05 | 96 | 61 | 0 | 157 |
@@ -71,7 +71,7 @@ Created using Electron and Vue.
 | v1.0.2 | 2020-04-27 | 50 | 0 | 85 | 174 |
 | v1.0.1 | 2020-04-27 | 21 | 0 | 38 | 80 |
 | v1.0.0 | 2020-04-24 | 20 | 0 | 24 | 67 |
-| **Total** |  | **8,692** | **514** | **116,275** | **127,376** |
+| **Total** |  | **8,692** | **514** | **116,278** | **127,379** |
 
 </details>
 
