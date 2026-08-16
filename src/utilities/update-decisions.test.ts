@@ -296,11 +296,20 @@ describe('canInstallNow', () => {
 describe('describeUpdate', () => {
 	test('distinguishes "not checked yet" from "up to date"', () => {
 		expect(describeUpdate(initialUpdateState(), '3.2.2')).toMatch(
-			/have not been checked/i
+			/not checked yet/i
 		);
 		expect(describeUpdate(stateWith({ checkedAt: NOW }), '3.2.2')).toMatch(
-			/latest version \(v3\.2\.2\)/i
+			/latest version/i
 		);
+	});
+
+	test('the idle sentences carry no version — Settings shows it right above', () => {
+		expect(describeUpdate(initialUpdateState(), '3.2.2')).not.toContain(
+			'3.2.2'
+		);
+		expect(
+			describeUpdate(stateWith({ checkedAt: NOW }), '3.2.2')
+		).not.toContain('3.2.2');
 	});
 
 	test('names the version and the action for an available update', () => {
