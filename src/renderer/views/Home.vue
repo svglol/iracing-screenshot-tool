@@ -65,8 +65,19 @@
 								padding-left: 0.5rem;
 							"
 						>
-							<span style="font-weight: bold">{{ fileName }}</span>
-							<o-tag variant="info">{{ resolution }}</o-tag>
+							<div style="font-weight: bold">{{ fileName }}</div>
+							<div
+								v-if="imageMeta"
+								style="
+									font-size: 0.7rem;
+									font-weight: 300;
+									letter-spacing: 0.06em;
+									line-height: 1.2;
+									color: var(--bulma-primary);
+								"
+							>
+								{{ imageMeta }}
+							</div>
 						</div>
 					</div>
 					<div class="column" style="margin-left: 5rem">
@@ -362,6 +373,7 @@ export default {
 			currentURL: '',
 			fileName: '',
 			resolution: '',
+			fileSize: '',
 			selected: 0,
 			galleryLoadId: 0,
 			generatingThumbs: new Set<string>(),
@@ -377,6 +389,9 @@ export default {
 		};
 	},
 	computed: {
+		imageMeta(): string {
+			return [this.resolution, this.fileSize].filter(Boolean).join(' · ');
+		},
 		// A computed rather than a data field so the context menu re-labels itself
 		// when the language changes — data() runs once per instance and this
 		// component is never remounted.
@@ -409,6 +424,7 @@ export default {
 			if (this.currentURL === '') {
 				this.fileName = '';
 				this.resolution = '';
+				this.fileSize = '';
 				return;
 			}
 
@@ -420,10 +436,20 @@ export default {
 				.join('.');
 			try {
 				const dimensions = sizeOf(toFsPath(this.currentURL));
-				this.resolution = `${dimensions.width} x ${dimensions.height}`;
+				this.resolution = `${dimensions.width}x${dimensions.height}`;
 			} catch (error) {
 				console.log(error);
 				this.resolution = '';
+			}
+			try {
+				const stats = fs.statSync(toFsPath(this.currentURL));
+				this.fileSize =
+					stats.size < 1024 * 1024
+						? `${Math.round(stats.size / 1024)} KB`
+						: `${(stats.size / (1024 * 1024)).toFixed(1)} MB`;
+			} catch (error) {
+				console.log(error);
+				this.fileSize = '';
 			}
 		},
 		// Keep the filename-bar / preview name in sync when the active index
