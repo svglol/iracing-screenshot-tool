@@ -136,6 +136,7 @@
         "prettier": "prettier --write \"{src,_scripts}/**/*.{js,ts,vue}\"",
         "rebuild:electron": "run-s electron-builder-install electron-rebuild",
         "rebuild:node": "npm rebuild",
+        "stats:downloads": "node _scripts/download-stats.js",
         "test": "vitest run",
         "test:coverage": "vitest run --coverage",
         "test:watch": "vitest --passWithNoTests",
