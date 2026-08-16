@@ -27,7 +27,7 @@
 
 		<!-- Hand-rolled tablist, not <o-tabs>: the Tabs plugin is deliberately
 		     unregistered and an unregistered Oruga component silently renders
-		     nothing (the HelpModal precedent). -->
+		     nothing (the Help page precedent). -->
 		<div
 			class="iracing-config__tabs"
 			role="tablist"

@@ -10,7 +10,7 @@
 		<section class="modal-card-body profiles-body">
 			<!-- v-html because the copy carries inline <b> emphasis on the one rule
 			     that matters (switch while the sim is closed). Catalogue text, not
-			     user input — same reasoning as HelpModal. -->
+			     user input — same reasoning as the Help page. -->
 			<!-- eslint-disable-next-line vue/no-v-html -->
 			<p class="description" v-html="$t('graphicsProfiles.description')"></p>
 
