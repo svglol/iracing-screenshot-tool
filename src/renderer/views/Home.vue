@@ -1,5 +1,14 @@
 <template>
-	<div class="columns is-gapless" style="margin-top: 0px; height: 100vh">
+	<!-- The view fills the space under the title bar. A bare 100vh here
+	     overshoots by that bar: the app-shell (and the nav rail stretching
+	     with it) then runs past the window bottom. -->
+	<div
+		class="columns is-gapless"
+		style="
+			margin-top: 0px;
+			height: calc(100vh - var(--titlebar-height, 24px));
+		"
+	>
 		<div
 			class="column is-2 shadow"
 			style="
@@ -12,26 +21,39 @@
 			"
 		>
 			<!-- The controls scroll, the footer does not. `html` is overflow:hidden
-			     and this column is pinned to 100vh, so without a scroll region here
-			     anything taller than the window is not merely cut off — it is
-			     unreachable. Expanding the long-exposure panel could put its own
-			     Capture button past the bottom edge with no way to reach it. -->
+			     and this column is pinned to the view height, so without a scroll
+			     region here anything taller than the window is not merely cut off —
+			     it is unreachable. Expanding the long-exposure panel could put its
+			     own Capture button past the bottom edge with no way to reach it. -->
 			<div class="sidebar-scroll">
 				<SideBar @screenshot="screenshot" />
 			</div>
 			<div class="sidebar-footer">
 				<PromoCard class="sidebar-promo" />
-				<Settings />
 			</div>
+
+			<!-- Auto-opened after an update. Hosted here (not on the Settings
+			     page) because Home is the view that is mounted at startup. -->
+			<o-modal
+				v-model:active="showChangelog"
+				has-modal-card
+				trap-focus
+				:can-cancel="false"
+				aria-role="dialog"
+				aria-modal
+			>
+				<ChangelogModal @close="showChangelog = false" />
+			</o-modal>
 		</div>
 
 		<div class="column">
-			<div v-if="currentURL !== ''">
+			<div v-if="currentURL !== ''" class="gallery-column">
 				<div
 					class="columns is-gapless"
 					style="
 						margin-bottom: 0.15rem;
 						background-color: rgba(0, 0, 0, 0.2);
+						flex-shrink: 0;
 					"
 				>
 					<div class="column is-9">
@@ -139,9 +161,10 @@
 <script lang="ts">
 import SideBar from '../components/SideBar.vue';
 import PromoCard from '../components/PromoCard.vue';
-import Settings from '../components/Settings.vue';
+import ChangelogModal from '../components/ChangelogModal.vue';
 import config from '../../utilities/config';
 import { useOruga } from '@oruga-ui/oruga-next';
+import { version, repository } from '../../../package.json';
 
 const { ipcRenderer, clipboard, shell, nativeImage } = require('electron');
 const sizeOf = require('image-size');
@@ -150,6 +173,34 @@ const path = require('path');
 const sharp = require('sharp');
 
 const userDataPath = ipcRenderer.sendSync('app:getPath-sync', 'userData');
+
+// Startup changelog plumbing, moved here from the old sidebar Settings
+// toolbar when its entries became rail pages: Home is the view mounted at
+// startup, so it owns "fetch the releases and surface the changelog once
+// after an update".
+const changelogFile = userDataPath + '\\releases.json';
+const changelogApiUrl = `https://api.github.com/repos/${getRepositorySlug(repository)}/releases`;
+
+function getRepositorySlug(repo) {
+	const fallback = 'svglol/iracing-screenshot-tool';
+	const raw = typeof repo === 'string' ? repo : repo?.url;
+
+	if (!raw) {
+		return fallback;
+	}
+
+	const slug = raw
+		.replace(/^git\+/, '')
+		.replace(/^https?:\/\/github\.com\//i, '')
+		.replace(/^git@github\.com:/i, '')
+		.replace(/^github:/i, '')
+		.replace(/\.git$/i, '')
+		.replace(/^\/+/, '')
+		.trim();
+
+	return slug || fallback;
+}
+
 const EMPTY_IMAGE =
 	'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const THUMBNAIL_CONCURRENCY = 4;
@@ -303,9 +354,10 @@ async function cleanupThumbnailCache() {
 
 export default {
 	name: 'Home',
-	components: { SideBar, PromoCard, Settings },
+	components: { SideBar, PromoCard, ChangelogModal },
 	data() {
 		return {
+			showChangelog: false,
 			items: [],
 			currentURL: '',
 			fileName: '',
@@ -423,6 +475,19 @@ export default {
 				void this.loadGallery();
 			}
 		);
+
+		// First launch lands on the Help page; an updated version surfaces the
+		// changelog once. (Moved from the old sidebar Settings toolbar.)
+		const firstTime = config.get('firstTime');
+		if (firstTime) {
+			config.set('firstTime', false);
+			void this.$router.push('/help');
+		}
+		const configVersion = config.get('version');
+		const showChangelogOnLoad =
+			configVersion !== '' && configVersion !== version && !firstTime;
+		config.set('version', version);
+		void this.loadReleases(showChangelogOnLoad);
 	},
 	beforeUnmount() {
 		if (this.onScreenshotResponse) {
@@ -434,6 +499,21 @@ export default {
 		this.configFolderDisposer?.();
 	},
 	methods: {
+		async loadReleases(showChangelogOnLoad) {
+			try {
+				const response = await fetch(changelogApiUrl);
+				const body = await response.text();
+				const releases = JSON.parse(body);
+				if (Array.isArray(releases)) {
+					fs.writeFileSync(changelogFile, body);
+					if (showChangelogOnLoad) {
+						this.showChangelog = true;
+					}
+				}
+			} catch (error) {
+				console.log(error);
+			}
+		},
 		getImageUrl(item) {
 			return item ? item.thumb : EMPTY_IMAGE;
 		},
@@ -684,14 +764,27 @@ body {
 	opacity: 0.5;
 }
 
+/* The filename bar keeps its natural height; the gallery flexes into
+   whatever remains of the column. Replaces a hand-tuned
+   `calc(100vh - 41px - 27px)` whose 27px under-measured the bar, so the
+   gallery poked past the bottom of the view (and the nav rail). */
+.gallery-column {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
 /* VRT: custom virtualized gallery — replaces <o-carousel>. Only the active
    preview img + the visible window of thumbs (≤ VISIBLE_WINDOW_SIZE = 11)
    are mounted, regardless of source folder size. */
 .gallery-virtual {
-	height: calc(100vh - 41px - 27px);
+	flex: 1 1 auto;
+	min-height: 0;
 	display: flex;
 	flex-direction: column;
-	max-width: calc(100vw - 240px);
+	/* The nav rail (App.vue's --nav-rail-width) now sits left of this view. */
+	max-width: calc(100vw - 240px - var(--nav-rail-width, 0px));
 	overflow: hidden;
 }
 

@@ -860,7 +860,10 @@ hr {
 .modal-card {
 	width: 100%;
 	max-width: none;
-	height: 100vh;
+	/* Fill the host exactly. 100vh was right when this card was a full-screen
+	   modal; as a page it overshot the wrapper by the title bar's height and
+	   pinned a permanent 41px scrollbar on the page. */
+	height: 100%;
 }
 
 .modal-card-head {

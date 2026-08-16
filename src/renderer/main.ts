@@ -41,6 +41,9 @@ import {
 	faRotateRight,
 	// Graphics profile switcher's toolbar entry.
 	faSliders,
+	// Nav rail: Home (gallery) and the iRacing configuration page.
+	faImages,
+	faDisplay,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -63,6 +66,8 @@ library.add(
 	faCloudArrowDown,
 	faRotateRight,
 	faSliders,
+	faImages,
+	faDisplay,
 	faDiscord
 );
 
