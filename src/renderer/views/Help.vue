@@ -104,24 +104,38 @@
 			</section>
 		</div>
 
+		<!-- An accordion of native <details>. The name attribute makes the group
+		     exclusive — opening one closes the others — in the engine itself
+		     (Chromium 120+; Electron ships far newer), so there is no open-state
+		     to script and <summary> brings the disclosure keyboard/AT semantics
+		     with it. Single stack, not columns: an item expanding in one column
+		     would reflow the neighbouring column mid-read. -->
 		<div
 			v-show="active === 'faq'"
 			id="help-panel-faq"
 			role="tabpanel"
 			aria-labelledby="help-tab-faq"
 			tabindex="0"
-			class="help-panel"
+			class="help-panel help-panel--stack"
 		>
-			<section class="help-block">
-				<span class="heading">{{ $t('help.faq.blackShot') }}</span>
-				<p>{{ $t('help.faq.blackShotBody') }}</p>
-				<p v-html="$t('help.faq.blackShotFullscreenBody')"></p>
-			</section>
-			<section class="help-block">
-				<span class="heading">{{ $t('help.faq.cameraReset') }}</span>
-				<p>{{ $t('help.faq.cameraResetBody') }}</p>
-				<p v-html="$t('help.faq.cameraResetFixBody')"></p>
-			</section>
+			<details class="help-faq" name="help-faq">
+				<summary class="help-faq__question">
+					{{ $t('help.faq.blackShot') }}
+				</summary>
+				<div class="help-faq__answer">
+					<p>{{ $t('help.faq.blackShotBody') }}</p>
+					<p v-html="$t('help.faq.blackShotFullscreenBody')"></p>
+				</div>
+			</details>
+			<details class="help-faq" name="help-faq">
+				<summary class="help-faq__question">
+					{{ $t('help.faq.cameraReset') }}
+				</summary>
+				<div class="help-faq__answer">
+					<p>{{ $t('help.faq.cameraResetBody') }}</p>
+					<p v-html="$t('help.faq.cameraResetFixBody')"></p>
+				</div>
+			</details>
 		</div>
 
 		<div
@@ -323,6 +337,62 @@ export default {
 .help-block {
 	break-inside: avoid;
 	margin-bottom: 2rem;
+}
+
+.help-panel--stack {
+	columns: auto;
+	max-width: 46rem;
+}
+
+.help-faq {
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 0.5rem;
+	background: rgba(0, 0, 0, 0.15);
+	margin-bottom: 0.75rem;
+}
+
+.help-faq__question {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.85rem 1.1rem;
+	cursor: pointer;
+	font-size: 1.05rem;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.9);
+	/* Suppress the default triangle marker; the chevron below replaces it. */
+	list-style: none;
+}
+
+.help-faq__question::-webkit-details-marker {
+	display: none;
+}
+
+.help-faq__question:focus-visible {
+	outline: 1px solid rgba(255, 255, 255, 0.6);
+	outline-offset: -2px;
+}
+
+.help-faq__question::after {
+	content: '';
+	flex: 0 0 auto;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-right: 2px solid rgba(255, 255, 255, 0.55);
+	border-bottom: 2px solid rgba(255, 255, 255, 0.55);
+	/* Points down while closed, up while open. */
+	transform: rotate(45deg);
+	transition: transform 0.15s ease;
+}
+
+.help-faq[open] > .help-faq__question::after {
+	transform: rotate(225deg);
+}
+
+/* The paragraphs' own 1rem bottom margin provides the bottom padding. */
+.help-faq__answer {
+	padding: 0 1.1rem;
 }
 
 /* Bulma's .heading helper is an 11px uppercase micro-label — right for a form
