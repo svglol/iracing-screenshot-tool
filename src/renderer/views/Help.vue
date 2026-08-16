@@ -270,7 +270,7 @@ export default {
 
 .help-page__title {
 	display: block;
-	font-size: 1.15rem;
+	font-size: 1.35rem;
 	font-weight: 700;
 	margin-bottom: 0.75rem;
 }
@@ -306,26 +306,34 @@ export default {
 	outline-offset: -2px;
 }
 
-/* `columns: <width>` rather than a count: the browser fits as many 30rem
+/* `columns: <width>` rather than a count: the browser fits as many 34rem
    columns as the window allows — one on a small window, two or three on a
-   wide one — with no media-query ladder to maintain. 30rem keeps each line
-   at a readable measure. */
+   wide one — with no media-query ladder to maintain. 34rem holds the line
+   at ~65ch of the 1.05rem body type, a comfortable measure.
+
+   The panel is focusable (tabindex 0) so a keyboard user can scroll it, but
+   it is a container, not a control — no focus ring styling beyond the
+   default. */
 .help-panel {
-	columns: 30rem;
-	column-gap: 3.5rem;
+	columns: 34rem;
+	column-gap: 4rem;
 }
 
 /* A heading never separates from its body across a column break. */
 .help-block {
 	break-inside: avoid;
-	margin-bottom: 1.5rem;
+	margin-bottom: 2rem;
 }
 
-/* The panel is focusable (tabindex 0) so a keyboard user can scroll it, but it
-   is a container, not a control — no focus ring styling beyond the default. */
+/* Bulma's .heading helper is an 11px uppercase micro-label — right for a form
+   caption, cramped for a manual. Restyled as a real section heading. */
 .heading {
-	font-size: 0.75rem;
-	font-weight: 700;
+	font-size: 1.15rem;
+	font-weight: 600;
+	text-transform: none;
+	letter-spacing: normal;
+	color: #ffffff;
+	margin-bottom: 0.5rem;
 }
 
 ul {
@@ -334,18 +342,26 @@ ul {
 }
 
 li {
-	color: #aaaaaa;
+	color: #b3b3b3;
+	font-size: 1.05rem;
+	line-height: 1.65;
 	overflow-wrap: anywhere;
+}
+
+li + li {
+	margin-top: 0.4rem;
 }
 
 p {
 	margin-bottom: 1rem;
-	color: #aaaaaa;
+	color: #b3b3b3;
+	font-size: 1.05rem;
+	line-height: 1.65;
 	overflow-wrap: anywhere;
 }
 
-/* Inline emphasis inside the help copy. The global `p` colour is #aaaaaa, so
-   bold alone barely reads as emphasis against it. */
+/* Inline emphasis inside the help copy. The body colour is #b3b3b3, so bold
+   alone barely reads as emphasis against it. */
 p b,
 li b {
 	color: rgba(255, 255, 255, 0.9);
