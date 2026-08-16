@@ -36,17 +36,14 @@ Created using Electron and Vue.
 # Download Statistics
 <!-- download-stats:start -->
 
-* **Installer downloads:** 8,691
-* **Portable downloads:** 514
-* **Update checks served:** 116,272
-* **All release artifacts combined:** 127,370
+**Total downloads: 9,206** — installer and portable, across 28 releases
 
 <details>
-<summary>Per-release breakdown (28 releases)</summary>
+<summary>Per-release breakdown</summary>
 
 | Version | Released | Installer | Portable | Update checks | All assets |
 | :------ | :------- | --------: | -------: | ------------: | ---------: |
-| v3.3.0 | 2026-08-07 | 259 | 32 | 673 | 1,162 |
+| v3.3.0 | 2026-08-07 | 260 | 32 | 676 | 1,167 |
 | v3.2.2 | 2026-08-05 | 29 | 4 | 2 | 35 |
 | v3.2.1 | 2026-08-04 | 4 | 2 | 0 | 6 |
 | v3.1.1 | 2026-07-05 | 96 | 61 | 0 | 157 |
@@ -60,7 +57,7 @@ Created using Electron and Vue.
 | v2.0.7 | 2026-04-03 | 31 | 42 | 0 | 73 |
 | v2.0.6 | 2026-03-28 | 32 | 44 | 0 | 76 |
 | v2.0.5 | 2026-03-27 | 29 | 32 | 158 | 224 |
-| v1.1.3 | 2020-10-21 | 6,820 | 0 | 112,803 | 120,438 |
+| v1.1.3 | 2020-10-21 | 6,820 | 0 | 112,803 | 120,439 |
 | v1.1.2 | 2020-10-20 | 114 | 0 | 34 | 247 |
 | v1.1.1 | 2020-10-19 | 29 | 0 | 9 | 62 |
 | v1.1.0 | 2020-09-30 | 137 | 0 | 320 | 600 |
@@ -74,13 +71,14 @@ Created using Electron and Vue.
 | v1.0.2 | 2020-04-27 | 50 | 0 | 85 | 174 |
 | v1.0.1 | 2020-04-27 | 21 | 0 | 38 | 80 |
 | v1.0.0 | 2020-04-24 | 20 | 0 | 24 | 67 |
-| **Total** |  | **8,691** | **514** | **116,272** | **127,370** |
+| **Total** |  | **8,692** | **514** | **116,275** | **127,376** |
 
 </details>
 
 <sub>Update checks are downloads of `latest.yml`, fetched by installed
-copies looking for a new version — not people downloading the app. The
-all-assets total additionally includes differential-update blockmaps.
+copies looking for a new version — not people downloading the app — and
+the all-assets column additionally includes differential-update
+blockmaps. Neither counts toward the total above.
 Updated 2026-08-16 · refresh with `npm run stats:downloads`.</sub>
 
 <!-- download-stats:end -->

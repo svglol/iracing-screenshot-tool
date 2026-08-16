@@ -124,14 +124,12 @@ function formatCount(n) {
 }
 
 function renderMarkdown({ rows, totals }, updatedOn) {
+	const combined = totals.installer + totals.portable;
 	const lines = [
-		`* **Installer downloads:** ${formatCount(totals.installer)}`,
-		`* **Portable downloads:** ${formatCount(totals.portable)}`,
-		`* **Update checks served:** ${formatCount(totals.updateChecks)}`,
-		`* **All release artifacts combined:** ${formatCount(totals.allAssets)}`,
+		`**Total downloads: ${formatCount(combined)}** — installer and portable, across ${rows.length} releases`,
 		'',
 		'<details>',
-		`<summary>Per-release breakdown (${rows.length} releases)</summary>`,
+		'<summary>Per-release breakdown</summary>',
 		'',
 		'| Version | Released | Installer | Portable | Update checks | All assets |',
 		'| :------ | :------- | --------: | -------: | ------------: | ---------: |',
@@ -161,8 +159,9 @@ function renderMarkdown({ rows, totals }, updatedOn) {
 		'</details>',
 		'',
 		'<sub>Update checks are downloads of `latest.yml`, fetched by installed',
-		'copies looking for a new version — not people downloading the app. The',
-		'all-assets total additionally includes differential-update blockmaps.',
+		'copies looking for a new version — not people downloading the app — and',
+		'the all-assets column additionally includes differential-update',
+		'blockmaps. Neither counts toward the total above.',
 		`Updated ${updatedOn} · refresh with \`npm run stats:downloads\`.</sub>`
 	);
 	return lines.join('\n');
@@ -198,8 +197,9 @@ async function main() {
 	}
 	const { totals, rows } = summary;
 	console.log(
-		`${slug}: ${formatCount(totals.installer)} installer + ` +
-			`${formatCount(totals.portable)} portable downloads, ` +
+		`${slug}: ${formatCount(totals.installer + totals.portable)} downloads ` +
+			`(${formatCount(totals.installer)} installer + ` +
+			`${formatCount(totals.portable)} portable), ` +
 			`${formatCount(totals.updateChecks)} update checks, ` +
 			`${formatCount(totals.allAssets)} artifacts total ` +
 			`across ${rows.length} releases`
