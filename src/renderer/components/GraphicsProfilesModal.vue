@@ -216,7 +216,9 @@
 const { ipcRenderer } = require('electron');
 
 export default {
-	emits: ['close'],
+	// 'applied' fires after a profile is successfully loaded onto the live
+	// config — hosts use it to refresh anything displaying ini values.
+	emits: ['close', 'applied'],
 	data() {
 		return {
 			loading: true,
@@ -435,6 +437,9 @@ export default {
 				// effect at iRacing's next launch, and without saying so the user has
 				// every reason to think it silently failed.
 				this.report(result, 'graphicsProfiles.feedback.loaded', { name });
+				if (result.ok) {
+					this.$emit('applied');
+				}
 				await this.refresh();
 			} finally {
 				this.busy = null;
@@ -568,6 +573,10 @@ export default {
 	width: 100%;
 	max-width: 820px;
 	background: rgb(37, 37, 37) !important;
+	/* Bulma rounds the head/foot children; without matching rounding here the
+	   card's own background shows as square gray corners behind them. */
+	border-radius: var(--bulma-modal-card-head-radius, 0.75rem);
+	overflow: hidden;
 }
 
 .profiles-head,
