@@ -10,7 +10,7 @@
 			     to be registered in main.ts, Tabs is not among them, and passing
 			     an unregistered component silently renders nothing rather than
 			     failing the build — a runtime-only failure this page would wear.
-			     Three tabs of real buttons cost less than that risk. -->
+			     Two tabs of real buttons cost less than that risk. -->
 			<div
 				class="help-tabs"
 				role="tablist"
@@ -102,40 +102,36 @@
 					<li>{{ $t('help.general.step7') }}</li>
 				</ol>
 			</section>
-		</div>
 
-		<!-- An accordion of native <details>. The name attribute makes the group
-		     exclusive — opening one closes the others — in the engine itself
-		     (Chromium 120+; Electron ships far newer), so there is no open-state
-		     to script and <summary> brings the disclosure keyboard/AT semantics
-		     with it. Single stack, not columns: an item expanding in one column
-		     would reflow the neighbouring column mid-read. -->
-		<div
-			v-show="active === 'faq'"
-			id="help-panel-faq"
-			role="tabpanel"
-			aria-labelledby="help-tab-faq"
-			tabindex="0"
-			class="help-panel help-panel--stack"
-		>
-			<details class="help-faq" name="help-faq">
-				<summary class="help-faq__question">
-					{{ $t('help.faq.blackShot') }}
-				</summary>
-				<div class="help-faq__answer">
-					<p>{{ $t('help.faq.blackShotBody') }}</p>
-					<p v-html="$t('help.faq.blackShotFullscreenBody')"></p>
-				</div>
-			</details>
-			<details class="help-faq" name="help-faq">
-				<summary class="help-faq__question">
-					{{ $t('help.faq.cameraReset') }}
-				</summary>
-				<div class="help-faq__answer">
-					<p>{{ $t('help.faq.cameraResetBody') }}</p>
-					<p v-html="$t('help.faq.cameraResetFixBody')"></p>
-				</div>
-			</details>
+			<!-- The FAQ, an accordion of native <details>. The name attribute
+			     makes the group exclusive — opening one closes the others — in
+			     the engine itself (Chromium 120+; Electron ships far newer), so
+			     there is no open-state to script and <summary> brings the
+			     disclosure keyboard/AT semantics with it. column-span lifts the
+			     subsection out of the column flow into a full-width stack under
+			     the prose: an item expanding inside one column would reflow the
+			     neighbouring column mid-read. -->
+			<section class="help-block help-faq-section">
+				<span class="heading">{{ $t('help.tabFaq') }}</span>
+				<details class="help-faq" name="help-faq">
+					<summary class="help-faq__question">
+						{{ $t('help.faq.blackShot') }}
+					</summary>
+					<div class="help-faq__answer">
+						<p>{{ $t('help.faq.blackShotBody') }}</p>
+						<p v-html="$t('help.faq.blackShotFullscreenBody')"></p>
+					</div>
+				</details>
+				<details class="help-faq" name="help-faq">
+					<summary class="help-faq__question">
+						{{ $t('help.faq.cameraReset') }}
+					</summary>
+					<div class="help-faq__answer">
+						<p>{{ $t('help.faq.cameraResetBody') }}</p>
+						<p v-html="$t('help.faq.cameraResetFixBody')"></p>
+					</div>
+				</details>
+			</section>
 		</div>
 
 		<div
@@ -233,7 +229,6 @@ export default {
 		tabs(): { id: string; label: string }[] {
 			return [
 				{ id: 'general', label: this.$t('help.tabGeneral') },
-				{ id: 'faq', label: this.$t('help.tabFaq') },
 				{
 					id: 'long-exposure',
 					label: this.$t('help.tabLongExposure'),
@@ -339,9 +334,11 @@ export default {
 	margin-bottom: 2rem;
 }
 
-.help-panel--stack {
-	columns: auto;
+.help-faq-section {
+	column-span: all;
 	max-width: 46rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	padding-top: 1.5rem;
 }
 
 .help-faq {
