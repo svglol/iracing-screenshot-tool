@@ -32,13 +32,10 @@ import {
 	type NameError,
 } from '../utilities/iracing-profiles';
 import { getRendererIniPath } from '../utilities/iracing-paths';
+import { ensureDir, writeAtomic, backupFile } from './atomic-file';
 
 const PROFILES_DIR_NAME = 'graphics-profiles';
 const BACKUPS_DIR_NAME = '.backups';
-/** Backups of the live config kept before it is overwritten. */
-const MAX_BACKUPS = 10;
-/** Suffix for the staging file used to make writes atomic. */
-const TEMP_SUFFIX = '.iRST-tmp';
 
 export type StoreError =
 	| 'profileNotFound'
@@ -118,10 +115,6 @@ function getBackupsDir(): string {
 
 function profilePath(name: string): string {
 	return path.join(getProfilesDir(), profileFileName(name));
-}
-
-function ensureDir(dir: string): void {
-	fs.mkdirSync(dir, { recursive: true });
 }
 
 // --- deletion ---------------------------------------------------------------
@@ -243,70 +236,15 @@ export function getSnapshot(ctx: StoreContext): ProfilesSnapshot {
 // --- writing ----------------------------------------------------------------
 
 /**
- * Replace `destination` with `bytes` without ever leaving a half-written file.
- *
- * Staged in the same directory so the rename stays on one volume — a
- * cross-volume rename degrades to a copy and loses the atomicity that is the
- * entire point. A crash mid-write leaves the original intact and a stray temp
- * file, rather than a truncated ini that would make iRacing re-run its 3D
- * auto-configuration and discard the user's settings.
- */
-function writeAtomic(destination: string, bytes: Buffer): void {
-	const temp = destination + TEMP_SUFFIX;
-	try {
-		fs.writeFileSync(temp, bytes);
-		fs.renameSync(temp, destination);
-	} catch (error) {
-		try {
-			fs.unlinkSync(temp);
-		} catch {
-			// Nothing staged, or already gone.
-		}
-		throw error;
-	}
-}
-
-/**
  * Preserve the live config before it is overwritten.
  *
  * This is the safety net for the worst outcome this feature could produce:
  * applying a profile over settings the user tuned and never saved.
+ * Write-atomicity and backup mechanics live in ./atomic-file, shared with the
+ * config-editor store (which keeps its OWN backups directory and rotation).
  */
 function backupActiveIni(activeIniPath: string): void {
-	let bytes: Buffer;
-	try {
-		bytes = fs.readFileSync(activeIniPath);
-	} catch {
-		// Nothing to preserve.
-		return;
-	}
-
-	const backupsDir = getBackupsDir();
-	ensureDir(backupsDir);
-	const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-	fs.writeFileSync(
-		path.join(backupsDir, `rendererDX11Monitor.${stamp}.ini`),
-		bytes
-	);
-	pruneBackups(backupsDir);
-}
-
-function pruneBackups(backupsDir: string): void {
-	try {
-		const files = fs
-			.readdirSync(backupsDir)
-			.filter((file) => file.toLowerCase().endsWith('.ini'))
-			.sort();
-		// Names are ISO-stamped, so lexical order is chronological order.
-		for (const stale of files.slice(
-			0,
-			Math.max(0, files.length - MAX_BACKUPS)
-		)) {
-			fs.unlinkSync(path.join(backupsDir, stale));
-		}
-	} catch {
-		// Pruning is housekeeping — never fail an apply over it.
-	}
+	backupFile(activeIniPath, getBackupsDir(), 'rendererDX11Monitor');
 }
 
 /**
@@ -432,17 +370,11 @@ export function saveActiveAs(
 /** Keep a copy of a profile that is about to be replaced. */
 function backupProfile(profileFilePath: string): void {
 	try {
-		const backupsDir = getBackupsDir();
-		ensureDir(backupsDir);
-		const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-		fs.writeFileSync(
-			path.join(
-				backupsDir,
-				`${path.basename(profileFilePath, '.ini')}.${stamp}.ini`
-			),
-			fs.readFileSync(profileFilePath)
+		backupFile(
+			profileFilePath,
+			getBackupsDir(),
+			path.basename(profileFilePath, '.ini')
 		);
-		pruneBackups(backupsDir);
 	} catch {
 		// Best effort — do not block the save.
 	}

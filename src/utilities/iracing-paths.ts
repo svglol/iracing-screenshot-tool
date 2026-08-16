@@ -97,6 +97,82 @@ export function getRendererIniPath(override = ''): string {
 	return path.join(getIracingFolder(override), RENDERER_INI_NAME);
 }
 
+// --- per-display-mode renderer files -----------------------------------------
+//
+// iRacing keeps one renderer config PER DISPLAY MODE: rendererDX11Monitor.ini,
+// rendererDX11Oculus.ini, rendererDX11OpenVR.ini, rendererDX11OpenXR.ini —
+// plus a bare rendererDX11.ini that only launches from the old members site
+// still read. The config-editor page edits whichever of these the user picks;
+// the profiles feature above deliberately stays pinned to the Monitor file.
+
+export const RENDERER_INI_PREFIX = 'rendererDX11';
+
+/** The bare `rendererDX11.ini`, presented as its own pseudo-mode. */
+export const RENDERER_LEGACY_MODE = 'Legacy';
+
+/**
+ * The display mode a renderer ini filename belongs to, or null for files that
+ * are not renderer configs at all. `rendererDX11OpenXR.ini` -> 'OpenXR';
+ * the suffix-less `rendererDX11.ini` -> 'Legacy'. Case-insensitive on the
+ * prefix/extension, but the returned mode keeps the file's own casing so the
+ * path can be rebuilt exactly.
+ */
+export function rendererModeFromFileName(fileName: string): string | null {
+	const match = /^rendererDX11(.*)\.ini$/i.exec(fileName.trim());
+	if (!match) {
+		return null;
+	}
+	return match[1] === '' ? RENDERER_LEGACY_MODE : match[1];
+}
+
+/** Filename for a display mode; inverse of `rendererModeFromFileName`. */
+export function rendererIniFileName(mode: string): string {
+	const suffix = mode === RENDERER_LEGACY_MODE ? '' : mode;
+	return `${RENDERER_INI_PREFIX}${suffix}.ini`;
+}
+
+/** The display modes iRacing itself ships renderer configs for. */
+export const RENDERER_BASE_MODES = ['Monitor', 'Oculus', 'OpenVR', 'OpenXR'];
+
+/**
+ * A mode string split into its base display mode and custom-config name.
+ *
+ * iRacing's UI can keep several graphics configs per display mode; a custom
+ * one is stored as `rendererDX11<Base> - <Name>.ini`, so its mode string
+ * arrives here as `<Base> - <Name>`. iRacing's own config switcher lists such
+ * a config by its bare <Name>, and this split is what lets ours do the same.
+ *
+ * The base must be one of iRacing's known display modes (matched
+ * case-insensitively, like the filename prefix) — anything else, including
+ * 'Legacy', is a base mode with `custom: null`. The name keeps every byte
+ * after the ` - ` separator, dashes included, so the filename can be rebuilt
+ * exactly.
+ */
+export function splitRendererMode(mode: string): {
+	base: string;
+	custom: string | null;
+} {
+	for (const base of RENDERER_BASE_MODES) {
+		const separator = base.length + ' - '.length;
+		if (
+			mode.slice(0, separator).toLowerCase() ===
+				`${base.toLowerCase()} - ` &&
+			mode.length > separator
+		) {
+			return {
+				base: mode.slice(0, base.length),
+				custom: mode.slice(separator),
+			};
+		}
+	}
+	return { base: mode, custom: null };
+}
+
+/** Full path to the renderer ini for a display mode. */
+export function rendererIniPathForMode(mode: string, override = ''): string {
+	return path.join(getIracingFolder(override), rendererIniFileName(mode));
+}
+
 /** Test seam: drop the memoised Documents lookup. */
 export function resetDocumentsDirCache(): void {
 	documentsDirCache = null;
