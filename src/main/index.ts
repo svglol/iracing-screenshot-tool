@@ -78,6 +78,13 @@ import {
 	saveActiveAs,
 	type StoreContext as ProfilesStoreContext,
 } from './iracing-profiles-store';
+import {
+	listModes as listConfigModes,
+	readConfig as readIracingConfig,
+	saveConfig as saveIracingConfig,
+	type ConfigStoreContext,
+	type SettingEdit,
+} from './iracing-config-store';
 import { resolveCaptureDimensions } from '../utilities/capture-resolution';
 import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
 import sharp from 'sharp';
@@ -1090,6 +1097,81 @@ ipcMain.handle('profiles:revealFolder', async () => {
 	}
 	await shell.openPath(dir);
 });
+
+// ---------------------------------------------------------------------------
+// iRacing configuration editor
+//
+// See docs/design/iracing-config-editor.md. All file handling lives in
+// iracing-config-store (curated schema + span-replacing writer); these
+// handlers only supply the folder override and the sim-running signal. Kept
+// deliberately separate from the profiles feature above — a direct edit here
+// legitimately flips the active profile's state to "modified".
+// ---------------------------------------------------------------------------
+
+function iracingConfigContext(): ConfigStoreContext {
+	return {
+		iracingFolder: configModule.get('iracingFolder'),
+		// Same readiness signal as profilesContext, and here it guards EVERY
+		// write: iRacing rewrites these files from memory when it exits.
+		iracingRunning: iracing.telemetry != null,
+	};
+}
+
+ipcMain.handle('iracing-config:modes', () =>
+	listConfigModes(iracingConfigContext())
+);
+
+ipcMain.handle('iracing-config:read', (_event, payload: { mode: string }) =>
+	readIracingConfig(payload.mode, iracingConfigContext())
+);
+
+ipcMain.handle(
+	'iracing-config:save',
+	(
+		_event,
+		payload: {
+			mode: string;
+			edits: SettingEdit[];
+			expectedMtimeMs: number;
+			pairReplay?: boolean;
+		}
+	) => {
+		const result = saveIracingConfig(
+			payload.mode,
+			payload.edits,
+			payload.expectedMtimeMs,
+			iracingConfigContext(),
+			{ pairReplay: payload.pairReplay }
+		);
+		if (result.ok) {
+			log.info('iRacing config saved', {
+				mode: payload.mode,
+				edits: payload.edits.length,
+				backedUp: result.backedUp,
+			});
+		} else {
+			log.warn('iRacing config save refused', {
+				mode: payload.mode,
+				reason: result.error,
+			});
+		}
+		return result;
+	}
+);
+
+// The OS display list for the monitor-layout visual. Bounds are DIP-based;
+// the renderer multiplies by scaleFactor to compare against iRacing's
+// physical-pixel ini coordinates.
+ipcMain.handle('iracing-config:displays', () => ({
+	displays: screen.getAllDisplays().map((display) => ({
+		id: display.id,
+		bounds: display.bounds,
+		scaleFactor: display.scaleFactor,
+		rotation: display.rotation,
+		internal: display.internal,
+	})),
+	primaryId: screen.getPrimaryDisplay().id,
+}));
 
 // ---------------------------------------------------------------------------
 // Long-exposure photo mode

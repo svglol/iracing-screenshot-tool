@@ -334,9 +334,8 @@ const fr: Catalog = {
 			'{version} est prête. Cliquez pour redémarrer et l’installer.',
 		failed: 'Échec de la recherche de mise à jour : {error}',
 		unknownError: 'erreur inconnue',
-		neverChecked:
-			'Aucune recherche de mise à jour n’a encore été faite (vous êtes en v{version}).',
-		upToDate: 'Vous êtes sur la dernière version (v{version}).',
+		neverChecked: 'Aucune recherche de mise à jour n’a encore été faite.',
+		upToDate: 'Vous êtes sur la dernière version.',
 
 		alreadyDownloading: 'La mise à jour est déjà en cours de téléchargement.',
 		alreadyDownloaded: 'La mise à jour est déjà téléchargée.',
@@ -413,6 +412,10 @@ const fr: Catalog = {
 		badge: {
 			active: 'Actif',
 			modified: 'Modifié',
+		},
+		picker: {
+			unknown: 'No matching profile',
+			missing: 'No configuration',
 		},
 		empty: {
 			title: 'Aucun profil enregistré pour l’instant.',
@@ -575,6 +578,243 @@ const fr: Catalog = {
 			other: '{count} minutes',
 		},
 		minutesSeconds: '{minutes} min {seconds} s',
+	},
+
+	// The iRacing configuration editor page. Setting labels/helps are addressed
+	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
+	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
+	// if one is missing here.
+	iniEditor: {
+		title: 'iRacing Configuration Editor',
+		nav: {
+			home: 'Screenshots',
+			config: 'iRacing configuration',
+		},
+		tabs: {
+			monitor: 'Monitor / Display',
+			graphics: 'Graphics',
+		},
+		mode: {
+			label: 'Currently editing configuration:',
+			// Mode names come from iRacing's own filenames; Legacy is the bare
+			// rendererDX11.ini only old-website launches still read.
+			legacy: 'Legacy',
+		},
+		actions: {
+			save: 'Save changes',
+			discard: 'Discard',
+			reload: 'Reload',
+			browse: 'Browse…',
+		},
+		state: {
+			dirty: {
+				one: '{count} unsaved change',
+				other: '{count} unsaved changes',
+			},
+			saved: 'Changes saved to {file}',
+			simRunning:
+				'iRacing is running. It keeps these settings in memory and rewrites the file when it exits, so edits made now would be lost. Close iRacing to edit.',
+			stale: 'This file changed on disk since it was loaded — usually iRacing rewriting it on exit. Reload to see the current values.',
+			keyMissing: 'Not present in this file',
+			noModes:
+				'No renderer configuration files were found in {folder}. Launch iRacing once to create them, or point the tool at your iRacing folder.',
+			loadFailed: 'The configuration file could not be read.',
+			discardConfirm: 'Discard {count} unsaved changes?',
+		},
+		folder: {
+			label: 'iRacing folder',
+			autoDetected: 'Auto-detected',
+			reset: 'Use auto-detection',
+			help: 'Where iRacing keeps its configuration files. Leave empty to detect the Documents\\iRacing folder automatically.',
+		},
+		errors: {
+			iracingRunning:
+				'Close iRacing first — it would overwrite the change when it exits.',
+			staleFile:
+				'The file changed on disk since it was loaded. Reload and try again.',
+			validationFailed:
+				'One of the values is not valid. Nothing was changed.',
+			keyNotFound:
+				'A setting was missing from the file, so nothing was changed. Reload and try again.',
+			fileNotFound: 'The configuration file no longer exists.',
+			ioError: 'The file could not be written. Nothing was changed.',
+		},
+		groups: {
+			window: 'Window placement',
+			fullscreen: 'Full screen',
+			quality: 'Quality & detail',
+			aa: 'Anti-aliasing & sharpening',
+			post: 'Post-processing',
+			perf: 'Performance',
+			misc: 'Miscellaneous',
+		},
+		// Shared tier vocabulary for enum settings.
+		levels: {
+			off: 'Off',
+			low: 'Low',
+			medium: 'Medium',
+			high: 'High',
+			max: 'Max',
+			ultra: 'Ultra',
+		},
+		nvReflex: {
+			off: 'Off',
+			on: 'On',
+			onBoost: 'Boost',
+		},
+		shadowDetail: {
+			fewer: 'Fewer shadows',
+			maximum: 'Maximum shadows',
+		},
+		aaMethod: {
+			none: 'None',
+			msaa: 'MSAA',
+			fxaa: 'FXAA',
+			smaa: 'SMAA',
+		},
+		msaaSamples: {
+			x2: '2x',
+			x4: '4x',
+			x8: '8x',
+		},
+		msaaFilter: {
+			soft: 'Soft',
+			neutral: 'Neutral',
+			sharp: 'Sharp',
+			simple: 'Simple',
+		},
+		dnsmFilter: {
+			off: 'Off',
+			simple: 'Simple',
+			pcf4: 'PCF4',
+			pcf4p: 'PCF4P',
+			pcf8p: 'PCF8P',
+			pcf16p: 'PCF16P',
+		},
+		dynamicShadowMaps: {
+			off: 'Off',
+			mainView: 'In Main View',
+			mainViewMirrors: 'In Main View & Mirrors',
+		},
+		hideObstructions: {
+			none: 'None',
+			halo: 'Hide the halo',
+			pillarRollcage: 'Hide A-pillars and rollcage',
+			everything: 'Hide everything',
+		},
+		replayScope: {
+			label: 'Also apply to replay graphics',
+		},
+		// Inline hints under a field whose pending value cannot be saved. Only
+		// numeric inputs can go invalid (switches and dropdowns cannot), and
+		// every bounded numeric in the schema carries both bounds.
+		invalid: {
+			intRange: 'Enter a whole number between {min} and {max}.',
+			int: 'Enter a whole number.',
+			floatRange: 'Enter a number between {min} and {max}.',
+			float: 'Enter a number.',
+		},
+		layout: {
+			title: 'Monitor layout',
+			primary: 'Primary',
+			windowTarget: 'iRacing window',
+			estimated:
+				'Estimated — Windows and iRacing number displays differently, so the highlight is matched by position.',
+		},
+		settings: {
+			display: {
+				border: { label: 'Window border' },
+				windowedXPos: { label: 'Window left' },
+				windowedYPos: { label: 'Window top' },
+				windowedWidth: { label: 'Window width' },
+				windowedHeight: { label: 'Window height' },
+				windowedMaximized: { label: 'Start maximized' },
+				windowedAlignment: {
+					label: 'Window alignment',
+					help: 'iRacing does not document this value. Leave unchanged unless you know the alignment index you want.',
+				},
+				fullScreen: { label: 'Full screen' },
+				fullScreenWidth: { label: 'Full-screen width' },
+				fullScreenHeight: { label: 'Full-screen height' },
+				fullScreenDepth: {
+					label: 'Full-screen color depth',
+					help: 'Bits per pixel. 32 on effectively every modern system.',
+				},
+				RefreshRate: {
+					label: 'Refresh rate',
+					help: '0 uses the display’s default refresh rate.',
+				},
+			},
+			graphics: {
+				ShaderQuality: { label: 'Shader quality' },
+				ShadowDetail: { label: 'Shadow detail' },
+				DynamicShadowMaps: {
+					label: 'Dynamic shadow maps',
+					help: 'Shadow maps for cars and other moving objects. Day only.',
+				},
+				DNSMFilter: {
+					label: 'Shadowmap filter',
+					help: 'The filter used for the dynamic night shadow maps.',
+				},
+				CarDetail: { label: 'Car detail' },
+				PitObjectDetail: { label: 'Pit object detail' },
+				CrowdDetail: { label: 'Crowd detail' },
+				GrandstandDetail: { label: 'Grandstand detail' },
+				ObjectDetail: { label: 'Object detail' },
+				FoliageDetail: { label: 'Foliage detail' },
+				ParticleDetail: { label: 'Particle detail' },
+				ParticlesFullRes: { label: 'Full-resolution particles' },
+				MirrorDetail: { label: 'Higher detail in mirrors' },
+				MaxCockpitMirrors: { label: 'Max cockpit mirrors' },
+				AntiAliasMethod: { label: 'Anti-aliasing method' },
+				MSAASamples: { label: 'MSAA samples' },
+				MSAAUseFilter: { label: 'MSAA filter' },
+				Sharpening: { label: 'Sharpening' },
+				SharpeningAmount: {
+					label: 'Sharpening amount',
+					help: 'Strength of the sharpening filter.',
+				},
+				FSRSharpness: {
+					label: 'FSR sharpness',
+					help: 'Sharpness used when resolution scaling upscales with FSR.',
+				},
+				AutoExposure: {
+					label: 'Auto exposure',
+					help: 'Only functions while HDR rendering is enabled.',
+				},
+				SSAO: { label: 'Ambient occlusion (SSAO)' },
+				SSRLevel: {
+					label: 'Screen-space reflections',
+					help: 'Low renders the reflections at a lower resolution, High at full resolution.',
+				},
+				SSRRainOnly: {
+					label: 'Reflections only during rain',
+					help: 'Limits screen-space reflections to wet track conditions — the Low Rain and High Rain options in the sim.',
+				},
+				HeatHaze: { label: 'Heat haze' },
+				DepthOfField: { label: 'Depth of field' },
+				MotionBlurStrength: { label: 'Motion blur strength' },
+				Distortion: { label: 'Lens distortion' },
+				EnableHDR: { label: 'HDR rendering' },
+				LimitFrameRate: { label: 'Limit frame rate' },
+				DesiredFPSLimit: { label: 'Frame rate limit' },
+				VerticalSync: { label: 'Vertical sync' },
+				NvReflexMode: { label: 'NVIDIA Reflex' },
+				MaxPreRenderedFrames: {
+					label: 'Max pre-rendered frames',
+					help: 'How many frames the GPU may trail behind the CPU. 1 is normal; 0 disables the queue for multi-GPU setups.',
+				},
+				SysMemToUseMB: { label: 'System memory to use' },
+				VidMemToUseMB: { label: 'Video memory to use' },
+				MaxCarsToDraw: { label: 'Max cars to draw' },
+				MaxCarsToDrawInMirrors: { label: 'Max cars in mirrors' },
+				VirtualMirrors: { label: 'Virtual mirrors' },
+				UIScale: { label: 'UI scale' },
+				EnableTireMarks: { label: 'Tire marks' },
+				HideCockpitObstructions: { label: 'Hide cockpit obstructions' },
+				HeadlightLevel: { label: 'Headlight quality' },
+			},
+		},
 	},
 };
 

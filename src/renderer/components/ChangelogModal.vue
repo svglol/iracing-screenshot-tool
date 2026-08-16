@@ -1,7 +1,13 @@
 <template>
 	<div
 		class="modal-card"
-		style="width: 100%; height: 80vh; background: rgb(37, 37, 37) !important"
+		style="
+			width: 100%;
+			height: 80vh;
+			background: rgb(37, 37, 37) !important;
+			border-radius: var(--bulma-modal-card-head-radius, 0.75rem);
+			overflow: hidden;
+		"
 	>
 		<header
 			class="modal-card-head"

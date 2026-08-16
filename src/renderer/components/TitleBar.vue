@@ -16,6 +16,8 @@
 					title
 				}}</span>
 			</div>
+			<!-- Always-present in the top right, whatever page is open. -->
+			<ConfigurationPicker v-if="showPicker" />
 			<!-- The tooltip is not decoration. This used to be a bare green arrow
 			     that appeared without explanation and, on one click, quit the app
 			     to install — so the title/aria-label naming the version and the
@@ -48,6 +50,7 @@
 
 <script lang="ts">
 import { useOruga } from '@oruga-ui/oruga-next';
+import ConfigurationPicker from './ConfigurationPicker.vue';
 import {
 	describeUpdate,
 	initialUpdateState,
@@ -66,7 +69,9 @@ type UpdateStatePayload = UpdateState & {
 };
 
 export default {
-	props: ['title', 'ico'],
+	components: { ConfigurationPicker },
+	// showPicker: false in the chrome-free worker window, true everywhere else.
+	props: ['title', 'ico', 'showPicker'],
 	data() {
 		return {
 			update: {

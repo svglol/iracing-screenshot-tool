@@ -152,6 +152,20 @@ const schema = {
 		type: 'string',
 		default: '',
 	},
+	// --- iRacing configuration editor (docs/design/iracing-config-editor.md) --
+	// The display mode (renderer ini variant) the editor page last had open.
+	// 'Monitor' is what the capture pipeline cares about and the sensible first
+	// visit; an unknown/stale mode simply fails its read and the page falls back.
+	iniEditorMode: {
+		type: 'string',
+		default: 'Monitor',
+	},
+	// Graphics-tab edits mirror into [Replay Graphics] when true. Defined ahead
+	// of the Graphics tab (v1.1) so the scope switch has a home from day one.
+	iniEditorPairReplay: {
+		type: 'boolean',
+		default: true,
+	},
 	// --- Long exposure (docs/design/long-exposure.md) ---------------------
 	// The last parameter set the user shot with, so re-opening the panel resumes
 	// where they left off. The anchor is deliberately NOT persisted: it belongs to

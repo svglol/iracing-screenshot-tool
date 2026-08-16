@@ -4,7 +4,12 @@ import {
 	getRendererIniPath,
 	getDocumentsDir,
 	resetDocumentsDirCache,
+	rendererModeFromFileName,
+	rendererIniFileName,
+	rendererIniPathForMode,
+	splitRendererMode,
 	RENDERER_INI_NAME,
+	RENDERER_LEGACY_MODE,
 } from './iracing-paths';
 
 const path = require('path');
@@ -87,5 +92,98 @@ describe('getIracingFolder / getRendererIniPath', () => {
 
 	test('the active ini name is the one iRacing actually reads', () => {
 		expect(RENDERER_INI_NAME).toBe('rendererDX11Monitor.ini');
+	});
+});
+
+describe('renderer display modes', () => {
+	afterEach(() => {
+		resetDocumentsDirCache();
+	});
+
+	test('extracts the mode from each per-mode filename', () => {
+		expect(rendererModeFromFileName('rendererDX11Monitor.ini')).toBe(
+			'Monitor'
+		);
+		expect(rendererModeFromFileName('rendererDX11Oculus.ini')).toBe('Oculus');
+		expect(rendererModeFromFileName('rendererDX11OpenVR.ini')).toBe('OpenVR');
+		expect(rendererModeFromFileName('rendererDX11OpenXR.ini')).toBe('OpenXR');
+	});
+
+	test('the suffix-less legacy file gets its own pseudo-mode', () => {
+		expect(rendererModeFromFileName('rendererDX11.ini')).toBe(
+			RENDERER_LEGACY_MODE
+		);
+	});
+
+	test('non-renderer files are rejected', () => {
+		expect(rendererModeFromFileName('app.ini')).toBeNull();
+		expect(rendererModeFromFileName('core.ini')).toBeNull();
+		expect(
+			rendererModeFromFileName('rendererDX11Monitor.ini.bak')
+		).toBeNull();
+		expect(rendererModeFromFileName('rendererDX9Monitor.ini')).toBeNull();
+	});
+
+	test('prefix and extension match case-insensitively, mode keeps its casing', () => {
+		expect(rendererModeFromFileName('RENDERERDX11monitor.INI')).toBe(
+			'monitor'
+		);
+	});
+
+	test('splitRendererMode separates a custom config from its base mode', () => {
+		expect(splitRendererMode('Monitor - Screenshot')).toEqual({
+			base: 'Monitor',
+			custom: 'Screenshot',
+		});
+		expect(splitRendererMode('OpenXR - Racing')).toEqual({
+			base: 'OpenXR',
+			custom: 'Racing',
+		});
+		// The name keeps everything after the first separator, dashes included.
+		expect(splitRendererMode('Monitor - A - B')).toEqual({
+			base: 'Monitor',
+			custom: 'A - B',
+		});
+		// Base matching is case-insensitive, casing is preserved.
+		expect(splitRendererMode('monitor - shots')).toEqual({
+			base: 'monitor',
+			custom: 'shots',
+		});
+	});
+
+	test('splitRendererMode leaves base and unrecognized modes whole', () => {
+		expect(splitRendererMode('Monitor')).toEqual({
+			base: 'Monitor',
+			custom: null,
+		});
+		expect(splitRendererMode(RENDERER_LEGACY_MODE)).toEqual({
+			base: RENDERER_LEGACY_MODE,
+			custom: null,
+		});
+		// A separator without a known base mode in front is not a custom config.
+		expect(splitRendererMode('Something - X')).toEqual({
+			base: 'Something - X',
+			custom: null,
+		});
+		// A separator with nothing after it is not a custom config either.
+		expect(splitRendererMode('Monitor - ')).toEqual({
+			base: 'Monitor - ',
+			custom: null,
+		});
+	});
+
+	test('rendererIniFileName is the inverse of rendererModeFromFileName', () => {
+		for (const mode of ['Monitor', 'Oculus', 'OpenVR', 'OpenXR']) {
+			expect(rendererModeFromFileName(rendererIniFileName(mode))).toBe(mode);
+		}
+		expect(rendererIniFileName(RENDERER_LEGACY_MODE)).toBe(
+			'rendererDX11.ini'
+		);
+	});
+
+	test("the Monitor mode path equals the profiles feature's active ini path", () => {
+		expect(rendererIniPathForMode('Monitor', 'D:\\iR')).toBe(
+			getRendererIniPath('D:\\iR')
+		);
 	});
 });
