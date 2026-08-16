@@ -7,8 +7,8 @@
 // The all-assets total is dominated by update checks: electron-updater fetches
 // latest.yml from the newest release every time an installed copy looks for an
 // update (v1.1.3 alone served ~113k of them while it sat as the latest release
-// for five years). The table therefore separates real installer/portable
-// downloads from update checks instead of presenting one inflated number.
+// for five years). The published figure therefore counts only installer and
+// portable downloads instead of presenting one inflated number.
 //
 // Usage: node _scripts/download-stats.js [--dry-run]
 // Unauthenticated GitHub API calls are rate-limited to 60/hour; set
@@ -88,84 +88,36 @@ function classify(name) {
 }
 
 function summarize(releases) {
-	const rows = releases
-		.map((release) => {
-			const row = {
-				tag: release.tag_name,
-				date: (release.published_at || release.created_at).slice(0, 10),
-				installer: 0,
-				portable: 0,
-				updateChecks: 0,
-				allAssets: 0,
-			};
-			for (const asset of release.assets) {
-				row.allAssets += asset.download_count;
-				row[classify(asset.name)] += asset.download_count;
-			}
-			return row;
-		})
-		.sort((a, b) => {
-			if (a.date !== b.date) {
-				return a.date < b.date ? 1 : -1;
-			}
-			return b.tag.localeCompare(a.tag, 'en', { numeric: true });
-		});
-	const totals = { installer: 0, portable: 0, updateChecks: 0, allAssets: 0 };
-	for (const row of rows) {
-		totals.installer += row.installer;
-		totals.portable += row.portable;
-		totals.updateChecks += row.updateChecks;
-		totals.allAssets += row.allAssets;
+	const totals = {
+		installer: 0,
+		portable: 0,
+		updateChecks: 0,
+		other: 0,
+		allAssets: 0,
+	};
+	for (const release of releases) {
+		for (const asset of release.assets) {
+			totals.allAssets += asset.download_count;
+			totals[classify(asset.name)] += asset.download_count;
+		}
 	}
-	return { rows, totals };
+	return { totals, releaseCount: releases.length };
 }
 
 function formatCount(n) {
 	return n.toLocaleString('en-US');
 }
 
-function renderMarkdown({ rows, totals }, updatedOn) {
+function renderMarkdown({ totals, releaseCount }, updatedOn) {
 	const combined = totals.installer + totals.portable;
-	const lines = [
-		`**Total downloads: ${formatCount(combined)}** — installer and portable, across ${rows.length} releases`,
+	return [
+		`**Total downloads: ${formatCount(combined)}** — installer and portable, across ${releaseCount} releases`,
 		'',
-		'<details>',
-		'<summary>Per-release breakdown</summary>',
-		'',
-		'| Version | Released | Installer | Portable | Update checks | All assets |',
-		'| :------ | :------- | --------: | -------: | ------------: | ---------: |',
-	];
-	for (const row of rows) {
-		const cells = [
-			row.tag,
-			row.date,
-			formatCount(row.installer),
-			formatCount(row.portable),
-			formatCount(row.updateChecks),
-			formatCount(row.allAssets),
-		];
-		lines.push(`| ${cells.join(' | ')} |`);
-	}
-	const totalCells = [
-		'**Total**',
-		'',
-		`**${formatCount(totals.installer)}**`,
-		`**${formatCount(totals.portable)}**`,
-		`**${formatCount(totals.updateChecks)}**`,
-		`**${formatCount(totals.allAssets)}**`,
-	];
-	lines.push(`| ${totalCells.join(' | ')} |`);
-	lines.push(
-		'',
-		'</details>',
-		'',
-		'<sub>Update checks are downloads of `latest.yml`, fetched by installed',
-		'copies looking for a new version — not people downloading the app — and',
-		'the all-assets column additionally includes differential-update',
-		'blockmaps. Neither counts toward the total above.',
-		`Updated ${updatedOn} · refresh with \`npm run stats:downloads\`.</sub>`
-	);
-	return lines.join('\n');
+		'<sub>Excludes update checks — downloads of `latest.yml`, made by',
+		'installed copies looking for a new version — and differential-update',
+		'blockmaps, neither of which is a person downloading the app.',
+		`Updated ${updatedOn} · refresh with \`npm run stats:downloads\`.</sub>`,
+	].join('\n');
 }
 
 // The README's downloads badge is a shields.io endpoint badge fed by this
@@ -214,14 +166,14 @@ async function main() {
 				path.relative(ROOT, BADGE_PATH)
 		);
 	}
-	const { totals, rows } = summary;
+	const { totals, releaseCount } = summary;
 	console.log(
 		`${slug}: ${formatCount(totals.installer + totals.portable)} downloads ` +
 			`(${formatCount(totals.installer)} installer + ` +
 			`${formatCount(totals.portable)} portable), ` +
 			`${formatCount(totals.updateChecks)} update checks, ` +
 			`${formatCount(totals.allAssets)} artifacts total ` +
-			`across ${rows.length} releases`
+			`across ${releaseCount} releases`
 	);
 }
 
