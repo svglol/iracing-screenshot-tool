@@ -1,0 +1,48 @@
+name: Download stats
+
+on:
+    schedule:
+        # Mondays 06:00 UTC. In practice every run finds changes to commit —
+        # update checks alone increment the counts daily — and the section
+        # carries an "Updated YYYY-MM-DD" stamp, so a silently dead schedule
+        # shows up as a stale date in the README.
+        - cron: '0 6 * * 1'
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    refresh:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+
+            # No `npm ci`: the script uses only Node built-ins, and the repo's
+            # postinstall rebuilds irsdk-node and sharp against Electron —
+            # Windows-only and pointless for a README refresh.
+            - name: Refresh README download statistics
+              run: node _scripts/download-stats.js
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # Pushes made with the workflow's own GITHUB_TOKEN do not trigger
+            # other workflows, so this commit never starts a CI run. The badge
+            # JSON feeds the shields.io endpoint badge in the README header.
+            - name: Commit and push if changed
+              run: |
+                  if git diff --quiet README.md .github/badges/downloads.json; then
+                      echo "Stats unchanged, nothing to commit"
+                      exit 0
+                  fi
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git add README.md .github/badges/downloads.json
+                  git commit -m "docs(readme): refresh download statistics"
+                  git push
