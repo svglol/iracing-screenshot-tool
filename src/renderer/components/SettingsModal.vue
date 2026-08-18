@@ -369,6 +369,7 @@ import { version } from '../../../package.json';
 import {
 	FILENAME_FIELDS,
 	DEFAULT_FORMAT,
+	fillCounterTokens,
 	type FilenameField,
 } from '../../utilities/filenameFormat';
 import { getLocale, SUPPORTED_LOCALES } from '../../utilities/i18n';
@@ -463,12 +464,14 @@ export default {
 				'{date}': '2026-04-03',
 				'{time}': '14-30-00',
 				'{datetime}': '2026-04-03_14-30-00',
-				'{counter}': '0',
 			};
 			let preview = this.filenameFormat || '';
 			for (const [token, value] of Object.entries(examples)) {
 				preview = preview.split(token).join(value);
 			}
+			// Counter tokens go through the real engine so the preview shows what
+			// the first file will actually be named: {counter} → 0, {counter+n} → n.
+			preview = fillCounterTokens(preview, 0);
 			const extMap = { jpeg: '.jpg', png: '.png', webp: '.webp' };
 			return preview + (extMap[this.outputFormat] || '.jpg');
 		},

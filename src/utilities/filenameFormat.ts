@@ -316,8 +316,8 @@ export const DEFAULT_FORMAT = '{track}-{driver}-{counter}';
 
 /**
  * Resolves a format string against session data, replacing all known tokens
- * with their corresponding values EXCEPT {counter}, which is left in place
- * for the caller (Worker.vue) to handle.
+ * with their corresponding values EXCEPT counter tokens ({counter} and
+ * {counter+n}), which are left in place for the caller (Worker.vue) to handle.
  *
  * After token replacement, characters that are invalid in Windows filenames
  * (\ / : * ? " < > |) are replaced with underscores.
@@ -325,6 +325,29 @@ export const DEFAULT_FORMAT = '{track}-{driver}-{counter}';
 /** Fallback name used when no session info is available — every session-derived
  *  token would resolve to '', producing degenerate filenames like '--0'. */
 export const FALLBACK_FORMAT = 'iRacingScreenshotTool-{counter}';
+
+// {counter} or {counter+n}: n is a non-negative offset added to the counter, so
+// {counter+5} numbers files 5, 6, 7… instead of 0, 1, 2… Digits are capped at 9
+// so a pathological offset can't push past Number's integer precision; a longer
+// one is left in the name as literal text, like any other unknown token.
+const COUNTER_TOKEN = /\{counter(?:\+(\d{1,9}))?\}/;
+const COUNTER_TOKEN_ALL = new RegExp(COUNTER_TOKEN.source, 'g');
+
+/** Whether the string contains {counter} or any {counter+n} variant. */
+export function hasCounterToken(formatString: string): boolean {
+	return COUNTER_TOKEN.test(formatString);
+}
+
+/** Every counter token filled from `count`: {counter} → count, {counter+n} → count+n. */
+export function fillCounterTokens(formatString: string, count: number): string {
+	return formatString.replace(COUNTER_TOKEN_ALL, (_match, offset) =>
+		String(count + (offset ? Number(offset) : 0))
+	);
+}
+
+function stripCounterTokens(formatString: string): string {
+	return formatString.replace(COUNTER_TOKEN_ALL, '');
+}
 
 export function resolveFilenameFormat(
 	formatString: string,
@@ -359,11 +382,13 @@ export function resolveFilenameFormat(
 	result = result.replace(/[\\/:*?"<>|]/g, '_');
 
 	// All-empty fallback (cq-utilities#2): if every session-derived token resolved
-	// empty AND the user didn't ask for a bare {counter}, fall back rather than emit
-	// a degenerate '.jpg'. Unicode-aware — a purely CJK/Cyrillic name (no Latin
-	// a-z0-9) is legitimate content and must be preserved, so test \p{L}/\p{N}.
-	const withoutCounter = result.split('{counter}').join('');
-	if (!/[\p{L}\p{N}]/u.test(withoutCounter) && !result.includes('{counter}')) {
+	// empty AND the user didn't ask for a bare counter ({counter} or {counter+n}),
+	// fall back rather than emit a degenerate '.jpg'. Unicode-aware — a purely
+	// CJK/Cyrillic name (no Latin a-z0-9) is legitimate content and must be
+	// preserved, so test \p{L}/\p{N}. Counter tokens are stripped first so a
+	// {counter+5} offset digit can't pass as name content.
+	const withoutCounter = stripCounterTokens(result);
+	if (!/[\p{L}\p{N}]/u.test(withoutCounter) && !hasCounterToken(result)) {
 		return FALLBACK_FORMAT;
 	}
 
