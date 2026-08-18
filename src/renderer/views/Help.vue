@@ -131,6 +131,15 @@
 						<p v-html="$t('help.faq.cameraResetFixBody')"></p>
 					</div>
 				</details>
+				<details class="help-faq" name="help-faq">
+					<summary class="help-faq__question">
+						{{ $t('help.faq.tripleBands') }}
+					</summary>
+					<div class="help-faq__answer">
+						<p>{{ $t('help.faq.tripleBandsBody') }}</p>
+						<p v-html="$t('help.faq.tripleBandsFixBody')"></p>
+					</div>
+				</details>
 			</section>
 		</div>
 

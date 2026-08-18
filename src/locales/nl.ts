@@ -312,6 +312,12 @@ const nl: Catalog = {
 				'Dat is iRacings eigen automatische shotkeuze, niet deze tool. Zolang die aanstaat, kiest iRacing zelf camera’s en springt het op het moment dat de opname begint terug naar een standaardkadrering, dus krijg je niet het beeld dat je had opgezet.',
 			cameraResetFixBody:
 				'Zet die uit in het camerascherm van iRacing (Ctrl+F12), onder <b>Camera &gt; Config &gt; Preferences</b>: de schakelaar <b>Shot Selection</b> met het label <b>Automatic</b>. Staat die uit, dan blijft de camera precies waar je hem hebt gezet — bij gewone screenshots én bij lange sluitertijden.',
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 

@@ -317,6 +317,12 @@ const fr: Catalog = {
 				'C’est la sélection automatique des plans propre à iRacing, pas cet outil. Tant qu’elle est active, iRacing continue de choisir les caméras lui-même et revient à un cadrage par défaut à l’instant où la capture démarre : vous n’obtenez donc pas la vue que vous aviez préparée.',
 			cameraResetFixBody:
 				'Désactivez-la dans l’outil caméra d’iRacing (Ctrl+F12), sous <b>Camera &gt; Config &gt; Preferences</b> : l’interrupteur <b>Shot Selection</b> intitulé <b>Automatic</b>. Une fois désactivé, la caméra reste exactement là où vous l’avez placée, pour les captures normales comme pour les poses longues.',
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 

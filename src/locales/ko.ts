@@ -317,6 +317,12 @@ const ko: Catalog = {
 				'이 도구가 아니라 iRacing 자체의 자동 샷 선택 기능 때문입니다. 켜져 있는 동안 iRacing은 스스로 카메라를 계속 고르며, 캡처가 시작되는 순간 기본 구도로 되돌아갑니다. 그래서 준비해 둔 장면이 아닌 다른 장면이 찍힙니다.',
 			cameraResetFixBody:
 				'iRacing의 카메라 도구(Ctrl+F12)에서 <b>Camera &gt; Config &gt; Preferences</b>에 있는 <b>Shot Selection</b>의 <b>Automatic</b> 토글을 끄세요. 끄고 나면 일반 스크린샷이든 장노출이든 카메라가 설정해 둔 자리에 그대로 머무릅니다.',
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 
