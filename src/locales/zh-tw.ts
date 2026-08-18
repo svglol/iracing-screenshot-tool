@@ -317,6 +317,12 @@ const zhTW: Catalog = {
 				'那是 iRacing 自己的自動選鏡功能，不是本工具。只要它開著，iRacing 就會不斷替自己挑選攝影機，並在擷取開始的那一刻切回預設構圖，所以拍到的並不是您原本設好的畫面。',
 			cameraResetFixBody:
 				'請到 iRacing 的攝影機工具（Ctrl+F12）中關閉它，位置在 <b>Camera &gt; Config &gt; Preferences</b>：標示為 <b>Automatic</b> 的 <b>Shot Selection</b> 開關。關閉之後，攝影機就會完全停在您擺放的位置，一般截圖和長時間曝光都一樣。',
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 

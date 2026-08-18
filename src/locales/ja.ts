@@ -321,6 +321,12 @@ const ja: Catalog = {
 				'それはこのツールではなく、iRacing 自身の自動ショット選択です。オンになっている間、iRacing は自分でカメラを選び続け、キャプチャが始まる瞬間に既定の構図へ戻してしまうため、用意した構図とは違う写真になります。',
 			cameraResetFixBody:
 				'iRacing のカメラツール（Ctrl+F12）の <b>Camera &gt; Config &gt; Preferences</b> にある、<b>Shot Selection</b> の <b>Automatic</b> スイッチでオフにできます。オフにすれば、通常のスクリーンショットでも長時間露光でも、カメラは設定した位置のままになります。',
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 

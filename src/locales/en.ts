@@ -336,6 +336,12 @@ export default {
 				"That is iRacing's own automatic shot selection, not this tool. While it is on, iRacing keeps picking cameras for itself and will cut back to a default framing at the moment the capture starts, so what you get is not the shot you set up.",
 			cameraResetFixBody:
 				"Turn it off in iRacing's camera tool (Ctrl+F12), under <b>Camera &gt; Config &gt; Preferences</b>: the <b>Shot Selection</b> toggle labelled <b>Automatic</b>. With it off the camera stays exactly where you put it, for normal screenshots and long exposures alike.",
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 

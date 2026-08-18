@@ -312,6 +312,12 @@ const da: Catalog = {
 				'Det er iRacings egen automatiske billedvalg, ikke dette værktøj. Så længe det er slået til, bliver iRacing ved med selv at vælge kameraer og skifter tilbage til en standardindstilling i det øjeblik, optagelsen starter, så du ikke får det billede, du havde sat op.',
 			cameraResetFixBody:
 				'Slå det fra i iRacings kameraværktøj (Ctrl+F12) under <b>Camera &gt; Config &gt; Preferences</b>: kontakten <b>Shot Selection</b> med teksten <b>Automatic</b>. Når den er slået fra, bliver kameraet præcis, hvor du satte det — både til almindelige skærmbilleder og til lange eksponeringer.',
+
+			tripleBands: 'There are vertical bands in my triple-screen shots',
+			tripleBandsBody:
+				'They are a side effect of two iRacing settings working together: multi-projection (the SMP setting) and bezel correction. On the monitors themselves the picture looks right — the correction exists to line the scene up across the physical frames — but in the captured image the corrected regions show up as vertical bands where one screen meets the next.',
+			tripleBandsFixBody:
+				"Either change fixes it: set the <b>bezel width</b> to <b>0 mm</b> in iRacing's graphics options, which takes effect immediately, or turn off <b>multi-projection (SMP)</b>, which takes effect after an iRacing restart.",
 		},
 	},
 
