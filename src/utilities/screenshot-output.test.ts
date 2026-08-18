@@ -78,6 +78,60 @@ describe('buildUniqueScreenshotName', () => {
 		expect(name).toBe('Daytona-0-0');
 	});
 
+	test('starts {counter+n} numbering at n', () => {
+		const name = buildUniqueScreenshotName({
+			formatString: '{track}-{counter+5}',
+			sessionInfo,
+			telemetry,
+			exists: () => false,
+		});
+		expect(name).toBe('Daytona-5');
+	});
+
+	test('advances {counter+n} past collisions from the offset', () => {
+		// counter=0 → '5' taken, counter=1 → '6' taken, counter=2 → '7' free.
+		const taken = new Set(['Daytona-5', 'Daytona-6']);
+		const name = buildUniqueScreenshotName({
+			formatString: '{track}-{counter+5}',
+			sessionInfo,
+			telemetry,
+			exists: (n) => taken.has(n),
+		});
+		expect(name).toBe('Daytona-7');
+	});
+
+	test('fills mixed {counter} and {counter+n} from the same counter', () => {
+		const name = buildUniqueScreenshotName({
+			formatString: '{track}-{counter}-{counter+3}',
+			sessionInfo,
+			telemetry,
+			exists: () => false,
+		});
+		expect(name).toBe('Daytona-0-3');
+	});
+
+	test('leaves a malformed counter expression as literal text', () => {
+		// Not a counter token, so it also gets no uniqueness handling — it is
+		// ordinary (if odd) filename text, like any other unknown {token}.
+		const name = buildUniqueScreenshotName({
+			formatString: '{track}-{counter+x}',
+			sessionInfo,
+			telemetry,
+			exists: () => false,
+		});
+		expect(name).toBe('Daytona-{counter+x}');
+	});
+
+	test('leaves an over-long counter offset (10+ digits) as literal text', () => {
+		const name = buildUniqueScreenshotName({
+			formatString: '{track}-{counter+1234567890}',
+			sessionInfo,
+			telemetry,
+			exists: () => false,
+		});
+		expect(name).toBe('Daytona-{counter+1234567890}');
+	});
+
 	test('appends -N to a counter-less format on collision', () => {
 		const taken = new Set(['Daytona', 'Daytona-1']);
 		const name = buildUniqueScreenshotName({

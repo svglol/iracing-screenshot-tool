@@ -70,6 +70,16 @@ describe('resolveFilenameFormat', () => {
 			).toBe('Autodromo Nazionale Monza-Smith, B-7-{counter}');
 		});
 
+		it('leaves {counter+n} in place for the caller, like {counter}', () => {
+			expect(
+				resolveFilenameFormat(
+					'{track}-{counter+12}',
+					sessionInfo,
+					telemetry
+				)
+			).toBe('Monza-{counter+12}');
+		});
+
 		it('strips diacritics for filesystem safety', () => {
 			const trackSession = {
 				data: {
@@ -156,6 +166,14 @@ describe('resolveFilenameFormat', () => {
 					values: {},
 				})
 			).toBe('{counter}');
+		});
+
+		it('preserves an explicit bare {counter+n} format (no fallback)', () => {
+			expect(
+				resolveFilenameFormat('{counter+5}', trackSession('Monza'), {
+					values: {},
+				})
+			).toBe('{counter+5}');
 		});
 
 		it('preserves a non-Latin (CJK) name instead of falling back', () => {

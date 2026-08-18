@@ -9,7 +9,11 @@
 // Everything here is pure except buildUniqueScreenshotName, whose only side
 // channel is an injected `exists` probe (fs.existsSync in production) — so it is
 // fully unit-testable without a filesystem.
-import { resolveFilenameFormat } from './filenameFormat';
+import {
+	resolveFilenameFormat,
+	hasCounterToken,
+	fillCounterTokens,
+} from './filenameFormat';
 
 // config 'outputFormat' key -> saved-file extension. Single source of truth for
 // the extension across both save paths (Worker.vue's FORMAT_MAP derives its
@@ -31,10 +35,11 @@ export function getOutputExtension(formatKey: unknown): string {
 
 // Resolve a filename format string against session/telemetry data to a UNIQUE
 // base name (no extension). {counter} is expanded to the first integer that
-// doesn't collide; a format without {counter} gets a `-N` suffix on collision.
-// `exists(baseName)` must report whether a file for that base name already
-// exists (the caller appends the extension + directory) — matching Worker.vue's
-// getScreenshotPath-based check exactly.
+// doesn't collide, and {counter+n} to that integer plus the offset n (so the
+// numbering starts at n); a format without a counter token gets a `-N` suffix
+// on collision. `exists(baseName)` must report whether a file for that base
+// name already exists (the caller appends the extension + directory) —
+// matching Worker.vue's getScreenshotPath-based check exactly.
 export function buildUniqueScreenshotName(opts: {
 	formatString: string;
 	// irsdk session/telemetry shapes are untyped upstream (see filenameFormat.ts)
@@ -47,23 +52,22 @@ export function buildUniqueScreenshotName(opts: {
 	const { formatString, sessionInfo, telemetry, exists } = opts;
 	const resolved = resolveFilenameFormat(formatString, sessionInfo, telemetry);
 
-	// {counter}: first non-colliding integer starting at 0. Use split/join so EVERY
-	// {counter} occurrence is expanded — String.replace hits only the first, leaving
-	// a literal '{counter}' behind in a two-counter format (cq-utilities#4).
-	if (resolved.includes('{counter}')) {
-		const fillCounter = (n: number): string =>
-			resolved.split('{counter}').join(String(n));
+	// Counter tokens: first non-colliding integer starting at 0, with each
+	// {counter+n} rendering that integer plus its offset. fillCounterTokens
+	// expands EVERY occurrence (cq-utilities#4: a single String.replace hit only
+	// the first, leaving a literal '{counter}' behind in a two-counter format).
+	if (hasCounterToken(resolved)) {
 		let count = 0;
-		let name = fillCounter(count);
+		let name = fillCounterTokens(resolved, count);
 		while (exists(name)) {
 			count += 1;
-			name = fillCounter(count);
+			name = fillCounterTokens(resolved, count);
 		}
 		return name;
 	}
 
-	// No {counter}: keep the resolved name, but disambiguate a collision with a
-	// `-N` suffix starting at 1.
+	// No counter token: keep the resolved name, but disambiguate a collision
+	// with a `-N` suffix starting at 1.
 	if (exists(resolved)) {
 		let count = 1;
 		while (exists(`${resolved}-${count}`)) {

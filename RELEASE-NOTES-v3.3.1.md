@@ -36,6 +36,12 @@ save a black image and call it a success.
   (iRacing, ReShade, WGC, VRAM, and the menu paths Help points you to) are
   left in English so they still match what you see in the sim.
 
+- **An offset for the filename counter.** `{counter+5}` numbers files
+  starting at 5 instead of 0 — useful for continuing a sequence from a
+  previous session instead of restarting it. Works alongside a plain
+  `{counter}` in the same format, and the filename preview in Settings
+  shows exactly what the first file will be named.
+
 - **A new FAQ tab in Help**, for the two things people report as "the tool
   is broken" most often, neither of which is a bug in the tool: a long
   exposure that comes back black except for the iRacing UI (a handful of
