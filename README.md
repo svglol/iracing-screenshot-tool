@@ -45,6 +45,16 @@ Updated 2026-08-17 · refresh with `npm run stats:downloads`.</sub>
 
 <!-- download-stats:end -->
 
+# Code signing policy
+The Windows installer and the portable executable are digitally signed, so Windows shows a verified publisher instead of an unknown-publisher warning.
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+* **Committers and reviewers:** [project contributors](https://github.com/svglol/iracing-screenshot-tool/graphs/contributors)
+* **Approvers:** [@svglol](https://github.com/svglol)
+
+**Privacy policy:** this program does not transfer any information to other networked systems, with one exception — it contacts GitHub to check this repository's releases for a newer version and to show you what changed in it. An update is downloaded and installed only after you confirm it. No analytics, usage data or personal information is collected or sent.
+
 # Support
 Please go to our Discord server and report any issues you are having. [![Discord](https://img.shields.io/discord/626921718442754048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/GX2kSgN)
 
