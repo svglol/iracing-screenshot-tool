@@ -1,0 +1,217 @@
+name: Build & sign
+
+# Builds the installers and submits them to SignPath. Deliberately does NOT
+# publish anything — the caller decides what happens to the signed artifact.
+#
+# Two entry points, one implementation:
+#   * workflow_call     — release.yml calls this for every tagged release.
+#   * workflow_dispatch — a signing rehearsal you can run by hand off any
+#                         branch, normally against test-signing, to prove the
+#                         pipeline without cutting a release.
+#
+# The signing policy is an input rather than a constant, so there is exactly
+# one copy of the build here and the caller picks the certificate.
+on:
+    workflow_call:
+        inputs:
+            signing-policy-slug:
+                description: SignPath signing policy to sign with.
+                required: true
+                type: string
+        secrets:
+            SIGNPATH_API_TOKEN:
+                description: SignPath REST API token with submitter permission.
+                required: true
+    workflow_dispatch:
+        inputs:
+            signing-policy-slug:
+                description: SignPath signing policy to sign with.
+                required: true
+                type: choice
+                default: test-signing
+                options:
+                    - test-signing
+                    - release-signing
+
+jobs:
+    # ---------------------------------------------------------------------
+    # Everything that compiles. Ends by parking the unsigned executables in a
+    # workflow artifact — which is how SignPath receives them: it pulls the
+    # artifact from GitHub itself rather than trusting anything this job says.
+    # ---------------------------------------------------------------------
+    build:
+        # Pinned to windows-2022, NOT windows-latest — see the note in ci.yml.
+        # VS 2026 (the windows-latest default since June 2026) hits a C1001
+        # internal compiler error on node-addon-api while building
+        # @irsdk-node/native, which fails `npm ci`. This must stay in step with
+        # the runner ci.yml uses, so the release builds what CI tested.
+        runs-on: windows-2022
+        timeout-minutes: 60
+
+        permissions:
+            contents: read
+
+        outputs:
+            unsigned-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: native/wgc-capture
+
+            # native/wgc-capture.node is committed for contributors' local
+            # `npm run dev`, but a release must never ship a binary older than
+            # src/lib.rs. Rebuild and overwrite it before electron-builder
+            # packages it in.
+            - name: Build native WGC addon
+              shell: bash
+              run: |
+                  cargo build --release --manifest-path native/wgc-capture/Cargo.toml
+                  cp native/wgc-capture/target/release/wgc_capture.dll native/wgc-capture.node
+
+            # postinstall rebuilds irsdk-node and sharp against Electron's headers.
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Test
+              run: npm test
+
+            - name: Build bundles
+              run: npm run pack
+
+            # Produces the NSIS installer, the portable exe, the .blockmap and
+            # latest.yml in build/ WITHOUT publishing. Signing has to happen
+            # between packaging and upload, so the electron-builder publishers
+            # are out of the loop entirely — the publish job uploads the
+            # finished assets with gh.
+            - name: Package installers
+              run: npx electron-builder --publish never
+
+            # The unsigned executables travel to SignPath as a workflow
+            # artifact. GitHub delivers those as a ZIP, which is why the
+            # SignPath project's artifact configuration must have a <zip-file>
+            # root containing the pe-file entries for both executables.
+            - name: Stage unsigned executables
+              id: unsigned
+              uses: actions/upload-artifact@v4
+              with:
+                  name: unsigned-executables
+                  path: build/*.exe
+                  if-no-files-found: error
+                  overwrite: true
+
+            # latest.yml is produced here but consumed by the publish job on a
+            # different runner, so it has to travel too. The .blockmap files
+            # electron-builder wrote are deliberately NOT carried across: they
+            # describe unsigned bytes and are rebuilt after signing.
+            - name: Stage update manifest
+              uses: actions/upload-artifact@v4
+              with:
+                  name: release-metadata
+                  path: build/latest.yml
+                  if-no-files-found: error
+                  overwrite: true
+
+    # ---------------------------------------------------------------------
+    # Signing is a separate job, and that split is the whole point of this
+    # file.
+    #
+    # The production (release-signing) certificate requires a SignPath
+    # reviewer to approve every request by hand in the SignPath web UI, which
+    # can take hours or days. The test-signing certificate signs automatically
+    # with no human involved.
+    #
+    # Keeping signing out of the build job means:
+    #   * the ~40 minute build is finished and banked in an artifact before
+    #     anyone is asked to approve anything;
+    #   * if the wait below runs out, "Re-run failed jobs" resubmits from the
+    #     EXISTING unsigned artifact — no rebuild, roughly two minutes.
+    #
+    # That re-run only works because everything stays inside ONE workflow run.
+    # The signing request is bound to the run id the action reads from the
+    # environment, and SignPath checks the submitted artifact against it, so a
+    # separate workflow triggered later cannot submit this build's artifact.
+    # A re-run keeps the run id; a fresh run would not.
+    #
+    # Note the ceiling: GitHub kills any single job at 6 hours, so no timeout
+    # value can survive an approval that lands the next day. If that happens,
+    # approve the request anyway and re-run the failed jobs.
+    # ---------------------------------------------------------------------
+    sign:
+        needs: build
+        # Nothing here compiles — it is an HTTP call and a wait — so this job
+        # is not pinned to the build runner. It must still be GitHub-hosted:
+        # SignPath Foundation requires that for open-source projects.
+        runs-on: ubuntu-latest
+        # 5h30m, just inside GitHub's 6-hour hard cap on a single job.
+        timeout-minutes: 330
+
+        permissions:
+            # actions:read is what lets SignPath download the artifact using
+            # the workflow's own token; contents:read is for reading the
+            # repository. Nothing in this job writes.
+            actions: read
+            contents: read
+
+        steps:
+            - name: Submit signing request
+              id: signing
+              uses: signpath/github-action-submit-signing-request@v2
+              with:
+                  api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+                  organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+                  project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+                  signing-policy-slug: ${{ inputs.signing-policy-slug }}
+                  # An unset variable resolves to an empty string, which the
+                  # action treats exactly like an omitted input — SignPath then
+                  # applies the project's default artifact configuration. Set
+                  # the variable to pin a named configuration instead.
+                  artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+                  github-artifact-id: ${{ needs.build.outputs.unsigned-artifact-id }}
+                  # Blocks until the request reaches a final state. Under
+                  # release-signing that means blocking until a human approves.
+                  wait-for-completion: true
+                  # 5 hours, leaving the job timeout above enough headroom to
+                  # report the failure rather than being killed mid-step.
+                  wait-for-completion-timeout-in-seconds: 18000
+                  output-artifact-directory: signed
+
+            # Runs even when the wait times out — that is precisely when a link
+            # to the pending request is worth having.
+            - name: Record signing request
+              if: always()
+              shell: bash
+              run: |
+                  {
+                    echo "### SignPath signing request"
+                    echo
+                    echo "| | |"
+                    echo "|---|---|"
+                    echo "| Policy | \`${{ inputs.signing-policy-slug }}\` |"
+                    echo "| Request id | \`${{ steps.signing.outputs.signing-request-id }}\` |"
+                    echo "| Request | ${{ steps.signing.outputs.signing-request-web-url }} |"
+                    echo
+                    if [ "${{ steps.signing.outcome }}" != "success" ]; then
+                      echo "The signing request did not reach a final state within the"
+                      echo "wait window. Approve it at the link above, then use"
+                      echo "**Re-run failed jobs** on this run — it resubmits from the"
+                      echo "existing unsigned artifact and does not rebuild."
+                    fi
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Stage signed executables
+              uses: actions/upload-artifact@v4
+              with:
+                  name: signed-executables
+                  path: signed/*.exe
+                  if-no-files-found: error
+                  overwrite: true

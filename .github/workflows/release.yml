@@ -3,6 +3,18 @@ name: Release
 # `npm run release <major|minor|patch>` bumps, commits and tags locally, then
 # pushes the tag — which lands here. Everything from "build the installer"
 # onward is this workflow's job; release.js no longer builds or uploads.
+#
+# The run is three stages, and the split exists because of code signing:
+#
+#   prepare    guards the tag, picks the signing policy, opens a draft release
+#   build_sign build-sign.yml — compiles, then submits to SignPath in a
+#              SEPARATE job, because the production certificate needs a human
+#              at SignPath to approve every request
+#   publish    only ever sees SIGNED executables; publishes the draft
+#
+# Nothing unsigned can reach a public release: the release is created as a
+# draft before the build starts and is only taken out of draft in the last
+# step, by which point the assets attached to it came out of SignPath.
 on:
     push:
         tags:
@@ -10,44 +22,33 @@ on:
 
 # The workflow creates a draft release, uploads the signed assets into it with
 # gh, and the final step flips it out of draft. All need write access.
+#
+# actions:read is granted for the signing job: SignPath downloads the unsigned
+# artifact from GitHub itself, using this workflow's token. A permissions block
+# sets every scope it does not name to none, and a called workflow can only ask
+# for scopes the caller already holds — so omitting it here would silently
+# starve build-sign.yml's sign job.
 permissions:
     contents: write
+    actions: read
 
 concurrency:
     group: release-${{ github.ref }}
     cancel-in-progress: false
 
 jobs:
-    release:
-        # Pinned to windows-2022, NOT windows-latest — see the note in ci.yml.
-        # VS 2026 (the windows-latest default since June 2026) hits a C1001
-        # internal compiler error on node-addon-api while building
-        # @irsdk-node/native, which fails `npm ci`. This must stay in step with
-        # the runner ci.yml uses, so the release builds what CI tested.
-        runs-on: windows-2022
-        # ~40 minutes of build plus up to 30 minutes waiting for a signing
-        # approval (see the SignPath step).
-        timeout-minutes: 90
+    # ---------------------------------------------------------------------
+    # Cheap checks and the draft, all before the expensive build.
+    # ---------------------------------------------------------------------
+    prepare:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
 
-        env:
-            # Which SignPath policy signs this release.
-            #
-            # test-signing uses the self-signed test certificate: it proves the
-            # pipeline end to end but Windows does not trust it, so releases
-            # signed with it must not ship to users. Flip to release-signing
-            # once the Foundation's release certificate shows VALID in SignPath
-            # — and in the SAME change add
-            #     "publisherName": ["SignPath Foundation"]
-            # to package.json's build.win, so electron-updater starts verifying
-            # the signature of every downloaded update.
-            SIGNPATH_SIGNING_POLICY: test-signing
+        outputs:
+            signing-policy-slug: ${{ steps.policy.outputs.slug }}
 
         steps:
             - uses: actions/checkout@v4
-              with:
-                  # Release notes fall back to `git log <prevTag>..<tag>`, which
-                  # needs real history — the default shallow clone has none.
-                  fetch-depth: 0
 
             # A tag whose semver disagrees with package.json produces an installer
             # named for one version published under another. Fail before the
@@ -63,35 +64,62 @@ jobs:
                   fi
                   echo "Releasing $GITHUB_REF_NAME"
 
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 24
-                  cache: npm
+            # A missing variable would surface as "Input required and not
+            # supplied" inside the signing job — after the ~40 minute build.
+            # Check it here instead, where failing costs half a minute.
+            - name: Verify SignPath configuration
+              shell: bash
+              env:
+                  ORG_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+                  PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+                  # Comparing in the expression keeps the token itself out of
+                  # the job environment; only the boolean crosses over.
+                  HAS_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+              run: |
+                  ok=true
+                  if [ -z "$ORG_ID" ]; then
+                    echo "Missing repository variable SIGNPATH_ORGANIZATION_ID"
+                    ok=false
+                  fi
+                  if [ -z "$PROJECT_SLUG" ]; then
+                    echo "Missing repository variable SIGNPATH_PROJECT_SLUG"
+                    ok=false
+                  fi
+                  if [ "$HAS_TOKEN" != "true" ]; then
+                    echo "Missing repository secret SIGNPATH_API_TOKEN"
+                    ok=false
+                  fi
+                  if [ "$ok" != "true" ]; then
+                    echo "::error::SignPath is not fully configured for this repository — see the missing entries above."
+                    exit 1
+                  fi
+                  echo "SignPath configuration present."
 
-            - uses: dtolnay/rust-toolchain@stable
-
-            - uses: Swatinem/rust-cache@v2
-              with:
-                  workspaces: native/wgc-capture
-
-            # native/wgc-capture.node is committed for contributors' `npm run dev`,
-            # but a release must never ship a binary older than src/lib.rs.
-            # Rebuild and overwrite it before electron-builder packages it in.
-            - name: Build native WGC addon
+            # Which certificate signs this build.
+            #
+            # release-signing is the SignPath Foundation production certificate:
+            # Windows trusts it, and every single request against it has to be
+            # approved by hand by a SignPath reviewer, which may take hours.
+            #
+            # test-signing is the self-signed test certificate: it signs
+            # automatically with nobody in the loop, but Windows does not trust
+            # it, so anything signed with it must never ship to users. A
+            # prerelease-suffixed tag (v3.4.0-signing.1) is a pipeline
+            # rehearsal, and the publish step below already refuses to take
+            # those out of draft — so they get the test certificate and the
+            # rehearsal costs no reviewer's attention.
+            - name: Select signing policy
+              id: policy
               shell: bash
               run: |
-                  cargo build --release --manifest-path native/wgc-capture/Cargo.toml
-                  cp native/wgc-capture/target/release/wgc_capture.dll native/wgc-capture.node
-
-            # postinstall rebuilds irsdk-node and sharp against Electron's headers.
-            - name: Install dependencies
-              run: npm ci
-
-            - name: Test
-              run: npm test
-
-            - name: Build bundles
-              run: npm run pack
+                  version="${GITHUB_REF_NAME#v}"
+                  if [[ "$version" == *-* ]]; then
+                    slug=test-signing
+                  else
+                    slug=release-signing
+                  fi
+                  echo "slug=$slug" >> "$GITHUB_OUTPUT"
+                  echo "Signing $GITHUB_REF_NAME with the $slug policy"
 
             # Create the draft BEFORE anything uploads, and flip it public only
             # at the very end, so a failed run never leaves a half-populated
@@ -120,43 +148,121 @@ jobs:
                       --notes "Build in progress — this text is replaced when the release is published."
                   fi
 
-            # Produces the NSIS installer, the portable exe, the .blockmap and
-            # latest.yml in build/ WITHOUT publishing. Signing has to happen
-            # between packaging and upload, so the electron-builder publishers
-            # are out of the loop entirely — gh uploads the finished assets
-            # below.
-            - name: Package installers
-              run: npx electron-builder --publish never
+    # ---------------------------------------------------------------------
+    # Compile, then sign. Two jobs inside build-sign.yml; see the commentary
+    # there for why signing is not part of the build job.
+    # ---------------------------------------------------------------------
+    build_sign:
+        needs: prepare
+        uses: ./.github/workflows/build-sign.yml
+        with:
+            signing-policy-slug: ${{ needs.prepare.outputs.signing-policy-slug }}
+        secrets:
+            SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
 
-            # The unsigned executables travel to SignPath as a workflow
-            # artifact. GitHub delivers those as a ZIP, which is why the
-            # SignPath project's artifact configuration must have a <zip-file>
-            # root containing the pe-file entries for both executables.
-            - name: Stage unsigned executables
-              id: unsigned
-              uses: actions/upload-artifact@v4
-              with:
-                  name: unsigned-executables
-                  path: build/*.exe
-                  if-no-files-found: error
+    # ---------------------------------------------------------------------
+    # Everything here operates on the executables that came back from
+    # SignPath. `needs: build_sign` is what guarantees that: the job cannot
+    # start until the signed artifact exists.
+    # ---------------------------------------------------------------------
+    publish:
+        needs: [prepare, build_sign]
+        # Windows because the Authenticode check below uses
+        # Get-AuthenticodeSignature, which is the OS doing the parsing rather
+        # than us trusting a hand-rolled PE reader.
+        runs-on: windows-2022
+        timeout-minutes: 30
 
-            # Submits the signing request and waits for the signed artifact.
-            #
-            # Under release-signing this PAUSES mid-run until someone approves
-            # the request in the SignPath UI — approve within the timeout below
-            # or the job fails. A re-run rebuilds and resubmits; the draft
-            # release is reused.
-            - name: Sign executables
-              uses: signpath/github-action-submit-signing-request@v2
+        permissions:
+            contents: write
+            # Same-run artifact downloads use the Actions runtime token rather
+            # than this one, but naming the scope keeps the job honest about
+            # what it touches.
+            actions: read
+
+        steps:
+            - uses: actions/checkout@v4
               with:
-                  api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-                  organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-                  project-slug: iracing-screenshot-tool
-                  signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY }}
-                  github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
-                  wait-for-completion: true
-                  wait-for-completion-timeout-in-seconds: 1800
-                  output-artifact-directory: build/signed
+                  # Release notes fall back to `git log <prevTag>..<tag>`, which
+                  # needs real history — the default shallow clone has none.
+                  fetch-depth: 0
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            # --ignore-scripts skips the postinstall that rebuilds irsdk-node
+            # and sharp against Electron — several minutes of native compilation
+            # this job has no use for. finalize-signed-artifacts.js only needs
+            # js-yaml and app-builder-lib's blockmap module, and that module
+            # pulls nothing but crypto, fs, zlib and @noble/hashes.
+            - name: Install dependencies
+              run: npm ci --ignore-scripts
+
+            - name: Download signed executables
+              uses: actions/download-artifact@v4
+              with:
+                  name: signed-executables
+                  path: build
+
+            - name: Download update manifest
+              uses: actions/download-artifact@v4
+              with:
+                  name: release-metadata
+                  path: build
+
+            # The last line of defence before anything is attached to a release.
+            # The steps above cannot really deliver an unsigned binary, but this
+            # is cheap and it catches the failure that would be worst to miss:
+            # a real tag that got signed with the untrusted test certificate.
+            - name: Verify Authenticode signatures
+              shell: pwsh
+              env:
+                  SIGNING_POLICY: ${{ needs.prepare.outputs.signing-policy-slug }}
+                  # The subject the SignPath Foundation certificate signs under.
+                  # Overridable as a repo variable so a certificate reissue with
+                  # a different subject does not need a code change.
+                  EXPECTED_PUBLISHER: ${{ vars.SIGNPATH_EXPECTED_PUBLISHER }}
+              run: |
+                  $expected = $env:EXPECTED_PUBLISHER
+                  if (-not $expected) { $expected = 'SignPath Foundation' }
+
+                  # Only the production certificate carries a meaningful
+                  # publisher name; the test certificate is self-signed and its
+                  # subject is whatever the SignPath test CA issued.
+                  $requirePublisher = $env:SIGNING_POLICY -eq 'release-signing'
+
+                  $exes = @(Get-ChildItem -Path build -Filter *.exe)
+                  if ($exes.Count -lt 2) {
+                      throw "Expected the installer and the portable build in build/, found $($exes.Count) .exe file(s)."
+                  }
+
+                  $failed = $false
+                  foreach ($exe in $exes) {
+                      $sig = Get-AuthenticodeSignature -FilePath $exe.FullName
+                      $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '<none>' }
+                      Write-Host "$($exe.Name): status=$($sig.Status) subject=$subject"
+
+                      # Status is deliberately not asserted. A test-signed
+                      # binary reports UnknownError because the runner does not
+                      # trust the self-signed chain, which is expected and not a
+                      # defect — the presence of a signer certificate is what
+                      # tells us SignPath actually signed the file.
+                      if (-not $sig.SignerCertificate) {
+                          Write-Host "::error::$($exe.Name) carries no Authenticode signature."
+                          $failed = $true
+                          continue
+                      }
+
+                      if ($requirePublisher -and $subject -notlike "*$expected*") {
+                          Write-Host "::error::$($exe.Name) is signed by '$subject', which does not contain '$expected'. Refusing to publish a release signed with the wrong certificate."
+                          $failed = $true
+                      }
+                  }
+
+                  if ($failed) { exit 1 }
+                  Write-Host "All $($exes.Count) executables are signed$(if ($requirePublisher) { " by $expected" })."
 
             # Signing changed every byte electron-builder hashed, so the
             # update manifest and blockmap must be rebuilt from the SIGNED
@@ -168,9 +274,7 @@ jobs:
             # the space-named files).
             - name: Rebuild update manifest from signed executables
               shell: bash
-              run: |
-                  cp build/signed/*.exe build/
-                  node _scripts/finalize-signed-artifacts.js build
+              run: node _scripts/finalize-signed-artifacts.js build
 
             - name: Upload artifacts
               shell: bash
@@ -256,7 +360,7 @@ jobs:
                   # rehearsal, not a release: run every guard above, then STOP,
                   # leaving the draft in place for inspection and deletion.
                   # Flipping it public with --latest would offer the build to
-                  # every auto-updating user — which for a rehearsal may be a
+                  # every auto-updating user — which for a rehearsal is a
                   # test-signed binary Windows does not trust.
                   if [[ "$version" == *-* ]]; then
                     echo "Prerelease tag ${tag}: all checks passed. Leaving the release as a draft."
