@@ -41,9 +41,11 @@
                 "portable"
             ],
             "signAndEditExecutable": false,
-            "publisherName": [
-                "SignPath Foundation"
-            ]
+            "signtoolOptions": {
+                "publisherName": [
+                    "SignPath Foundation"
+                ]
+            }
         },
         "nsis": {
             "include": "_scripts/installer.nsh"
