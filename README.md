@@ -36,12 +36,12 @@ Created using Electron and Vue.
 # Download Statistics
 <!-- download-stats:start -->
 
-**Total downloads: 9,586** — installer and portable, across 28 releases
+**Total downloads: 9,757** — installer and portable, across 28 releases
 
 <sub>Excludes update checks — downloads of `latest.yml`, made by
 installed copies looking for a new version — and differential-update
 blockmaps, neither of which is a person downloading the app.
-Updated 2026-08-31 · refresh with `npm run stats:downloads`.</sub>
+Updated 2026-09-07 · refresh with `npm run stats:downloads`.</sub>
 
 <!-- download-stats:end -->
 
