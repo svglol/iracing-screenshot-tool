@@ -10,10 +10,13 @@ crate-type = ["cdylib"]
 napi = { version = "2", default-features = false, features = ["napi8"] }
 napi-derive = "2"
 windows-capture = "2.0.0"
+half = "2"
 windows = { version = "0.62.2", features = [
+    "Win32_Devices_Display",
     "Win32_UI_HiDpi",
     "Win32_Foundation",
     "Graphics_Capture",
+    "Win32_Graphics_Gdi",
     # Long-exposure DirectCompute backend (see src/longexp/). D3D11 + the runtime
     # HLSL compiler (d3dcompiler_47.dll, a Windows system component since 8.1) are
     # all this feature needs — no CUDA toolkit, no per-architecture build, nothing
