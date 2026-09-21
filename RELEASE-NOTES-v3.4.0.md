@@ -1,13 +1,13 @@
-# iRacing Screenshot Tool — v3.3.1
+# iRacing Screenshot Tool — v3.4.0
 
-Graphics profiles, seven more languages, and a Long Exposure bug that could
-save a black image and call it a success.
+Graphics profiles for iRacing, seven more languages, and a Long Exposure bug
+that could save a black image and call it a success.
 
 ## New
 
 - **Graphics Profiles.** Store iRacing graphics configurations and switch
   between them — one for racing, one for screenshots, one for recording
-  video — from a new toolbar icon instead of hand-editing
+  video — from the title bar instead of hand-editing
   `rendererDX11Monitor.ini` and keeping copies yourself.
 
   The panel always tells you where you stand: "Matches your Screenshots
@@ -19,22 +19,25 @@ save a black image and call it a success.
 
   Saving refuses to store the exact same configuration twice, and points you
   at the profile that already holds it instead of leaving you to diff `.ini`
-  files by hand. Every apply and overwrite is backed up first (ten kept), and
-  writes are atomic, so a crash mid-write can't leave you with a corrupted
-  config that makes iRacing discard everything and re-run its auto-setup.
+  files by hand. Editing a file iRacing depends on deserves some care, so
+  applies and overwrites are backed up first (ten kept), written atomically,
+  and disabled while iRacing is open — the sim holds its settings in memory
+  and writes them back over the file when it exits, so a switch made while
+  it's open would be silently undone.
 
-  **iRacing has to be closed to switch** — it holds its graphics settings in
-  memory and writes them back over the file when it exits, so a change made
-  while it's running is silently undone. The Load button is disabled while
-  iRacing is open, and again for whichever profile the live config already
-  matches, since loading it again would change nothing.
+- **The app has pages now.** Settings and Help are full pages instead of
+  dialogs, reached from a slim rail on the left that also holds Screenshots
+  and our Discord; F1 still opens Help. The title bar shows which stored
+  Graphics Profile the active config matches (with a "Modified" badge once
+  it drifts) and holds the button to the profiles panel.
 
 - **Seven more languages.** Arabic, Russian, Japanese, Korean, Traditional
   Chinese, Greek and Turkish join the thirteen from v3.3.0, for twenty in
-  total. Same coverage as before — settings, sidebar, Long Exposure, every
-  warning, the whole Help screen — and the same rule: iRacing's own terms
-  (iRacing, ReShade, WGC, VRAM, and the menu paths Help points you to) are
-  left in English so they still match what you see in the sim.
+  total. Everything above is covered too — Graphics Profiles ship translated
+  in all of them — under the same rule as before:
+  iRacing's own terms (iRacing, ReShade, WGC, VRAM, and the menu paths Help
+  points you to) are left in English so they still match what you see in the
+  sim.
 
 - **An offset for the filename counter.** `{counter+5}` numbers files
   starting at 5 instead of 0 — useful for continuing a sequence from a
@@ -42,13 +45,19 @@ save a black image and call it a success.
   `{counter}` in the same format, and the filename preview in Settings
   shows exactly what the first file will be named.
 
-- **A new FAQ tab in Help**, for the two things people report as "the tool
-  is broken" most often, neither of which is a bug in the tool: a long
-  exposure that comes back black except for the iRacing UI (a handful of
-  cameras — the suspension camera especially — render nothing, unlike
-  exclusive fullscreen where the UI goes black too), and iRacing moving the
-  camera on its own mid-capture (its own **Shot Selection: Automatic**,
-  under **Camera > Config > Preferences**).
+- **Resolution and file size in the gallery.** Each screenshot now carries a
+  small caption under its name — `3840x2160 · 4.2 MB` — replacing the badge
+  that crowded the filename.
+
+- **An FAQ in Help**, for the three things people report as "the tool is
+  broken" most often, none of which is a bug in the tool: a long exposure
+  that comes back black except for the iRacing UI (a handful of cameras —
+  the suspension camera especially — render nothing, unlike exclusive
+  fullscreen where the UI goes black too); iRacing moving the camera on its
+  own mid-capture (its own **Shot Selection: Automatic**, under **Camera >
+  Config > Preferences**); and vertical bands in triple-screen shots, a side
+  effect of multi-projection (SMP) plus bezel correction — set the bezel
+  width to 0 mm (immediate) or turn SMP off (needs an iRacing restart).
 
 ## Fixes
 
@@ -81,5 +90,5 @@ save a black image and call it a success.
 
 ## Get it
 
-- **Installer** — `iRacing-Screenshot-Tool-Setup-3.3.1.exe`
-- **Portable** — `iRacing-Screenshot-Tool-3.3.1.exe`
+- **Installer** — `iRacing-Screenshot-Tool-Setup-3.4.0.exe`
+- **Portable** — `iRacing-Screenshot-Tool-3.4.0.exe`
