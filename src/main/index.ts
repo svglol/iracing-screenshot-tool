@@ -21,6 +21,7 @@ import * as path from 'path';
 const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
+import { listForeignModules } from '../utilities/foreign-modules';
 import * as irsdk from './iracing-sdk';
 import {
 	resizeIracingWindow,
@@ -38,7 +39,9 @@ import {
 } from './capture-decisions';
 import {
 	captureIracingWindowNative,
+	getCaptureConsentStatus,
 	getLastNativeFailureReason,
+	getProcessElevation,
 	getWgcSupport,
 	getWgcUnavailableReason,
 	isWgcAvailable,
@@ -453,6 +456,36 @@ function getCaptureBackendDiagnostics(): Record<string, unknown> {
 		// Pre-exit snapshot taken at capture start, so the disconnect diagnostic
 		// carries usage that actually supports the OOM hypothesis (obs-capture-diagnostics#3).
 		vramAtCaptureStart: captureStartVram,
+		// The Windows screenshots-privacy consent as the registry stores it (24H2+).
+		// A 'Deny' in any field fails CreateForWindow for BOTH backends at once —
+		// and the Settings UI can disagree with an HKLM policy value, so the log
+		// needs the registry truth, not the user's reading of the toggle. Read
+		// live per failure; null = unreadable or a pre-24H2 OS with no store.
+		captureConsent: (() => {
+			try {
+				return getCaptureConsentStatus();
+			} catch {
+				return null;
+			}
+		})(),
+		// The our-process-specific family (field case 2026-08: CreateForWindow
+		// failed from this app while Discord converted the same iRacing window,
+		// so machine, consent and window were fine and the difference had to be
+		// inside THIS process). elevated = our token; compatLayer = AppCompat
+		// shims on our exe (RUNASADMIN, WIN8RTM… — durable, inherited by every
+		// child process); foreignModules = DLLs from neither Windows nor our
+		// install, the fingerprint of third-party injection. All fail-open.
+		processContext: {
+			elevated: (() => {
+				try {
+					return getProcessElevation();
+				} catch {
+					return null;
+				}
+			})(),
+			compatLayer: process.env.__COMPAT_LAYER ?? null,
+			foreignModules: listForeignModules(),
+		},
 	};
 }
 

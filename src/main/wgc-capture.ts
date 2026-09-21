@@ -200,6 +200,18 @@ export interface WgcLongExposureAddon {
 	};
 }
 
+// The Windows screenshots-privacy consent (Settings > Privacy & security >
+// "Screenshots and apps", enforced from Windows 11 24H2) as the registry stores
+// it — per hive/scope, null where the key is absent (pre-24H2 has no store; that
+// absence is itself the answer). A 'Deny' anywhere here fails CreateForWindow
+// for EVERY capture backend at once, which no contract probe can see.
+export interface CaptureConsentStatus {
+	hkcu: string | null;
+	hkcuNonPackaged: string | null;
+	hklm: string | null;
+	hklmNonPackaged: string | null;
+}
+
 interface WgcAddon {
 	// Whether Windows.Graphics.Capture is available on this OS build. WGC's
 	// CreateForWindow needs Win10 1903 (build 18362) or newer. NOT sufficient on
@@ -212,6 +224,21 @@ interface WgcAddon {
 	// Capture one frame of the window identified by the numeric HWND. Throws on a
 	// bad handle, no frame, or timeout so the JS side can fall back.
 	captureWindow(hwnd: number, timeoutMs?: number): WgcCaptureResult;
+	// The screenshots-privacy consent registry values (diagnostics-only, read
+	// live). Optional: an addon build predating it simply reports nothing. Raw
+	// napi shape: absent registry keys are OMITTED (undefined), not null —
+	// getCaptureConsentStatus normalizes to the four-field contract.
+	captureConsentStatus?(): {
+		hkcu?: string;
+		hkcuNonPackaged?: string;
+		hklm?: string;
+		hklmNonPackaged?: string;
+	};
+	// Process-side facts (diagnostics-only). Optional: an addon build predating
+	// it reports nothing. Raw napi shape: an unqueryable field is OMITTED.
+	processCaptureContext?(): {
+		elevated?: boolean;
+	};
 }
 
 // undefined = not yet initialized; null = unavailable (fall back to getUserMedia)
@@ -391,6 +418,51 @@ export function getLongExposureAddon(): WgcLongExposureAddon | null {
 // Whether the WGC path is available this session (used to gate UI / pre-flight).
 export function isWgcAvailable(): boolean {
 	return getWgcApi() !== null;
+}
+
+// The screenshots-privacy consent as the registry stores it, or null when it
+// cannot be read (addon unavailable, addon build predating the fn, or the read
+// throws). Diagnostics-only and fail-open — a null never blocks anything; it
+// just leaves the failure log without the one value that decides whether
+// Windows itself is refusing capture (field case: ItemConvertFailed on every
+// backend with the Settings UI showing everything allowed).
+export function getCaptureConsentStatus(): CaptureConsentStatus | null {
+	const api = getWgcApi();
+	if (!api || typeof api.captureConsentStatus !== 'function') {
+		return null;
+	}
+	try {
+		const raw = api.captureConsentStatus();
+		// napi-rs omits None fields rather than emitting null; normalize so the
+		// diagnostics JSON always carries all four fields, absent-as-null — an
+		// absent key is a finding (pre-24H2 store missing), not a gap in the log.
+		return {
+			hkcu: raw?.hkcu ?? null,
+			hkcuNonPackaged: raw?.hkcuNonPackaged ?? null,
+			hklm: raw?.hklm ?? null,
+			hklmNonPackaged: raw?.hklmNonPackaged ?? null,
+		};
+	} catch {
+		return null;
+	}
+}
+
+// Whether THIS process holds an elevated (administrator) token, or null when
+// unknowable (addon unavailable / predating the fn / query failed). Field case
+// 2026-08: CreateForWindow failed from our process on a window a third process
+// could convert, so the log needs the one durable per-exe fact — "run as
+// administrator" — that a reboot does not reset.
+export function getProcessElevation(): boolean | null {
+	const api = getWgcApi();
+	if (!api || typeof api.processCaptureContext !== 'function') {
+		return null;
+	}
+	try {
+		const raw = api.processCaptureContext();
+		return typeof raw?.elevated === 'boolean' ? raw.elevated : null;
+	} catch {
+		return null;
+	}
 }
 
 // Test-only seam (cq-tests#3): inject a fake WgcAddon — or null (unavailable) /

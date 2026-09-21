@@ -61,6 +61,43 @@ describe('wgc-capture addon (native N-API load smoke)', () => {
 			expect(typeof addon.isSupported()).toBe('boolean');
 		}
 	);
+
+	test.runIf(process.platform === 'win32')(
+		'captureConsentStatus reports each consent field as string-or-null',
+		() => {
+			const addon = require(addonPath);
+			expect(typeof addon.captureConsentStatus).toBe('function');
+			// Shape only: the VALUES are machine state ('Allow'/'Deny', or absent
+			// where the ConsentStore key is missing — e.g. a pre-24H2 CI runner).
+			// napi-rs omits None fields entirely, so the raw contract is "each field
+			// string or undefined, no throw" (getCaptureConsentStatus normalizes
+			// absent to null for the diagnostics).
+			const consent = addon.captureConsentStatus();
+			for (const field of [
+				'hkcu',
+				'hkcuNonPackaged',
+				'hklm',
+				'hklmNonPackaged',
+			] as const) {
+				const value = consent[field];
+				expect(value === undefined || typeof value === 'string').toBe(true);
+			}
+		}
+	);
+
+	test.runIf(process.platform === 'win32')(
+		'processCaptureContext reports elevated as boolean-or-absent',
+		() => {
+			const addon = require(addonPath);
+			expect(typeof addon.processCaptureContext).toBe('function');
+			// Shape only: whether THIS test process is elevated is machine state.
+			const context = addon.processCaptureContext();
+			expect(
+				context.elevated === undefined ||
+					typeof context.elevated === 'boolean'
+			).toBe(true);
+		}
+	);
 });
 
 // ---------------------------------------------------------------------------

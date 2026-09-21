@@ -3,6 +3,8 @@
 //! Exposes to Node/Electron:
 //!   - `isSupported()` -> bool
 //!   - `captureWindow(hwnd, timeoutMs?)` -> { data: Buffer, width, height }
+//!   - `captureConsentStatus()` -> the screenshots-privacy consent registry
+//!     values (diagnostics-only; see `capture_consent_status`)
 //!   - the `longExposure*` family (see `longexp`), which holds a live WGC capture
 //!     open and accumulates its frames on the GPU via a D3D11 compute shader.
 //!
@@ -180,6 +182,241 @@ pub(crate) fn negotiated_cursor_settings() -> CursorCaptureSettings {
     }
 }
 
+/// Re-attempt the FIRST step of a WGC capture — turning the HWND into a
+/// `GraphicsCaptureItem` via `IGraphicsCaptureItemInterop::CreateForWindow` —
+/// purely to recover the HRESULT. `windows-capture` maps every conversion
+/// failure to the same `ItemConvertFailed` string, discarding the code, and a
+/// field log carrying only that string cannot distinguish an access denial
+/// (screenshots-privacy consent, window display affinity) from a dead HWND or a
+/// broken WinRT activation. Diagnostic-only: called AFTER a capture already
+/// failed, on the same worker thread, so an extra conversion attempt costs
+/// nothing and changes no behavior.
+pub(crate) fn describe_create_for_window(hwnd_int: isize) -> String {
+    use windows::Graphics::Capture::GraphicsCaptureItem;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
+
+    let hwnd = HWND(hwnd_int as *mut std::ffi::c_void);
+
+    // An anti-capture display affinity — set by whoever owns the window (an
+    // overlay, a privacy tool, conceivably the sim itself) — fails
+    // CreateForWindow with the SAME 0x80070005 as a privacy-consent Deny, so an
+    // access-denied log line is only attributable with this field beside it.
+    let affinity = display_affinity_suffix(hwnd);
+
+    // Same acquisition path the crate itself uses; a failure HERE (not at
+    // CreateForWindow) means WinRT activation of the capture class is broken on
+    // this machine — a distinct, registry-level fault worth naming.
+    let interop = match windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
+    {
+        Ok(interop) => interop,
+        Err(e) => {
+            return format!(
+                "activation factory failed: HRESULT=0x{:08X} {}{affinity}",
+                e.code().0 as u32,
+                e.message()
+            )
+        }
+    };
+
+    match unsafe { interop.CreateForWindow::<GraphicsCaptureItem>(hwnd) } {
+        // The retry succeeding right after the capture failed is itself a
+        // finding: the conversion is racy/transient on this machine, not durable.
+        Ok(_) => format!("CreateForWindow retry succeeded (transient failure){affinity}"),
+        Err(e) => format!(
+            "CreateForWindow HRESULT=0x{:08X} {}{affinity}{}",
+            e.code().0 as u32,
+            e.message(),
+            describe_control_probe(&interop)
+        ),
+    }
+}
+
+/// The same `CreateForWindow`, from this process, against the taskbar
+/// (`Shell_TrayWnd`) — a window every interactive session has and that WGC
+/// converts unconditionally. Field case 2026-08: a third process (Discord)
+/// converted the very iRacing window our capture had just failed on, so the
+/// machine, the consent store and the window were all fine and the fault was
+/// specific to THIS process. This probe splits that family: the control failing
+/// too means WGC refuses the process as a whole (policy, injection, token); the
+/// control succeeding pins the fault to the target HWND as this process sees it.
+fn describe_control_probe(
+    interop: &windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
+) -> String {
+    use windows::core::{w, PCWSTR};
+    use windows::Graphics::Capture::GraphicsCaptureItem;
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
+
+    let control = match unsafe { FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) } {
+        Ok(hwnd) if !hwnd.0.is_null() => hwnd,
+        _ => return "; control window absent".to_string(),
+    };
+    match unsafe { interop.CreateForWindow::<GraphicsCaptureItem>(control) } {
+        Ok(_) => "; control(Shell_TrayWnd)=OK".to_string(),
+        Err(e) => format!(
+            "; control(Shell_TrayWnd) HRESULT=0x{:08X} {}",
+            e.code().0 as u32,
+            e.message()
+        ),
+    }
+}
+
+/// `"; displayAffinity=0x…"` for the target window, empty when the query itself
+/// fails (dead HWND — the CreateForWindow HRESULT already tells that story).
+/// 0x00 is the normal state; 0x01 (WDA_MONITOR) and 0x11
+/// (WDA_EXCLUDEFROMCAPTURE) mark the window as capture-protected.
+pub(crate) fn display_affinity_suffix(hwnd: windows::Win32::Foundation::HWND) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowDisplayAffinity;
+
+    let mut affinity = 0u32;
+    if unsafe { GetWindowDisplayAffinity(hwnd, &mut affinity) }.is_err() {
+        return String::new();
+    }
+    let label = match affinity {
+        0x00 => "",
+        0x01 | 0x11 => " (anti-capture)",
+        _ => " (unknown)",
+    };
+    format!("; displayAffinity=0x{affinity:02X}{label}")
+}
+
+/// The Windows screenshots-privacy consent values for programmatic capture, as
+/// stored in the registry — one field per hive/scope, `None` when the key or
+/// value is absent (pre-24H2 Windows has no such store; that absence is itself
+/// the answer). Field names surface in JS camelCased (`hkcuNonPackaged`).
+#[napi(object)]
+pub struct CaptureConsentStatus {
+    pub hkcu: Option<String>,
+    pub hkcu_non_packaged: Option<String>,
+    pub hklm: Option<String>,
+    pub hklm_non_packaged: Option<String>,
+}
+
+/// Read one ConsentStore `Value` (REG_SZ, typically "Allow"/"Deny"/"Prompt").
+/// Fail-open: any error — absent key, wrong type, truncation — reads as `None`.
+fn read_consent_value(
+    root: windows::Win32::System::Registry::HKEY,
+    subkey: windows::core::PCWSTR,
+) -> Option<String> {
+    use windows::core::w;
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Registry::{RegGetValueW, RRF_RT_REG_SZ};
+
+    // Real values are single words; 64 UTF-16 units is generous headroom.
+    let mut buf = [0u16; 64];
+    let mut size_bytes = (buf.len() * 2) as u32;
+    let status = unsafe {
+        RegGetValueW(
+            root,
+            subkey,
+            w!("Value"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr().cast()),
+            Some(&mut size_bytes),
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    // size_bytes counts the terminating NUL; strip it (and any padding NULs).
+    let mut chars = ((size_bytes as usize) / 2).min(buf.len());
+    while chars > 0 && buf[chars - 1] == 0 {
+        chars -= 1;
+    }
+    Some(String::from_utf16_lossy(&buf[..chars]))
+}
+
+/// Report the screenshots-privacy consent (Settings > Privacy & security >
+/// "Screenshots and apps", enforced from Windows 11 24H2) as the registry
+/// actually stores it. The Settings UI can disagree with the effective policy —
+/// an HKLM value overrides what the user sees — and a `Deny` in any of these
+/// makes `CreateForWindow` fail for EVERY capture backend at once, which no
+/// contract probe can see (`probe_capture_support` is ApiInformation-only).
+/// Diagnostic-only and fail-open; read live on each call so a toggle flipped
+/// between attempts shows up.
+#[napi(catch_unwind)]
+pub fn capture_consent_status() -> CaptureConsentStatus {
+    use windows::core::w;
+    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+
+    CaptureConsentStatus {
+        hkcu: read_consent_value(
+            HKEY_CURRENT_USER,
+            w!(
+                r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\graphicsCaptureProgrammatic"
+            ),
+        ),
+        hkcu_non_packaged: read_consent_value(
+            HKEY_CURRENT_USER,
+            w!(
+                r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\graphicsCaptureProgrammatic\NonPackaged"
+            ),
+        ),
+        hklm: read_consent_value(
+            HKEY_LOCAL_MACHINE,
+            w!(
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\graphicsCaptureProgrammatic"
+            ),
+        ),
+        hklm_non_packaged: read_consent_value(
+            HKEY_LOCAL_MACHINE,
+            w!(
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\graphicsCaptureProgrammatic\NonPackaged"
+            ),
+        ),
+    }
+}
+
+/// Process-side facts for the diagnostics log, exposed as an object so the
+/// contract can grow without an ABI break. Field names surface camelCased.
+#[napi(object)]
+pub struct ProcessCaptureContext {
+    /// Whether this process holds an elevated (administrator) token; `None`
+    /// when the token cannot be queried.
+    pub elevated: Option<bool>,
+}
+
+/// Who the capturing process is, as Windows sees it. An elevated capturer is a
+/// different subject for the capability-access checks behind `CreateForWindow`
+/// than the un-elevated Discord/OBS that work beside it, and "run as
+/// administrator" is a durable per-exe setting that survives the reboot which
+/// the field case showed did not help — so the log has to name it rather than
+/// ask. Diagnostic-only and fail-open.
+#[napi(catch_unwind)]
+pub fn process_capture_context() -> ProcessCaptureContext {
+    ProcessCaptureContext {
+        elevated: token_elevated(),
+    }
+}
+
+fn token_elevated() -> Option<bool> {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    let mut token = HANDLE::default();
+    unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }.ok()?;
+    let mut elevation = TOKEN_ELEVATION::default();
+    let mut returned = 0u32;
+    let queried = unsafe {
+        GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(&mut elevation as *mut TOKEN_ELEVATION as *mut std::ffi::c_void),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut returned,
+        )
+    };
+    // Close before inspecting the result so the handle never leaks on the
+    // error path.
+    let _ = unsafe { CloseHandle(token) };
+    queried.ok()?;
+    Some(elevation.TokenIsElevated != 0)
+}
+
 /// The strongest border setting this OS build accepts.
 ///
 /// This one costs NOTHING to degrade. The yellow capture border is a Windows 11
@@ -222,31 +459,41 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
     // Builder::spawn (not thread::spawn) so an OS thread-creation failure surfaces
     // as a catchable Err instead of panicking across the N-API boundary; the JS
     // caller then falls back to getUserMedia rather than crashing the app.
-    let spawn_result = thread::Builder::new().name("wgc-capture".into()).spawn(move || {
-        let hwnd_ptr = hwnd_int as *mut std::ffi::c_void;
-        let window = Window::from_raw_hwnd(hwnd_ptr);
+    let spawn_result = thread::Builder::new()
+        .name("wgc-capture".into())
+        .spawn(move || {
+            let hwnd_ptr = hwnd_int as *mut std::ffi::c_void;
+            let window = Window::from_raw_hwnd(hwnd_ptr);
 
-        let settings = Settings::new(
-            window,
-            negotiated_cursor_settings(),
-            negotiated_border_settings(),
-            SecondaryWindowSettings::Default,
-            MinimumUpdateIntervalSettings::Default,
-            DirtyRegionSettings::Default,
-            ColorFormat::Rgba8,
-            slot_worker.clone(),
-        );
+            let settings = Settings::new(
+                window,
+                negotiated_cursor_settings(),
+                negotiated_border_settings(),
+                SecondaryWindowSettings::Default,
+                MinimumUpdateIntervalSettings::Default,
+                DirtyRegionSettings::Default,
+                ColorFormat::Rgba8,
+                slot_worker.clone(),
+            );
 
-        // Blocks until the handler calls capture_control.stop().
-        let outcome = match OneShot::start(settings) {
-            Ok(()) => match slot_worker.lock().ok().and_then(|mut g| g.take()) {
-                Some(frame) => Ok(frame),
-                None => Err("WGC capture produced no frame".to_string()),
-            },
-            Err(e) => Err(format!("WGC capture failed: {e}")),
-        };
-        let _ = tx.send(outcome);
-    });
+            // Blocks until the handler calls capture_control.stop().
+            let outcome = match OneShot::start(settings) {
+                Ok(()) => match slot_worker.lock().ok().and_then(|mut g| g.take()) {
+                    Some(frame) => Ok(frame),
+                    None => Err("WGC capture produced no frame".to_string()),
+                },
+                Err(e) => {
+                    let mut message = format!("WGC capture failed: {e}");
+                    // ItemConvertFailed swallows the HRESULT; re-attempt just the
+                    // conversion to name the actual code (see the helper's doc).
+                    if message.contains("GraphicsCaptureItem") {
+                        message = format!("{message} [{}]", describe_create_for_window(hwnd_int));
+                    }
+                    Err(message)
+                }
+            };
+            let _ = tx.send(outcome);
+        });
     if let Err(e) = spawn_result {
         return Err(napi::Error::from_reason(format!(
             "WGC worker thread spawn failed: {e}"
@@ -266,9 +513,17 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
         // genuine slow grab (Timeout, grabElapsedMs ~ timeout+500) from a worker-thread
         // panic (tx dropped -> Disconnected, returns immediately with grabElapsedMs ~ 0),
         // which was previously mislabeled a timeout (cq-capture-path#3).
-        Err(RecvTimeoutError::Timeout) => {
-            Err(napi::Error::from_reason("WGC capture timed out"))
-        }
+        //
+        // The affinity suffix is here, NOT on ItemConvertFailed enrichment alone:
+        // measured on 26200.9168, an anti-capture window (WDA_EXCLUDEFROMCAPTURE)
+        // converts fine and starts a session that simply never delivers a frame —
+        // it surfaces as exactly this timeout.
+        Err(RecvTimeoutError::Timeout) => Err(napi::Error::from_reason(format!(
+            "WGC capture timed out{}",
+            display_affinity_suffix(windows::Win32::Foundation::HWND(
+                hwnd_int as *mut std::ffi::c_void
+            ))
+        ))),
         Err(RecvTimeoutError::Disconnected) => Err(napi::Error::from_reason(
             "WGC worker exited without result (panic?)",
         )),
