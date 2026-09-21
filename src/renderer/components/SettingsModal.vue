@@ -357,6 +357,15 @@
 							</o-button>
 						</p>
 					</o-field>
+					<!-- The path above lives in a DISABLED input, so a wrong one looks
+					     exactly like a right one. This is the only place it says
+					     otherwise before a capture goes and finds out. -->
+					<span
+						v-if="reshadeWarning"
+						class="description description--warning"
+					>
+						{{ reshadeWarning }}
+					</span>
 				</div>
 			</div>
 		</section>
@@ -373,6 +382,11 @@ import {
 	type FilenameField,
 } from '../../utilities/filenameFormat';
 import { getLocale, SUPPORTED_LOCALES } from '../../utilities/i18n';
+import {
+	checkReshadeConfig,
+	discoverReshadeIni,
+	probeReshadeIni,
+} from '../../utilities/reshade-config';
 import { applyLocale } from '../i18n';
 import {
 	describeUpdate,
@@ -523,6 +537,17 @@ export default {
 				!this.nativeCaptureSupported || this.nativeCaptureWarning !== null
 			);
 		},
+		// Empty when there is nothing wrong. checkReshadeConfig phrases through the
+		// shared core's module-level `t`, which Vue cannot see, so touching $locale
+		// is what makes this recompute — and re-read the sentence in the new
+		// language — when the picker changes. Same reason as SideBar's
+		// configWarnings. Re-probes whenever `reshadeFile` changes, which covers the
+		// file picker; a file that appears on disk while this modal sits open is not
+		// worth polling for.
+		reshadeWarning() {
+			void this.$locale;
+			return checkReshadeConfig(this.reshade, this.reshadeFile)[0] || '';
+		},
 		nativeCaptureDescription() {
 			// Main names the specific reason. The old text here hard-coded
 			// "Requires Windows 10 (1903)", which was both the wrong floor and the
@@ -584,6 +609,24 @@ export default {
 		},
 		reshade() {
 			config.set('reshade', this.reshade);
+			// Turning it ON is the moment the stored path starts governing captures,
+			// so it is the moment to check that it leads anywhere. The shipped
+			// default is a GUESS at the usual install — the field case behind this
+			// was a user who never opened the picker and inherited that guess — so
+			// look for the real file before letting them walk away thinking they are
+			// configured. Only ever replaces a path that does not resolve, and only
+			// with one that does; when nothing is found the setting is left exactly
+			// as the user knows it and reshadeWarning says so.
+			//
+			// The probe guard is load-bearing: on a machine with BOTH filenames
+			// present, dropping it would let our candidate order overrule a working
+			// choice the user made themselves.
+			if (this.reshade && probeReshadeIni(this.reshadeFile) !== null) {
+				const found = discoverReshadeIni(this.reshadeFile);
+				if (found) {
+					this.reshadeFile = found;
+				}
+			}
 		},
 		// Turning this ON pre-flights the capture path instead of taking the user's
 		// word for it. Before this check, an unsupported machine accepted the switch

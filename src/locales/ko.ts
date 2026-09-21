@@ -492,6 +492,16 @@ const ko: Catalog = {
 			'iRacing이 전용 전체 화면 모드이므로 스크린샷이 검게 나옵니다. iRacing에서 Display > Full Screen을 OFF로 설정하고(Borderless 또는 Windowed 사용) 다시 시도하세요.',
 		exclusiveFullscreenUnattributed:
 			'어떤 프로그램이 전용 전체 화면 모드로 실행 중이어서 캡처가 검게 나옵니다. iRacing이 전체 화면 모드라면 Display > Full Screen을 OFF로 설정하고(Borderless 또는 Windowed 사용) 다시 시도하세요.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: '알 수 없는 스크린샷 오류',
 		outputTooSmall: '캡처 결과가 너무 작습니다 ({width}x{height})',
 		blackFrame:

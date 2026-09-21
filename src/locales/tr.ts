@@ -501,6 +501,16 @@ const tr: Catalog = {
 			"iRacing özel tam ekran modunda, bu yüzden ekran görüntüsü siyah çıkardı. iRacing'de Display > Full Screen ayarını OFF yapın (Borderless veya Windowed kullanın) ve yeniden deneyin.",
 		exclusiveFullscreenUnattributed:
 			'Bir uygulama özel tam ekran modunda çalışıyor, bu da siyah bir yakalama üretir. iRacing tam ekrandaysa, Display > Full Screen ayarını OFF yapın (Borderless veya Windowed kullanın) ve yeniden deneyin.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'Bilinmeyen ekran görüntüsü hatası',
 		outputTooSmall: 'Yakalama çıktısı çok küçük ({width}x{height})',
 		blackFrame:

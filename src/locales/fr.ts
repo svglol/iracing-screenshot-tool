@@ -496,6 +496,16 @@ const fr: Catalog = {
 			'iRacing est en plein écran exclusif : la capture serait donc noire. Dans iRacing, mettez Display > Full Screen sur OFF (utilisez Borderless ou Windowed) puis réessayez.',
 		exclusiveFullscreenUnattributed:
 			'Une application fonctionne en plein écran exclusif, ce qui produit une capture noire. Si iRacing est en plein écran, mettez Display > Full Screen sur OFF (utilisez Borderless ou Windowed) puis réessayez.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'Erreur de capture inconnue',
 		outputTooSmall: 'La capture est trop petite ({width}x{height})',
 		blackFrame:

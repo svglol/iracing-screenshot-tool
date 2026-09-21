@@ -526,6 +526,16 @@ export default {
 			'iRacing is in exclusive fullscreen, so the screenshot would be black. In iRacing, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.',
 		exclusiveFullscreenUnattributed:
 			'An application is running in exclusive fullscreen, which produces a black capture. If iRacing is in Full Screen, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'Unknown screenshot error',
 		outputTooSmall: 'Capture output is too small ({width}x{height})',
 		blackFrame:

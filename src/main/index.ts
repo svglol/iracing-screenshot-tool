@@ -104,9 +104,12 @@ import {
 	summarizeDesktopSource,
 	summarizeDesktopSources,
 	createScreenshotErrorPayload,
+	describeReshadeIniError,
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
 	parseCameraState as parseCameraStateFromArray,
+	type ReshadeIni,
+	type ReshadeScreenshotFolder,
 } from './main-utils';
 import {
 	applyUpdateEvent,
@@ -1909,6 +1912,45 @@ app.on('ready', async () => {
 			lastCaptureFullscreenState = null;
 		}
 
+		// ReShade pre-flight (field case 2026-08: 14 identical reports from one
+		// user over a week). This read used to sit inside the ReShade branch below
+		// — after takingScreenshot had latched, after the watchdog was armed, after
+		// the sim's UI was hidden, and after the window had been resized to capture
+		// size. So a missing ini cost a full resize/restore cycle on every press,
+		// and on the reporting machine each of those cycles had iRacing allocate
+		// 3-7 GB of render targets (one reaching 93.7% of a 12 GB card) for a
+		// capture that could never happen. None of that work can change this
+		// answer, so ask it HERE, alongside the other refusals, while the sim is
+		// still untouched.
+		//
+		// Resolved ONCE and carried down rather than re-read in the branch: two
+		// reads are two chances to disagree, and the branch would then be reporting
+		// a fault the pre-flight had already cleared.
+		let reshadeLocation: ReshadeScreenshotFolder | null = null;
+		if (config.get('reshade')) {
+			const reshadeIniPath = config.get('reshadeFile');
+			try {
+				const reshadeIni = loadIniFile.sync(reshadeIniPath) as ReshadeIni;
+				// Pulled forward for exactly the same reason: an ini that parses but
+				// names no screenshot folder is just as fatal and just as knowable
+				// before we touch the window.
+				reshadeLocation = getReshadeScreenshotFolder(
+					reshadeIni,
+					reshadeIniPath
+				);
+			} catch (error) {
+				log.info('Screenshot rejected', { reason: 'reshade-config' });
+				reportScreenshotError(
+					describeReshadeIniError(error, reshadeIniPath),
+					{
+						context: 'resize-screenshot:reshade-preflight',
+						meta: { request: data, reshadeFile: reshadeIniPath },
+					}
+				);
+				return;
+			}
+		}
+
 		// Defensive clamp: the sidebar's o-input max is only a hint and the
 		// global-hotkey path bypasses the UI entirely, so main must not trust
 		// data.width/height blindly. Bound them to the capture ceiling and keep
@@ -2102,13 +2144,10 @@ app.on('ready', async () => {
 		// foreground) just like the non-ReShade path — a quiet reposition would
 		// leave a minimized/background iRacing un-composited so ReShade's grab
 		// gets no frame. No desktopCapturer.getSources here, so just await it.
-		let reshadeLocation: {
-			folder: string;
-			rawFolder: string;
-			basePath: string;
-			remappedFrom: string;
-		} | null = null;
-
+		//
+		// reshadeLocation is already resolved by the pre-flight above: reaching this
+		// line means the ini was read AND named a screenshot folder, so the only
+		// config failure left here is the wait for ReShade's own grab.
 		try {
 			// Raising pre-capture resize INSIDE the try so a rejection here recovers
 			// via the catch instead of wedging: it previously sat outside the ReShade
@@ -2139,12 +2178,6 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			const reshadeIniPath = config.get('reshadeFile');
-			const reshadeIni = loadIniFile.sync(reshadeIniPath);
-			reshadeLocation = getReshadeScreenshotFolder(
-				reshadeIni,
-				reshadeIniPath
-			);
 			const reshadeFile = await waitForReshadeScreenshot(
 				reshadeLocation.folder
 			);

@@ -493,6 +493,16 @@ const fi: Catalog = {
 			'iRacing on yksinomaisessa koko näytön tilassa, joten kuvakaappauksesta tulisi musta. Aseta iRacingissa Display > Full Screen tilaan OFF (käytä Borderless- tai Windowed-tilaa) ja yritä uudelleen.',
 		exclusiveFullscreenUnattributed:
 			'Jokin sovellus on yksinomaisessa koko näytön tilassa, mistä seuraa musta kaappaus. Jos iRacing on koko näytön tilassa, aseta Display > Full Screen tilaan OFF (käytä Borderless- tai Windowed-tilaa) ja yritä uudelleen.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'Tuntematon kuvakaappausvirhe',
 		outputTooSmall: 'Kaappaus on liian pieni ({width}x{height})',
 		blackFrame:

@@ -498,6 +498,16 @@ const cs: Catalog = {
 			'iRacing běží ve výhradním celoobrazovkovém režimu, takže snímek by byl černý. V iRacingu nastavte Display > Full Screen na OFF (použijte Borderless nebo Windowed) a zkuste to znovu.',
 		exclusiveFullscreenUnattributed:
 			'Nějaká aplikace běží ve výhradním celoobrazovkovém režimu, což vede k černému snímku. Pokud je iRacing v celoobrazovkovém režimu, nastavte Display > Full Screen na OFF (použijte Borderless nebo Windowed) a zkuste to znovu.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'Neznámá chyba snímku obrazovky',
 		outputTooSmall: 'Snímek je příliš malý ({width}x{height})',
 		blackFrame:

@@ -523,6 +523,16 @@ const ar: Catalog = {
 			'iRacing في وضع ملء الشاشة الحصري، لذا ستكون لقطة الشاشة سوداء. في iRacing، اضبط Display > Full Screen على OFF (استخدم Borderless أو Windowed) وحاول مرة أخرى.',
 		exclusiveFullscreenUnattributed:
 			'هناك تطبيق يعمل في وضع ملء الشاشة الحصري، وهو ما ينتج لقطة سوداء. فإذا كان iRacing في وضع ملء الشاشة، فاضبط Display > Full Screen على OFF (استخدم Borderless أو Windowed) وحاول مرة أخرى.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'خطأ غير معروف في لقطة الشاشة',
 		outputTooSmall: 'ناتج الالتقاط صغير جدًا ({width}x{height})',
 		blackFrame:
