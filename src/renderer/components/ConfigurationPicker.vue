@@ -34,10 +34,10 @@
 // profile the live rendererDX11Monitor.ini currently matches, plus the way
 // into the Graphics Profiles dialog from anywhere in the app.
 //
-// Writers of that ini elsewhere in the renderer (the config editor's save)
-// announce themselves on the window as 'renderer-ini-changed', and this
-// picker does the same after a profile is applied — that one event name is
-// the whole cross-page sync contract.
+// Any writer of that ini in the renderer announces itself on the window as
+// 'renderer-ini-changed'; this picker does so after a profile is applied and
+// listens for the same — that one event name is the whole cross-page sync
+// contract.
 import GraphicsProfilesModal from './GraphicsProfilesModal.vue';
 import { INI_CHANGED_EVENT } from '../ini-events';
 
@@ -121,7 +121,7 @@ export default {
 		},
 		onApplied() {
 			void this.refresh();
-			// Tell the pages (the config editor) the ini changed under them.
+			// Tell anything else showing ini state that it changed underneath.
 			window.dispatchEvent(new Event(INI_CHANGED_EVENT));
 		},
 		closeDialog() {

@@ -4,17 +4,9 @@
 			to="/home"
 			class="nav-rail__item"
 			:class="{ 'nav-rail__item--active': isActive('/home') }"
-			:title="$t('iniEditor.nav.home')"
+			:title="$t('nav.home')"
 		>
 			<font-awesome-icon :icon="['fas', 'images']" />
-		</router-link>
-		<router-link
-			to="/config"
-			class="nav-rail__item"
-			:class="{ 'nav-rail__item--active': isActive('/config') }"
-			:title="$t('iniEditor.nav.config')"
-		>
-			<font-awesome-icon :icon="['fas', 'display']" />
 		</router-link>
 		<!-- Utility destinations sit at the bottom of the rail, like every
 		     icon-rail convention (VS Code, Discord itself). -->
@@ -51,7 +43,7 @@
 </template>
 
 <script lang="ts">
-// The app's icon rail: feature pages on top, utility pages at the bottom,
+// The app's icon rail: the gallery on top, utility pages at the bottom,
 // active route marked with the accent the gallery already uses for its
 // selected thumbnail. No labels — every item carries a tooltip.
 export default {

@@ -220,7 +220,7 @@
 
 <script lang="ts">
 // The Help page: the former F1 modal's content laid out as a rail destination.
-// Full-bleed like the configuration editor page — the prose flows into 30rem
+// Full-bleed like the Settings page — the prose flows into 30rem
 // columns, so a wide window fills with two or three columns instead of framing
 // a dialog-width card in empty space.
 const { shell } = require('electron');

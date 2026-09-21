@@ -14,8 +14,7 @@
 				<RouterView v-slot="{ Component }">
 					<!-- Home stays alive across navigation: its virtualized gallery
 					     state and live IPC listeners keep ingesting screenshots taken
-					     while another page is open. The config page is deliberately
-					     NOT kept alive — re-entering re-reads the ini from disk. -->
+					     while another page is open. -->
 					<KeepAlive include="Home">
 						<component :is="Component" />
 					</KeepAlive>
