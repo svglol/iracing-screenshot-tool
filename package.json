@@ -40,12 +40,7 @@
                 "nsis",
                 "portable"
             ],
-            "signAndEditExecutable": false,
-            "signtoolOptions": {
-                "publisherName": [
-                    "SignPath Foundation"
-                ]
-            }
+            "signAndEditExecutable": false
         },
         "nsis": {
             "include": "_scripts/installer.nsh"

@@ -106,6 +106,10 @@ Exposure bug that could save a black image and report success.
 
 ## Notes
 
+- This release is not code-signed yet, like every release before it. Windows
+  SmartScreen may say it "protected your PC" the first time you run the
+  installer: click More info, then Run anyway. Signing through the SignPath
+  Foundation is set up and will arrive in a later release.
 - Captures still need iRacing in Windowed Borderless. Exclusive Full Screen
   still comes back black.
 - On Windows 10 before version 2004, the mouse cursor can appear in
