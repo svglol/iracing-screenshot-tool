@@ -1,7 +1,8 @@
 # iRacing Screenshot Tool v3.4.0
 
-Graphics profiles for iRacing, seven more languages, and a Long Exposure bug
-that could save a black image and report success.
+Graphics profiles for iRacing, seven more languages, a clear answer when
+Windows blocks capture because the tool runs as administrator, and a Long
+Exposure bug that could save a black image and report success.
 
 ## New
 
@@ -63,6 +64,23 @@ that could save a black image and report success.
   for an immediate fix, or turn SMP off and restart iRacing.
 
 ## Fixes
+
+- **Every capture failed with "Could not start video source" when the tool
+  ran as administrator.** Windows refuses screen capture to an app running
+  with administrator rights. Both of the tool's capture methods go through
+  that same Windows check, so screenshots and long exposures all failed, and
+  the message gave no hint why. This is easy to set by accident, for example
+  by ticking "Run this program as an administrator" once while
+  troubleshooting.
+
+  The tool now asks Windows whether it may capture. If it may not, a warning
+  above the Screenshot button says so. When administrator mode is the cause,
+  the warning tells you how to turn it off: right-click
+  `iRacing Screenshot Tool.exe`, open Properties > Compatibility, and untick
+  "Run this program as an administrator". Screenshots and long exposures
+  stop straight away with the same message, instead of failing after a
+  capture attempt. ReShade Compatibility Mode is not affected, because
+  ReShade captures inside iRacing.
 
 - **Long Exposure could save an all-black image, or a frozen one, and still
   report success.** Under GPU load, a capture could read the same video
