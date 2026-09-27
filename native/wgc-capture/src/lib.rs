@@ -243,6 +243,9 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
     // integer range (<= 2^53), so no precision is lost.
     let hwnd_int = hwnd as isize;
     let hwnd_native = HWND(hwnd_int as *mut std::ffi::c_void);
+    // Resolved once, before the capture starts. If HDR is toggled or the window
+    // changes monitor in between, the frame format is merely suboptimal: WGC
+    // converts to whichever format was requested, it never fails on a mismatch.
     let profile = profile_for_window(hwnd_native);
 
     let (tx, rx) = mpsc::channel::<Result<(Vec<u8>, u32, u32), String>>();
