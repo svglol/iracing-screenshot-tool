@@ -486,6 +486,10 @@ const zhTW: Catalog = {
 			'iRacing 處於獨佔全螢幕模式，因此截圖會是全黑的。請在 iRacing 中將 Display > Full Screen 設為 OFF（使用 Borderless 或 Windowed）後再試一次。',
 		exclusiveFullscreenUnattributed:
 			'有應用程式正在獨佔全螢幕模式下執行，這會讓擷取結果全黑。如果 iRacing 處於全螢幕模式，請將 Display > Full Screen 設為 OFF（使用 Borderless 或 Windowed）後再試一次。',
+		blockedElevated:
+			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+		blockedDenied:
+			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
 		reshadeIniMissing:
 			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		reshadeIniUnreadable:

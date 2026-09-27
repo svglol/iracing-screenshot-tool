@@ -390,6 +390,56 @@ pub fn process_capture_context() -> ProcessCaptureContext {
     }
 }
 
+/// Whether Windows lets THIS process create a capture item at all.
+#[napi(object)]
+pub struct CapturePermission {
+    pub allowed: bool,
+    /// The refusing HRESULT (unsigned, e.g. 0x80070005); `None` when allowed.
+    pub hresult: Option<u32>,
+    pub message: Option<String>,
+}
+
+/// Ask Windows whether this process may capture, using the taskbar
+/// (`Shell_TrayWnd`) — a window we never resize or touch — so the answer is
+/// about US, not about iRacing. Field case 2026-09 (reporter #5): with the app
+/// set to "Run as administrator", `CreateForWindow` returned 0x80070005 for the
+/// taskbar and iRacing alike while an un-elevated PowerShell on the same session
+/// converted both. The refusal covers Chromium's WGC-based window capture too,
+/// so no capture backend can work; the caller turns that into an actionable
+/// message instead of two failed captures and "Could not start video source".
+///
+/// Converting an item starts no session and grabs no frame — it is cheap and has
+/// no visible side effect. `None` when the answer is unknowable (no taskbar, WGC
+/// activation itself broken): fail open, the capture paths report those.
+#[napi(catch_unwind)]
+pub fn probe_capture_permission() -> Option<CapturePermission> {
+    use windows::core::{w, PCWSTR};
+    use windows::Graphics::Capture::GraphicsCaptureItem;
+    use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
+
+    let control = match unsafe { FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) } {
+        Ok(hwnd) if !hwnd.0.is_null() => hwnd,
+        _ => return None,
+    };
+    let interop =
+        windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>().ok()?;
+    Some(
+        match unsafe { interop.CreateForWindow::<GraphicsCaptureItem>(control) } {
+            Ok(_) => CapturePermission {
+                allowed: true,
+                hresult: None,
+                message: None,
+            },
+            Err(e) => CapturePermission {
+                allowed: false,
+                hresult: Some(e.code().0 as u32),
+                message: Some(e.message().to_string()),
+            },
+        },
+    )
+}
+
 fn token_elevated() -> Option<bool> {
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::Security::{

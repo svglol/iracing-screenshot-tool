@@ -534,6 +534,10 @@ const el: Catalog = {
 			'Το iRacing βρίσκεται σε αποκλειστική πλήρη οθόνη, οπότε το στιγμιότυπο θα ήταν μαύρο. Στο iRacing, ορίστε το Display > Full Screen σε OFF (χρησιμοποιήστε Borderless ή Windowed) και δοκιμάστε ξανά.',
 		exclusiveFullscreenUnattributed:
 			'Μια εφαρμογή εκτελείται σε αποκλειστική πλήρη οθόνη, κάτι που παράγει μαύρη λήψη. Αν το iRacing βρίσκεται σε πλήρη οθόνη, ορίστε το Display > Full Screen σε OFF (χρησιμοποιήστε Borderless ή Windowed) και δοκιμάστε ξανά.',
+		blockedElevated:
+			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+		blockedDenied:
+			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
 		reshadeIniMissing:
 			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		reshadeIniUnreadable:

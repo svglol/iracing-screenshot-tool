@@ -20,6 +20,7 @@ import {
 	getWgcApi,
 	captureIracingWindowNative,
 	getLastNativeFailureReason,
+	getCapturePermission,
 	__setWgcApiForTests,
 } from './wgc-capture';
 
@@ -198,5 +199,64 @@ describe('captureIracingWindowNative failure-reason state machine', () => {
 		// The transient grab failure must leave the addon enabled for the next
 		// capture — only a load-time fault (createWgcApi) disables the session.
 		expect(getWgcApi()).toBe(addon);
+	});
+});
+
+// getCapturePermission — the taskbar probe behind the "running as administrator"
+// warning. Driven through the same seam; the real .node is exercised by the
+// load smoke test above.
+describe('getCapturePermission', () => {
+	function addonWith(probe?: () => unknown) {
+		return {
+			isSupported: () => true,
+			captureWindow: (() => {
+				throw new Error('unused');
+			}) as never,
+			...(probe ? { probeCapturePermission: probe as never } : {}),
+		};
+	}
+
+	afterEach(() => {
+		__setWgcApiForTests(undefined);
+	});
+
+	test('formats a refusal HRESULT as unsigned hex', () => {
+		// napi hands the u32 over as a JS number; 0x80070005 must not go negative.
+		__setWgcApiForTests(
+			addonWith(() => ({
+				allowed: false,
+				hresult: 0x80070005,
+				message: 'You do not have permission to capture the given window.',
+			}))
+		);
+		expect(getCapturePermission()).toEqual({
+			allowed: false,
+			hresult: '0x80070005',
+			message: 'You do not have permission to capture the given window.',
+		});
+	});
+
+	test('normalizes an allowed result (napi omits the empty fields)', () => {
+		__setWgcApiForTests(addonWith(() => ({ allowed: true })));
+		expect(getCapturePermission()).toEqual({
+			allowed: true,
+			hresult: null,
+			message: null,
+		});
+	});
+
+	test('fails open to null: no addon, old addon, inconclusive probe, throw', () => {
+		__setWgcApiForTests(null);
+		expect(getCapturePermission()).toBeNull();
+		__setWgcApiForTests(addonWith());
+		expect(getCapturePermission()).toBeNull();
+		__setWgcApiForTests(addonWith(() => null));
+		expect(getCapturePermission()).toBeNull();
+		__setWgcApiForTests(
+			addonWith(() => {
+				throw new Error('boom');
+			})
+		);
+		expect(getCapturePermission()).toBeNull();
 	});
 });

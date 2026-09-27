@@ -218,3 +218,43 @@ export function classifyWgcResult(
 	}
 	return { outcome: 'fallback', fallbackReason: 'black-frame' };
 }
+
+// Why no capture backend can work in THIS process, or null to proceed.
+// 'elevated' — Windows refused the capture-permission probe and we hold an
+//   administrator token. Field case 2026-09 (reporter #5): the app was set to
+//   "Run as administrator"; every WGC CreateForWindow returned 0x80070005 while
+//   an un-elevated process on the same session captured the same windows, and
+//   unticking the setting fixed it.
+// 'denied'   — refused for some other reason (privacy policy, security software).
+// ReShade is exempt: it captures inside iRacing and never asks Windows. The
+// getUserMedia backend is NOT exempt — Chromium's window capture is WGC-based and
+// is refused alongside ours. An unknowable probe (null) fails open.
+export type CaptureBlock = 'elevated' | 'denied';
+
+export interface CaptureBlockInputs {
+	reshade: boolean;
+	permission: { allowed: boolean } | null;
+	elevated: boolean | null;
+}
+
+export function decideCaptureBlock({
+	reshade,
+	permission,
+	elevated,
+}: CaptureBlockInputs): CaptureBlock | null {
+	if (reshade || !permission || permission.allowed) {
+		return null;
+	}
+	return elevated === true ? 'elevated' : 'denied';
+}
+
+// The user-facing sentence for a block. Functions, not constants: see
+// EXCLUSIVE_FULLSCREEN_MESSAGE in index.ts for why t() must run late.
+export function captureBlockMessage(
+	block: CaptureBlock,
+	hresult: string | null
+): string {
+	return block === 'elevated'
+		? t('capture.blockedElevated')
+		: t('capture.blockedDenied', { hresult: hresult || 'unknown' });
+}

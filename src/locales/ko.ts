@@ -492,6 +492,10 @@ const ko: Catalog = {
 			'iRacing이 전용 전체 화면 모드이므로 스크린샷이 검게 나옵니다. iRacing에서 Display > Full Screen을 OFF로 설정하고(Borderless 또는 Windowed 사용) 다시 시도하세요.',
 		exclusiveFullscreenUnattributed:
 			'어떤 프로그램이 전용 전체 화면 모드로 실행 중이어서 캡처가 검게 나옵니다. iRacing이 전체 화면 모드라면 Display > Full Screen을 OFF로 설정하고(Borderless 또는 Windowed 사용) 다시 시도하세요.',
+		blockedElevated:
+			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+		blockedDenied:
+			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
 		reshadeIniMissing:
 			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		reshadeIniUnreadable:

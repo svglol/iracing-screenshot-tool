@@ -36,10 +36,14 @@ import {
 	decideCaptureBackend,
 	classifyWgcResult,
 	decideLongExposureAvailability,
+	decideCaptureBlock,
+	captureBlockMessage,
+	type CaptureBlock,
 } from './capture-decisions';
 import {
 	captureIracingWindowNative,
 	getCaptureConsentStatus,
+	getCapturePermission,
 	getLastNativeFailureReason,
 	getProcessElevation,
 	getWgcSupport,
@@ -485,8 +489,32 @@ function getCaptureBackendDiagnostics(): Record<string, unknown> {
 			})(),
 			compatLayer: process.env.__COMPAT_LAYER ?? null,
 			foreignModules: listForeignModules(),
+			// Whether Windows lets this process capture at all (taskbar probe).
+			capturePermission: (() => {
+				try {
+					return getCapturePermission();
+				} catch {
+					return null;
+				}
+			})(),
 		},
 	};
+}
+
+// Whether any capture can work in this process right now (decideCaptureBlock).
+// `reshade` is the caller's backend: ReShade never asks Windows, so it is never
+// blocked. Asked live at each capture — cheap (no session, no frame) and the
+// answer can change if the user edits a privacy setting while we run.
+function currentCaptureBlock(
+	reshade: boolean
+): { block: CaptureBlock; hresult: string | null } | null {
+	const permission = getCapturePermission();
+	const block = decideCaptureBlock({
+		reshade,
+		permission,
+		elevated: getProcessElevation(),
+	});
+	return block ? { block, hresult: permission?.hresult ?? null } : null;
 }
 
 function buildMainScreenshotDiagnostics() {
@@ -960,6 +988,10 @@ ipcMain.handle('get-vram-info', () => {
 ipcMain.handle('get-iracing-fullscreen-state', () =>
 	getIracingExclusiveFullscreenState()
 );
+// Whether Windows refuses capture to this process, for the sidebar's proactive
+// warning. Asked as if not in ReShade mode — the sidebar hides it under ReShade
+// itself, so toggling the mode needs no second round-trip. Fails open to null.
+ipcMain.handle('get-capture-block', () => currentCaptureBlock(false));
 // #11: whether the WGC native-capture path loaded on this machine (addon present
 // + the OS floors in decideWgcSupport). Settings uses this (sendSync) to disable
 // the toggle on an unsupported system. Fails open in the loader, so a false here
@@ -1316,6 +1348,22 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 	// cannot attribute the shell's fullscreen state to iRacing. It is kept because it
 	// costs nothing and stashes `lastCaptureFullscreenState`; the sample that can
 	// actually refuse is `exclusiveFullscreenRefusal` below, taken after the raise.
+	// Long exposure is WGC-only, so a capture refusal from Windows would only
+	// surface after the whole playback as "no frames". Refuse up front instead.
+	const blocked = currentCaptureBlock(false);
+	if (blocked) {
+		log.warn('Long exposure rejected', {
+			reason: `capture-blocked-${blocked.block}`,
+			hresult: blocked.hresult,
+		});
+		return {
+			ok: false,
+			failure: 'capture-blocked',
+			message: captureBlockMessage(blocked.block, blocked.hresult),
+			warnings: [],
+		};
+	}
+
 	const fullscreen = getIracingExclusiveFullscreenState();
 	lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
 	if (fullscreen && fullscreen.exclusiveFullscreen) {
@@ -1929,6 +1977,27 @@ app.on('ready', async () => {
 		// stashed state — be the backstop. Fails open: null (native off / iRacing
 		// closed) just proceeds.
 		if (!config.get('reshade')) {
+			// Capture-permission pre-flight: when Windows refuses this process
+			// (field case: the app set to "Run as administrator"), WGC and the
+			// getUserMedia fallback are both refused, so the capture would fail
+			// twice and surface as "Could not start video source". Say why instead,
+			// before touching the sim.
+			const blocked = currentCaptureBlock(false);
+			if (blocked) {
+				log.warn('Screenshot rejected', {
+					reason: `capture-blocked-${blocked.block}`,
+					hresult: blocked.hresult,
+				});
+				reportScreenshotError(
+					captureBlockMessage(blocked.block, blocked.hresult),
+					{
+						context: `resize-screenshot:capture-blocked-${blocked.block}`,
+						meta: { request: data },
+					}
+				);
+				return;
+			}
+
 			const fullscreen = getIracingExclusiveFullscreenState();
 			lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
 			if (fullscreen && fullscreen.exclusiveFullscreen) {

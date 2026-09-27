@@ -246,6 +246,9 @@ export default {
 			iracingStatusTimer: null,
 			// #10: true when iRacing is in exclusive fullscreen (capture → black).
 			exclusiveFullscreen: false,
+			// { block: 'elevated' | 'denied', hresult } when Windows refuses
+			// screen capture to this app; null when it can capture (or unknown).
+			captureBlock: null,
 		};
 	},
 	computed: {
@@ -402,6 +405,21 @@ export default {
 		// / aspect ratio / ReShade respect it.
 		notices() {
 			const notices = [];
+
+			// Windows refuses screen capture to this app (field case: set to "Run as
+			// administrator"). Every non-ReShade capture — WGC, its getUserMedia
+			// fallback and long exposure — would fail, so it leads the list.
+			if (this.captureBlock && !this.reshade) {
+				notices.push({
+					level: 'danger',
+					text:
+						this.captureBlock.block === 'elevated'
+							? this.$t('capture.blockedElevated')
+							: this.$t('capture.blockedDenied', {
+									hresult: this.captureBlock.hresult || 'unknown',
+								}),
+				});
+			}
 
 			// #10. iRacing in exclusive fullscreen bypasses DWM, so any
 			// composition-based grab comes back black — that is true of the
@@ -653,6 +671,7 @@ export default {
 		// warning stays current. Both share one timer, cleared on unmount.
 		this.refreshVramInfo();
 		this.refreshFullscreenState();
+		this.refreshCaptureBlock();
 		this.vramTimer = setInterval(() => {
 			this.refreshVramInfo();
 			this.refreshFullscreenState();
@@ -682,6 +701,7 @@ export default {
 				// exclusive-fullscreen warning reflects the freshly-connected sim.
 				this.refreshVramInfo();
 				this.refreshFullscreenState();
+				this.refreshCaptureBlock();
 			}
 		},
 		stopIracingStatusPoll() {
@@ -776,6 +796,19 @@ export default {
 					if (next !== this.exclusiveFullscreen) {
 						this.exclusiveFullscreen = next;
 					}
+				})
+				.catch(() => {
+					/* keep last value */
+				});
+		},
+		// Ask main whether Windows refuses screen capture to this app. Not on the
+		// poll timer: elevation is fixed for the process lifetime, so on mount and
+		// on iRacing connecting is enough.
+		refreshCaptureBlock() {
+			ipcRenderer
+				.invoke('get-capture-block')
+				.then((state) => {
+					this.captureBlock = state || null;
 				})
 				.catch(() => {
 					/* keep last value */

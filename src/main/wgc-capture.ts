@@ -239,6 +239,14 @@ interface WgcAddon {
 	processCaptureContext?(): {
 		elevated?: boolean;
 	};
+	// Whether Windows lets this process create a capture item at all (asked with
+	// the taskbar). Optional: an addon build predating it reports nothing. Returns
+	// null/undefined when unknowable; an allowed result omits hresult/message.
+	probeCapturePermission?(): {
+		allowed: boolean;
+		hresult?: number;
+		message?: string;
+	} | null;
 }
 
 // undefined = not yet initialized; null = unavailable (fall back to getUserMedia)
@@ -460,6 +468,41 @@ export function getProcessElevation(): boolean | null {
 	try {
 		const raw = api.processCaptureContext();
 		return typeof raw?.elevated === 'boolean' ? raw.elevated : null;
+	} catch {
+		return null;
+	}
+}
+
+export interface CapturePermission {
+	allowed: boolean;
+	// The refusing HRESULT as unsigned hex ("0x80070005"); null when allowed.
+	hresult: string | null;
+	message: string | null;
+}
+
+// Whether Windows will let THIS process capture at all, asked against the
+// taskbar so the answer is about us rather than iRacing. A refusal covers every
+// capture backend we have (Chromium's window capture is WGC-based too), so the
+// callers turn it into an actionable message. null when unknowable (addon
+// unavailable / predating the fn / probe inconclusive): fail open.
+export function getCapturePermission(): CapturePermission | null {
+	const api = getWgcApi();
+	if (!api || typeof api.probeCapturePermission !== 'function') {
+		return null;
+	}
+	try {
+		const raw = api.probeCapturePermission();
+		if (!raw || typeof raw.allowed !== 'boolean') {
+			return null;
+		}
+		return {
+			allowed: raw.allowed,
+			hresult:
+				typeof raw.hresult === 'number'
+					? `0x${(raw.hresult >>> 0).toString(16).toUpperCase().padStart(8, '0')}`
+					: null,
+			message: raw.message ?? null,
+		};
 	} catch {
 		return null;
 	}
