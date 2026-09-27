@@ -6,10 +6,12 @@
 //!   - the `longExposure*` family (see `longexp`), which holds a live WGC capture
 //!     open and accumulates its frames on the GPU via a D3D11 compute shader.
 //!
-//! WGC delivers true, un-subsampled 8-bit RGBA frames (unlike the
-//! desktopCapturer/getUserMedia path, which chroma-subsamples to I420). We use
-//! the `windows-capture` crate (WGC-only, no GDI fallback), so a successful grab
-//! unambiguously proves WGC worked.
+//! WGC delivers true, un-subsampled RGBA frames (unlike the
+//! desktopCapturer/getUserMedia path, which chroma-subsamples to I420). On an
+//! Advanced Color desktop we request FP16 scRGB and convert it to SDR sRGB only
+//! after capture, avoiding the overclipping caused by requesting RGBA8 directly.
+//! We use the `windows-capture` crate (WGC-only, no GDI fallback), so a
+//! successful grab unambiguously proves WGC worked.
 //!
 //! Thread model: `OneShot::start()` BLOCKS its calling thread and pumps a
 //! per-thread dispatcher queue; the frame handler runs on that same thread.
@@ -20,6 +22,7 @@
 //! pathological never-arriving frame leaks the worker thread (documented,
 //! acceptable) but never calls `process::exit`.
 
+mod hdr;
 mod longexp;
 
 use std::sync::mpsc;
@@ -40,9 +43,12 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
+use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
+
+use hdr::{profile_for_window, scrgb_to_srgba8, HdrCaptureProfile};
 
 /// Set per-monitor-DPI-aware-v2 exactly once so captured sizes are physical
 /// pixels. Safe to attempt repeatedly; the `Once` guarantees a single call.
@@ -59,6 +65,10 @@ pub struct CaptureResult {
     pub data: Buffer,
     pub width: u32,
     pub height: u32,
+    /// Whether the frame was captured as FP16 scRGB and converted to SDR sRGB.
+    pub hdr_corrected: bool,
+    /// Windows' configured SDR reference white for the target monitor.
+    pub sdr_white_nits: f64,
 }
 
 /// Shared slot the handler drops the first frame into: (RGBA bytes, w, h).
@@ -68,15 +78,24 @@ type Shared = Arc<Mutex<Option<(Vec<u8>, u32, u32)>>>;
 /// then stops the capture (which unblocks `OneShot::start`).
 struct OneShot {
     slot: Shared,
+    profile: HdrCaptureProfile,
+}
+
+struct OneShotFlags {
+    slot: Shared,
+    profile: HdrCaptureProfile,
 }
 
 impl GraphicsCaptureApiHandler for OneShot {
     // The handler's `Flags` payload is the shared result slot.
-    type Flags = Shared;
+    type Flags = OneShotFlags;
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
     fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
-        Ok(Self { slot: ctx.flags })
+        Ok(Self {
+            slot: ctx.flags.slot,
+            profile: ctx.flags.profile,
+        })
     }
 
     fn on_frame_arrived(
@@ -87,16 +106,26 @@ impl GraphicsCaptureApiHandler for OneShot {
         // frame.buffer() maps a STAGING texture; the mapped rows carry the GPU
         // RowPitch (usually NOT width*4). as_nopadding_buffer copies row-by-row
         // honoring RowPitch into `scratch` and returns a tightly-packed
-        // width*height*4 RGBA slice. (Rgba8 was requested, so byte order is
-        // R,G,B,A already — no swizzle needed.)
+        // width*height*4 RGBA slice for SDR, or width*height*8 packed RGBA16F
+        // for an Advanced Color desktop. RGBA16F is linear scRGB and must be
+        // normalized/tone-converted before Sharp can encode an SDR image.
         let fb = frame.buffer()?;
         let width = fb.width();
         let height = fb.height();
         let mut scratch: Vec<u8> = Vec::new();
         let data = fb.as_nopadding_buffer(&mut scratch);
+        let rgba8 = if self.profile.advanced_color_enabled {
+            scrgb_to_srgba8(data, self.profile.sdr_white_scale).map_err(
+                |message| -> Self::Error {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, message).into()
+                },
+            )?
+        } else {
+            data.to_vec()
+        };
 
         if let Ok(mut guard) = self.slot.lock() {
-            *guard = Some((data.to_vec(), width, height));
+            *guard = Some((rgba8, width, height));
         }
 
         // Unblocks OneShot::start() on the worker thread.
@@ -213,6 +242,8 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
     // f64 -> native handle integer. HWND values fit well within f64's exact
     // integer range (<= 2^53), so no precision is lost.
     let hwnd_int = hwnd as isize;
+    let hwnd_native = HWND(hwnd_int as *mut std::ffi::c_void);
+    let profile = profile_for_window(hwnd_native);
 
     let (tx, rx) = mpsc::channel::<Result<(Vec<u8>, u32, u32), String>>();
     let slot: Shared = Arc::new(Mutex::new(None));
@@ -222,31 +253,41 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
     // Builder::spawn (not thread::spawn) so an OS thread-creation failure surfaces
     // as a catchable Err instead of panicking across the N-API boundary; the JS
     // caller then falls back to getUserMedia rather than crashing the app.
-    let spawn_result = thread::Builder::new().name("wgc-capture".into()).spawn(move || {
-        let hwnd_ptr = hwnd_int as *mut std::ffi::c_void;
-        let window = Window::from_raw_hwnd(hwnd_ptr);
+    let spawn_result = thread::Builder::new()
+        .name("wgc-capture".into())
+        .spawn(move || {
+            let hwnd_ptr = hwnd_int as *mut std::ffi::c_void;
+            let window = Window::from_raw_hwnd(hwnd_ptr);
 
-        let settings = Settings::new(
-            window,
-            negotiated_cursor_settings(),
-            negotiated_border_settings(),
-            SecondaryWindowSettings::Default,
-            MinimumUpdateIntervalSettings::Default,
-            DirtyRegionSettings::Default,
-            ColorFormat::Rgba8,
-            slot_worker.clone(),
-        );
+            let color_format = if profile.advanced_color_enabled {
+                ColorFormat::Rgba16F
+            } else {
+                ColorFormat::Rgba8
+            };
+            let settings = Settings::new(
+                window,
+                negotiated_cursor_settings(),
+                negotiated_border_settings(),
+                SecondaryWindowSettings::Default,
+                MinimumUpdateIntervalSettings::Default,
+                DirtyRegionSettings::Default,
+                color_format,
+                OneShotFlags {
+                    slot: slot_worker.clone(),
+                    profile,
+                },
+            );
 
-        // Blocks until the handler calls capture_control.stop().
-        let outcome = match OneShot::start(settings) {
-            Ok(()) => match slot_worker.lock().ok().and_then(|mut g| g.take()) {
-                Some(frame) => Ok(frame),
-                None => Err("WGC capture produced no frame".to_string()),
-            },
-            Err(e) => Err(format!("WGC capture failed: {e}")),
-        };
-        let _ = tx.send(outcome);
-    });
+            // Blocks until the handler calls capture_control.stop().
+            let outcome = match OneShot::start(settings) {
+                Ok(()) => match slot_worker.lock().ok().and_then(|mut g| g.take()) {
+                    Some(frame) => Ok(frame),
+                    None => Err("WGC capture produced no frame".to_string()),
+                },
+                Err(e) => Err(format!("WGC capture failed: {e}")),
+            };
+            let _ = tx.send(outcome);
+        });
     if let Err(e) = spawn_result {
         return Err(napi::Error::from_reason(format!(
             "WGC worker thread spawn failed: {e}"
@@ -260,15 +301,15 @@ pub fn capture_window(hwnd: f64, timeout_ms: Option<u32>) -> napi::Result<Captur
             data: Buffer::from(data),
             width,
             height,
+            hdr_corrected: profile.advanced_color_enabled,
+            sdr_white_nits: profile.sdr_white_nits,
         }),
         Ok(Err(msg)) => Err(napi::Error::from_reason(msg)),
         // Split the two recv_timeout failure modes so the JS diagnostics can tell a
         // genuine slow grab (Timeout, grabElapsedMs ~ timeout+500) from a worker-thread
         // panic (tx dropped -> Disconnected, returns immediately with grabElapsedMs ~ 0),
         // which was previously mislabeled a timeout (cq-capture-path#3).
-        Err(RecvTimeoutError::Timeout) => {
-            Err(napi::Error::from_reason("WGC capture timed out"))
-        }
+        Err(RecvTimeoutError::Timeout) => Err(napi::Error::from_reason("WGC capture timed out")),
         Err(RecvTimeoutError::Disconnected) => Err(napi::Error::from_reason(
             "WGC worker exited without result (panic?)",
         )),
