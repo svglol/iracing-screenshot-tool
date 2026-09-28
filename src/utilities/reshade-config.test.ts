@@ -254,10 +254,8 @@ describe('describeReshadeIniProblem', () => {
 	// Phrased through the shared core rather than from a literal, so it CAN be
 	// translated — the 2026-08-21 reporter's machine was Italian and read a raw
 	// English errno. Asserted as "resolves the catalogue key under the ambient
-	// locale", not as "differs from English": these strings ship English-only in
-	// every catalogue until the translation pass, so a cross-language difference
-	// is not observable yet and a test asserting one would fail today and pass
-	// for the wrong reason later.
+	// locale", not as "differs from English", so the test doesn't need editing
+	// every time a translation's wording changes.
 	test('resolves through the catalogue under the ambient locale', () => {
 		setLocale('it');
 		expect(describeReshadeIniProblem('missing', DEFAULT_INI)).toBe(

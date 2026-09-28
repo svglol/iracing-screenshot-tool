@@ -502,19 +502,19 @@ const tr: Catalog = {
 		exclusiveFullscreenUnattributed:
 			'Bir uygulama özel tam ekran modunda çalışıyor, bu da siyah bir yakalama üretir. iRacing tam ekrandaysa, Display > Full Screen ayarını OFF yapın (Borderless veya Windowed kullanın) ve yeniden deneyin.',
 		blockedElevated:
-			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+			'iRacing Screenshot Tool yönetici olarak çalışırken Windows ekran yakalamayı engeller. Aracı kapatın, iRacing Screenshot Tool.exe dosyasına sağ tıklayıp Özellikler > Uyumluluk yolunu izleyin, «Bu programı yönetici olarak çalıştır» işaretini kaldırın («Ayarı tüm kullanıcılar için değiştir» seçeneğini de işaretleyin), ardından aracı normal şekilde yeniden başlatın.',
 		blockedDenied:
-			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+			'Windows bu uygulama için ekran yakalamayı reddediyor ({hresult}). Bu bilgisayardaki bir gizlilik ayarı, şirket politikası veya güvenlik yazılımı bunu engelliyor olabilir. ReShade Uyumluluk Modu bundan etkilenmez.',
 		reshadeIniMissing:
-			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path} konumunda ReShade yapılandırması bulunamadı. Ayarlar’dan ReShade.ini dosyanızı seçin — ReShade’in kurulduğu klasörde, iRacingSim64DX11.exe dosyasının hemen yanında bulunur — veya ReShade Uyumluluk Modu’nu kapatın.',
 		reshadeIniUnreadable:
-			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+			'{path} konumundaki ReShade yapılandırması okunamadı. Bu dosya için okuma izniniz olup olmadığını kontrol edin veya Ayarlar’dan başka bir ReShade.ini seçin.',
 		reshadeIniPreset:
-			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+			'{path}, ReShade’in kendi yapılandırması değil, bir ReShade ön ayarı (preset). Ön ayarlar efekt ayarlarını içerir, ekran görüntüsü klasörü içermez. Bunun yerine Ayarlar’dan ReShade.ini dosyasını seçin — aynı klasördedir — veya ReShade Uyumluluk Modu’nu kapatın.',
 		reshadeIniNoSavePath:
-			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+			'ReShade’de {path} için ayarlanmış bir ekran görüntüsü klasörü yok. iRacing içinde ReShade katmanını (overlay) açın, Ayarlar sekmesine gidin ve bir ekran görüntüsü yolu belirleyin, ardından yeniden deneyin.',
 		reshadeIniNotConfig:
-			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path}, bir ReShade yapılandırma dosyası değil. Ayarlar’dan ReShade.ini dosyanızı seçin — ReShade’in kurulduğu klasörde, iRacingSim64DX11.exe dosyasının hemen yanında bulunur — veya ReShade Uyumluluk Modu’nu kapatın.',
 		unknownError: 'Bilinmeyen ekran görüntüsü hatası',
 		outputTooSmall: 'Yakalama çıktısı çok küçük ({width}x{height})',
 		blackFrame:

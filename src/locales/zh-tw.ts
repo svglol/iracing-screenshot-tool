@@ -487,19 +487,19 @@ const zhTW: Catalog = {
 		exclusiveFullscreenUnattributed:
 			'有應用程式正在獨佔全螢幕模式下執行，這會讓擷取結果全黑。如果 iRacing 處於全螢幕模式，請將 Display > Full Screen 設為 OFF（使用 Borderless 或 Windowed）後再試一次。',
 		blockedElevated:
-			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+			'當 iRacing Screenshot Tool 以系統管理員身分執行時，Windows 會封鎖螢幕擷取。請關閉工具，在 iRacing Screenshot Tool.exe 上按滑鼠右鍵 > 內容 > 相容性，取消勾選「以系統管理員的身分執行此程式」（也請勾選「變更所有使用者的設定」），然後以一般方式重新啟動工具。',
 		blockedDenied:
-			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+			'Windows 拒絕讓這個應用程式擷取螢幕（{hresult}）。可能是這台電腦上的隱私權設定、公司原則或安全性軟體在封鎖它。這不會影響 ReShade 相容模式。',
 		reshadeIniMissing:
-			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'在 {path} 找不到 ReShade 設定檔。請在設定中選取你的 ReShade.ini——它就位於安裝 ReShade 的資料夾中，緊鄰 iRacingSim64DX11.exe——或是關閉 ReShade 相容模式。',
 		reshadeIniUnreadable:
-			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+			'無法讀取位於 {path} 的 ReShade 設定檔。請確認你有讀取權限，或是在設定中選取其他的 ReShade.ini。',
 		reshadeIniPreset:
-			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+			'{path} 是 ReShade 的預設集（preset），不是 ReShade 本身的設定檔。預設集只包含特效設定，不含螢幕截圖資料夾。請改在設定中選取 ReShade.ini——它就在同一個資料夾中——或是關閉 ReShade 相容模式。',
 		reshadeIniNoSavePath:
-			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+			'ReShade 在 {path} 中沒有設定螢幕截圖資料夾。請在 iRacing 中開啟 ReShade 疊加層，前往其「設定」分頁設定螢幕截圖路徑，然後再試一次。',
 		reshadeIniNotConfig:
-			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path} 不是 ReShade 設定檔。請在設定中選取你的 ReShade.ini——它就位於安裝 ReShade 的資料夾中，緊鄰 iRacingSim64DX11.exe——或是關閉 ReShade 相容模式。',
 		unknownError: '不明的截圖錯誤',
 		outputTooSmall: '擷取結果太小（{width}x{height}）',
 		blackFrame:

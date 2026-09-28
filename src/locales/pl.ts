@@ -505,19 +505,19 @@ const pl: Catalog = {
 		exclusiveFullscreenUnattributed:
 			'Jakaś aplikacja działa w wyłącznym trybie pełnoekranowym, co daje czarny zrzut. Jeśli iRacing jest w trybie pełnoekranowym, ustaw Display > Full Screen na OFF (użyj Borderless lub Windowed) i spróbuj ponownie.',
 		blockedElevated:
-			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+			'Windows blokuje przechwytywanie ekranu, dopóki iRacing Screenshot Tool działa jako administrator. Zamknij narzędzie, kliknij prawym przyciskiem myszy iRacing Screenshot Tool.exe > Właściwości > Zgodność, odznacz „Uruchom ten program jako administrator” (zaznacz też „Zmień ustawienia dla wszystkich użytkowników”), a następnie uruchom narzędzie normalnie.',
 		blockedDenied:
-			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+			'Windows odmawia tej aplikacji przechwytywania ekranu ({hresult}). Może to blokować ustawienie prywatności, zasady firmowe lub oprogramowanie zabezpieczające na tym komputerze. Nie dotyczy to Trybu zgodności z ReShade.',
 		reshadeIniMissing:
-			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'Nie znaleziono konfiguracji ReShade w {path}. W Ustawieniach wybierz swój plik ReShade.ini — znajduje się tuż obok iRacingSim64DX11.exe, w folderze, do którego zainstalowano ReShade — albo wyłącz Tryb zgodności z ReShade.',
 		reshadeIniUnreadable:
-			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+			'Nie udało się odczytać konfiguracji ReShade w {path}. Sprawdź, czy masz do niej uprawnienia do odczytu, albo wybierz inny plik ReShade.ini w Ustawieniach.',
 		reshadeIniPreset:
-			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+			'{path} to preset ReShade, a nie jego właściwa konfiguracja. Presety zawierają ustawienia efektów i nie zawierają folderu na zrzuty ekranu. W Ustawieniach wybierz zamiast tego ReShade.ini — znajduje się w tym samym folderze — albo wyłącz Tryb zgodności z ReShade.',
 		reshadeIniNoSavePath:
-			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+			'ReShade nie ma ustawionego folderu na zrzuty ekranu w {path}. Otwórz nakładkę ReShade w iRacing, przejdź do jej karty Ustawienia i ustaw ścieżkę zrzutów ekranu, a następnie spróbuj ponownie.',
 		reshadeIniNotConfig:
-			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path} nie jest plikiem konfiguracyjnym ReShade. W Ustawieniach wybierz swój plik ReShade.ini — znajduje się tuż obok iRacingSim64DX11.exe, w folderze, do którego zainstalowano ReShade — albo wyłącz Tryb zgodności z ReShade.',
 		unknownError: 'Nieznany błąd zrzutu ekranu',
 		outputTooSmall: 'Przechwycony obraz jest za mały ({width}x{height})',
 		blackFrame:

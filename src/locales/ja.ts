@@ -506,19 +506,19 @@ const ja: Catalog = {
 		exclusiveFullscreenUnattributed:
 			'いずれかのアプリケーションが排他的フルスクリーンで動作しているため、キャプチャが真っ黒になります。iRacing がフルスクリーンの場合は、Display > Full Screen を OFF（Borderless または Windowed）に設定して、もう一度お試しください。',
 		blockedElevated:
-			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+			'iRacing Screenshot Tool が管理者として実行されている間、Windows は画面キャプチャをブロックします。ツールを終了し、iRacing Screenshot Tool.exe を右クリックして「プロパティ」>「互換性」を開き、「管理者としてこのプログラムを実行する」のチェックを外して（「設定をすべてのユーザーに適用する」にもチェックを入れてください）、ツールを通常どおり起動し直してください。',
 		blockedDenied:
-			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+			'Windows がこのアプリの画面キャプチャを拒否しています（{hresult}）。このPCのプライバシー設定、会社のポリシー、またはセキュリティソフトが原因の可能性があります。ReShade 互換モードには影響しません。',
 		reshadeIniMissing:
-			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path} に ReShade の設定ファイルが見つかりません。設定でお使いの ReShade.ini を選択してください — ReShade をインストールしたフォルダー内、iRacingSim64DX11.exe のすぐそばにあります — または ReShade 互換モードをオフにしてください。',
 		reshadeIniUnreadable:
-			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+			'{path} の ReShade 設定ファイルを読み込めませんでした。読み取り権限があるか確認するか、設定で別の ReShade.ini を選択してください。',
 		reshadeIniPreset:
-			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+			'{path} は ReShade のプリセットであり、ReShade 自体の設定ファイルではありません。プリセットにはエフェクトの設定が含まれるだけで、スクリーンショットの保存先フォルダーは含まれません。設定で代わりに ReShade.ini を選択してください — 同じフォルダー内にあります — または ReShade 互換モードをオフにしてください。',
 		reshadeIniNoSavePath:
-			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+			'{path} に ReShade のスクリーンショット保存先フォルダーが設定されていません。iRacing 内で ReShade のオーバーレイを開き、その「設定」タブでスクリーンショットの保存先を指定してから、もう一度お試しください。',
 		reshadeIniNotConfig:
-			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path} は ReShade の設定ファイルではありません。設定でお使いの ReShade.ini を選択してください — ReShade をインストールしたフォルダー内、iRacingSim64DX11.exe のすぐそばにあります — または ReShade 互換モードをオフにしてください。',
 		unknownError: '不明なスクリーンショットエラー',
 		outputTooSmall: 'キャプチャ結果が小さすぎます（{width}x{height}）',
 		blackFrame:

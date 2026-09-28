@@ -535,19 +535,19 @@ const el: Catalog = {
 		exclusiveFullscreenUnattributed:
 			'Μια εφαρμογή εκτελείται σε αποκλειστική πλήρη οθόνη, κάτι που παράγει μαύρη λήψη. Αν το iRacing βρίσκεται σε πλήρη οθόνη, ορίστε το Display > Full Screen σε OFF (χρησιμοποιήστε Borderless ή Windowed) και δοκιμάστε ξανά.',
 		blockedElevated:
-			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+			'Τα Windows μπλοκάρουν τη λήψη οθόνης όσο το iRacing Screenshot Tool εκτελείται ως διαχειριστής. Κλείστε το εργαλείο, κάντε δεξί κλικ στο iRacing Screenshot Tool.exe > Ιδιότητες > Συμβατότητα, αποεπιλέξτε «Εκτέλεση αυτού του προγράμματος ως διαχειριστής» (επιλέξτε και «Αλλαγή ρυθμίσεων για όλους τους χρήστες»), και μετά ξεκινήστε το εργαλείο κανονικά.',
 		blockedDenied:
-			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+			'Τα Windows αρνούνται τη λήψη οθόνης για αυτήν την εφαρμογή ({hresult}). Μια ρύθμιση απορρήτου, μια εταιρική πολιτική ή κάποιο λογισμικό ασφαλείας σε αυτόν τον υπολογιστή ενδέχεται να το εμποδίζει. Η Λειτουργία συμβατότητας με ReShade δεν επηρεάζεται.',
 		reshadeIniMissing:
-			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'Δεν βρέθηκε αρχείο ρυθμίσεων του ReShade στο {path}. Στις Ρυθμίσεις, επιλέξτε το ReShade.ini σας — βρίσκεται δίπλα στο iRacingSim64DX11.exe, μέσα στον φάκελο όπου εγκαταστάθηκε το ReShade — ή απενεργοποιήστε τη Λειτουργία συμβατότητας με ReShade.',
 		reshadeIniUnreadable:
-			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+			'Το αρχείο ρυθμίσεων του ReShade στο {path} δεν ήταν δυνατό να διαβαστεί. Ελέγξτε αν έχετε δικαίωμα ανάγνωσης, ή επιλέξτε διαφορετικό ReShade.ini στις Ρυθμίσεις.',
 		reshadeIniPreset:
-			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+			'Το {path} είναι ένα προεπιλεγμένο πρότυπο (preset) του ReShade, όχι οι δικές του ρυθμίσεις. Τα presets περιέχουν ρυθμίσεις εφέ και όχι φάκελο στιγμιότυπων. Στις Ρυθμίσεις, επιλέξτε το ReShade.ini — βρίσκεται στον ίδιο φάκελο — ή απενεργοποιήστε τη Λειτουργία συμβατότητας με ReShade.',
 		reshadeIniNoSavePath:
-			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+			'Το ReShade δεν έχει ορισμένο φάκελο στιγμιότυπων στο {path}. Ανοίξτε την επικάλυψη (overlay) του ReShade μέσα στο iRacing, μεταβείτε στην καρτέλα Ρυθμίσεις του και ορίστε μια διαδρομή στιγμιότυπων, και μετά δοκιμάστε ξανά.',
 		reshadeIniNotConfig:
-			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'Το {path} δεν είναι αρχείο ρυθμίσεων του ReShade. Στις Ρυθμίσεις, επιλέξτε το ReShade.ini σας — βρίσκεται δίπλα στο iRacingSim64DX11.exe, μέσα στον φάκελο όπου εγκαταστάθηκε το ReShade — ή απενεργοποιήστε τη Λειτουργία συμβατότητας με ReShade.',
 		unknownError: 'Άγνωστο σφάλμα στιγμιότυπου',
 		outputTooSmall: 'Η έξοδος λήψης είναι πολύ μικρή ({width}x{height})',
 		blackFrame:

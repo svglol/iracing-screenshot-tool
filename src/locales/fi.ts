@@ -494,19 +494,19 @@ const fi: Catalog = {
 		exclusiveFullscreenUnattributed:
 			'Jokin sovellus on yksinomaisessa koko näytön tilassa, mistä seuraa musta kaappaus. Jos iRacing on koko näytön tilassa, aseta Display > Full Screen tilaan OFF (käytä Borderless- tai Windowed-tilaa) ja yritä uudelleen.',
 		blockedElevated:
-			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+			'Windows estää näytön kaappauksen, kun iRacing Screenshot Tool on käynnissä järjestelmänvalvojana. Sulje työkalu, napsauta hiiren kakkospainikkeella tiedostoa iRacing Screenshot Tool.exe > Ominaisuudet > Yhteensopivuus, poista valinta kohdasta ”Suorita tämä ohjelma järjestelmänvalvojana” (valitse myös ”Muuta asetukset kaikille käyttäjille”) ja käynnistä työkalu sitten normaalisti.',
 		blockedDenied:
-			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+			'Windows estää tältä sovellukselta näytön kaappauksen ({hresult}). Tietosuoja-asetus, yrityksen käytäntö tai tämän tietokoneen suojausohjelmisto saattaa estää sen. Tämä ei vaikuta ReShade-yhteensopivuustilaan.',
 		reshadeIniMissing:
-			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'ReShade-asetustiedostoa ei löytynyt polusta {path}. Valitse Asetuksista oma ReShade.ini-tiedostosi — se sijaitsee samassa kansiossa kuin iRacingSim64DX11.exe, johon ReShade asennettiin — tai poista ReShade-yhteensopivuustila käytöstä.',
 		reshadeIniUnreadable:
-			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+			'ReShade-asetustiedostoa polussa {path} ei voitu lukea. Tarkista, että sinulla on lukuoikeus siihen, tai valitse Asetuksista toinen ReShade.ini-tiedosto.',
 		reshadeIniPreset:
-			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+			'{path} on ReShaden esiasetus (preset), ei sen omat asetukset. Esiasetukset sisältävät efektiasetuksia, ei kuvakaappauskansiota. Valitse Asetuksista sen sijaan ReShade.ini — se on samassa kansiossa — tai poista ReShade-yhteensopivuustila käytöstä.',
 		reshadeIniNoSavePath:
-			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+			'ReShadelle ei ole asetettu kuvakaappauskansiota polussa {path}. Avaa ReShaden overlay iRacingissa, siirry sen Asetukset-välilehdelle ja aseta kuvakaappauspolku, ja yritä sitten uudelleen.',
 		reshadeIniNotConfig:
-			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+			'{path} ei ole ReShaden asetustiedosto. Valitse Asetuksista oma ReShade.ini-tiedostosi — se sijaitsee samassa kansiossa kuin iRacingSim64DX11.exe, johon ReShade asennettiin — tai poista ReShade-yhteensopivuustila käytöstä.',
 		unknownError: 'Tuntematon kuvakaappausvirhe',
 		outputTooSmall: 'Kaappaus on liian pieni ({width}x{height})',
 		blackFrame:
