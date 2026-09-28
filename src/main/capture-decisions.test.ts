@@ -262,7 +262,7 @@ describe('classifyWgcResult (cq-tests#2)', () => {
 });
 
 describe('decideCaptureBlock', () => {
-	const DENIED = { allowed: false };
+	const DENIED = { allowed: false, hresult: '0x80070005' };
 
 	test('elevated + refused → elevated (the field case)', () => {
 		expect(
@@ -295,8 +295,27 @@ describe('decideCaptureBlock', () => {
 		expect(
 			decideCaptureBlock({
 				reshade: false,
-				permission: { allowed: true },
+				permission: { allowed: true, hresult: null },
 				elevated: true,
+			})
+		).toBeNull();
+	});
+
+	test('a non-access-denied refusal fails open (Win11 23H2 taskbar, 0x80070057)', () => {
+		for (const elevated of [false, true, null]) {
+			expect(
+				decideCaptureBlock({
+					reshade: false,
+					permission: { allowed: false, hresult: '0x80070057' },
+					elevated,
+				})
+			).toBeNull();
+		}
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: { allowed: false, hresult: null },
+				elevated: false,
 			})
 		).toBeNull();
 	});
