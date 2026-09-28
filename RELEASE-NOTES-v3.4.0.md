@@ -1,142 +1,139 @@
 # iRacing Screenshot Tool v3.4.0
 
-This release adds Graphics Profiles for iRacing, seven more languages, and
-correct colors on HDR desktops. Two capture failures that used to show a
-vague error now name the cause and the fix: the tool running as
-administrator, and a ReShade.ini path that points at the wrong file. A Long
-Exposure bug that could save a black image and report success is fixed.
+The big one this time is Graphics Profiles. Keep one set of iRacing graphics
+settings for racing and another for screenshots, and swap between them with
+a click. The tool also speaks seven more languages, and screenshots finally
+look right on HDR monitors.
+
+Some problems that used to end in a confusing error now tell you what to do.
+We also fixed a Long Exposure bug that could save a black picture and report
+success. That one was nasty, because nothing told you it had happened.
 
 ## New
 
-- **Graphics Profiles.** Store iRacing graphics configurations and switch
-  between them from the title bar, for example one for racing and one for
-  screenshots. You no longer have to hand-edit `rendererDX11Monitor.ini` or
-  keep your own copies of it.
-
-  The panel shows where the current config stands: "Matches your Screenshots
-  profile", "Based on Screenshots, with 5 settings changed since", or "Does
-  not match any stored profile". The second state is expected. iRacing
-  rewrites its graphics config every time it exits, so a config drifts from
-  its profile as soon as you move a slider in the sim.
-
-  Saving refuses to store the same configuration twice and names the profile
-  that already holds it. Before any apply or overwrite, the tool backs up the
-  current file, keeps the last ten backups, and writes the new file
-  atomically. Both actions are disabled while iRacing is open. The sim keeps
-  its settings in memory and writes them over the file when it exits, which
-  would silently undo the switch.
-
-- **Settings and Help are full pages.** They used to be dialogs. A rail on
-  the left switches between Screenshots, Settings and Help, and links to our
-  Discord. F1 still opens Help. The title bar shows which stored Graphics
-  Profile the active config matches, adds a "Modified" badge once the config
-  drifts, and holds the button that opens the profiles panel.
-
-- **Seven more languages.** Arabic, Russian, Japanese, Korean, Traditional
-  Chinese, Greek and Turkish join the thirteen from v3.3.0, for twenty in
-  total. Graphics Profiles and the new administrator and ReShade.ini messages
-  are translated in all twenty. Product names and iRacing's menu paths stay
-  in English so they match what you see on screen: iRacing, ReShade, WGC,
-  VRAM, and the paths Help sends you to.
-
-- **An offset for the filename counter.** `{counter+5}` starts numbering at
-  5 instead of 0, so a sequence can carry on from an earlier session. It
-  works alongside a plain `{counter}` in the same format, and the filename
-  preview in Settings shows what the first file will be called.
-
-- **Resolution and file size in the gallery.** Each screenshot has a caption
-  under its name, such as `3840x2160 · 4.2 MB`. It replaces the badge that
-  used to crowd the filename.
-
-- **An FAQ in Help.** It covers the three problems reported most often as
-  the tool being broken. None of them is a bug in the tool.
-
-  A long exposure can come back black except for the iRacing UI. A few
-  cameras render nothing, and the suspension camera is the worst offender.
-  Exclusive fullscreen is a different problem: there the UI goes black too.
-
-  iRacing can move the camera by itself during a capture. That is its own
-  Shot Selection setting on Automatic, under Camera > Config > Preferences.
-
-  Triple-screen shots can show vertical bands. Multi-projection (SMP)
-  combined with bezel correction causes them. Set the bezel width to 0 mm
-  for an immediate fix, or turn SMP off and restart iRacing.
+- **Graphics Profiles.** Save your iRacing graphics settings and switch
+  between them with a click.
+- **A new layout.** Settings and Help are full pages, reached from a bar on
+  the left.
+- **Seven more languages.** Twenty in total.
+- **Carry on numbering.** `{counter+5}` in the filename format starts your
+  files at 5 instead of 0.
+- **Picture size and file size in the gallery.** They show under each
+  screenshot's name.
+- **A FAQ in Help.** It covers the three problems people most often mistake
+  for bugs.
 
 ## Fixes
 
-- **Every capture failed with "Could not start video source" when the tool
-  ran as administrator.** Windows refuses screen capture to an app running
-  with administrator rights. Both of the tool's capture methods go through
-  that check, so every screenshot and long exposure failed, and the message
-  gave no reason. The setting is easy to turn on by accident, for example by
-  ticking "Run this program as an administrator" once while troubleshooting.
+- **Running as administrator.** Windows blocks capture for it. The tool now
+  says so and shows the fix, where before you got a vague error.
+- **HDR monitors.** Screenshots no longer come out far too bright.
+- **Wrong ReShade.ini setting.** You get a clear message about what is
+  wrong, where before you got "ENOENT".
+- **Black Long Exposure pictures.** The tool refuses to save them, where
+  before it saved them and reported success.
+- **Documents in OneDrive.** The tool now finds iRacing's settings there.
+- **Duplicate Long Exposure warnings.** Each warning shows once.
 
-  The tool now asks Windows whether it may capture. If it may not, a warning
-  above the Screenshot button says so, and Screenshot and Long Exposure stop
-  with that message before attempting a capture. When administrator mode is
-  the cause, the warning gives the fix: close the tool, right-click
-  `iRacing Screenshot Tool.exe`, open Properties > Compatibility, untick
-  "Run this program as an administrator" (also under "Change settings for
-  all users"), then start the tool normally. When something else refuses
-  capture, such as a privacy setting, a company policy or security software,
-  the warning says that instead. ReShade Compatibility Mode is not affected,
-  because ReShade captures from inside iRacing.
+## In detail
 
-- **Screenshots came out heavily overexposed on HDR desktops.** With HDR on
-  in Windows, the desktop is composed in a wider color format, and the tool
-  converted it straight to 8-bit color, clipping everything bright. The tool
-  now checks whether the monitor showing iRacing is in HDR. If it is, the
-  tool captures in the wider format and converts the image back using that
-  monitor's SDR brightness setting. SDR monitors, including Windows 11 Auto
-  Color Management on an SDR display, are captured as before. Thanks to
-  @kylemcd for finding and fixing this.
+### Graphics Profiles
 
-- **A wrong ReShade.ini path now tells you what is wrong.** A path that
-  pointed at nothing used to end in a raw "ENOENT" error, and picking a
-  ReShade preset instead of ReShade.ini ended in "unable to determine the
-  screenshot folder". Neither said what to do. The tool now tells apart a
-  missing or unreadable file, a preset, a file that is not a ReShade config,
-  and a config with no screenshot folder, and says which one it found and
-  how to fix it. It checks before touching the iRacing window, and shows the
-  message above the Screenshot button and under the path in Settings.
-  Turning ReShade Compatibility Mode on also looks for ReShade.ini next to
-  `iRacingSim64DX11.exe` if the stored path doesn't work.
+Racing wants frame rate. Screenshots want everything turned up. Profiles
+save you from changing the settings by hand every time. You switch between
+them from the top of the window.
 
-- **Long Exposure could save an all-black image, or a frozen one, and still
-  report success.** Under GPU load, a capture could read a video frame back
-  before the previous one had finished copying. This was most likely on a
-  busy GPU with little free VRAM, and right after the tool resizes the
-  iRacing window, which it does before every capture. The tool now detects a
-  blank capture and refuses to save it. When frames come back frozen, the
-  result is still a real image but not the exposure you asked for, so the
-  tool saves it and warns you.
+The panel tells you whether your current settings match one of your
+profiles. You will often see something like "Based on Screenshots, with 5
+settings changed since". That's normal. iRacing saves its graphics settings
+every time it closes, so moving a single slider in the sim is enough to
+drift away from a profile.
 
-- **The tool could not find the iRacing config folder when Windows had
-  redirected Documents,** usually to OneDrive. Graphics Profiles and the
-  in-sim config warnings then had nothing to read and gave no sign of it.
-  The tool now gets the folder from Windows' known-folder lookup, which
-  follows the redirection.
+If you try to save settings you already have, the tool tells you which
+profile holds them. Before every switch, it backs up your current settings
+and keeps the last ten backups. You can't switch while iRacing is running.
+iRacing would overwrite your change when it closes, and you'd never know.
 
-- **Long Exposure's warning panel no longer shows every warning twice**
-  after a capture. A notice such as shutter-too-short, or a conflict between
-  bracketing and interpolation, appeared once from the live settings and
-  again from the finished capture.
+### The new layout
+
+Settings and Help used to open as pop-ups. Now they are full pages, and a
+bar down the left side lets you move between Screenshots, Settings, Help and
+our Discord. F1 still opens Help. The top of the window shows which profile
+your iRacing settings match, and a "Modified" badge appears once they
+change.
+
+### Languages
+
+Arabic, Russian, Japanese, Korean, Traditional Chinese, Greek and Turkish
+join the thirteen from v3.3.0. Names like iRacing and ReShade stay in
+English, and so do iRacing's menu names, so the tool matches what you see in
+the sim.
+
+### Running as administrator
+
+Windows blocks screen capture for programs running as administrator. Every
+screenshot and long exposure failed with "Could not start video source",
+which told you nothing useful. The setting is easy to switch on by accident,
+often while troubleshooting something else.
+
+The tool now checks whether Windows will let it capture. If Windows says no,
+a warning appears above the Screenshot button and tells you how to fix it.
+For administrator mode, close the tool, right-click
+`iRacing Screenshot Tool.exe`, choose Properties and open the Compatibility
+tab. Untick "Run this program as an administrator". Click "Change settings
+for all users" and untick it there as well. Then start the tool normally.
+
+If something else is blocking capture, like a privacy setting, a company
+policy or security software, the warning says so. ReShade Compatibility Mode
+keeps working either way.
+
+### HDR monitors
+
+With HDR turned on in Windows, bright areas blew out to white. The tool now
+notices when iRacing is on an HDR monitor and converts the picture to normal
+colors. Nothing changes on regular monitors. Thanks to @kylemcd, who found
+this and fixed it.
+
+### ReShade.ini messages
+
+If ReShade Compatibility Mode pointed at the wrong file, you got "ENOENT" or
+"unable to determine the screenshot folder". Neither told you what to do.
+The tool now says what is wrong and how to fix it, for example that the file
+is missing or that you picked a ReShade preset instead of ReShade.ini. The
+message shows above the Screenshot button and next to the setting in
+Settings. When you turn ReShade Compatibility Mode on and the saved location
+doesn't work, the tool looks for ReShade.ini in your iRacing folder by
+itself.
+
+### Black or frozen Long Exposure pictures
+
+Long Exposure could save a black or frozen picture and say it worked. This
+happened most on a busy graphics card with little memory to spare. The tool
+now spots a black result and refuses to save it. A frozen result is
+still a real picture, so the tool saves it and warns you that it isn't the
+exposure you set.
+
+### Documents in OneDrive
+
+If Windows keeps your Documents folder somewhere else, usually OneDrive, the
+tool couldn't find iRacing's settings. Graphics Profiles and the warnings
+about your iRacing settings had nothing to work with, and nothing told you.
+The tool now finds the folder wherever Windows has put it.
 
 ## Notes
 
-- This release is not code-signed, like every release before it. Windows
-  SmartScreen may say it "protected your PC" the first time you run the
-  installer: click More info, then Run anyway. Signing through the SignPath
-  Foundation is in progress and will arrive in a later release.
-- Electron is updated from 41.2.2 to 41.10.3, which brings the Chromium
-  security fixes released since the version in v3.3.0.
-- Captures still need iRacing in Windowed Borderless. Exclusive Full Screen
-  still comes back black.
-- On Windows 10 before version 2004, the mouse cursor can appear in
-  captures, because hiding it needs a newer version of Windows. The tool
-  warns you when this applies to your machine.
+- Windows may say it "protected your PC" the first time you run the
+  installer. Click More info, then Run anyway. You see this because the
+  release isn't digitally signed yet, and none of our releases have been.
+  Signing is in progress and should arrive in a later release.
+- We updated the browser engine the app is built on, which brings in its
+  latest security fixes.
+- iRacing still needs to run in Windowed Borderless. In iRacing's Full
+  Screen mode, captures still come out black.
+- On Windows 10 versions older than 2004, the mouse pointer can show up in
+  your captures. The tool warns you if your PC is affected.
 
 ## Get it
 
-- Installer: `iRacing-Screenshot-Tool-Setup-3.4.0.exe`
-- Portable: `iRacing-Screenshot-Tool-3.4.0.exe`
+- Installer, which most people want: `iRacing-Screenshot-Tool-Setup-3.4.0.exe`
+- Portable, runs without installing: `iRacing-Screenshot-Tool-3.4.0.exe`
