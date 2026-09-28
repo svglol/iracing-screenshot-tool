@@ -29,9 +29,21 @@
 							$t('settings.checkForUpdates')
 						}}</a></span
 					>
-					<span class="heading settings-meta__update">{{
-						updateStatus
-					}}</span>
+					<!-- When the sentence says "Click to download/install", it IS the
+					     button: the same action as the title-bar icon, through the
+					     same main-process guards. Otherwise it is plain text. -->
+					<span class="heading settings-meta__update">
+						<a
+							v-if="updateAction"
+							class="settings-meta__update-action"
+							role="button"
+							tabindex="0"
+							@click="runUpdateAction"
+							@keydown.enter="runUpdateAction"
+							>{{ updateStatus }}</a
+						>
+						<template v-else>{{ updateStatus }}</template>
+					</span>
 				</aside>
 
 				<div class="settings-form">
@@ -391,6 +403,7 @@ import { applyLocale } from '../i18n';
 import {
 	describeUpdate,
 	initialUpdateState,
+	updateActionChannel,
 } from '../../utilities/update-decisions';
 const { ipcRenderer, shell } = require('electron');
 const path = require('path');
@@ -529,6 +542,15 @@ export default {
 					this.update.busy
 				)
 			);
+		},
+		// Clickable only while the status sentence invites a click: not while a
+		// capture blocks the action (the busy wording says to wait), and not
+		// while a one-off notice replaces the sentence.
+		updateAction() {
+			if (this.updateNotice || this.update.busy) {
+				return null;
+			}
+			return updateActionChannel(this.update.phase);
 		},
 		// Whether the description is reporting a problem rather than describing the
 		// feature, which is the only thing the warning styling keys off.
@@ -775,6 +797,22 @@ export default {
 				});
 			}
 		},
+		async runUpdateAction() {
+			const channel = this.updateAction;
+			if (!channel) {
+				return;
+			}
+			// Main re-checks its guards at the moment of the call; a refusal
+			// comes back with a reason worth showing. Declining the install
+			// dialog returns none, and says nothing.
+			const result = await ipcRenderer.invoke(channel);
+			if (result?.state) {
+				this.update = result.state;
+			}
+			if (result && !result.ok && result.reason) {
+				this.updateNotice = result.reason;
+			}
+		},
 		restoreNow() {
 			const w = parseInt(this.screenWidth, 10);
 			const h = parseInt(this.screenHeight, 10);
@@ -961,6 +999,16 @@ hr {
 	opacity: 0.75;
 	white-space: normal;
 	margin-top: -0.25rem;
+}
+
+.settings-meta__update-action {
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+.settings-meta__update:has(.settings-meta__update-action) {
+	opacity: 1;
 }
 
 .settings-form {

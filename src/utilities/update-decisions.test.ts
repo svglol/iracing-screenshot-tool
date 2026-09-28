@@ -7,6 +7,7 @@ import {
 	initialUpdateState,
 	shouldCheckNow,
 	shouldShowUpdateBadge,
+	updateActionChannel,
 	UPDATE_RECHECK_INTERVAL_MS,
 	type UpdateState,
 } from './update-decisions';
@@ -389,6 +390,45 @@ describe('shouldShowUpdateBadge', () => {
 	test('stays quiet for idle, checking and error', () => {
 		for (const phase of ['idle', 'checking', 'error'] as const) {
 			expect(shouldShowUpdateBadge(stateWith({ phase }))).toBe(false);
+		}
+	});
+});
+
+describe('updateActionChannel', () => {
+	test('an available update downloads, a downloaded one installs', () => {
+		// Exactly the two phases whose sentence says "Click to…".
+		expect(updateActionChannel('available')).toBe('update:download');
+		expect(updateActionChannel('downloaded')).toBe('update:install');
+	});
+
+	test('every other phase has no action', () => {
+		for (const phase of [
+			'idle',
+			'checking',
+			'downloading',
+			'error',
+		] as const) {
+			expect(updateActionChannel(phase)).toBeNull();
+		}
+	});
+
+	test('the phases with an action are the ones describeUpdate invites a click for', () => {
+		// The Settings status line is clickable only when its text says so.
+		for (const phase of [
+			'idle',
+			'checking',
+			'available',
+			'downloading',
+			'downloaded',
+			'error',
+		] as const) {
+			const text = describeUpdate(
+				stateWith({ phase, version: '3.4.0' }),
+				'3.3.0'
+			);
+			expect(text.includes('Click to')).toBe(
+				updateActionChannel(phase) !== null
+			);
 		}
 	});
 });
