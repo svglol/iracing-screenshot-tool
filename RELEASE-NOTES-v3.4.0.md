@@ -1,8 +1,10 @@
 # iRacing Screenshot Tool v3.4.0
 
-Graphics profiles for iRacing, seven more languages, a clear answer when
-Windows blocks capture because the tool runs as administrator, and a Long
-Exposure bug that could save a black image and report success.
+Graphics profiles for iRacing, seven more languages, and correct
+screenshots on HDR desktops. Capture problems that used to end in a vague
+error now say what is wrong and how to fix it: the tool running as
+administrator, or a ReShade.ini path that points at the wrong file. A Long
+Exposure bug that could save a black image and report success is fixed too.
 
 ## New
 
@@ -82,6 +84,26 @@ Exposure bug that could save a black image and report success.
   capture attempt. ReShade Compatibility Mode is not affected, because
   ReShade captures inside iRacing.
 
+- **Screenshots came out heavily overexposed on HDR desktops.** With HDR
+  turned on in Windows, the desktop is composed in a wider color format,
+  and the tool converted it straight to 8-bit color, clipping everything
+  bright. The tool now checks whether the monitor showing iRacing is in HDR,
+  captures in the wider format when it is, and converts the image back to
+  normal colors using that monitor's SDR brightness setting. SDR monitors,
+  including Windows 11 Auto Color Management on an SDR display, keep the
+  unchanged path. Thanks to @kylemcd for finding and fixing this.
+
+- **A wrong ReShade.ini path now tells you what is wrong.** A path that
+  pointed at nothing used to end in a raw "ENOENT" error, and picking a
+  ReShade preset instead of ReShade.ini ended in "unable to determine the
+  screenshot folder". Neither said what to do. The tool now recognises a
+  missing or unreadable file, a preset, and a config with no screenshot
+  folder, and says which one it is and how to fix it. It checks before
+  touching the iRacing window. The message also appears above the
+  Screenshot button and under the path in Settings. Turning ReShade
+  Compatibility Mode on now looks for ReShade.ini next to
+  `iRacingSim64DX11.exe` if the stored path doesn't work.
+
 - **Long Exposure could save an all-black image, or a frozen one, and still
   report success.** Under GPU load, a capture could read the same video
   frame back before the previous one had finished copying. It was most
@@ -110,6 +132,10 @@ Exposure bug that could save a black image and report success.
   SmartScreen may say it "protected your PC" the first time you run the
   installer: click More info, then Run anyway. Signing through the SignPath
   Foundation is set up and will arrive in a later release.
+- Electron is updated from 41.2.2 to 41.10.3, which brings in the Chromium
+  security fixes released since v3.3.0's version.
+- A few messages new in this release, about ReShade.ini and administrator
+  mode, are in English in every language for now. Translations will follow.
 - Captures still need iRacing in Windowed Borderless. Exclusive Full Screen
   still comes back black.
 - On Windows 10 before version 2004, the mouse cursor can appear in
