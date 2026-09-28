@@ -31,6 +31,8 @@ import {
 	faCircleQuestion,
 	faArrowDown,
 	faChevronRight,
+	// Title-bar profile quick switch.
+	faChevronDown,
 	// NoticeCard's severity glyphs: severity must not be carried by colour alone.
 	faCircleExclamation,
 	faTriangleExclamation,
@@ -65,6 +67,7 @@ library.add(
 	faCircleQuestion,
 	faArrowDown,
 	faChevronRight,
+	faChevronDown,
 	faCircleExclamation,
 	faTriangleExclamation,
 	faCircleInfo,
