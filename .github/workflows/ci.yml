@@ -85,3 +85,9 @@ jobs:
             # contributor's local `npm run dev` until they rebuild.
             - name: Build addon
               run: cargo build --release --manifest-path native/wgc-capture/Cargo.toml
+
+            # Pure-Rust unit tests (e.g. the scRGB -> sRGB conversion in hdr.rs).
+            # They need no Node host: on Windows napi-sys resolves N-API symbols
+            # at runtime and tolerates their absence in the test binary.
+            - name: Test addon
+              run: cargo test --release --manifest-path native/wgc-capture/Cargo.toml

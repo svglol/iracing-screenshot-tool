@@ -10,7 +10,12 @@ crate-type = ["cdylib"]
 napi = { version = "2", default-features = false, features = ["napi8"] }
 napi-derive = "2"
 windows-capture = "2.0.0"
+half = "2"
+# Parallel RGBA16F -> RGBA8 conversion (hdr.rs). Already a transitive
+# dependency via windows-capture, so this adds nothing to the build.
+rayon = "1"
 windows = { version = "0.62.2", features = [
+    "Win32_Devices_Display",
     "Win32_UI_HiDpi",
     "Win32_Foundation",
     "Graphics_Capture",
@@ -23,6 +28,9 @@ windows = { version = "0.62.2", features = [
     # 'Deny' there blocks CreateForWindow for every capture backend at once.
     "Win32_System_Registry",
     "Win32_Security",
+    # MonitorFromWindow + GetMonitorInfoW: the monitor whose HDR state decides
+    # the capture's frame format (see src/hdr.rs).
+    "Win32_Graphics_Gdi",
     # Long-exposure DirectCompute backend (see src/longexp/). D3D11 + the runtime
     # HLSL compiler (d3dcompiler_47.dll, a Windows system component since 8.1) are
     # all this feature needs — no CUDA toolkit, no per-architecture build, nothing

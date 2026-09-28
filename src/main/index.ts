@@ -2922,6 +2922,8 @@ async function captureAndSaveViaWgc(
 			file: savedPath,
 			frame: { width: frame.width, height: frame.height },
 			cropped: cropInBounds,
+			hdrCorrected: frame.hdrCorrected ?? false,
+			sdrWhiteNits: frame.sdrWhiteNits ?? null,
 		});
 
 		// Gallery thumbnail from the same in-memory frame (transparent letterbox,

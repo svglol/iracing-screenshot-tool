@@ -36,6 +36,10 @@ export interface WgcCaptureResult {
 	data: Buffer;
 	width: number;
 	height: number;
+	// Additive fields from the HDR-aware addon. Optional so an older packaged
+	// prebuild still loads and degrades exactly as it did before this change.
+	hdrCorrected?: boolean;
+	sdrWhiteNits?: number;
 }
 
 // One entry of the native per-sample diagnostic log (long exposure). See
