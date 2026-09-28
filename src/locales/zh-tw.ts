@@ -397,8 +397,6 @@ const zhTW: Catalog = {
 
 	graphicsProfiles: {
 		title: '顯示設定檔',
-		description:
-			'儲存多組 iRacing 顯示設定並在它們之間切換——比賽用一組、截圖用一組、錄影用一組。iRacing 會在啟動時載入設定，關閉時再寫回，因此在執行中切換會被還原：<b>請在模擬器關閉時才切換設定</b>。',
 		iracingRunning:
 			'請先關閉 iRacing 再切換。它結束時會把自己的顯示設定重新寫回檔案，那會把這次變更蓋掉。',
 		activeHeading: '目前的設定',

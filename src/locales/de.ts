@@ -400,8 +400,6 @@ const de: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Grafikprofile',
-		description:
-			'Speichere iRacing-Grafikkonfigurationen und wechsle zwischen ihnen — eine fürs Fahren, eine für Screenshots, eine für Videoaufnahmen. iRacing lädt die Konfiguration beim Start und schreibt sie beim Beenden zurück; ein Wechsel bei laufender Sim wird also rückgängig gemacht: <b>Konfigurationen nur bei geschlossener Sim wechseln</b>.',
 		iracingRunning:
 			'Schließe iRacing vor dem Wechsel. Beim Beenden schreibt es seine Grafikkonfiguration zurück und würde die Änderung rückgängig machen.',
 		activeHeading: 'Aktuelle Konfiguration',

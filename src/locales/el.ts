@@ -423,10 +423,6 @@ const el: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Προφίλ γραφικών',
-		// Carries inline <b> emphasis — rendered with v-html, so keep it to markup
-		// the modal expects (see GraphicsProfilesModal.vue).
-		description:
-			'Αποθηκεύστε ρυθμίσεις γραφικών του iRacing και εναλλάσσεστε ανάμεσά τους — μία για αγώνες, μία για στιγμιότυπα, μία για εγγραφή βίντεο. Το iRacing φορτώνει τη ρύθμιση κατά την εκκίνηση και την ξαναγράφει όταν κλείνει, οπότε μια εναλλαγή που γίνεται όσο εκτελείται αναιρείται: <b>να εναλλάσσετε ρυθμίσεις μόνο όταν το σύστημα προσομοίωσης είναι κλειστό</b>.',
 		// The most important sentence here. iRacing keeps its graphics settings in
 		// memory and writes them back over the file when it exits, so a swap made
 		// while it is running is undone with no sign anything failed.

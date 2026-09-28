@@ -421,8 +421,6 @@ const ar: Catalog = {
 
 	graphicsProfiles: {
 		title: 'ملفات تعريف الرسومات',
-		description:
-			'احفظ إعدادات رسومات iRacing وبدّل بينها — إعداد للسباق، وآخر للقطات الشاشة، وآخر لتسجيل الفيديو. يحمّل iRacing الإعدادات عند تشغيله ويكتبها من جديد عند إغلاقه، لذا فأي تبديل يجري أثناء تشغيله يُلغى: <b>بدّل الإعدادات والمحاكي مغلق فقط</b>.',
 		// The most important sentence here: iRacing writes its graphics settings back
 		// over the file when it exits, so a swap made while it is running is undone
 		// with no sign anything failed.

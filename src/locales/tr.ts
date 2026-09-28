@@ -407,8 +407,6 @@ const tr: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Grafik Profilleri',
-		description:
-			'iRacing grafik yapılandırmalarını saklayın ve aralarında geçiş yapın — biri yarış için, biri ekran görüntüleri için, biri video kaydı için. iRacing, yapılandırmayı başlangıçta yükler ve çıkışta geri yazar, bu yüzden çalışırken yapılan bir geçiş geri alınır: <b>yapılandırmaları yalnızca simülatör kapalıyken değiştirin</b>.',
 		iracingRunning:
 			"Geçiş yapmadan önce iRacing'i kapatın. Çıkışta grafik yapılandırmasını yeniden yazar, bu da değişikliği geri alır.",
 		activeHeading: 'Geçerli yapılandırma',

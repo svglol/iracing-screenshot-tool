@@ -398,8 +398,6 @@ const fi: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Grafiikkaprofiilit',
-		description:
-			'Tallenna iRacingin grafiikka-asetuksia ja vaihda niiden välillä — yksi ajamiseen, yksi kuvakaappauksiin, yksi videon tallennukseen. iRacing lukee kokoonpanon käynnistyessään ja kirjoittaa sen takaisin sulkeutuessaan, joten simulaattorin ollessa käynnissä tehty vaihto kumoutuu: <b>vaihda kokoonpanoa vain, kun simulaattori on suljettu</b>.',
 		iracingRunning:
 			'Sulje iRacing ennen vaihtoa. Se kirjoittaa grafiikka-asetuksensa takaisin sulkeutuessaan, mikä kumoaisi muutoksen.',
 		activeHeading: 'Nykyinen kokoonpano',
