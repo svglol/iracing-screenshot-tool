@@ -229,11 +229,17 @@ export function classifyWgcResult(
 // ReShade is exempt: it captures inside iRacing and never asks Windows. The
 // getUserMedia backend is NOT exempt — Chromium's window capture is WGC-based and
 // is refused alongside ours. An unknowable probe (null) fails open.
+// Only E_ACCESSDENIED is a refusal. Any other HRESULT says the taskbar itself
+// can't be captured, not that we can't: field case 2026-09-28, Windows 11 23H2
+// (22631), un-elevated — the taskbar probe returned 0x80070057 "Could not capture
+// the given window." and v3.4.0 blocked every still, where v3.3.0 captured.
 export type CaptureBlock = 'elevated' | 'denied';
+
+export const CAPTURE_ACCESS_DENIED = '0x80070005';
 
 export interface CaptureBlockInputs {
 	reshade: boolean;
-	permission: { allowed: boolean } | null;
+	permission: { allowed: boolean; hresult: string | null } | null;
 	elevated: boolean | null;
 }
 
@@ -242,7 +248,12 @@ export function decideCaptureBlock({
 	permission,
 	elevated,
 }: CaptureBlockInputs): CaptureBlock | null {
-	if (reshade || !permission || permission.allowed) {
+	if (
+		reshade ||
+		!permission ||
+		permission.allowed ||
+		permission.hresult !== CAPTURE_ACCESS_DENIED
+	) {
 		return null;
 	}
 	return elevated === true ? 'elevated' : 'denied';
