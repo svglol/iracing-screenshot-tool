@@ -11,6 +11,9 @@ napi = { version = "2", default-features = false, features = ["napi8"] }
 napi-derive = "2"
 windows-capture = "2.0.0"
 half = "2"
+# Parallel RGBA16F -> RGBA8 conversion (hdr.rs). Already a transitive
+# dependency via windows-capture, so this adds nothing to the build.
+rayon = "1"
 windows = { version = "0.62.2", features = [
     "Win32_Devices_Display",
     "Win32_UI_HiDpi",

@@ -8,6 +8,7 @@
 //! original SDR pixels that iRacing presented.
 
 use half::f16;
+use rayon::prelude::*;
 use windows::Win32::Devices::Display::{
     DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig,
     DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
@@ -158,10 +159,16 @@ pub(crate) fn profile_for_window(hwnd: HWND) -> HdrCaptureProfile {
             return HdrCaptureProfile::sdr();
         }
 
-        // Bit 1 is advancedColorEnabled. Reading the union's aggregate value is
-        // more stable than depending on generated bitfield accessor names.
-        let advanced_color_enabled = unsafe { advanced.Anonymous.value & 0b10 != 0 };
-        if !advanced_color_enabled {
+        // Bit 1 is advancedColorEnabled, bit 2 wideColorEnforced. Reading the
+        // union's aggregate value is more stable than depending on generated
+        // bitfield accessor names. Windows 11 Auto Color Management sets both
+        // bits on an SDR display (WCG mode): that desktop is not HDR, WGC's RGBA8
+        // path is not clipped there, and there is no HDR SDR-white slider for
+        // the inverse transform to reverse, so keep the unchanged RGBA8 path.
+        let bits = unsafe { advanced.Anonymous.value };
+        let advanced_color_enabled = bits & 0b010 != 0;
+        let wide_color_enforced = bits & 0b100 != 0;
+        if !advanced_color_enabled || wide_color_enforced {
             return HdrCaptureProfile::sdr();
         }
 
@@ -203,6 +210,10 @@ fn linear_to_srgb(value: f32) -> f32 {
     }
 }
 
+/// Pixels per parallel work item: large enough to amortize rayon's scheduling,
+/// small enough to balance across cores on a 1080p frame.
+const PIXELS_PER_TASK: usize = 64 * 1024;
+
 fn rgb_lut(sdr_white_scale: f32) -> Vec<u8> {
     (0u32..=u16::MAX as u32)
         .map(|bits| {
@@ -238,17 +249,26 @@ pub(crate) fn scrgb_to_srgba8(input: &[u8], sdr_white_scale: f32) -> Result<Vec<
     // Half floats have only 65,536 possible bit patterns. A per-capture LUT
     // avoids four expensive float conversions/powf calls per pixel at 8K; the
     // hot loop becomes a sequential read plus four tiny cached lookups.
+    //
+    // The conversion runs inside the WGC frame handler, i.e. inside the JS
+    // caller's capture timeout. A 16K frame is ~140M pixels, so split it across
+    // cores (rayon is already pulled in by windows-capture's row copy) and write
+    // into a pre-sized output instead of growing a Vec pixel by pixel.
     let rgb = rgb_lut(sdr_white_scale);
     let alpha = alpha_lut();
-    let mut output = Vec::with_capacity(input.len() / 2);
+    let mut output = vec![0u8; input.len() / 2];
 
-    for pixel in input.chunks_exact(8) {
-        let r = u16::from_le_bytes([pixel[0], pixel[1]]) as usize;
-        let g = u16::from_le_bytes([pixel[2], pixel[3]]) as usize;
-        let b = u16::from_le_bytes([pixel[4], pixel[5]]) as usize;
-        let a = u16::from_le_bytes([pixel[6], pixel[7]]) as usize;
-        output.extend_from_slice(&[rgb[r], rgb[g], rgb[b], alpha[a]]);
-    }
+    output
+        .par_chunks_mut(4 * PIXELS_PER_TASK)
+        .zip(input.par_chunks(8 * PIXELS_PER_TASK))
+        .for_each(|(out, inp)| {
+            for (dst, pixel) in out.chunks_exact_mut(4).zip(inp.chunks_exact(8)) {
+                dst[0] = rgb[u16::from_le_bytes([pixel[0], pixel[1]]) as usize];
+                dst[1] = rgb[u16::from_le_bytes([pixel[2], pixel[3]]) as usize];
+                dst[2] = rgb[u16::from_le_bytes([pixel[4], pixel[5]]) as usize];
+                dst[3] = alpha[u16::from_le_bytes([pixel[6], pixel[7]]) as usize];
+            }
+        });
 
     Ok(output)
 }
@@ -279,6 +299,24 @@ mod tests {
     fn clamps_extended_and_negative_scrgb_values() {
         let output = scrgb_to_srgba8(&rgba16f([12.5, -0.5, f32::NAN, 2.0]), 3.0).unwrap();
         assert_eq!(output, [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn converts_frames_spanning_multiple_tasks() {
+        // More than one parallel chunk plus a ragged tail, so chunk boundaries
+        // must line up between the 8-byte input and 4-byte output.
+        let pixels = PIXELS_PER_TASK * 2 + 3;
+        let mut input = Vec::with_capacity(pixels * 8);
+        for i in 0..pixels {
+            let v = if i % 2 == 0 { 3.0 } else { 0.0 };
+            input.extend(rgba16f([v, 0.0, v, 1.0]));
+        }
+        let output = scrgb_to_srgba8(&input, 3.0).unwrap();
+        assert_eq!(output.len(), pixels * 4);
+        for (i, px) in output.chunks_exact(4).enumerate() {
+            let v = if i % 2 == 0 { 255 } else { 0 };
+            assert_eq!(px, [v, 0, v, 255], "pixel {i}");
+        }
     }
 
     #[test]

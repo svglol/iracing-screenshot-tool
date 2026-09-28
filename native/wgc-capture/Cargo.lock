@@ -352,6 +352,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "rayon",
  "windows",
  "windows-capture",
 ]
