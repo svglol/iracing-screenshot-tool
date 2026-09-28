@@ -418,10 +418,6 @@ export default {
 
 	graphicsProfiles: {
 		title: 'Graphics Profiles',
-		// Carries inline <b> emphasis — rendered with v-html, so keep it to markup
-		// the modal expects (see GraphicsProfilesModal.vue).
-		description:
-			'Store iRacing graphics configurations and switch between them — one for racing, one for screenshots, one for recording video. iRacing loads the configuration when it starts and writes it back when it exits, so a switch made while it is running is undone: <b>only switch configurations while the sim is closed</b>.',
 		// The most important sentence here. iRacing keeps its graphics settings in
 		// memory and writes them back over the file when it exits, so a swap made
 		// while it is running is undone with no sign anything failed.
@@ -526,6 +522,20 @@ export default {
 			'iRacing is in exclusive fullscreen, so the screenshot would be black. In iRacing, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.',
 		exclusiveFullscreenUnattributed:
 			'An application is running in exclusive fullscreen, which produces a black capture. If iRacing is in Full Screen, set Display > Full Screen to OFF (use Borderless or Windowed) and try again.',
+		blockedElevated:
+			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator. Close the tool, right-click iRacing Screenshot Tool.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), then start the tool normally.',
+		blockedDenied:
+			'Windows is refusing screen capture for this app ({hresult}). A privacy setting, a company policy or security software on this PC may be blocking it. Reshade Compatibility Mode is not affected.',
+		reshadeIniMissing:
+			'ReShade config not found at {path}. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
+		reshadeIniUnreadable:
+			'ReShade config at {path} could not be read. Check that you have permission to read it, or select a different ReShade.ini in Settings.',
+		reshadeIniPreset:
+			'{path} is a ReShade preset, not ReShade’s own config. Presets hold effect settings and no screenshot folder. In Settings, select ReShade.ini instead — it is in the same folder — or turn off Reshade Compatibility Mode.',
+		reshadeIniNoSavePath:
+			'ReShade has no screenshot folder set in {path}. Open the ReShade overlay in iRacing, go to its Settings tab and set a screenshot path, then try again.',
+		reshadeIniNotConfig:
+			'{path} is not a ReShade config file. In Settings, select your ReShade.ini — it sits next to iRacingSim64DX11.exe in the folder ReShade was installed into — or turn off Reshade Compatibility Mode.',
 		unknownError: 'Unknown screenshot error',
 		outputTooSmall: 'Capture output is too small ({width}x{height})',
 		blackFrame:
@@ -618,240 +628,8 @@ export default {
 		minutesSeconds: '{minutes} min {seconds} s',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'iRacing Configuration Editor',
-		nav: {
-			home: 'Screenshots',
-			config: 'iRacing configuration',
-		},
-		tabs: {
-			monitor: 'Monitor / Display',
-			graphics: 'Graphics',
-		},
-		mode: {
-			label: 'Currently editing configuration:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Legacy',
-		},
-		actions: {
-			save: 'Save changes',
-			discard: 'Discard',
-			reload: 'Reload',
-			browse: 'Browse…',
-		},
-		state: {
-			dirty: {
-				one: '{count} unsaved change',
-				other: '{count} unsaved changes',
-			},
-			saved: 'Changes saved to {file}',
-			simRunning:
-				'iRacing is running. It keeps these settings in memory and rewrites the file when it exits, so edits made now would be lost. Close iRacing to edit.',
-			stale: 'This file changed on disk since it was loaded — usually iRacing rewriting it on exit. Reload to see the current values.',
-			keyMissing: 'Not present in this file',
-			noModes:
-				'No renderer configuration files were found in {folder}. Launch iRacing once to create them, or point the tool at your iRacing folder.',
-			loadFailed: 'The configuration file could not be read.',
-			discardConfirm: 'Discard {count} unsaved changes?',
-		},
-		folder: {
-			label: 'iRacing folder',
-			autoDetected: 'Auto-detected',
-			reset: 'Use auto-detection',
-			help: 'Where iRacing keeps its configuration files. Leave empty to detect the Documents\\iRacing folder automatically.',
-		},
-		errors: {
-			iracingRunning:
-				'Close iRacing first — it would overwrite the change when it exits.',
-			staleFile:
-				'The file changed on disk since it was loaded. Reload and try again.',
-			validationFailed:
-				'One of the values is not valid. Nothing was changed.',
-			keyNotFound:
-				'A setting was missing from the file, so nothing was changed. Reload and try again.',
-			fileNotFound: 'The configuration file no longer exists.',
-			ioError: 'The file could not be written. Nothing was changed.',
-		},
-		groups: {
-			window: 'Window placement',
-			fullscreen: 'Full screen',
-			quality: 'Quality & detail',
-			aa: 'Anti-aliasing & sharpening',
-			post: 'Post-processing',
-			perf: 'Performance',
-			misc: 'Miscellaneous',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Off',
-			low: 'Low',
-			medium: 'Medium',
-			high: 'High',
-			max: 'Max',
-			ultra: 'Ultra',
-		},
-		nvReflex: {
-			off: 'Off',
-			on: 'On',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Fewer shadows',
-			maximum: 'Maximum shadows',
-		},
-		aaMethod: {
-			none: 'None',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Soft',
-			neutral: 'Neutral',
-			sharp: 'Sharp',
-			simple: 'Simple',
-		},
-		dnsmFilter: {
-			off: 'Off',
-			simple: 'Simple',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Off',
-			mainView: 'In Main View',
-			mainViewMirrors: 'In Main View & Mirrors',
-		},
-		hideObstructions: {
-			none: 'None',
-			halo: 'Hide the halo',
-			pillarRollcage: 'Hide A-pillars and rollcage',
-			everything: 'Hide everything',
-		},
-		replayScope: {
-			label: 'Also apply to replay graphics',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Enter a whole number between {min} and {max}.',
-			int: 'Enter a whole number.',
-			floatRange: 'Enter a number between {min} and {max}.',
-			float: 'Enter a number.',
-		},
-		layout: {
-			title: 'Monitor layout',
-			primary: 'Primary',
-			windowTarget: 'iRacing window',
-			estimated:
-				'Estimated — Windows and iRacing number displays differently, so the highlight is matched by position.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Window border' },
-				windowedXPos: { label: 'Window left' },
-				windowedYPos: { label: 'Window top' },
-				windowedWidth: { label: 'Window width' },
-				windowedHeight: { label: 'Window height' },
-				windowedMaximized: { label: 'Start maximized' },
-				windowedAlignment: {
-					label: 'Window alignment',
-					help: 'iRacing does not document this value. Leave unchanged unless you know the alignment index you want.',
-				},
-				fullScreen: { label: 'Full screen' },
-				fullScreenWidth: { label: 'Full-screen width' },
-				fullScreenHeight: { label: 'Full-screen height' },
-				fullScreenDepth: {
-					label: 'Full-screen color depth',
-					help: 'Bits per pixel. 32 on effectively every modern system.',
-				},
-				RefreshRate: {
-					label: 'Refresh rate',
-					help: '0 uses the display’s default refresh rate.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Shader quality' },
-				ShadowDetail: { label: 'Shadow detail' },
-				DynamicShadowMaps: {
-					label: 'Dynamic shadow maps',
-					help: 'Shadow maps for cars and other moving objects. Day only.',
-				},
-				DNSMFilter: {
-					label: 'Shadowmap filter',
-					help: 'The filter used for the dynamic night shadow maps.',
-				},
-				CarDetail: { label: 'Car detail' },
-				PitObjectDetail: { label: 'Pit object detail' },
-				CrowdDetail: { label: 'Crowd detail' },
-				GrandstandDetail: { label: 'Grandstand detail' },
-				ObjectDetail: { label: 'Object detail' },
-				FoliageDetail: { label: 'Foliage detail' },
-				ParticleDetail: { label: 'Particle detail' },
-				ParticlesFullRes: { label: 'Full-resolution particles' },
-				MirrorDetail: { label: 'Higher detail in mirrors' },
-				MaxCockpitMirrors: { label: 'Max cockpit mirrors' },
-				AntiAliasMethod: { label: 'Anti-aliasing method' },
-				MSAASamples: { label: 'MSAA samples' },
-				MSAAUseFilter: { label: 'MSAA filter' },
-				Sharpening: { label: 'Sharpening' },
-				SharpeningAmount: {
-					label: 'Sharpening amount',
-					help: 'Strength of the sharpening filter.',
-				},
-				FSRSharpness: {
-					label: 'FSR sharpness',
-					help: 'Sharpness used when resolution scaling upscales with FSR.',
-				},
-				AutoExposure: {
-					label: 'Auto exposure',
-					help: 'Only functions while HDR rendering is enabled.',
-				},
-				SSAO: { label: 'Ambient occlusion (SSAO)' },
-				SSRLevel: {
-					label: 'Screen-space reflections',
-					help: 'Low renders the reflections at a lower resolution, High at full resolution.',
-				},
-				SSRRainOnly: {
-					label: 'Reflections only during rain',
-					help: 'Limits screen-space reflections to wet track conditions — the Low Rain and High Rain options in the sim.',
-				},
-				HeatHaze: { label: 'Heat haze' },
-				DepthOfField: { label: 'Depth of field' },
-				MotionBlurStrength: { label: 'Motion blur strength' },
-				Distortion: { label: 'Lens distortion' },
-				EnableHDR: { label: 'HDR rendering' },
-				LimitFrameRate: { label: 'Limit frame rate' },
-				DesiredFPSLimit: { label: 'Frame rate limit' },
-				VerticalSync: { label: 'Vertical sync' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Max pre-rendered frames',
-					help: 'How many frames the GPU may trail behind the CPU. 1 is normal; 0 disables the queue for multi-GPU setups.',
-				},
-				SysMemToUseMB: { label: 'System memory to use' },
-				VidMemToUseMB: { label: 'Video memory to use' },
-				MaxCarsToDraw: { label: 'Max cars to draw' },
-				MaxCarsToDrawInMirrors: { label: 'Max cars in mirrors' },
-				VirtualMirrors: { label: 'Virtual mirrors' },
-				UIScale: { label: 'UI scale' },
-				EnableTireMarks: { label: 'Tire marks' },
-				HideCockpitObstructions: { label: 'Hide cockpit obstructions' },
-				HeadlightLevel: { label: 'Headlight quality' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Screenshots',
 	},
 };

@@ -400,8 +400,6 @@ const no: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Grafikkprofiler',
-		description:
-			'Lagre iRacing-grafikkonfigurasjoner og bytt mellom dem — én for kjøring, én for skjermbilder, én for videoopptak. iRacing leser konfigurasjonen ved oppstart og skriver den tilbake når den avsluttes, så et bytte gjort mens simulatoren kjører blir omgjort: <b>bytt konfigurasjon bare når simulatoren er lukket</b>.',
 		iracingRunning:
 			'Lukk iRacing før du bytter. Det skriver grafikkonfigurasjonen sin tilbake når det avsluttes, noe som ville omgjort endringen.',
 		activeHeading: 'Gjeldende konfigurasjon',
@@ -494,6 +492,20 @@ const no: Catalog = {
 			'iRacing kjører i eksklusiv fullskjerm, så skjermbildet ville blitt svart. Sett Display > Full Screen til OFF i iRacing (bruk Borderless eller Windowed), og prøv igjen.',
 		exclusiveFullscreenUnattributed:
 			'Et program kjører i eksklusiv fullskjerm, noe som gir et svart opptak. Hvis iRacing kjører i fullskjerm, sett Display > Full Screen til OFF (bruk Borderless eller Windowed), og prøv igjen.',
+		blockedElevated:
+			'Windows blokkerer skjermopptak så lenge iRacing Screenshot Tool kjører som administrator. Lukk verktøyet, høyreklikk på iRacing Screenshot Tool.exe > Egenskaper > Kompatibilitet, fjern haken ved «Kjør dette programmet som administrator» (kryss også av for «Endre innstillinger for alle brukere»), og start deretter verktøyet normalt igjen.',
+		blockedDenied:
+			'Windows nekter denne appen skjermopptak ({hresult}). En personverninnstilling, en bedriftspolicy eller sikkerhetsprogramvare på denne PC-en kan blokkere det. ReShade-kompatibilitetsmodus påvirkes ikke.',
+		reshadeIniMissing:
+			'Fant ikke ReShade-konfigurasjon på {path}. Velg din ReShade.ini i Innstillinger — den ligger rett ved siden av iRacingSim64DX11.exe, i mappen ReShade ble installert i — eller slå av ReShade-kompatibilitetsmodus.',
+		reshadeIniUnreadable:
+			'Klarte ikke å lese ReShade-konfigurasjonen på {path}. Sjekk at du har leserettigheter til den, eller velg en annen ReShade.ini i Innstillinger.',
+		reshadeIniPreset:
+			'{path} er en ReShade-forhåndsinnstilling (preset), ikke ReShades egen konfigurasjon. Forhåndsinnstillinger inneholder effektinnstillinger og ingen skjermbildemappe. Velg heller ReShade.ini i Innstillinger — den ligger i samme mappe — eller slå av ReShade-kompatibilitetsmodus.',
+		reshadeIniNoSavePath:
+			'ReShade har ingen skjermbildemappe angitt i {path}. Åpne ReShade-overlayet i iRacing, gå til fanen Innstillinger der og angi en skjermbildesti, og prøv deretter igjen.',
+		reshadeIniNotConfig:
+			'{path} er ikke en ReShade-konfigurasjonsfil. Velg din ReShade.ini i Innstillinger — den ligger rett ved siden av iRacingSim64DX11.exe, i mappen ReShade ble installert i — eller slå av ReShade-kompatibilitetsmodus.',
 		unknownError: 'Ukjent skjermbildefeil',
 		outputTooSmall: 'Opptaket er for lite ({width}x{height})',
 		blackFrame:
@@ -582,241 +594,9 @@ const no: Catalog = {
 		minutesSeconds: '{minutes} min {seconds} s',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'Redigering av iRacing-konfigurasjon',
-		nav: {
-			home: 'Skjermbilder',
-			config: 'iRacing-konfigurasjon',
-		},
-		tabs: {
-			monitor: 'Monitor / skjerm',
-			graphics: 'Grafikk',
-		},
-		mode: {
-			label: 'Redigerer nå konfigurasjonen:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Eldre',
-		},
-		actions: {
-			save: 'Lagre endringer',
-			discard: 'Forkast',
-			reload: 'Last inn på nytt',
-			browse: 'Bla gjennom…',
-		},
-		state: {
-			dirty: {
-				one: '{count} ulagret endring',
-				other: '{count} ulagrede endringer',
-			},
-			saved: 'Endringene ble lagret i {file}',
-			simRunning:
-				'iRacing kjører. Det holder disse innstillingene i minnet og skriver filen på nytt når det avsluttes, så endringer du gjør nå ville gått tapt. Lukk iRacing for å redigere.',
-			stale: 'Denne filen er endret på disken siden den ble lastet inn — som regel fordi iRacing skrev den på nytt ved avslutning. Last inn på nytt for å se de gjeldende verdiene.',
-			keyMissing: 'Finnes ikke i denne filen',
-			noModes:
-				'Fant ingen konfigurasjonsfiler for gjengiveren i {folder}. Start iRacing én gang for å opprette dem, eller pek verktøyet mot iRacing-mappen din.',
-			loadFailed: 'Konfigurasjonsfilen kunne ikke leses.',
-			discardConfirm: 'Forkaste {count} ulagrede endringer?',
-		},
-		folder: {
-			label: 'iRacing-mappe',
-			autoDetected: 'Funnet automatisk',
-			reset: 'Finn mappen automatisk',
-			help: 'Her holder iRacing konfigurasjonsfilene sine. La feltet stå tomt for å finne mappen Documents\\iRacing automatisk.',
-		},
-		errors: {
-			iracingRunning:
-				'Lukk iRacing først — det ville overskrevet endringen når det avsluttes.',
-			staleFile:
-				'Filen er endret på disken siden den ble lastet inn. Last inn på nytt og prøv igjen.',
-			validationFailed:
-				'En av verdiene er ikke gyldig. Ingenting ble endret.',
-			keyNotFound:
-				'En innstilling manglet i filen, så ingenting ble endret. Last inn på nytt og prøv igjen.',
-			fileNotFound: 'Konfigurasjonsfilen finnes ikke lenger.',
-			ioError: 'Filen kunne ikke skrives. Ingenting ble endret.',
-		},
-		groups: {
-			window: 'Vindusplassering',
-			fullscreen: 'Fullskjerm',
-			quality: 'Kvalitet og detaljer',
-			aa: 'Kantutjevning og skarphet',
-			post: 'Etterbehandling',
-			perf: 'Ytelse',
-			misc: 'Diverse',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Av',
-			low: 'Lav',
-			medium: 'Middels',
-			high: 'Høy',
-			max: 'Maks',
-			ultra: 'Ultra',
-		},
-		nvReflex: {
-			off: 'Av',
-			on: 'På',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Færre skygger',
-			maximum: 'Maksimalt med skygger',
-		},
-		aaMethod: {
-			none: 'Ingen',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Myk',
-			neutral: 'Nøytral',
-			sharp: 'Skarp',
-			simple: 'Enkel',
-		},
-		dnsmFilter: {
-			off: 'Av',
-			simple: 'Enkel',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Av',
-			mainView: 'I hovedvisningen',
-			mainViewMirrors: 'I hovedvisningen og speilene',
-		},
-		hideObstructions: {
-			none: 'Ingen',
-			halo: 'Skjul haloen',
-			pillarRollcage: 'Skjul A-stolper og rullebur',
-			everything: 'Skjul alt',
-		},
-		replayScope: {
-			label: 'Bruk også på reprisegrafikken',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Skriv inn et heltall mellom {min} og {max}.',
-			int: 'Skriv inn et heltall.',
-			floatRange: 'Skriv inn et tall mellom {min} og {max}.',
-			float: 'Skriv inn et tall.',
-		},
-		layout: {
-			title: 'Skjermoppsett',
-			primary: 'Primær',
-			windowTarget: 'iRacing-vinduet',
-			estimated:
-				'Anslått — Windows og iRacing nummererer skjermer forskjellig, så markeringen er funnet ut fra posisjon.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Vinduskant' },
-				windowedXPos: { label: 'Vindu venstre' },
-				windowedYPos: { label: 'Vindu øverst' },
-				windowedWidth: { label: 'Vindusbredde' },
-				windowedHeight: { label: 'Vindushøyde' },
-				windowedMaximized: { label: 'Start maksimert' },
-				windowedAlignment: {
-					label: 'Vindusjustering',
-					help: 'iRacing dokumenterer ikke denne verdien. La den stå urørt med mindre du vet hvilken justeringsindeks du vil ha.',
-				},
-				fullScreen: { label: 'Fullskjerm' },
-				fullScreenWidth: { label: 'Fullskjermbredde' },
-				fullScreenHeight: { label: 'Fullskjermhøyde' },
-				fullScreenDepth: {
-					label: 'Fargedybde i fullskjerm',
-					help: 'Biter per piksel. 32 på så godt som alle moderne systemer.',
-				},
-				RefreshRate: {
-					label: 'Oppdateringsfrekvens',
-					help: '0 bruker skjermens standard oppdateringsfrekvens.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Shaderkvalitet' },
-				ShadowDetail: { label: 'Skyggedetaljer' },
-				DynamicShadowMaps: {
-					label: 'Dynamiske skyggekart',
-					help: 'Skyggekart for biler og andre objekter i bevegelse. Bare på dagtid.',
-				},
-				DNSMFilter: {
-					label: 'Skyggekartfilter',
-					help: 'Filteret som brukes på de dynamiske nattskyggekartene.',
-				},
-				CarDetail: { label: 'Detaljer på biler' },
-				PitObjectDetail: { label: 'Detaljer på depotobjekter' },
-				CrowdDetail: { label: 'Detaljer på publikum' },
-				GrandstandDetail: { label: 'Detaljer på tribuner' },
-				ObjectDetail: { label: 'Detaljer på objekter' },
-				FoliageDetail: { label: 'Detaljer på vegetasjon' },
-				ParticleDetail: { label: 'Detaljer på partikler' },
-				ParticlesFullRes: { label: 'Partikler i full oppløsning' },
-				MirrorDetail: { label: 'Høyere detaljnivå i speilene' },
-				MaxCockpitMirrors: { label: 'Maks antall cockpitspeil' },
-				AntiAliasMethod: { label: 'Kantutjevningsmetode' },
-				MSAASamples: { label: 'MSAA-prøver' },
-				MSAAUseFilter: { label: 'MSAA-filter' },
-				Sharpening: { label: 'Skarphetsfilter' },
-				SharpeningAmount: {
-					label: 'Grad av skarphet',
-					help: 'Styrken på skarphetsfilteret.',
-				},
-				FSRSharpness: {
-					label: 'FSR-skarphet',
-					help: 'Skarpheten som brukes når oppløsningsskalering oppskalerer med FSR.',
-				},
-				AutoExposure: {
-					label: 'Automatisk eksponering',
-					help: 'Fungerer bare når HDR-gjengivelse er slått på.',
-				},
-				SSAO: { label: 'Ambient occlusion (SSAO)' },
-				SSRLevel: {
-					label: 'Skjermromsrefleksjoner',
-					help: 'Lav gjengir refleksjonene i lavere oppløsning, Høy i full oppløsning.',
-				},
-				SSRRainOnly: {
-					label: 'Refleksjoner bare i regn',
-					help: 'Begrenser skjermromsrefleksjoner til våt bane — alternativene Low Rain og High Rain i simulatoren.',
-				},
-				HeatHaze: { label: 'Varmedis' },
-				DepthOfField: { label: 'Dybdeskarphet' },
-				MotionBlurStrength: { label: 'Styrke på bevegelsesuskarphet' },
-				Distortion: { label: 'Linseforvrengning' },
-				EnableHDR: { label: 'HDR-gjengivelse' },
-				LimitFrameRate: { label: 'Begrens bildefrekvens' },
-				DesiredFPSLimit: { label: 'Grense for bildefrekvens' },
-				VerticalSync: { label: 'Vertikal synkronisering' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Maks antall forhåndsgjengitte bilder',
-					help: 'Hvor mange bilder GPU-en kan ligge etter CPU-en. 1 er normalt; 0 slår av køen for oppsett med flere GPU-er.',
-				},
-				SysMemToUseMB: { label: 'Systemminne som skal brukes' },
-				VidMemToUseMB: { label: 'Videominne som skal brukes' },
-				MaxCarsToDraw: { label: 'Maks antall biler som tegnes' },
-				MaxCarsToDrawInMirrors: { label: 'Maks antall biler i speilene' },
-				VirtualMirrors: { label: 'Virtuelle speil' },
-				UIScale: { label: 'UI-skalering' },
-				EnableTireMarks: { label: 'Dekkspor' },
-				HideCockpitObstructions: { label: 'Skjul hindringer i cockpiten' },
-				HeadlightLevel: { label: 'Kvalitet på frontlys' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Skjermbilder',
 	},
 };
 

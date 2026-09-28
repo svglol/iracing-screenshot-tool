@@ -403,8 +403,6 @@ const cs: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Grafické profily',
-		description:
-			'Ukládejte konfigurace grafiky iRacingu a přepínejte mezi nimi — jednu na závodění, jednu na snímky obrazovky, jednu na natáčení videa. iRacing načítá konfiguraci při spuštění a při ukončení ji zapisuje zpět, takže přepnutí provedené za běhu se ztratí: <b>konfigurace přepínejte jen při vypnutém simulátoru</b>.',
 		iracingRunning:
 			'Před přepnutím zavřete iRacing. Při ukončení přepíše svou konfiguraci grafiky, čímž by změnu vrátil zpět.',
 		activeHeading: 'Aktuální konfigurace',
@@ -498,6 +496,20 @@ const cs: Catalog = {
 			'iRacing běží ve výhradním celoobrazovkovém režimu, takže snímek by byl černý. V iRacingu nastavte Display > Full Screen na OFF (použijte Borderless nebo Windowed) a zkuste to znovu.',
 		exclusiveFullscreenUnattributed:
 			'Nějaká aplikace běží ve výhradním celoobrazovkovém režimu, což vede k černému snímku. Pokud je iRacing v celoobrazovkovém režimu, nastavte Display > Full Screen na OFF (použijte Borderless nebo Windowed) a zkuste to znovu.',
+		blockedElevated:
+			'Windows blokuje snímání obrazovky, dokud iRacing Screenshot Tool běží jako správce. Zavřete nástroj, klikněte pravým tlačítkem na iRacing Screenshot Tool.exe > Vlastnosti > Kompatibilita, zrušte zaškrtnutí „Spustit tento program jako správce“ (zaškrtněte i „Změnit nastavení pro všechny uživatele“) a poté nástroj spusťte běžným způsobem.',
+		blockedDenied:
+			'Windows odmítá snímání obrazovky pro tuto aplikaci ({hresult}). Může to blokovat nastavení ochrany osobních údajů, firemní zásady nebo bezpečnostní software v tomto počítači. Režimu kompatibility s ReShade se to netýká.',
+		reshadeIniMissing:
+			'Konfigurace ReShade nebyla nalezena na {path}. V Nastavení vyberte svůj soubor ReShade.ini — nachází se ve složce, do které byl ReShade nainstalován, hned vedle iRacingSim64DX11.exe — nebo vypněte Režim kompatibility s ReShade.',
+		reshadeIniUnreadable:
+			'Konfiguraci ReShade na {path} se nepodařilo přečíst. Zkontrolujte, zda k ní máte oprávnění ke čtení, nebo v Nastavení vyberte jiný soubor ReShade.ini.',
+		reshadeIniPreset:
+			'{path} je předvolba (preset) ReShade, ne jeho vlastní konfigurace. Předvolby obsahují nastavení efektů a neobsahují složku pro snímky obrazovky. V Nastavení místo toho vyberte ReShade.ini — je ve stejné složce — nebo vypněte Režim kompatibility s ReShade.',
+		reshadeIniNoSavePath:
+			'ReShade nemá v {path} nastavenou složku pro snímky obrazovky. Otevřete překryvnou vrstvu ReShade v iRacingu, přejděte na kartu Nastavení a nastavte cestu pro snímky obrazovky, poté zkuste znovu.',
+		reshadeIniNotConfig:
+			'{path} není konfigurační soubor ReShade. V Nastavení vyberte svůj soubor ReShade.ini — nachází se ve složce, do které byl ReShade nainstalován, hned vedle iRacingSim64DX11.exe — nebo vypněte Režim kompatibility s ReShade.',
 		unknownError: 'Neznámá chyba snímku obrazovky',
 		outputTooSmall: 'Snímek je příliš malý ({width}x{height})',
 		blackFrame:
@@ -587,242 +599,9 @@ const cs: Catalog = {
 		minutesSeconds: '{minutes} min {seconds} s',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'Editor konfigurace iRacingu',
-		nav: {
-			home: 'Snímky obrazovky',
-			config: 'Konfigurace iRacingu',
-		},
-		tabs: {
-			monitor: 'Monitor / zobrazení',
-			graphics: 'Grafika',
-		},
-		mode: {
-			label: 'Právě upravovaná konfigurace:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Legacy',
-		},
-		actions: {
-			save: 'Uložit změny',
-			discard: 'Zahodit',
-			reload: 'Načíst znovu',
-			browse: 'Procházet…',
-		},
-		state: {
-			dirty: {
-				one: '{count} neuložená změna',
-				few: '{count} neuložené změny',
-				many: '{count} neuložené změny',
-				other: '{count} neuložených změn',
-			},
-			saved: 'Změny uloženy do souboru {file}',
-			simRunning:
-				'iRacing běží. Tato nastavení si drží v paměti a při ukončení soubor přepíše, takže nynější úpravy by se ztratily. Chcete-li je upravit, zavřete iRacing.',
-			stale: 'Tento soubor se od načtení na disku změnil — obvykle jej při ukončení přepsal iRacing. Načtěte jej znovu, abyste viděli aktuální hodnoty.',
-			keyMissing: 'V tomto souboru není přítomno',
-			noModes:
-				'Ve složce {folder} nebyly nalezeny žádné konfigurační soubory rendereru. Spusťte jednou iRacing, aby je vytvořil, nebo nástroji nastavte svou složku iRacingu.',
-			loadFailed: 'Konfigurační soubor se nepodařilo přečíst.',
-			discardConfirm: 'Zahodit neuložené změny ({count})?',
-		},
-		folder: {
-			label: 'Složka iRacingu',
-			autoDetected: 'Zjištěno automaticky',
-			reset: 'Použít automatické zjištění',
-			help: 'Kde iRacing uchovává své konfigurační soubory. Ponechte prázdné, aby se složka Documents\\iRacing zjistila automaticky.',
-		},
-		errors: {
-			iracingRunning:
-				'Nejprve zavřete iRacing — při ukončení by změnu přepsal.',
-			staleFile:
-				'Soubor se od načtení na disku změnil. Načtěte jej znovu a akci opakujte.',
-			validationFailed: 'Jedna z hodnot není platná. Nic nebylo změněno.',
-			keyNotFound:
-				'Jedno z nastavení v souboru chybělo, proto nebylo nic změněno. Načtěte soubor znovu a akci opakujte.',
-			fileNotFound: 'Konfigurační soubor již neexistuje.',
-			ioError: 'Soubor se nepodařilo zapsat. Nic nebylo změněno.',
-		},
-		groups: {
-			window: 'Umístění okna',
-			fullscreen: 'Celá obrazovka',
-			quality: 'Kvalita a detaily',
-			aa: 'Vyhlazování a doostření',
-			post: 'Postprocesové efekty',
-			perf: 'Výkon',
-			misc: 'Různé',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Vypnuto',
-			low: 'Nízké',
-			medium: 'Střední',
-			high: 'Vysoké',
-			max: 'Maximální',
-			ultra: 'Ultra',
-		},
-		nvReflex: {
-			off: 'Vypnuto',
-			on: 'Zapnuto',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Méně stínů',
-			maximum: 'Maximum stínů',
-		},
-		aaMethod: {
-			none: 'Žádné',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Měkký',
-			neutral: 'Neutrální',
-			sharp: 'Ostrý',
-			simple: 'Jednoduchý',
-		},
-		dnsmFilter: {
-			off: 'Vypnuto',
-			simple: 'Jednoduchý',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Vypnuto',
-			mainView: 'V hlavním pohledu',
-			mainViewMirrors: 'V hlavním pohledu a zrcátkách',
-		},
-		hideObstructions: {
-			none: 'Nic neskrývat',
-			halo: 'Skrýt halo',
-			pillarRollcage: 'Skrýt A-sloupky a ochranný rám',
-			everything: 'Skrýt vše',
-		},
-		replayScope: {
-			label: 'Použít i na grafiku záznamu',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Zadejte celé číslo mezi {min} a {max}.',
-			int: 'Zadejte celé číslo.',
-			floatRange: 'Zadejte číslo mezi {min} a {max}.',
-			float: 'Zadejte číslo.',
-		},
-		layout: {
-			title: 'Rozvržení monitorů',
-			primary: 'Hlavní',
-			windowTarget: 'Okno iRacingu',
-			estimated:
-				'Odhad — Windows a iRacing číslují obrazovky odlišně, proto se zvýraznění přiřazuje podle polohy.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Okraj okna' },
-				windowedXPos: { label: 'Poloha okna zleva' },
-				windowedYPos: { label: 'Poloha okna shora' },
-				windowedWidth: { label: 'Šířka okna' },
-				windowedHeight: { label: 'Výška okna' },
-				windowedMaximized: { label: 'Spustit maximalizované' },
-				windowedAlignment: {
-					label: 'Zarovnání okna',
-					help: 'iRacing tuto hodnotu nedokumentuje. Neměňte ji, pokud neznáte index zarovnání, který chcete.',
-				},
-				fullScreen: { label: 'Celá obrazovka' },
-				fullScreenWidth: { label: 'Šířka na celé obrazovce' },
-				fullScreenHeight: { label: 'Výška na celé obrazovce' },
-				fullScreenDepth: {
-					label: 'Barevná hloubka na celé obrazovce',
-					help: 'Bitů na pixel. Na prakticky každém dnešním systému 32.',
-				},
-				RefreshRate: {
-					label: 'Obnovovací frekvence',
-					help: '0 použije výchozí obnovovací frekvenci displeje.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Kvalita shaderů' },
-				ShadowDetail: { label: 'Detail stínů' },
-				DynamicShadowMaps: {
-					label: 'Dynamické stínové mapy',
-					help: 'Stínové mapy pro vozy a další pohyblivé objekty. Jen ve dne.',
-				},
-				DNSMFilter: {
-					label: 'Filtr stínových map',
-					help: 'Filtr používaný pro dynamické noční stínové mapy.',
-				},
-				CarDetail: { label: 'Detail vozů' },
-				PitObjectDetail: { label: 'Detail objektů v boxech' },
-				CrowdDetail: { label: 'Detail diváků' },
-				GrandstandDetail: { label: 'Detail tribun' },
-				ObjectDetail: { label: 'Detail objektů' },
-				FoliageDetail: { label: 'Detail vegetace' },
-				ParticleDetail: { label: 'Detail částic' },
-				ParticlesFullRes: { label: 'Částice v plném rozlišení' },
-				MirrorDetail: { label: 'Vyšší detail v zrcátkách' },
-				MaxCockpitMirrors: { label: 'Max. zrcátek v kokpitu' },
-				AntiAliasMethod: { label: 'Metoda vyhlazování' },
-				MSAASamples: { label: 'Vzorky MSAA' },
-				MSAAUseFilter: { label: 'Filtr MSAA' },
-				Sharpening: { label: 'Doostření' },
-				SharpeningAmount: {
-					label: 'Míra doostření',
-					help: 'Síla filtru doostření.',
-				},
-				FSRSharpness: {
-					label: 'Ostrost FSR',
-					help: 'Ostrost použitá, když škálování rozlišení zvětšuje obraz pomocí FSR.',
-				},
-				AutoExposure: {
-					label: 'Automatická expozice',
-					help: 'Funguje pouze při zapnutém vykreslování HDR.',
-				},
-				SSAO: { label: 'Ambientní okluze (SSAO)' },
-				SSRLevel: {
-					label: 'Odrazy v prostoru obrazovky',
-					help: 'Nízké vykresluje odrazy v nižším rozlišení, Vysoké v plném rozlišení.',
-				},
-				SSRRainOnly: {
-					label: 'Odrazy jen za deště',
-					help: 'Omezí odrazy v prostoru obrazovky na mokrou trať — možnosti Low Rain a High Rain v simulátoru.',
-				},
-				HeatHaze: { label: 'Vlnění horkého vzduchu' },
-				DepthOfField: { label: 'Hloubka ostrosti' },
-				MotionBlurStrength: { label: 'Síla rozmazání pohybem' },
-				Distortion: { label: 'Zkreslení objektivu' },
-				EnableHDR: { label: 'Vykreslování HDR' },
-				LimitFrameRate: { label: 'Omezit snímkovou frekvenci' },
-				DesiredFPSLimit: { label: 'Limit snímkové frekvence' },
-				VerticalSync: { label: 'Vertikální synchronizace' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Max. předvykreslených snímků',
-					help: 'Kolik snímků smí GPU zaostávat za CPU. 1 je běžná hodnota; 0 vypne frontu pro sestavy s více GPU.',
-				},
-				SysMemToUseMB: { label: 'Využitá systémová paměť' },
-				VidMemToUseMB: { label: 'Využitá videopaměť' },
-				MaxCarsToDraw: { label: 'Max. vykreslených vozů' },
-				MaxCarsToDrawInMirrors: { label: 'Max. vozů v zrcátkách' },
-				VirtualMirrors: { label: 'Virtuální zrcátka' },
-				UIScale: { label: 'Měřítko UI' },
-				EnableTireMarks: { label: 'Stopy pneumatik' },
-				HideCockpitObstructions: { label: 'Skrýt překážky v kokpitu' },
-				HeadlightLevel: { label: 'Kvalita světlometů' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Snímky obrazovky',
 	},
 };
 

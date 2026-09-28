@@ -144,10 +144,7 @@ pub trait AccumulateBackend {
     /// The returned texture is owned by the backend and is stable across frames, so
     /// callers may hold views on it. Implementations must accept being called once per
     /// frame with the same dimensions.
-    fn retain_frame(
-        &mut self,
-        source: &ID3D11Texture2D,
-    ) -> Result<ID3D11Texture2D, BackendError>;
+    fn retain_frame(&mut self, source: &ID3D11Texture2D) -> Result<ID3D11Texture2D, BackendError>;
 
     /// Queue a content digest of a source frame. **Does not block.**
     ///

@@ -15,6 +15,20 @@ name: Release
 # Nothing unsigned can reach a public release: the release is created as a
 # draft before the build starts and is only taken out of draft in the last
 # step, by which point the assets attached to it came out of SignPath.
+#
+# TEMPORARY EXCEPTION — unsigned releases. The SignPath Foundation production
+# certificate was still pending in September 2026, which left no way to ship.
+# Setting the repository variable RELEASE_UNSIGNED to `true` selects the
+# signing policy `none`: the sign job and the Authenticode check are skipped
+# and publish uploads the executables exactly as electron-builder built them,
+# the way every release up to v3.3.0 shipped. Every other guard still runs.
+#
+# To re-enable signing once the certificate is issued:
+#   1. delete the RELEASE_UNSIGNED repository variable;
+#   2. restore build.win.signtoolOptions.publisherName ["SignPath Foundation"]
+#      in package.json (removed while unsigned — see the note in
+#      "Select signing policy" for why it must not ship on an unsigned build).
+# The `none` branches below can stay; they are inert without the variable.
 on:
     push:
         tags:
@@ -68,6 +82,8 @@ jobs:
             # supplied" inside the signing job — after the ~40 minute build.
             # Check it here instead, where failing costs half a minute.
             - name: Verify SignPath configuration
+              # Unsigned releases never talk to SignPath (see the header).
+              if: vars.RELEASE_UNSIGNED != 'true'
               shell: bash
               env:
                   ORG_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -108,11 +124,32 @@ jobs:
             # rehearsal, and the publish step below already refuses to take
             # those out of draft — so they get the test certificate and the
             # rehearsal costs no reviewer's attention.
+            #
+            # `none` is the temporary unsigned mode (RELEASE_UNSIGNED, see the
+            # header). It refuses to run while package.json still names a
+            # publisher: electron-builder copies publisherName into every
+            # install's app-update.yml, and electron-updater then REJECTS any
+            # update not validly signed by that publisher. Shipping it on an
+            # unsigned build would make every later unsigned update download
+            # and then fail for everyone on this version. Without the field an
+            # install accepts both, so a signed release can follow later.
             - name: Select signing policy
               id: policy
               shell: bash
+              env:
+                  RELEASE_UNSIGNED: ${{ vars.RELEASE_UNSIGNED }}
               run: |
                   version="${GITHUB_REF_NAME#v}"
+                  if [ "$RELEASE_UNSIGNED" = "true" ]; then
+                    publisher="$(node -p "JSON.stringify(require('./package.json').build?.win?.signtoolOptions?.publisherName ?? null)")"
+                    if [ "$publisher" != "null" ]; then
+                      echo "::error::RELEASE_UNSIGNED is set but package.json still declares publisherName ${publisher}. An unsigned build carrying it would make every later unsigned update fail to install. Remove it, or unset RELEASE_UNSIGNED to sign."
+                      exit 1
+                    fi
+                    echo "slug=none" >> "$GITHUB_OUTPUT"
+                    echo "::warning::RELEASE_UNSIGNED is set — $GITHUB_REF_NAME will be published WITHOUT a code signature. Delete the variable once the SignPath certificate is issued."
+                    exit 0
+                  fi
                   if [[ "$version" == *-* ]]; then
                     slug=test-signing
                   else
@@ -200,10 +237,12 @@ jobs:
             - name: Install dependencies
               run: npm ci --ignore-scripts
 
-            - name: Download signed executables
+            # In the temporary unsigned mode there is no signed artifact; take
+            # the executables straight from the build job instead.
+            - name: Download executables
               uses: actions/download-artifact@v4
               with:
-                  name: signed-executables
+                  name: ${{ needs.prepare.outputs.signing-policy-slug == 'none' && 'unsigned-executables' || 'signed-executables' }}
                   path: build
 
             - name: Download update manifest
@@ -217,6 +256,8 @@ jobs:
             # is cheap and it catches the failure that would be worst to miss:
             # a real tag that got signed with the untrusted test certificate.
             - name: Verify Authenticode signatures
+              # Skipped only in the temporary unsigned mode (see the header).
+              if: needs.prepare.outputs.signing-policy-slug != 'none'
               shell: pwsh
               env:
                   SIGNING_POLICY: ${{ needs.prepare.outputs.signing-policy-slug }}

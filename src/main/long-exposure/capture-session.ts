@@ -78,6 +78,9 @@ export type LongExposureFailure =
 	| 'backend-unavailable'
 	| 'window-unavailable'
 	| 'exclusive-fullscreen'
+	// Windows refuses screen capture to this process (e.g. it runs as
+	// administrator) — decided before playback, see decideCaptureBlock.
+	| 'capture-blocked'
 	| 'seek-failed'
 	| 'playback-stalled'
 	| 'no-samples'

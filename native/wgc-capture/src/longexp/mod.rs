@@ -474,7 +474,6 @@ impl Accumulator {
         self.last_presented_at = presented_at;
         Ok(())
     }
-
 }
 
 /// Match completed digests to the samples that produced them, in submission order,
@@ -635,7 +634,13 @@ fn run_session(
     let capture_result = Accumulator::start(settings);
 
     if let Err(error) = &capture_result {
-        record_error(&shared, format!("capture failed: {error}"));
+        let mut message = format!("capture failed: {error}");
+        // ItemConvertFailed swallows the HRESULT; re-attempt just the conversion
+        // so the "no frames" report names the actual code (lib.rs helper).
+        if message.contains("GraphicsCaptureItem") {
+            message = format!("{message} [{}]", crate::describe_create_for_window(hwnd));
+        }
+        record_error(&shared, message);
     }
 
     // The capture loop has stopped, so blocking costs nothing: collect the two or
@@ -669,10 +674,9 @@ fn run_session(
                         for id in sink_ids_of(&shared) {
                             match backend.resolve(&id, &params) {
                                 Ok(resolved) => images.push((id, resolved)),
-                                Err(error) => record_error(
-                                    &shared,
-                                    format!("resolve '{id}' failed: {error}"),
-                                ),
+                                Err(error) => {
+                                    record_error(&shared, format!("resolve '{id}' failed: {error}"))
+                                }
                             }
                         }
                     }
@@ -681,9 +685,17 @@ fn run_session(
                 Err(_) => record_error(&shared, "backend mutex poisoned at resolve".to_string()),
             }
         } else {
+            // An anti-capture display affinity on the target produces exactly this
+            // outcome (session runs, zero frames — measured on 26200.9168), so the
+            // report names the affinity when it is the likely cause.
             record_error(
                 &shared,
-                "no frames were accumulated during the exposure".to_string(),
+                format!(
+                    "no frames were accumulated during the exposure{}",
+                    crate::display_affinity_suffix(windows::Win32::Foundation::HWND(
+                        hwnd as *mut std::ffi::c_void
+                    ))
+                ),
             );
         }
     }
@@ -1018,10 +1030,7 @@ pub fn long_exposure_begin(
     Ok(id)
 }
 
-fn with_session<T>(
-    id: u32,
-    f: impl FnOnce(&SessionEntry) -> napi::Result<T>,
-) -> napi::Result<T> {
+fn with_session<T>(id: u32, f: impl FnOnce(&SessionEntry) -> napi::Result<T>) -> napi::Result<T> {
     let registry = sessions()
         .lock()
         .map_err(|_| napi::Error::from_reason("session registry poisoned"))?;
@@ -1100,10 +1109,7 @@ pub fn long_exposure_set_sample(
 #[napi(catch_unwind)]
 pub fn long_exposure_begin_pass(session: u32, pass_index: u32) -> napi::Result<()> {
     with_session(session, |entry| {
-        entry
-            .shared
-            .pass_index
-            .store(pass_index, Ordering::SeqCst);
+        entry.shared.pass_index.store(pass_index, Ordering::SeqCst);
         entry.shared.pass_reset.store(true, Ordering::SeqCst);
         Ok(())
     })

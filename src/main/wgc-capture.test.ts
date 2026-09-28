@@ -20,6 +20,7 @@ import {
 	getWgcApi,
 	captureIracingWindowNative,
 	getLastNativeFailureReason,
+	getCapturePermission,
 	__setWgcApiForTests,
 } from './wgc-capture';
 
@@ -59,6 +60,43 @@ describe('wgc-capture addon (native N-API load smoke)', () => {
 			// IsSupported() must return a plain boolean (true on any Win10 1903+ box,
 			// which every dev/CI Windows runner is). Never throws.
 			expect(typeof addon.isSupported()).toBe('boolean');
+		}
+	);
+
+	test.runIf(process.platform === 'win32')(
+		'captureConsentStatus reports each consent field as string-or-null',
+		() => {
+			const addon = require(addonPath);
+			expect(typeof addon.captureConsentStatus).toBe('function');
+			// Shape only: the VALUES are machine state ('Allow'/'Deny', or absent
+			// where the ConsentStore key is missing — e.g. a pre-24H2 CI runner).
+			// napi-rs omits None fields entirely, so the raw contract is "each field
+			// string or undefined, no throw" (getCaptureConsentStatus normalizes
+			// absent to null for the diagnostics).
+			const consent = addon.captureConsentStatus();
+			for (const field of [
+				'hkcu',
+				'hkcuNonPackaged',
+				'hklm',
+				'hklmNonPackaged',
+			] as const) {
+				const value = consent[field];
+				expect(value === undefined || typeof value === 'string').toBe(true);
+			}
+		}
+	);
+
+	test.runIf(process.platform === 'win32')(
+		'processCaptureContext reports elevated as boolean-or-absent',
+		() => {
+			const addon = require(addonPath);
+			expect(typeof addon.processCaptureContext).toBe('function');
+			// Shape only: whether THIS test process is elevated is machine state.
+			const context = addon.processCaptureContext();
+			expect(
+				context.elevated === undefined ||
+					typeof context.elevated === 'boolean'
+			).toBe(true);
 		}
 	);
 });
@@ -161,5 +199,64 @@ describe('captureIracingWindowNative failure-reason state machine', () => {
 		// The transient grab failure must leave the addon enabled for the next
 		// capture — only a load-time fault (createWgcApi) disables the session.
 		expect(getWgcApi()).toBe(addon);
+	});
+});
+
+// getCapturePermission — the taskbar probe behind the "running as administrator"
+// warning. Driven through the same seam; the real .node is exercised by the
+// load smoke test above.
+describe('getCapturePermission', () => {
+	function addonWith(probe?: () => unknown) {
+		return {
+			isSupported: () => true,
+			captureWindow: (() => {
+				throw new Error('unused');
+			}) as never,
+			...(probe ? { probeCapturePermission: probe as never } : {}),
+		};
+	}
+
+	afterEach(() => {
+		__setWgcApiForTests(undefined);
+	});
+
+	test('formats a refusal HRESULT as unsigned hex', () => {
+		// napi hands the u32 over as a JS number; 0x80070005 must not go negative.
+		__setWgcApiForTests(
+			addonWith(() => ({
+				allowed: false,
+				hresult: 0x80070005,
+				message: 'You do not have permission to capture the given window.',
+			}))
+		);
+		expect(getCapturePermission()).toEqual({
+			allowed: false,
+			hresult: '0x80070005',
+			message: 'You do not have permission to capture the given window.',
+		});
+	});
+
+	test('normalizes an allowed result (napi omits the empty fields)', () => {
+		__setWgcApiForTests(addonWith(() => ({ allowed: true })));
+		expect(getCapturePermission()).toEqual({
+			allowed: true,
+			hresult: null,
+			message: null,
+		});
+	});
+
+	test('fails open to null: no addon, old addon, inconclusive probe, throw', () => {
+		__setWgcApiForTests(null);
+		expect(getCapturePermission()).toBeNull();
+		__setWgcApiForTests(addonWith());
+		expect(getCapturePermission()).toBeNull();
+		__setWgcApiForTests(addonWith(() => null));
+		expect(getCapturePermission()).toBeNull();
+		__setWgcApiForTests(
+			addonWith(() => {
+				throw new Error('boom');
+			})
+		);
+		expect(getCapturePermission()).toBeNull();
 	});
 });

@@ -311,7 +311,10 @@ impl Drop for NvOfLibrary {
 }
 
 /// SAFETY: `GetProcAddress` on a live module handle with a NUL-terminated name.
-unsafe fn proc_address(module: HMODULE, name: &str) -> Option<unsafe extern "system" fn() -> isize> {
+unsafe fn proc_address(
+    module: HMODULE,
+    name: &str,
+) -> Option<unsafe extern "system" fn() -> isize> {
     let c_name = CString::new(name).ok()?;
     GetProcAddress(module, PCSTR(c_name.as_ptr() as *const u8))
 }
@@ -424,13 +427,7 @@ impl NvOpticalFlow {
         let mut handle: NvOFHandle = std::ptr::null_mut();
         // SAFETY: both COM pointers are live for the duration of the call; the driver
         // takes its own references.
-        let status = unsafe {
-            create(
-                device.as_raw(),
-                context.as_raw(),
-                &mut handle,
-            )
-        };
+        let status = unsafe { create(device.as_raw(), context.as_raw(), &mut handle) };
         if status != NV_OF_SUCCESS || handle.is_null() {
             return Err(BackendError(format!(
                 "nvCreateOpticalFlowD3D11 failed with status {status}"
@@ -488,17 +485,16 @@ impl NvOpticalFlow {
         //    of the bandwidth. ABGR8 is kept as a fallback for a driver that somehow
         //    declines grayscale.
         let input_formats = self.surface_formats(NV_OF_BUFFER_USAGE_INPUT)?;
-        let input_format = if input_formats.contains(&nvof_format_to_dxgi(
-            NV_OF_BUFFER_FORMAT_GRAYSCALE8,
-        )) {
-            NV_OF_BUFFER_FORMAT_GRAYSCALE8
-        } else if input_formats.contains(&nvof_format_to_dxgi(NV_OF_BUFFER_FORMAT_ABGR8)) {
-            NV_OF_BUFFER_FORMAT_ABGR8
-        } else {
-            return Err(BackendError(
-                "the optical-flow engine advertises no input format we can produce".into(),
-            ));
-        };
+        let input_format =
+            if input_formats.contains(&nvof_format_to_dxgi(NV_OF_BUFFER_FORMAT_GRAYSCALE8)) {
+                NV_OF_BUFFER_FORMAT_GRAYSCALE8
+            } else if input_formats.contains(&nvof_format_to_dxgi(NV_OF_BUFFER_FORMAT_ABGR8)) {
+                NV_OF_BUFFER_FORMAT_ABGR8
+            } else {
+                return Err(BackendError(
+                    "the optical-flow engine advertises no input format we can produce".into(),
+                ));
+            };
 
         // 3. Output grid size. Bigger grid = fewer, coarser vectors and less work.
         //    Our displacements are ~4 px, so a 4x4 grid with a bilinear upsample of
@@ -809,11 +805,7 @@ pub fn probe(
                     NV_OF_BUFFER_FORMAT_ABGR8 => "abgr8",
                     _ => "unknown",
                 },
-                api_version: format!(
-                    "{}.{}",
-                    config.api_version >> 4,
-                    config.api_version & 0xF
-                ),
+                api_version: format!("{}.{}", config.api_version >> 4, config.api_version & 0xF),
             }
         }
         Err(error) => InterpolationSupport::unavailable(error.0),
@@ -824,7 +816,8 @@ pub fn probe(
 /// formats we can actually produce plus the flow output.
 pub fn nvof_format_to_dxgi(format: u32) -> DXGI_FORMAT {
     use windows::Win32::Graphics::Dxgi::Common::{
-        DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16_SINT, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_UNKNOWN,
+        DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16_SINT, DXGI_FORMAT_R8_UNORM,
+        DXGI_FORMAT_UNKNOWN,
     };
     match format {
         NV_OF_BUFFER_FORMAT_GRAYSCALE8 => DXGI_FORMAT_R8_UNORM,
@@ -875,13 +868,19 @@ mod tests {
             offset(&params.enableExternalHints as *const _ as *const u8),
             24
         );
-        assert_eq!(offset(&params.enableOutputCost as *const _ as *const u8), 28);
+        assert_eq!(
+            offset(&params.enableOutputCost as *const _ as *const u8),
+            28
+        );
         // The pointer forces 8-byte alignment here; everything after it shifts.
         assert_eq!(offset(&params.hPrivData as *const _ as *const u8), 32);
         assert_eq!(offset(&params.disparityRange as *const _ as *const u8), 40);
         assert_eq!(offset(&params.enableRoi as *const _ as *const u8), 44);
         assert_eq!(offset(&params.predDirection as *const _ as *const u8), 48);
-        assert_eq!(offset(&params.enableGlobalFlow as *const _ as *const u8), 52);
+        assert_eq!(
+            offset(&params.enableGlobalFlow as *const _ as *const u8),
+            52
+        );
         assert_eq!(
             offset(&params.inputBufferFormat as *const _ as *const u8),
             56

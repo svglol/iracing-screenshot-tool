@@ -398,8 +398,6 @@ const fi: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Grafiikkaprofiilit',
-		description:
-			'Tallenna iRacingin grafiikka-asetuksia ja vaihda niiden välillä — yksi ajamiseen, yksi kuvakaappauksiin, yksi videon tallennukseen. iRacing lukee kokoonpanon käynnistyessään ja kirjoittaa sen takaisin sulkeutuessaan, joten simulaattorin ollessa käynnissä tehty vaihto kumoutuu: <b>vaihda kokoonpanoa vain, kun simulaattori on suljettu</b>.',
 		iracingRunning:
 			'Sulje iRacing ennen vaihtoa. Se kirjoittaa grafiikka-asetuksensa takaisin sulkeutuessaan, mikä kumoaisi muutoksen.',
 		activeHeading: 'Nykyinen kokoonpano',
@@ -493,6 +491,20 @@ const fi: Catalog = {
 			'iRacing on yksinomaisessa koko näytön tilassa, joten kuvakaappauksesta tulisi musta. Aseta iRacingissa Display > Full Screen tilaan OFF (käytä Borderless- tai Windowed-tilaa) ja yritä uudelleen.',
 		exclusiveFullscreenUnattributed:
 			'Jokin sovellus on yksinomaisessa koko näytön tilassa, mistä seuraa musta kaappaus. Jos iRacing on koko näytön tilassa, aseta Display > Full Screen tilaan OFF (käytä Borderless- tai Windowed-tilaa) ja yritä uudelleen.',
+		blockedElevated:
+			'Windows estää näytön kaappauksen, kun iRacing Screenshot Tool on käynnissä järjestelmänvalvojana. Sulje työkalu, napsauta hiiren kakkospainikkeella tiedostoa iRacing Screenshot Tool.exe > Ominaisuudet > Yhteensopivuus, poista valinta kohdasta ”Suorita tämä ohjelma järjestelmänvalvojana” (valitse myös ”Muuta asetukset kaikille käyttäjille”) ja käynnistä työkalu sitten normaalisti.',
+		blockedDenied:
+			'Windows estää tältä sovellukselta näytön kaappauksen ({hresult}). Tietosuoja-asetus, yrityksen käytäntö tai tämän tietokoneen suojausohjelmisto saattaa estää sen. Tämä ei vaikuta ReShade-yhteensopivuustilaan.',
+		reshadeIniMissing:
+			'ReShade-asetustiedostoa ei löytynyt polusta {path}. Valitse Asetuksista oma ReShade.ini-tiedostosi — se sijaitsee samassa kansiossa kuin iRacingSim64DX11.exe, johon ReShade asennettiin — tai poista ReShade-yhteensopivuustila käytöstä.',
+		reshadeIniUnreadable:
+			'ReShade-asetustiedostoa polussa {path} ei voitu lukea. Tarkista, että sinulla on lukuoikeus siihen, tai valitse Asetuksista toinen ReShade.ini-tiedosto.',
+		reshadeIniPreset:
+			'{path} on ReShaden esiasetus (preset), ei sen omat asetukset. Esiasetukset sisältävät efektiasetuksia, ei kuvakaappauskansiota. Valitse Asetuksista sen sijaan ReShade.ini — se on samassa kansiossa — tai poista ReShade-yhteensopivuustila käytöstä.',
+		reshadeIniNoSavePath:
+			'ReShadelle ei ole asetettu kuvakaappauskansiota polussa {path}. Avaa ReShaden overlay iRacingissa, siirry sen Asetukset-välilehdelle ja aseta kuvakaappauspolku, ja yritä sitten uudelleen.',
+		reshadeIniNotConfig:
+			'{path} ei ole ReShaden asetustiedosto. Valitse Asetuksista oma ReShade.ini-tiedostosi — se sijaitsee samassa kansiossa kuin iRacingSim64DX11.exe, johon ReShade asennettiin — tai poista ReShade-yhteensopivuustila käytöstä.',
 		unknownError: 'Tuntematon kuvakaappausvirhe',
 		outputTooSmall: 'Kaappaus on liian pieni ({width}x{height})',
 		blackFrame:
@@ -580,242 +592,9 @@ const fi: Catalog = {
 		minutesSeconds: '{minutes} min {seconds} s',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'iRacingin kokoonpanoeditori',
-		nav: {
-			home: 'Kuvakaappaukset',
-			config: 'iRacingin kokoonpano',
-		},
-		tabs: {
-			monitor: 'Monitori / näyttö',
-			graphics: 'Grafiikka',
-		},
-		mode: {
-			label: 'Muokattava kokoonpano:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Legacy',
-		},
-		actions: {
-			save: 'Tallenna muutokset',
-			discard: 'Hylkää',
-			reload: 'Lataa uudelleen',
-			browse: 'Selaa…',
-		},
-		state: {
-			dirty: {
-				one: '{count} tallentamaton muutos',
-				other: '{count} tallentamatonta muutosta',
-			},
-			saved: 'Muutokset tallennettiin tiedostoon {file}',
-			simRunning:
-				'iRacing on käynnissä. Se pitää nämä asetukset muistissa ja kirjoittaa tiedoston uudelleen sulkeutuessaan, joten nyt tehdyt muutokset menetettäisiin. Sulje iRacing, jotta voit muokata.',
-			stale: 'Tiedosto on muuttunut levyllä sen lataamisen jälkeen — yleensä siksi, että iRacing kirjoitti sen uudelleen sulkeutuessaan. Lataa uudelleen, niin näet nykyiset arvot.',
-			keyMissing: 'Ei tässä tiedostossa',
-			noModes:
-				'Kansiosta {folder} ei löytynyt renderöijän kokoonpanotiedostoja. Käynnistä iRacing kerran, niin ne luodaan, tai osoita työkalu iRacing-kansioosi.',
-			loadFailed: 'Kokoonpanotiedostoa ei voitu lukea.',
-			discardConfirm: 'Hylätäänkö {count} tallentamatonta muutosta?',
-		},
-		folder: {
-			label: 'iRacing-kansio',
-			autoDetected: 'Tunnistettu automaattisesti',
-			reset: 'Käytä automaattista tunnistusta',
-			help: 'Kansio, jossa iRacing säilyttää kokoonpanotiedostojaan. Jätä tyhjäksi, niin Documents\\iRacing-kansio tunnistetaan automaattisesti.',
-		},
-		errors: {
-			iracingRunning:
-				'Sulje ensin iRacing — se ylikirjoittaisi muutoksen sulkeutuessaan.',
-			staleFile:
-				'Tiedosto on muuttunut levyllä sen lataamisen jälkeen. Lataa uudelleen ja yritä uudestaan.',
-			validationFailed: 'Jokin arvoista ei kelpaa. Mitään ei muutettu.',
-			keyNotFound:
-				'Tiedostosta puuttui asetus, joten mitään ei muutettu. Lataa uudelleen ja yritä uudestaan.',
-			fileNotFound: 'Kokoonpanotiedostoa ei ole enää olemassa.',
-			ioError: 'Tiedostoa ei voitu kirjoittaa. Mitään ei muutettu.',
-		},
-		groups: {
-			window: 'Ikkunan sijoitus',
-			fullscreen: 'Koko näyttö',
-			quality: 'Laatu ja yksityiskohdat',
-			aa: 'Reunanpehmennys ja terävöinti',
-			post: 'Jälkikäsittely',
-			perf: 'Suorituskyky',
-			misc: 'Sekalaiset',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Pois',
-			low: 'Matala',
-			medium: 'Keskitaso',
-			high: 'Korkea',
-			max: 'Maksimi',
-			ultra: 'Ultra',
-		},
-		nvReflex: {
-			off: 'Pois',
-			on: 'Päällä',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Vähemmän varjoja',
-			maximum: 'Eniten varjoja',
-		},
-		aaMethod: {
-			none: 'Ei mitään',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Pehmeä',
-			neutral: 'Neutraali',
-			sharp: 'Terävä',
-			simple: 'Yksinkertainen',
-		},
-		dnsmFilter: {
-			off: 'Pois',
-			simple: 'Yksinkertainen',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Pois',
-			mainView: 'Päänäkymässä',
-			mainViewMirrors: 'Päänäkymässä ja peileissä',
-		},
-		hideObstructions: {
-			none: 'Ei mitään',
-			halo: 'Piilota halo',
-			pillarRollcage: 'Piilota A-pilarit ja turvakehikko',
-			everything: 'Piilota kaikki',
-		},
-		replayScope: {
-			label: 'Käytä myös uusinnan grafiikka-asetuksiin',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Anna kokonaisluku väliltä {min}–{max}.',
-			int: 'Anna kokonaisluku.',
-			floatRange: 'Anna luku väliltä {min}–{max}.',
-			float: 'Anna luku.',
-		},
-		layout: {
-			title: 'Näyttöjen asettelu',
-			primary: 'Ensisijainen',
-			windowTarget: 'iRacing-ikkuna',
-			estimated:
-				'Arvio — Windows ja iRacing numeroivat näytöt eri tavoin, joten korostus perustuu sijaintiin.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Ikkunan reunus' },
-				windowedXPos: { label: 'Ikkunan vasen reuna' },
-				windowedYPos: { label: 'Ikkunan yläreuna' },
-				windowedWidth: { label: 'Ikkunan leveys' },
-				windowedHeight: { label: 'Ikkunan korkeus' },
-				windowedMaximized: { label: 'Käynnistä suurennettuna' },
-				windowedAlignment: {
-					label: 'Ikkunan kohdistus',
-					help: 'iRacing ei dokumentoi tätä arvoa. Älä muuta sitä, ellet tiedä haluamaasi kohdistusindeksiä.',
-				},
-				fullScreen: { label: 'Koko näyttö' },
-				fullScreenWidth: { label: 'Koko näytön leveys' },
-				fullScreenHeight: { label: 'Koko näytön korkeus' },
-				fullScreenDepth: {
-					label: 'Koko näytön värisyvyys',
-					help: 'Bittiä pikseliä kohti. Käytännössä kaikissa nykyjärjestelmissä 32.',
-				},
-				RefreshRate: {
-					label: 'Virkistystaajuus',
-					help: '0 käyttää näytön oletusvirkistystaajuutta.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Varjostimien laatu' },
-				ShadowDetail: { label: 'Varjojen yksityiskohdat' },
-				DynamicShadowMaps: {
-					label: 'Dynaamiset varjokartat',
-					help: 'Varjokartat autoille ja muille liikkuville kohteille. Vain päivällä.',
-				},
-				DNSMFilter: {
-					label: 'Varjokarttasuodatin',
-					help: 'Suodatin, jota käytetään dynaamisiin yövarjokarttoihin.',
-				},
-				CarDetail: { label: 'Autojen yksityiskohdat' },
-				PitObjectDetail: { label: 'Varikkokohteiden yksityiskohdat' },
-				CrowdDetail: { label: 'Yleisön yksityiskohdat' },
-				GrandstandDetail: { label: 'Katsomoiden yksityiskohdat' },
-				ObjectDetail: { label: 'Kohteiden yksityiskohdat' },
-				FoliageDetail: { label: 'Kasvillisuuden yksityiskohdat' },
-				ParticleDetail: { label: 'Partikkelien yksityiskohdat' },
-				ParticlesFullRes: { label: 'Partikkelit täydellä tarkkuudella' },
-				MirrorDetail: { label: 'Enemmän yksityiskohtia peileissä' },
-				MaxCockpitMirrors: { label: 'Ohjaamon peilien enimmäismäärä' },
-				AntiAliasMethod: { label: 'Reunanpehmennysmenetelmä' },
-				MSAASamples: { label: 'MSAA-näytteet' },
-				MSAAUseFilter: { label: 'MSAA-suodatin' },
-				Sharpening: { label: 'Terävöinti' },
-				SharpeningAmount: {
-					label: 'Terävöinnin määrä',
-					help: 'Terävöintisuodattimen voimakkuus.',
-				},
-				FSRSharpness: {
-					label: 'FSR-terävyys',
-					help: 'Terävyys, jota käytetään, kun tarkkuusskaalaus suurentaa kuvaa FSR:llä.',
-				},
-				AutoExposure: {
-					label: 'Automaattinen valotus',
-					help: 'Toimii vain, kun HDR-renderöinti on käytössä.',
-				},
-				SSAO: { label: 'Ympäristön varjostus (SSAO)' },
-				SSRLevel: {
-					label: 'Ruututilan heijastukset',
-					help: 'Matala renderöi heijastukset pienemmällä tarkkuudella, Korkea täydellä tarkkuudella.',
-				},
-				SSRRainOnly: {
-					label: 'Heijastukset vain sateella',
-					help: 'Rajaa ruututilan heijastukset märkiin rataolosuhteisiin — simulaattorin Low Rain- ja High Rain -asetukset.',
-				},
-				HeatHaze: { label: 'Lämpöväreily' },
-				DepthOfField: { label: 'Syväterävyys' },
-				MotionBlurStrength: { label: 'Liike-epäterävyyden voimakkuus' },
-				Distortion: { label: 'Linssivääristymä' },
-				EnableHDR: { label: 'HDR-renderöinti' },
-				LimitFrameRate: { label: 'Rajoita ruudunpäivitysnopeutta' },
-				DesiredFPSLimit: { label: 'Ruudunpäivitysnopeuden raja' },
-				VerticalSync: { label: 'Pystytahdistus' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Esirenderöityjen ruutujen enimmäismäärä',
-					help: 'Kuinka monta ruutua GPU saa olla CPU:ta jäljessä. 1 on normaali; 0 poistaa jonon käytöstä usean GPU:n kokoonpanoissa.',
-				},
-				SysMemToUseMB: { label: 'Käytettävä järjestelmämuisti' },
-				VidMemToUseMB: { label: 'Käytettävä näytönohjaimen muisti' },
-				MaxCarsToDraw: { label: 'Piirrettävien autojen enimmäismäärä' },
-				MaxCarsToDrawInMirrors: {
-					label: 'Autojen enimmäismäärä peileissä',
-				},
-				VirtualMirrors: { label: 'Virtuaalipeilit' },
-				UIScale: { label: 'UI-skaalaus' },
-				EnableTireMarks: { label: 'Rengasjäljet' },
-				HideCockpitObstructions: { label: 'Piilota ohjaamon esteet' },
-				HeadlightLevel: { label: 'Ajovalojen laatu' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Kuvakaappaukset',
 	},
 };
 

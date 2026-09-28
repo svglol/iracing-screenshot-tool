@@ -5,7 +5,6 @@ import {
 } from 'vue-router';
 import Home from '../views/Home.vue';
 import Worker from '../views/Worker.vue';
-import IracingConfig from '../views/IracingConfig.vue';
 import Settings from '../views/Settings.vue';
 import Help from '../views/Help.vue';
 
@@ -21,15 +20,6 @@ const routes: RouteRecordRaw[] = [
 			icon: 'fa-home',
 		},
 		component: Home,
-	},
-	{
-		path: '/config',
-		name: 'config',
-		meta: {
-			title: 'iRacing Config',
-			icon: 'fa-display',
-		},
-		component: IracingConfig,
 	},
 	{
 		path: '/settings',

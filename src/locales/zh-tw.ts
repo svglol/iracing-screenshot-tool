@@ -397,8 +397,6 @@ const zhTW: Catalog = {
 
 	graphicsProfiles: {
 		title: '顯示設定檔',
-		description:
-			'儲存多組 iRacing 顯示設定並在它們之間切換——比賽用一組、截圖用一組、錄影用一組。iRacing 會在啟動時載入設定，關閉時再寫回，因此在執行中切換會被還原：<b>請在模擬器關閉時才切換設定</b>。',
 		iracingRunning:
 			'請先關閉 iRacing 再切換。它結束時會把自己的顯示設定重新寫回檔案，那會把這次變更蓋掉。',
 		activeHeading: '目前的設定',
@@ -486,6 +484,20 @@ const zhTW: Catalog = {
 			'iRacing 處於獨佔全螢幕模式，因此截圖會是全黑的。請在 iRacing 中將 Display > Full Screen 設為 OFF（使用 Borderless 或 Windowed）後再試一次。',
 		exclusiveFullscreenUnattributed:
 			'有應用程式正在獨佔全螢幕模式下執行，這會讓擷取結果全黑。如果 iRacing 處於全螢幕模式，請將 Display > Full Screen 設為 OFF（使用 Borderless 或 Windowed）後再試一次。',
+		blockedElevated:
+			'當 iRacing Screenshot Tool 以系統管理員身分執行時，Windows 會封鎖螢幕擷取。請關閉工具，在 iRacing Screenshot Tool.exe 上按滑鼠右鍵 > 內容 > 相容性，取消勾選「以系統管理員的身分執行此程式」（也請勾選「變更所有使用者的設定」），然後以一般方式重新啟動工具。',
+		blockedDenied:
+			'Windows 拒絕讓這個應用程式擷取螢幕（{hresult}）。可能是這台電腦上的隱私權設定、公司原則或安全性軟體在封鎖它。這不會影響 ReShade 相容模式。',
+		reshadeIniMissing:
+			'在 {path} 找不到 ReShade 設定檔。請在設定中選取你的 ReShade.ini——它就位於安裝 ReShade 的資料夾中，緊鄰 iRacingSim64DX11.exe——或是關閉 ReShade 相容模式。',
+		reshadeIniUnreadable:
+			'無法讀取位於 {path} 的 ReShade 設定檔。請確認你有讀取權限，或是在設定中選取其他的 ReShade.ini。',
+		reshadeIniPreset:
+			'{path} 是 ReShade 的預設集（preset），不是 ReShade 本身的設定檔。預設集只包含特效設定，不含螢幕截圖資料夾。請改在設定中選取 ReShade.ini——它就在同一個資料夾中——或是關閉 ReShade 相容模式。',
+		reshadeIniNoSavePath:
+			'ReShade 在 {path} 中沒有設定螢幕截圖資料夾。請在 iRacing 中開啟 ReShade 疊加層，前往其「設定」分頁設定螢幕截圖路徑，然後再試一次。',
+		reshadeIniNotConfig:
+			'{path} 不是 ReShade 設定檔。請在設定中選取你的 ReShade.ini——它就位於安裝 ReShade 的資料夾中，緊鄰 iRacingSim64DX11.exe——或是關閉 ReShade 相容模式。',
 		unknownError: '不明的截圖錯誤',
 		outputTooSmall: '擷取結果太小（{width}x{height}）',
 		blackFrame:
@@ -565,238 +577,9 @@ const zhTW: Catalog = {
 		minutesSeconds: '{minutes} 分 {seconds} 秒',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'iRacing 設定編輯器',
-		nav: {
-			home: '螢幕截圖',
-			config: 'iRacing 設定',
-		},
-		tabs: {
-			monitor: '螢幕／顯示',
-			graphics: '圖形',
-		},
-		mode: {
-			label: '目前編輯的設定：',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: '舊版',
-		},
-		actions: {
-			save: '儲存變更',
-			discard: '捨棄',
-			reload: '重新載入',
-			browse: '瀏覽…',
-		},
-		state: {
-			dirty: {
-				other: '{count} 項未儲存的變更',
-			},
-			saved: '已將變更儲存到 {file}',
-			simRunning:
-				'iRacing 正在執行中。它會把這些設定保留在記憶體裡，並在結束時重新寫回檔案，因此現在做的修改會遺失。請先關閉 iRacing 再編輯。',
-			stale: '這個檔案自載入之後在磁碟上被改過了——通常是 iRacing 結束時重新寫入造成的。請重新載入以查看目前的值。',
-			keyMissing: '這個檔案裡沒有這一項',
-			noModes:
-				'在 {folder} 中找不到任何算圖設定檔案。請先啟動一次 iRacing 讓它建立這些檔案，或把本工具指向您的 iRacing 資料夾。',
-			loadFailed: '無法讀取這個設定檔案。',
-			discardConfirm: '要捨棄 {count} 項未儲存的變更嗎？',
-		},
-		folder: {
-			label: 'iRacing 資料夾',
-			autoDetected: '已自動偵測',
-			reset: '使用自動偵測',
-			help: 'iRacing 存放設定檔案的位置。留空即可自動偵測 Documents\\iRacing 資料夾。',
-		},
-		errors: {
-			iracingRunning: '請先關閉 iRacing，它結束時會覆蓋這次的變更。',
-			staleFile:
-				'這個檔案自載入之後在磁碟上被改過了。請重新載入後再試一次。',
-			validationFailed: '其中一個值不正確，沒有變更任何東西。',
-			keyNotFound:
-				'檔案裡少了某一項設定，因此沒有變更任何東西。請重新載入後再試一次。',
-			fileNotFound: '這個設定檔案已經不存在了。',
-			ioError: '無法寫入檔案，沒有變更任何東西。',
-		},
-		groups: {
-			window: '視窗位置',
-			fullscreen: '全螢幕',
-			quality: '品質與細節',
-			aa: '反鋸齒與銳利化',
-			post: '後製處理',
-			perf: '效能',
-			misc: '其他',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: '關閉',
-			low: '低',
-			medium: '中',
-			high: '高',
-			max: '最高',
-			ultra: '超高',
-		},
-		nvReflex: {
-			off: '關閉',
-			on: '開啟',
-			onBoost: '加速',
-		},
-		shadowDetail: {
-			fewer: '較少陰影',
-			maximum: '最多陰影',
-		},
-		aaMethod: {
-			none: '無',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: '柔和',
-			neutral: '中性',
-			sharp: '銳利',
-			simple: '簡單',
-		},
-		dnsmFilter: {
-			off: '關閉',
-			simple: '簡單',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: '關閉',
-			mainView: '主畫面中',
-			mainViewMirrors: '主畫面與後視鏡中',
-		},
-		hideObstructions: {
-			none: '無',
-			halo: '隱藏 Halo',
-			pillarRollcage: '隱藏 A 柱與防滾架',
-			everything: '全部隱藏',
-		},
-		replayScope: {
-			label: '同時套用到重播的圖形設定',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: '請輸入 {min} 到 {max} 之間的整數。',
-			int: '請輸入整數。',
-			floatRange: '請輸入 {min} 到 {max} 之間的數字。',
-			float: '請輸入數字。',
-		},
-		layout: {
-			title: '螢幕配置',
-			primary: '主螢幕',
-			windowTarget: 'iRacing 視窗',
-			estimated:
-				'這是推估值——Windows 與 iRacing 為顯示器編號的方式不同，因此是以位置來比對要標示哪一個。',
-		},
-		settings: {
-			display: {
-				border: { label: '視窗邊框' },
-				windowedXPos: { label: '視窗左側' },
-				windowedYPos: { label: '視窗頂端' },
-				windowedWidth: { label: '視窗寬度' },
-				windowedHeight: { label: '視窗高度' },
-				windowedMaximized: { label: '啟動時最大化' },
-				windowedAlignment: {
-					label: '視窗對齊',
-					help: 'iRacing 沒有說明這個值的意義。除非您清楚自己想要的對齊索引，否則請保持不變。',
-				},
-				fullScreen: { label: '全螢幕' },
-				fullScreenWidth: { label: '全螢幕寬度' },
-				fullScreenHeight: { label: '全螢幕高度' },
-				fullScreenDepth: {
-					label: '全螢幕色彩深度',
-					help: '每像素位元數。實際上所有現代系統都是 32。',
-				},
-				RefreshRate: {
-					label: '更新率',
-					help: '設為 0 會使用顯示器的預設更新率。',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: '著色器品質' },
-				ShadowDetail: { label: '陰影細節' },
-				DynamicShadowMaps: {
-					label: '動態陰影貼圖',
-					help: '賽車與其他會移動物體的陰影貼圖。只在白天有作用。',
-				},
-				DNSMFilter: {
-					label: '陰影貼圖濾鏡',
-					help: '用於動態夜間陰影貼圖的濾鏡。',
-				},
-				CarDetail: { label: '賽車細節' },
-				PitObjectDetail: { label: '維修區物件細節' },
-				CrowdDetail: { label: '觀眾細節' },
-				GrandstandDetail: { label: '看台細節' },
-				ObjectDetail: { label: '物件細節' },
-				FoliageDetail: { label: '植被細節' },
-				ParticleDetail: { label: '粒子細節' },
-				ParticlesFullRes: { label: '完整解析度粒子' },
-				MirrorDetail: { label: '後視鏡使用較高細節' },
-				MaxCockpitMirrors: { label: '座艙後視鏡數量上限' },
-				AntiAliasMethod: { label: '反鋸齒方式' },
-				MSAASamples: { label: 'MSAA 取樣數' },
-				MSAAUseFilter: { label: 'MSAA 濾鏡' },
-				Sharpening: { label: '銳利化' },
-				SharpeningAmount: {
-					label: '銳利化強度',
-					help: '銳利化濾鏡的強度。',
-				},
-				FSRSharpness: {
-					label: 'FSR 銳利度',
-					help: '解析度縮放以 FSR 放大時所使用的銳利度。',
-				},
-				AutoExposure: {
-					label: '自動曝光',
-					help: '只有在開啟 HDR 算圖時才會作用。',
-				},
-				SSAO: { label: '環境光遮蔽（SSAO）' },
-				SSRLevel: {
-					label: '螢幕空間反射',
-					help: '「低」會以較低的解析度算出反射，「高」則使用完整解析度。',
-				},
-				SSRRainOnly: {
-					label: '只在下雨時反射',
-					help: '把螢幕空間反射限制在潮濕的賽道狀況——也就是模擬器裡的 Low Rain 與 High Rain 選項。',
-				},
-				HeatHaze: { label: '熱氣扭曲' },
-				DepthOfField: { label: '景深' },
-				MotionBlurStrength: { label: '動態模糊強度' },
-				Distortion: { label: '鏡頭變形' },
-				EnableHDR: { label: 'HDR 算圖' },
-				LimitFrameRate: { label: '限制影格率' },
-				DesiredFPSLimit: { label: '影格率上限' },
-				VerticalSync: { label: '垂直同步' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: '預先算圖影格數上限',
-					help: 'GPU 最多可以落後 CPU 幾格。1 是正常值；0 會關閉這個佇列，適用於多 GPU 的組態。',
-				},
-				SysMemToUseMB: { label: '要使用的系統記憶體' },
-				VidMemToUseMB: { label: '要使用的顯示記憶體' },
-				MaxCarsToDraw: { label: '繪製賽車數量上限' },
-				MaxCarsToDrawInMirrors: { label: '後視鏡中的賽車數量上限' },
-				VirtualMirrors: { label: '虛擬後視鏡' },
-				UIScale: { label: 'UI 縮放' },
-				EnableTireMarks: { label: '輪胎痕跡' },
-				HideCockpitObstructions: { label: '隱藏座艙遮擋物' },
-				HeadlightLevel: { label: '車頭燈品質' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: '螢幕截圖',
 	},
 };
 

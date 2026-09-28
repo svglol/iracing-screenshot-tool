@@ -20,19 +20,18 @@ use windows::Win32::Graphics::Direct3D::{
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Buffer, ID3D11ComputeShader, ID3D11Device, ID3D11DeviceContext, ID3D11Query,
     ID3D11Resource, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11Texture2D,
-    ID3D11UnorderedAccessView,
-    D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE,
-    D3D11_BIND_UNORDERED_ACCESS, D3D11_BUFFER_DESC, D3D11_BUFFER_UAV, D3D11_BUFFER_UAV_FLAG_RAW,
-    D3D11_BUFFEREX_SRV, D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_READ, D3D11_CPU_ACCESS_WRITE,
-    D3D11_FEATURE_DATA_FORMAT_SUPPORT2, D3D11_FEATURE_FORMAT_SUPPORT2,
+    ID3D11UnorderedAccessView, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_RENDER_TARGET,
+    D3D11_BIND_SHADER_RESOURCE, D3D11_BIND_UNORDERED_ACCESS, D3D11_BUFFEREX_SRV, D3D11_BUFFER_DESC,
+    D3D11_BUFFER_UAV, D3D11_BUFFER_UAV_FLAG_RAW, D3D11_COMPARISON_NEVER, D3D11_CPU_ACCESS_READ,
+    D3D11_CPU_ACCESS_WRITE, D3D11_FEATURE_DATA_FORMAT_SUPPORT2, D3D11_FEATURE_FORMAT_SUPPORT2,
     D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE,
-    D3D11_MAP_FLAG_DO_NOT_WAIT, D3D11_MAP_READ,
-    D3D11_MAP_WRITE_DISCARD, D3D11_MAPPED_SUBRESOURCE, D3D11_QUERY_DESC, D3D11_QUERY_EVENT, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
-    D3D11_SAMPLER_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0,
-    D3D11_SUBRESOURCE_DATA, D3D11_TEX2D_SRV, D3D11_TEX2D_UAV, D3D11_TEXTURE2D_DESC,
-    D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_UAV_DIMENSION_BUFFER, D3D11_UAV_DIMENSION_TEXTURE2D,
-    D3D11_UNORDERED_ACCESS_VIEW_DESC, D3D11_UNORDERED_ACCESS_VIEW_DESC_0, D3D11_USAGE_DEFAULT,
-    D3D11_USAGE_DYNAMIC, D3D11_USAGE_STAGING,
+    D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_FLAG_DO_NOT_WAIT, D3D11_MAP_READ, D3D11_MAP_WRITE_DISCARD,
+    D3D11_QUERY_DESC, D3D11_QUERY_EVENT, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED, D3D11_SAMPLER_DESC,
+    D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_SUBRESOURCE_DATA,
+    D3D11_TEX2D_SRV, D3D11_TEX2D_UAV, D3D11_TEXTURE2D_DESC, D3D11_TEXTURE_ADDRESS_CLAMP,
+    D3D11_UAV_DIMENSION_BUFFER, D3D11_UAV_DIMENSION_TEXTURE2D, D3D11_UNORDERED_ACCESS_VIEW_DESC,
+    D3D11_UNORDERED_ACCESS_VIEW_DESC_0, D3D11_USAGE_DEFAULT, D3D11_USAGE_DYNAMIC,
+    D3D11_USAGE_STAGING,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -305,10 +304,7 @@ fn compile(entry: &str) -> Result<ID3DBlob, BackendError> {
 }
 
 impl D3d11Backend {
-    pub fn new(
-        device: ID3D11Device,
-        context: ID3D11DeviceContext,
-    ) -> Result<Self, BackendError> {
+    pub fn new(device: ID3D11Device, context: ID3D11DeviceContext) -> Result<Self, BackendError> {
         let make_shader = |entry: &str| -> Result<ID3D11ComputeShader, BackendError> {
             let blob = compile(entry)?;
             let mut shader: Option<ID3D11ComputeShader> = None;
@@ -319,7 +315,8 @@ impl D3d11Backend {
                 );
                 device.CreateComputeShader(bytes, None, Some(&mut shader))?;
             }
-            shader.ok_or_else(|| BackendError(format!("CreateComputeShader({entry}) returned null")))
+            shader
+                .ok_or_else(|| BackendError(format!("CreateComputeShader({entry}) returned null")))
         };
 
         let cs_clear = make_shader("CSClear")?;
@@ -532,8 +529,9 @@ impl D3d11Backend {
             width,
             height,
             DXGI_FORMAT_R8_UNORM,
-            (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_UNORDERED_ACCESS.0 | D3D11_BIND_RENDER_TARGET.0)
-                as u32,
+            (D3D11_BIND_SHADER_RESOURCE.0
+                | D3D11_BIND_UNORDERED_ACCESS.0
+                | D3D11_BIND_RENDER_TARGET.0) as u32,
         );
         let luma0 = create_texture(&self.device, &luma_desc)?;
         let luma1 = create_texture(&self.device, &luma_desc)?;
@@ -547,8 +545,9 @@ impl D3d11Backend {
             config.flow_width,
             config.flow_height,
             DXGI_FORMAT_R16G16_SINT,
-            (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_UNORDERED_ACCESS.0 | D3D11_BIND_RENDER_TARGET.0)
-                as u32,
+            (D3D11_BIND_SHADER_RESOURCE.0
+                | D3D11_BIND_UNORDERED_ACCESS.0
+                | D3D11_BIND_RENDER_TARGET.0) as u32,
         );
         let flow_fwd = create_texture(&self.device, &flow_desc)?;
         let flow_fwd_srv = create_texture_srv(&self.device, &flow_fwd, DXGI_FORMAT_R16G16_SINT)?;
@@ -711,10 +710,7 @@ impl D3d11Backend {
         interp.have_prev = true;
         interp.prev_weight = weight;
 
-        Ok(SampleOutcome {
-            real: 1,
-            synthetic,
-        })
+        Ok(SampleOutcome { real: 1, synthetic })
     }
 
     /// Read the oldest outstanding digest slot.
@@ -805,7 +801,8 @@ impl D3d11Backend {
             self.context.CSSetShader(&self.cs_accumulate, None);
             self.context
                 .CSSetConstantBuffers(0, Some(&[Some(self.cb_accumulate.clone())]));
-            self.context.CSSetShaderResources(0, Some(&[Some(srv.clone())]));
+            self.context
+                .CSSetShaderResources(0, Some(&[Some(srv.clone())]));
             self.context
                 .CSSetUnorderedAccessViews(0, 1, Some([Some(uav.clone())].as_ptr()), None);
             self.context
@@ -827,7 +824,8 @@ impl D3d11Backend {
             self.context.CSSetShader(&self.cs_luma, None);
             self.context
                 .CSSetConstantBuffers(0, Some(&[Some(self.cb_accumulate.clone())]));
-            self.context.CSSetShaderResources(0, Some(&[Some(srv.clone())]));
+            self.context
+                .CSSetShaderResources(0, Some(&[Some(srv.clone())]));
             // gLuma is register(u3).
             self.context.CSSetUnorderedAccessViews(
                 3,
@@ -835,8 +833,11 @@ impl D3d11Backend {
                 Some([Some(interp.luma_uav[interp.cur].clone())].as_ptr()),
                 None,
             );
-            self.context
-                .Dispatch(div_ceil(interp.width, TILE), div_ceil(interp.height, TILE), 1);
+            self.context.Dispatch(
+                div_ceil(interp.width, TILE),
+                div_ceil(interp.height, TILE),
+                1,
+            );
         }
         self.unbind();
         Ok(())
@@ -889,28 +890,36 @@ impl D3d11Backend {
             // WarpParams is register(b2).
             self.context
                 .CSSetConstantBuffers(2, Some(&[Some(self.cb_warp.clone())]));
-            self.context.CSSetSamplers(0, Some(&[Some(self.sampler_linear.clone())]));
-            // t0 gSource, t2 gFlowFwd, t3 gFlowBwd, t4 gPrev.
             self.context
-                .CSSetShaderResources(0, Some(&[Some(cur_srv)]));
+                .CSSetSamplers(0, Some(&[Some(self.sampler_linear.clone())]));
+            // t0 gSource, t2 gFlowFwd, t3 gFlowBwd, t4 gPrev.
+            self.context.CSSetShaderResources(0, Some(&[Some(cur_srv)]));
             self.context.CSSetShaderResources(
                 2,
-                Some(&[
-                    Some(interp.flow_fwd_srv.clone()),
-                    Some(bwd),
-                    Some(prev_srv),
-                ]),
+                Some(&[Some(interp.flow_fwd_srv.clone()), Some(bwd), Some(prev_srv)]),
             );
-            self.context
-                .CSSetUnorderedAccessViews(0, 1, Some([Some(sink_uav.clone())].as_ptr()), None);
-            self.context
-                .Dispatch(div_ceil(interp.width, TILE), div_ceil(interp.height, TILE), 1);
+            self.context.CSSetUnorderedAccessViews(
+                0,
+                1,
+                Some([Some(sink_uav.clone())].as_ptr()),
+                None,
+            );
+            self.context.Dispatch(
+                div_ceil(interp.width, TILE),
+                div_ceil(interp.height, TILE),
+                1,
+            );
         }
         self.unbind();
         Ok(())
     }
 
-    fn write_accumulate_cb(&self, width: u32, height: u32, weight: f32) -> Result<(), BackendError> {
+    fn write_accumulate_cb(
+        &self,
+        width: u32,
+        height: u32,
+        weight: f32,
+    ) -> Result<(), BackendError> {
         let data = AccumulateCb {
             size: [width, height],
             weight,
@@ -1077,10 +1086,7 @@ impl AccumulateBackend for D3d11Backend {
         Ok(())
     }
 
-    fn retain_frame(
-        &mut self,
-        source: &ID3D11Texture2D,
-    ) -> Result<ID3D11Texture2D, BackendError> {
+    fn retain_frame(&mut self, source: &ID3D11Texture2D) -> Result<ID3D11Texture2D, BackendError> {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         unsafe { source.GetDesc(&mut desc) };
         self.ensure_frame_copy(&desc)?;
@@ -1124,7 +1130,8 @@ impl AccumulateBackend for D3d11Backend {
         let slot = (self.digest_submitted as usize) % DIGEST_RING;
         unsafe {
             // Reset both lanes by copying an 8-byte zero buffer over them.
-            self.context.CopyResource(&self.digest_buffer, &self.digest_zero);
+            self.context
+                .CopyResource(&self.digest_buffer, &self.digest_zero);
 
             self.context.CSSetShader(&self.cs_digest, None);
             self.context
@@ -1235,33 +1242,29 @@ impl AccumulateBackend for D3d11Backend {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         unsafe { source.GetDesc(&mut desc) };
 
-        self.interpolation_status = match self.build_interpolation(
-            factor,
-            desc.Format,
-            desc.Width,
-            desc.Height,
-        ) {
-            Ok(interp) => {
-                let config = interp.config;
-                self.interpolation = Some(interp);
-                InterpolationStatus {
-                    enabled: true,
-                    factor,
-                    reason: None,
-                    grid_size: config.grid_size,
-                    bidirectional: config.bidirectional,
+        self.interpolation_status =
+            match self.build_interpolation(factor, desc.Format, desc.Width, desc.Height) {
+                Ok(interp) => {
+                    let config = interp.config;
+                    self.interpolation = Some(interp);
+                    InterpolationStatus {
+                        enabled: true,
+                        factor,
+                        reason: None,
+                        grid_size: config.grid_size,
+                        bidirectional: config.bidirectional,
+                    }
                 }
-            }
-            // Every failure lands here as a REASON, never an error. NVOFA is an
-            // optional accelerator; the base long exposure must not depend on it.
-            Err(error) => InterpolationStatus {
-                enabled: false,
-                factor: 1,
-                reason: Some(error.0),
-                grid_size: 0,
-                bidirectional: false,
-            },
-        };
+                // Every failure lands here as a REASON, never an error. NVOFA is an
+                // optional accelerator; the base long exposure must not depend on it.
+                Err(error) => InterpolationStatus {
+                    enabled: false,
+                    factor: 1,
+                    reason: Some(error.0),
+                    grid_size: 0,
+                    bidirectional: false,
+                },
+            };
         self.interpolation_status.clone()
     }
 
@@ -1341,12 +1344,8 @@ impl AccumulateBackend for D3d11Backend {
             // gAccumRead is register(t1).
             self.context.CSSetShaderResources(1, Some(&[Some(srv)]));
             // gOutput is register(u2).
-            self.context.CSSetUnorderedAccessViews(
-                2,
-                1,
-                Some([Some(output_uav)].as_ptr()),
-                None,
-            );
+            self.context
+                .CSSetUnorderedAccessViews(2, 1, Some([Some(output_uav)].as_ptr()), None);
             self.context.Dispatch(
                 div_ceil(params.out_width, TILE),
                 div_ceil(params.out_height, TILE),
@@ -1360,8 +1359,7 @@ impl AccumulateBackend for D3d11Backend {
         let data = unsafe {
             self.context
                 .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
-            let slice =
-                std::slice::from_raw_parts(mapped.pData as *const u8, out_bytes as usize);
+            let slice = std::slice::from_raw_parts(mapped.pData as *const u8, out_bytes as usize);
             let copied = slice.to_vec();
             self.context.Unmap(&staging, 0);
             copied
@@ -2111,9 +2109,9 @@ mod tests {
             "gWarpHighlightGain",
             "gPadW",
         ] {
-            let at = block[cursor..]
-                .find(name)
-                .unwrap_or_else(|| panic!("WarpParams is missing {name}, or declares it too early"));
+            let at = block[cursor..].find(name).unwrap_or_else(|| {
+                panic!("WarpParams is missing {name}, or declares it too early")
+            });
             cursor += at + name.len();
         }
     }
@@ -2160,7 +2158,10 @@ mod tests {
             let after = accumulator_rw + samples * colour_per_sample;
             // Factor 2 emits exactly one synthetic sample, so there is nothing to
             // fold and the two are identical — the saving starts at factor 4.
-            assert!(after <= before, "factor {factor} must not get more expensive");
+            assert!(
+                after <= before,
+                "factor {factor} must not get more expensive"
+            );
             if factor > 2 {
                 assert!(after < before, "factor {factor} must get cheaper");
             }

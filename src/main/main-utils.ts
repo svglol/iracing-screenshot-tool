@@ -2,6 +2,12 @@ import * as path from 'path';
 import * as os from 'os';
 import { normalizeCaptureBounds } from '../utilities/desktop-capture';
 import { createLogger } from '../utilities/logger';
+import {
+	classifyReshadeIniError,
+	describeReshadeIniProblem,
+	inspectReshadeIni,
+	readReshadeSavePath,
+} from '../utilities/reshade-config';
 
 const log = createLogger('main-utils');
 
@@ -54,7 +60,10 @@ interface ScreenshotErrorDefaults {
 	diagnostics?: unknown;
 }
 
-interface ReshadeIni {
+// Exported because index.ts now holds both of these across the capture: it
+// parses the ini in the pre-flight and hands the parsed result down to the
+// ReShade branch, rather than re-reading it there.
+export interface ReshadeIni {
 	INSTALL?: { BasePath?: string };
 	SCREENSHOT?: { SavePath?: string };
 	GENERAL?: { ScreenshotPath?: string };
@@ -65,7 +74,7 @@ interface ReshadeConfigError extends Error {
 	meta?: Record<string, unknown>;
 }
 
-interface ReshadeScreenshotFolder {
+export interface ReshadeScreenshotFolder {
 	folder: string;
 	rawFolder: string;
 	basePath: string;
@@ -311,16 +320,65 @@ export function createReshadeConfigError(
 	return error;
 }
 
+/**
+ * Rephrase a failed ReShade ini read as something the user can act on, keeping
+ * the original errno in `meta` so the error log still says exactly what the
+ * filesystem said.
+ *
+ * Returns the error UNTOUCHED when we cannot name the problem. A raw errno is a
+ * poor message, but a confident wrong one is worse: it sends the user to fix a
+ * setting that was never broken, and it erases the only evidence of whatever
+ * actually happened. Only the two failures we can name get rewritten.
+ */
+export function describeReshadeIniError(
+	error: unknown,
+	reshadeFile: string
+): unknown {
+	const problem = classifyReshadeIniError(error);
+	if (!problem) {
+		return error;
+	}
+
+	return createReshadeConfigError(
+		describeReshadeIniProblem(problem, reshadeFile),
+		{
+			reshadeFile,
+			code: (error as NodeJS.ErrnoException).code,
+			problem,
+			// The rewrite gives the error a NEW stack, so the filesystem's own
+			// wording would otherwise be gone from the log — and that wording is what
+			// tells us apart a path that is absent from one that resolved somewhere
+			// unexpected. The sentence the user reads is ours; the line the log keeps
+			// is still the OS's.
+			originalMessage: (error as Error)?.message,
+		}
+	);
+}
+
 export function getReshadeScreenshotFolder(
 	reshadeIni: ReshadeIni = {},
 	reshadeIniPath = ''
 ): ReshadeScreenshotFolder {
-	const rawFolder =
-		reshadeIni.SCREENSHOT?.SavePath || reshadeIni.GENERAL?.ScreenshotPath;
+	const rawFolder = readReshadeSavePath(reshadeIni);
 
 	if (!rawFolder) {
+		// Was a flat "Unable to determine the ReShade screenshot folder" — a
+		// symptom, in English only, naming neither the mistake nor the fix. The
+		// 2026-08-28 reporter read it twelve times while swapping one ReShade
+		// PRESET for another. inspectReshadeIni cannot return null here (null means
+		// a save path exists, and we just found none), so this always names
+		// something specific.
+		const problem = inspectReshadeIni(reshadeIni);
 		throw createReshadeConfigError(
-			'Unable to determine the ReShade screenshot folder'
+			describeReshadeIniProblem(problem, reshadeIniPath),
+			{
+				reshadeFile: reshadeIniPath,
+				problem,
+				// What the file DID contain. The old error carried no meta at all, so
+				// the field report could only imply "that was a preset" from the
+				// filename — the log itself could not say.
+				iniSections: Object.keys(reshadeIni || {}),
+			}
 		);
 	}
 

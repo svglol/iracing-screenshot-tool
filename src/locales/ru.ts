@@ -410,8 +410,6 @@ const ru: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Графические профили',
-		description:
-			'Сохраняйте графические конфигурации iRacing и переключайтесь между ними — одна для гонок, одна для снимков экрана, одна для записи видео. iRacing загружает конфигурацию при запуске и записывает её обратно при выходе, поэтому переключение во время работы будет отменено: <b>меняйте конфигурацию только при закрытом симуляторе</b>.',
 		iracingRunning:
 			'Закройте iRacing перед переключением. При выходе он переписывает свою графическую конфигурацию, что отменило бы изменение.',
 		activeHeading: 'Текущая конфигурация',
@@ -510,6 +508,20 @@ const ru: Catalog = {
 			'iRacing работает в эксклюзивном полноэкранном режиме, поэтому снимок был бы чёрным. В iRacing установите Display > Full Screen в OFF (используйте Borderless или Windowed) и попробуйте снова.',
 		exclusiveFullscreenUnattributed:
 			'Какое-то приложение работает в эксклюзивном полноэкранном режиме, что даёт чёрный снимок. Если iRacing находится в полноэкранном режиме, установите Display > Full Screen в OFF (используйте Borderless или Windowed) и попробуйте снова.',
+		blockedElevated:
+			'Windows блокирует захват экрана, пока iRacing Screenshot Tool запущен от имени администратора. Закройте программу, щёлкните правой кнопкой мыши по iRacing Screenshot Tool.exe > Свойства > Совместимость, снимите флажок «Запускать эту программу от имени администратора» (также отметьте «Изменить параметры для всех пользователей»), а затем запустите программу обычным способом.',
+		blockedDenied:
+			'Windows отказывает этому приложению в захвате экрана ({hresult}). Это может блокировать настройка конфиденциальности, корпоративная политика или защитное ПО на этом компьютере. На Режим совместимости с ReShade это не влияет.',
+		reshadeIniMissing:
+			'Конфигурация ReShade не найдена по пути {path}. В Настройках выберите свой файл ReShade.ini — он находится в той же папке, куда был установлен ReShade, рядом с iRacingSim64DX11.exe — либо отключите Режим совместимости с ReShade.',
+		reshadeIniUnreadable:
+			'Не удалось прочитать конфигурацию ReShade по пути {path}. Проверьте, есть ли у вас право на чтение этого файла, либо выберите другой ReShade.ini в Настройках.',
+		reshadeIniPreset:
+			'{path} — это пресет ReShade, а не его собственная конфигурация. Пресеты содержат настройки эффектов и не содержат папку для снимков экрана. В Настройках выберите вместо этого ReShade.ini — он находится в той же папке — либо отключите Режим совместимости с ReShade.',
+		reshadeIniNoSavePath:
+			'В ReShade не задана папка для снимков экрана в {path}. Откройте оверлей ReShade в iRacing, перейдите на вкладку Настройки и укажите путь для снимков экрана, затем попробуйте снова.',
+		reshadeIniNotConfig:
+			'{path} не является файлом конфигурации ReShade. В Настройках выберите свой файл ReShade.ini — он находится в той же папке, куда был установлен ReShade, рядом с iRacingSim64DX11.exe — либо отключите Режим совместимости с ReShade.',
 		unknownError: 'Неизвестная ошибка снимка экрана',
 		outputTooSmall:
 			'Захваченное изображение слишком маленькое ({width}x{height})',
@@ -601,246 +613,9 @@ const ru: Catalog = {
 		minutesSeconds: '{minutes} мин {seconds} с',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'Редактор конфигурации iRacing',
-		nav: {
-			home: 'Снимки экрана',
-			config: 'Конфигурация iRacing',
-		},
-		tabs: {
-			monitor: 'Монитор / Экран',
-			graphics: 'Графика',
-		},
-		mode: {
-			label: 'Редактируемая конфигурация:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Устаревшая',
-		},
-		actions: {
-			save: 'Сохранить изменения',
-			discard: 'Отменить изменения',
-			reload: 'Перезагрузить',
-			browse: 'Обзор…',
-		},
-		state: {
-			dirty: {
-				one: '{count} несохранённое изменение',
-				few: '{count} несохранённых изменения',
-				many: '{count} несохранённых изменений',
-				other: '{count} несохранённых изменения',
-			},
-			saved: 'Изменения сохранены в {file}',
-			simRunning:
-				'iRacing запущен. Он держит эти настройки в памяти и перезаписывает файл при выходе, поэтому сделанные сейчас правки были бы потеряны. Закройте iRacing, чтобы редактировать.',
-			stale: 'С момента загрузки этот файл изменился на диске — обычно это iRacing перезаписывает его при выходе. Перезагрузите, чтобы увидеть текущие значения.',
-			keyMissing: 'Отсутствует в этом файле',
-			noModes:
-				'В папке {folder} не найдено ни одного файла конфигурации рендерера. Запустите iRacing один раз, чтобы они создались, или укажите приложению вашу папку iRacing.',
-			loadFailed: 'Не удалось прочитать файл конфигурации.',
-			discardConfirm: 'Отменить несохранённые изменения ({count})?',
-		},
-		folder: {
-			label: 'Папка iRacing',
-			autoDetected: 'Определена автоматически',
-			reset: 'Использовать автоопределение',
-			help: 'Где iRacing хранит свои файлы конфигурации. Оставьте пустым, чтобы папка Documents\\iRacing определялась автоматически.',
-		},
-		errors: {
-			iracingRunning:
-				'Сначала закройте iRacing — при выходе он перезаписал бы это изменение.',
-			staleFile:
-				'С момента загрузки файл изменился на диске. Перезагрузите и попробуйте снова.',
-			validationFailed: 'Одно из значений некорректно. Ничего не изменено.',
-			keyNotFound:
-				'Одна из настроек отсутствовала в файле, поэтому ничего не изменено. Перезагрузите и попробуйте снова.',
-			fileNotFound: 'Файл конфигурации больше не существует.',
-			ioError: 'Не удалось записать файл. Ничего не изменено.',
-		},
-		groups: {
-			window: 'Расположение окна',
-			fullscreen: 'Полноэкранный режим',
-			quality: 'Качество и детализация',
-			aa: 'Сглаживание и резкость',
-			post: 'Постобработка',
-			perf: 'Производительность',
-			misc: 'Разное',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Выкл.',
-			low: 'Низкое',
-			medium: 'Среднее',
-			high: 'Высокое',
-			max: 'Максимальное',
-			ultra: 'Ультра',
-		},
-		nvReflex: {
-			off: 'Выкл.',
-			on: 'Вкл.',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Меньше теней',
-			maximum: 'Максимум теней',
-		},
-		aaMethod: {
-			none: 'Нет',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Мягкий',
-			neutral: 'Нейтральный',
-			sharp: 'Резкий',
-			simple: 'Простой',
-		},
-		dnsmFilter: {
-			off: 'Выкл.',
-			simple: 'Простой',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Выкл.',
-			mainView: 'В основном виде',
-			mainViewMirrors: 'В основном виде и зеркалах',
-		},
-		hideObstructions: {
-			none: 'Нет',
-			halo: 'Скрыть Halo',
-			pillarRollcage: 'Скрыть передние стойки и каркас безопасности',
-			everything: 'Скрыть всё',
-		},
-		replayScope: {
-			label: 'Также применять к графике повтора',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Введите целое число от {min} до {max}.',
-			int: 'Введите целое число.',
-			floatRange: 'Введите число от {min} до {max}.',
-			float: 'Введите число.',
-		},
-		layout: {
-			title: 'Расположение мониторов',
-			primary: 'Основной',
-			windowTarget: 'Окно iRacing',
-			estimated:
-				'Приблизительно — Windows и iRacing нумеруют экраны по-разному, поэтому выделение подобрано по положению.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Рамка окна' },
-				windowedXPos: { label: 'Отступ окна слева' },
-				windowedYPos: { label: 'Отступ окна сверху' },
-				windowedWidth: { label: 'Ширина окна' },
-				windowedHeight: { label: 'Высота окна' },
-				windowedMaximized: { label: 'Запускать развёрнутым' },
-				windowedAlignment: {
-					label: 'Выравнивание окна',
-					help: 'iRacing не документирует это значение. Не меняйте его, если только вы не знаете нужный индекс выравнивания.',
-				},
-				fullScreen: { label: 'Полноэкранный режим' },
-				fullScreenWidth: { label: 'Ширина в полноэкранном режиме' },
-				fullScreenHeight: { label: 'Высота в полноэкранном режиме' },
-				fullScreenDepth: {
-					label: 'Глубина цвета в полноэкранном режиме',
-					help: 'Бит на пиксель. Практически на любой современной системе — 32.',
-				},
-				RefreshRate: {
-					label: 'Частота обновления',
-					help: '0 использует частоту обновления экрана по умолчанию.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Качество шейдеров' },
-				ShadowDetail: { label: 'Детализация теней' },
-				DynamicShadowMaps: {
-					label: 'Динамические карты теней',
-					help: 'Карты теней для автомобилей и других движущихся объектов. Только днём.',
-				},
-				DNSMFilter: {
-					label: 'Фильтр карт теней',
-					help: 'Фильтр, используемый для динамических ночных карт теней.',
-				},
-				CarDetail: { label: 'Детализация автомобилей' },
-				PitObjectDetail: { label: 'Детализация объектов на пит-лейне' },
-				CrowdDetail: { label: 'Детализация зрителей' },
-				GrandstandDetail: { label: 'Детализация трибун' },
-				ObjectDetail: { label: 'Детализация объектов' },
-				FoliageDetail: { label: 'Детализация растительности' },
-				ParticleDetail: { label: 'Детализация частиц' },
-				ParticlesFullRes: { label: 'Частицы в полном разрешении' },
-				MirrorDetail: { label: 'Повышенная детализация в зеркалах' },
-				MaxCockpitMirrors: { label: 'Максимум зеркал в кокпите' },
-				AntiAliasMethod: { label: 'Метод сглаживания' },
-				MSAASamples: { label: 'Выборки MSAA' },
-				MSAAUseFilter: { label: 'Фильтр MSAA' },
-				Sharpening: { label: 'Повышение резкости' },
-				SharpeningAmount: {
-					label: 'Степень повышения резкости',
-					help: 'Сила фильтра повышения резкости.',
-				},
-				FSRSharpness: {
-					label: 'Резкость FSR',
-					help: 'Резкость, применяемая, когда масштабирование разрешения выполняется через FSR.',
-				},
-				AutoExposure: {
-					label: 'Автоэкспозиция',
-					help: 'Работает только при включённом рендеринге HDR.',
-				},
-				SSAO: { label: 'Объёмное затенение (SSAO)' },
-				SSRLevel: {
-					label: 'Отражения в экранном пространстве',
-					help: 'При значении «Низкое» отражения отрисовываются в пониженном разрешении, при «Высокое» — в полном.',
-				},
-				SSRRainOnly: {
-					label: 'Отражения только во время дождя',
-					help: 'Ограничивает отражения в экранном пространстве условиями мокрой трассы — параметры Low Rain и High Rain в симуляторе.',
-				},
-				HeatHaze: { label: 'Тепловое марево' },
-				DepthOfField: { label: 'Глубина резкости' },
-				MotionBlurStrength: { label: 'Сила размытия в движении' },
-				Distortion: { label: 'Дисторсия объектива' },
-				EnableHDR: { label: 'Рендеринг HDR' },
-				LimitFrameRate: { label: 'Ограничивать частоту кадров' },
-				DesiredFPSLimit: { label: 'Предел частоты кадров' },
-				VerticalSync: { label: 'Вертикальная синхронизация' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Максимум заранее подготовленных кадров',
-					help: 'На сколько кадров GPU может отставать от CPU. 1 — обычное значение; 0 отключает очередь для конфигураций с несколькими GPU.',
-				},
-				SysMemToUseMB: { label: 'Используемая системная память' },
-				VidMemToUseMB: { label: 'Используемая видеопамять' },
-				MaxCarsToDraw: { label: 'Максимум отрисовываемых автомобилей' },
-				MaxCarsToDrawInMirrors: {
-					label: 'Максимум автомобилей в зеркалах',
-				},
-				VirtualMirrors: { label: 'Виртуальные зеркала' },
-				UIScale: { label: 'Масштаб UI' },
-				EnableTireMarks: { label: 'Следы шин' },
-				HideCockpitObstructions: {
-					label: 'Скрывать помехи обзору в кокпите',
-				},
-				HeadlightLevel: { label: 'Качество фар' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Снимки экрана',
 	},
 };
 

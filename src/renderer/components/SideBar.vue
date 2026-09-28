@@ -129,6 +129,7 @@
 import { defineComponent, h } from 'vue';
 import config from '../../utilities/config';
 import { checkIracingConfig } from '../../utilities/iracing-config-checks';
+import { checkReshadeConfig } from '../../utilities/reshade-config';
 import {
 	assessVram,
 	largestSafeResolution,
@@ -223,6 +224,10 @@ export default {
 			takingScreenshot: false,
 			disableTooltips: config.get('disableTooltips'),
 			reshade: config.get('reshade'),
+			// Tracked alongside `reshade` so the missing-ini notice re-checks when
+			// the settings modal changes the path. Kept in sync by the onDidChange
+			// below; config.get is not reactive on its own.
+			reshadeFile: config.get('reshadeFile'),
 			// Mirrored into data (not read straight from config in the computed) so a
 			// change in Settings re-renders the Output line — a config.get() call is
 			// not reactive, so without this the format shown would go stale until
@@ -241,6 +246,9 @@ export default {
 			iracingStatusTimer: null,
 			// #10: true when iRacing is in exclusive fullscreen (capture → black).
 			exclusiveFullscreen: false,
+			// { block: 'elevated' | 'denied', hresult } when Windows refuses
+			// screen capture to this app; null when it can capture (or unknown).
+			captureBlock: null,
 		};
 	},
 	computed: {
@@ -375,17 +383,43 @@ export default {
 				!this.disableTooltips
 			);
 		},
+		// Its own computed rather than an inline call inside notices(), which also
+		// depends on the 4-second VRAM poll and would therefore re-stat the disk on
+		// every tick. Here the only dependencies are the two settings and the
+		// locale, so Vue's caching keeps this at one filesystem probe per actual
+		// change. $locale because checkReshadeConfig phrases through the shared
+		// core's module-level `t`, which Vue cannot see.
+		reshadeWarnings() {
+			void this.$locale;
+			return checkReshadeConfig(this.reshade, this.reshadeFile);
+		},
 		// Everything the sidebar has to say, as data for the single NoticeCard.
 		// NoticeCard sorts by severity, so the order here is only the order within
 		// a severity — safety signals are declared first anyway so they read in a
 		// sensible order when they tie.
 		//
 		// The disableTooltips gating is UNCHANGED and deliberately uneven: the
-		// exclusive-fullscreen and VRAM entries ignore it because they are
-		// hard-failure signals (a black capture, an OOM crash), not tips. The
-		// explanatory notes about crop / aspect ratio / ReShade respect it.
+		// exclusive-fullscreen, VRAM and missing-ReShade-ini entries ignore it
+		// because they are hard-failure signals (a black capture, an OOM crash, a
+		// capture that will be refused), not tips. The explanatory notes about crop
+		// / aspect ratio / ReShade respect it.
 		notices() {
 			const notices = [];
+
+			// Windows refuses screen capture to this app (field case: set to "Run as
+			// administrator"). Every non-ReShade capture — WGC, its getUserMedia
+			// fallback and long exposure — would fail, so it leads the list.
+			if (this.captureBlock && !this.reshade) {
+				notices.push({
+					level: 'danger',
+					text:
+						this.captureBlock.block === 'elevated'
+							? this.$t('capture.blockedElevated')
+							: this.$t('capture.blockedDenied', {
+									hresult: this.captureBlock.hresult || 'unknown',
+								}),
+				});
+			}
 
 			// #10. iRacing in exclusive fullscreen bypasses DWM, so any
 			// composition-based grab comes back black — that is true of the
@@ -444,6 +478,16 @@ export default {
 			void this.$locale;
 			this.configWarnings.forEach((warning) => {
 				notices.push({ level: 'warning', text: warning });
+			});
+
+			// A ReShade capture cannot even start without this file, so this is a
+			// refusal waiting to happen rather than a tip: ranked `danger` so
+			// NoticeCard floats it above the rest, and deliberately NOT gated on
+			// disableTooltips — that setting silences advice, not faults. Same probe
+			// main runs in its pre-flight, so the sidebar and the refusal can never
+			// disagree about whether the ini is there.
+			this.reshadeWarnings.forEach((warning) => {
+				notices.push({ level: 'danger', text: warning });
 			});
 
 			if (this.reshade && !this.disableTooltips) {
@@ -603,6 +647,10 @@ export default {
 			this.reshade = newValue;
 		});
 
+		config.onDidChange('reshadeFile', (newValue) => {
+			this.reshadeFile = newValue;
+		});
+
 		config.onDidChange('cropTopLeft', (newValue) => {
 			this.cropTopLeft = newValue;
 		});
@@ -623,6 +671,7 @@ export default {
 		// warning stays current. Both share one timer, cleared on unmount.
 		this.refreshVramInfo();
 		this.refreshFullscreenState();
+		this.refreshCaptureBlock();
 		this.vramTimer = setInterval(() => {
 			this.refreshVramInfo();
 			this.refreshFullscreenState();
@@ -652,6 +701,7 @@ export default {
 				// exclusive-fullscreen warning reflects the freshly-connected sim.
 				this.refreshVramInfo();
 				this.refreshFullscreenState();
+				this.refreshCaptureBlock();
 			}
 		},
 		stopIracingStatusPoll() {
@@ -746,6 +796,19 @@ export default {
 					if (next !== this.exclusiveFullscreen) {
 						this.exclusiveFullscreen = next;
 					}
+				})
+				.catch(() => {
+					/* keep last value */
+				});
+		},
+		// Ask main whether Windows refuses screen capture to this app. Not on the
+		// poll timer: elevation is fixed for the process lifetime, so on mount and
+		// on iRacing connecting is enough.
+		refreshCaptureBlock() {
+			ipcRenderer
+				.invoke('get-capture-block')
+				.then((state) => {
+					this.captureBlock = state || null;
 				})
 				.catch(() => {
 					/* keep last value */

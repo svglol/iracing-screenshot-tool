@@ -148,6 +148,9 @@ jobs:
     # ---------------------------------------------------------------------
     sign:
         needs: build
+        # `none` is release.yml's temporary unsigned mode (RELEASE_UNSIGNED):
+        # the build job's unsigned-executables artifact is what gets published.
+        if: inputs.signing-policy-slug != 'none'
         # Nothing here compiles — it is an HTTP call and a wait — so this job
         # is not pinned to the build runner. It must still be GitHub-hosted:
         # SignPath Foundation requires that for open-source projects.

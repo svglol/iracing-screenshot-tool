@@ -406,8 +406,6 @@ const pl: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Profile graficzne',
-		description:
-			'Zapisuj konfiguracje grafiki iRacing i przełączaj się między nimi — jedną do ścigania, jedną do zrzutów ekranu, jedną do nagrywania wideo. iRacing wczytuje konfigurację przy starcie i zapisuje ją z powrotem przy zamknięciu, więc zmiana zrobiona w trakcie działania zostanie cofnięta: <b>konfigurację przełączaj tylko przy wyłączonym symulatorze</b>.',
 		iracingRunning:
 			'Zamknij iRacing przed przełączeniem. Przy zamykaniu zapisuje swoją konfigurację grafiki z powrotem, co cofnęłoby zmianę.',
 		activeHeading: 'Bieżąca konfiguracja',
@@ -504,6 +502,20 @@ const pl: Catalog = {
 			'iRacing działa w wyłącznym trybie pełnoekranowym, więc zrzut byłby czarny. W iRacing ustaw Display > Full Screen na OFF (użyj Borderless lub Windowed) i spróbuj ponownie.',
 		exclusiveFullscreenUnattributed:
 			'Jakaś aplikacja działa w wyłącznym trybie pełnoekranowym, co daje czarny zrzut. Jeśli iRacing jest w trybie pełnoekranowym, ustaw Display > Full Screen na OFF (użyj Borderless lub Windowed) i spróbuj ponownie.',
+		blockedElevated:
+			'Windows blokuje przechwytywanie ekranu, dopóki iRacing Screenshot Tool działa jako administrator. Zamknij narzędzie, kliknij prawym przyciskiem myszy iRacing Screenshot Tool.exe > Właściwości > Zgodność, odznacz „Uruchom ten program jako administrator” (zaznacz też „Zmień ustawienia dla wszystkich użytkowników”), a następnie uruchom narzędzie normalnie.',
+		blockedDenied:
+			'Windows odmawia tej aplikacji przechwytywania ekranu ({hresult}). Może to blokować ustawienie prywatności, zasady firmowe lub oprogramowanie zabezpieczające na tym komputerze. Nie dotyczy to Trybu zgodności z ReShade.',
+		reshadeIniMissing:
+			'Nie znaleziono konfiguracji ReShade w {path}. W Ustawieniach wybierz swój plik ReShade.ini — znajduje się tuż obok iRacingSim64DX11.exe, w folderze, do którego zainstalowano ReShade — albo wyłącz Tryb zgodności z ReShade.',
+		reshadeIniUnreadable:
+			'Nie udało się odczytać konfiguracji ReShade w {path}. Sprawdź, czy masz do niej uprawnienia do odczytu, albo wybierz inny plik ReShade.ini w Ustawieniach.',
+		reshadeIniPreset:
+			'{path} to preset ReShade, a nie jego właściwa konfiguracja. Presety zawierają ustawienia efektów i nie zawierają folderu na zrzuty ekranu. W Ustawieniach wybierz zamiast tego ReShade.ini — znajduje się w tym samym folderze — albo wyłącz Tryb zgodności z ReShade.',
+		reshadeIniNoSavePath:
+			'ReShade nie ma ustawionego folderu na zrzuty ekranu w {path}. Otwórz nakładkę ReShade w iRacing, przejdź do jej karty Ustawienia i ustaw ścieżkę zrzutów ekranu, a następnie spróbuj ponownie.',
+		reshadeIniNotConfig:
+			'{path} nie jest plikiem konfiguracyjnym ReShade. W Ustawieniach wybierz swój plik ReShade.ini — znajduje się tuż obok iRacingSim64DX11.exe, w folderze, do którego zainstalowano ReShade — albo wyłącz Tryb zgodności z ReShade.',
 		unknownError: 'Nieznany błąd zrzutu ekranu',
 		outputTooSmall: 'Przechwycony obraz jest za mały ({width}x{height})',
 		blackFrame:
@@ -600,249 +612,9 @@ const pl: Catalog = {
 		minutesSeconds: '{minutes} min {seconds} s',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'Edytor konfiguracji iRacing',
-		nav: {
-			home: 'Zrzuty ekranu',
-			config: 'Konfiguracja iRacing',
-		},
-		tabs: {
-			monitor: 'Monitor / ekran',
-			graphics: 'Grafika',
-		},
-		mode: {
-			label: 'Edytowana konfiguracja:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Starsza wersja',
-		},
-		actions: {
-			save: 'Zapisz zmiany',
-			discard: 'Odrzuć',
-			reload: 'Wczytaj ponownie',
-			browse: 'Przeglądaj…',
-		},
-		state: {
-			dirty: {
-				one: '{count} niezapisana zmiana',
-				few: '{count} niezapisane zmiany',
-				many: '{count} niezapisanych zmian',
-				other: '{count} niezapisanych zmian',
-			},
-			saved: 'Zapisano zmiany w pliku {file}',
-			simRunning:
-				'iRacing jest uruchomiony. Trzyma te ustawienia w pamięci i zapisuje plik ponownie przy zamykaniu, więc zmiany wprowadzone teraz zostałyby utracone. Zamknij iRacing, aby edytować.',
-			stale: 'Ten plik zmienił się na dysku od czasu wczytania — zwykle to iRacing zapisuje go przy zamykaniu. Wczytaj ponownie, aby zobaczyć bieżące wartości.',
-			keyMissing: 'Nie występuje w tym pliku',
-			noModes:
-				'Nie znaleziono plików konfiguracji renderera w folderze {folder}. Uruchom raz iRacing, aby je utworzyć, albo wskaż narzędziu swój folder iRacing.',
-			loadFailed: 'Nie udało się odczytać pliku konfiguracji.',
-			discardConfirm: 'Odrzucić niezapisane zmiany ({count})?',
-		},
-		folder: {
-			label: 'Folder iRacing',
-			autoDetected: 'Wykryto automatycznie',
-			reset: 'Użyj wykrywania automatycznego',
-			help: 'Miejsce, w którym iRacing przechowuje pliki konfiguracji. Pozostaw puste, aby automatycznie wykryć folder Documents\\iRacing.',
-		},
-		errors: {
-			iracingRunning:
-				'Najpierw zamknij iRacing — przy zamykaniu nadpisałby tę zmianę.',
-			staleFile:
-				'Plik zmienił się na dysku od czasu wczytania. Wczytaj ponownie i spróbuj jeszcze raz.',
-			validationFailed:
-				'Jedna z wartości jest nieprawidłowa. Nic nie zostało zmienione.',
-			keyNotFound:
-				'W pliku zabrakło jednego z ustawień, więc nic nie zostało zmienione. Wczytaj ponownie i spróbuj jeszcze raz.',
-			fileNotFound: 'Plik konfiguracji już nie istnieje.',
-			ioError: 'Nie udało się zapisać pliku. Nic nie zostało zmienione.',
-		},
-		groups: {
-			window: 'Położenie okna',
-			fullscreen: 'Pełny ekran',
-			quality: 'Jakość i szczegółowość',
-			aa: 'Antyaliasing i wyostrzanie',
-			post: 'Postprocessing',
-			perf: 'Wydajność',
-			misc: 'Różne',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Wyłączona',
-			low: 'Niska',
-			medium: 'Średnia',
-			high: 'Wysoka',
-			max: 'Maksymalna',
-			ultra: 'Ultra',
-		},
-		nvReflex: {
-			off: 'Wyłączony',
-			on: 'Włączony',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Mniej cieni',
-			maximum: 'Maksimum cieni',
-		},
-		aaMethod: {
-			none: 'Brak',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Miękki',
-			neutral: 'Neutralny',
-			sharp: 'Ostry',
-			simple: 'Prosty',
-		},
-		dnsmFilter: {
-			off: 'Wyłączony',
-			simple: 'Prosty',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Wyłączone',
-			mainView: 'W widoku głównym',
-			mainViewMirrors: 'W widoku głównym i lusterkach',
-		},
-		hideObstructions: {
-			none: 'Brak',
-			halo: 'Ukryj halo',
-			pillarRollcage: 'Ukryj słupki A i klatkę bezpieczeństwa',
-			everything: 'Ukryj wszystko',
-		},
-		replayScope: {
-			label: 'Zastosuj także do grafiki powtórek',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Wpisz liczbę całkowitą z zakresu od {min} do {max}.',
-			int: 'Wpisz liczbę całkowitą.',
-			floatRange: 'Wpisz liczbę z zakresu od {min} do {max}.',
-			float: 'Wpisz liczbę.',
-		},
-		layout: {
-			title: 'Układ monitorów',
-			primary: 'Główny',
-			windowTarget: 'Okno iRacing',
-			estimated:
-				'Szacunkowo — Windows i iRacing numerują ekrany inaczej, więc wyróżnienie jest dopasowywane według położenia.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Ramka okna' },
-				windowedXPos: { label: 'Lewa krawędź okna' },
-				windowedYPos: { label: 'Górna krawędź okna' },
-				windowedWidth: { label: 'Szerokość okna' },
-				windowedHeight: { label: 'Wysokość okna' },
-				windowedMaximized: { label: 'Uruchamiaj zmaksymalizowane' },
-				windowedAlignment: {
-					label: 'Wyrównanie okna',
-					help: 'iRacing nie dokumentuje tej wartości. Nie zmieniaj jej, chyba że znasz potrzebny indeks wyrównania.',
-				},
-				fullScreen: { label: 'Pełny ekran' },
-				fullScreenWidth: { label: 'Szerokość w trybie pełnoekranowym' },
-				fullScreenHeight: { label: 'Wysokość w trybie pełnoekranowym' },
-				fullScreenDepth: {
-					label: 'Głębia kolorów w trybie pełnoekranowym',
-					help: 'Bity na piksel. Praktycznie w każdym współczesnym systemie 32.',
-				},
-				RefreshRate: {
-					label: 'Częstotliwość odświeżania',
-					help: 'Wartość 0 oznacza domyślną częstotliwość odświeżania ekranu.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Jakość shaderów' },
-				ShadowDetail: { label: 'Szczegółowość cieni' },
-				DynamicShadowMaps: {
-					label: 'Dynamiczne mapy cieni',
-					help: 'Mapy cieni dla samochodów i innych ruchomych obiektów. Tylko za dnia.',
-				},
-				DNSMFilter: {
-					label: 'Filtr map cieni',
-					help: 'Filtr używany dla dynamicznych nocnych map cieni.',
-				},
-				CarDetail: { label: 'Szczegółowość samochodów' },
-				PitObjectDetail: {
-					label: 'Szczegółowość obiektów w alei serwisowej',
-				},
-				CrowdDetail: { label: 'Szczegółowość publiczności' },
-				GrandstandDetail: { label: 'Szczegółowość trybun' },
-				ObjectDetail: { label: 'Szczegółowość obiektów' },
-				FoliageDetail: { label: 'Szczegółowość roślinności' },
-				ParticleDetail: { label: 'Szczegółowość cząsteczek' },
-				ParticlesFullRes: { label: 'Cząsteczki w pełnej rozdzielczości' },
-				MirrorDetail: { label: 'Wyższa szczegółowość w lusterkach' },
-				MaxCockpitMirrors: { label: 'Maks. liczba lusterek w kokpicie' },
-				AntiAliasMethod: { label: 'Metoda antyaliasingu' },
-				MSAASamples: { label: 'Próbki MSAA' },
-				MSAAUseFilter: { label: 'Filtr MSAA' },
-				Sharpening: { label: 'Wyostrzanie' },
-				SharpeningAmount: {
-					label: 'Siła wyostrzania',
-					help: 'Siła działania filtra wyostrzającego.',
-				},
-				FSRSharpness: {
-					label: 'Ostrość FSR',
-					help: 'Ostrość stosowana, gdy skalowanie rozdzielczości podnosi ją za pomocą FSR.',
-				},
-				AutoExposure: {
-					label: 'Automatyczna ekspozycja',
-					help: 'Działa tylko przy włączonym renderowaniu HDR.',
-				},
-				SSAO: { label: 'Okluzja otoczenia (SSAO)' },
-				SSRLevel: {
-					label: 'Odbicia w przestrzeni ekranu',
-					help: 'Ustawienie Niska renderuje odbicia w niższej rozdzielczości, Wysoka — w pełnej.',
-				},
-				SSRRainOnly: {
-					label: 'Odbicia tylko podczas deszczu',
-					help: 'Ogranicza odbicia w przestrzeni ekranu do mokrego toru — opcje Low Rain i High Rain w symulatorze.',
-				},
-				HeatHaze: { label: 'Falowanie gorącego powietrza' },
-				DepthOfField: { label: 'Głębia ostrości' },
-				MotionBlurStrength: { label: 'Siła rozmycia ruchu' },
-				Distortion: { label: 'Dystorsja obiektywu' },
-				EnableHDR: { label: 'Renderowanie HDR' },
-				LimitFrameRate: { label: 'Ogranicz liczbę klatek' },
-				DesiredFPSLimit: { label: 'Limit liczby klatek' },
-				VerticalSync: { label: 'Synchronizacja pionowa' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Maks. liczba wstępnie renderowanych klatek',
-					help: 'O ile klatek GPU może pozostawać w tyle za CPU. Wartość 1 jest typowa; 0 wyłącza kolejkę na potrzeby konfiguracji z wieloma GPU.',
-				},
-				SysMemToUseMB: { label: 'Wykorzystywana pamięć systemowa' },
-				VidMemToUseMB: { label: 'Wykorzystywana pamięć wideo' },
-				MaxCarsToDraw: { label: 'Maks. liczba rysowanych samochodów' },
-				MaxCarsToDrawInMirrors: {
-					label: 'Maks. liczba samochodów w lusterkach',
-				},
-				VirtualMirrors: { label: 'Wirtualne lusterka' },
-				UIScale: { label: 'Skala UI' },
-				EnableTireMarks: { label: 'Ślady opon' },
-				HideCockpitObstructions: {
-					label: 'Ukryj elementy zasłaniające w kokpicie',
-				},
-				HeadlightLevel: { label: 'Jakość świateł' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Zrzuty ekranu',
 	},
 };
 

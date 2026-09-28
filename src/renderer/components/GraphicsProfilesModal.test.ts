@@ -94,9 +94,19 @@ const global = {
 			template: '<input />',
 			props: ['modelValue', 'placeholder', 'size'],
 		},
+		'o-tooltip': {
+			template: '<span><slot /></span>',
+			props: ['label', 'position', 'openOnFocus'],
+		},
 		'font-awesome-icon': true,
 	},
 };
+
+// The row actions are icon-only; their accessible name is the aria-label.
+const byLabel =
+	(label: string) =>
+	(button: { attributes: (name: string) => string | undefined }) =>
+		button.attributes('aria-label') === label;
 
 async function mountModal(snap = snapshot()) {
 	invokeResults = { 'profiles:list': snap };
@@ -131,6 +141,23 @@ describe('rendering', () => {
 	test('asks main for the snapshot on mount', async () => {
 		await mountModal();
 		expect(invoked.map((call) => call.channel)).toContain('profiles:list');
+	});
+
+	test('renders the row actions as labelled icon buttons', async () => {
+		// Icon-only, so the aria-label is the button's only accessible name.
+		const wrapper = await mountModal();
+		const buttons = wrapper
+			.find('[data-profile-name="Racing"] .profiles-row__actions')
+			.findAll('button');
+		expect(buttons.map((button) => button.attributes('aria-label'))).toEqual([
+			'Load',
+			'Update from current',
+			'Export',
+			'Delete',
+		]);
+		for (const button of buttons) {
+			expect(button.text()).toBe('');
+		}
 	});
 
 	test('shows the empty state when nothing is stored', async () => {
@@ -212,9 +239,7 @@ describe('the iRacing-running guard', () => {
 		// The reason the whole feature needs a guard: iRacing rewrites the ini
 		// from memory on exit, so a load now would be silently undone.
 		const wrapper = await mountModal(snapshot({ iracingRunning: true }));
-		const loadButtons = wrapper
-			.findAll('button')
-			.filter((button) => button.text() === 'Load');
+		const loadButtons = wrapper.findAll('button').filter(byLabel('Load'));
 		expect(loadButtons.length).toBe(2);
 		for (const button of loadButtons) {
 			expect(button.attributes('disabled')).toBeDefined();
@@ -229,7 +254,7 @@ describe('the iRacing-running guard', () => {
 			wrapper
 				.find(`[data-profile-name="${name}"]`)
 				.findAll('button')
-				.find((button) => button.text() === 'Load');
+				.find(byLabel('Load'));
 		expect(rowButton('Screenshots')?.attributes('disabled')).toBeDefined();
 		expect(rowButton('Racing')?.attributes('disabled')).toBeUndefined();
 	});
@@ -247,7 +272,7 @@ describe('the iRacing-running guard', () => {
 		const load = wrapper
 			.find('[data-profile-name="Screenshots"]')
 			.findAll('button')
-			.find((button) => button.text() === 'Load');
+			.find(byLabel('Load'));
 		expect(load?.attributes('disabled')).toBeUndefined();
 	});
 
@@ -260,9 +285,7 @@ describe('the iRacing-running guard', () => {
 			})
 		);
 		expect(wrapper.text()).toContain('Not a graphics config');
-		const load = wrapper
-			.findAll('button')
-			.find((button) => button.text() === 'Load');
+		const load = wrapper.findAll('button').find(byLabel('Load'));
 		expect(load?.attributes('disabled')).toBeDefined();
 	});
 

@@ -1,4 +1,6 @@
 import {
+	decideCaptureBlock,
+	captureBlockMessage,
 	decideCaptureBackend,
 	classifyWgcResult,
 	decideLongExposureAvailability,
@@ -256,5 +258,81 @@ describe('classifyWgcResult (cq-tests#2)', () => {
 			outcome: 'fallback',
 			fallbackReason: 'black-frame',
 		});
+	});
+});
+
+describe('decideCaptureBlock', () => {
+	const DENIED = { allowed: false };
+
+	test('elevated + refused → elevated (the field case)', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: DENIED,
+				elevated: true,
+			})
+		).toBe('elevated');
+	});
+
+	test('refused without elevation (or unknown elevation) → denied', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: DENIED,
+				elevated: false,
+			})
+		).toBe('denied');
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: DENIED,
+				elevated: null,
+			})
+		).toBe('denied');
+	});
+
+	test('elevated but allowed is NOT blocked — never warn on elevation alone', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: { allowed: true },
+				elevated: true,
+			})
+		).toBeNull();
+	});
+
+	test('ReShade is never blocked — it captures inside iRacing', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: true,
+				permission: DENIED,
+				elevated: true,
+			})
+		).toBeNull();
+	});
+
+	test('an unknowable probe fails open', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: null,
+				elevated: true,
+			})
+		).toBeNull();
+	});
+});
+
+describe('captureBlockMessage', () => {
+	test('elevated names the Run-as-administrator setting', () => {
+		expect(captureBlockMessage('elevated', '0x80070005')).toContain(
+			'Run this program as an administrator'
+		);
+	});
+
+	test('denied carries the HRESULT, or "unknown" without one', () => {
+		expect(captureBlockMessage('denied', '0x80070005')).toContain(
+			'0x80070005'
+		);
+		expect(captureBlockMessage('denied', null)).toContain('unknown');
 	});
 });

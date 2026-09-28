@@ -8,7 +8,7 @@ import { i18n } from '../i18n';
 import NavRail from './NavRail.vue';
 
 // to → expected index in the rail's visual order.
-const PAGES = ['/home', '/config', '/help', '/settings'];
+const PAGES = ['/home', '/help', '/settings'];
 
 function mountRail(path: string) {
 	return mount(NavRail, {
@@ -30,9 +30,9 @@ function mountRail(path: string) {
 }
 
 describe('NavRail', () => {
-	test('renders four page destinations and the Discord button', () => {
+	test('renders three page destinations and the Discord button', () => {
 		const wrapper = mountRail('/home');
-		expect(wrapper.findAll('.nav-rail__item')).toHaveLength(5);
+		expect(wrapper.findAll('.nav-rail__item')).toHaveLength(4);
 		expect(wrapper.find('.nav-rail__item--button').attributes('title')).toBe(
 			'Discord'
 		);

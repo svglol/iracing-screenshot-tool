@@ -423,10 +423,6 @@ const el: Catalog = {
 
 	graphicsProfiles: {
 		title: 'Προφίλ γραφικών',
-		// Carries inline <b> emphasis — rendered with v-html, so keep it to markup
-		// the modal expects (see GraphicsProfilesModal.vue).
-		description:
-			'Αποθηκεύστε ρυθμίσεις γραφικών του iRacing και εναλλάσσεστε ανάμεσά τους — μία για αγώνες, μία για στιγμιότυπα, μία για εγγραφή βίντεο. Το iRacing φορτώνει τη ρύθμιση κατά την εκκίνηση και την ξαναγράφει όταν κλείνει, οπότε μια εναλλαγή που γίνεται όσο εκτελείται αναιρείται: <b>να εναλλάσσετε ρυθμίσεις μόνο όταν το σύστημα προσομοίωσης είναι κλειστό</b>.',
 		// The most important sentence here. iRacing keeps its graphics settings in
 		// memory and writes them back over the file when it exits, so a swap made
 		// while it is running is undone with no sign anything failed.
@@ -534,6 +530,20 @@ const el: Catalog = {
 			'Το iRacing βρίσκεται σε αποκλειστική πλήρη οθόνη, οπότε το στιγμιότυπο θα ήταν μαύρο. Στο iRacing, ορίστε το Display > Full Screen σε OFF (χρησιμοποιήστε Borderless ή Windowed) και δοκιμάστε ξανά.',
 		exclusiveFullscreenUnattributed:
 			'Μια εφαρμογή εκτελείται σε αποκλειστική πλήρη οθόνη, κάτι που παράγει μαύρη λήψη. Αν το iRacing βρίσκεται σε πλήρη οθόνη, ορίστε το Display > Full Screen σε OFF (χρησιμοποιήστε Borderless ή Windowed) και δοκιμάστε ξανά.',
+		blockedElevated:
+			'Τα Windows μπλοκάρουν τη λήψη οθόνης όσο το iRacing Screenshot Tool εκτελείται ως διαχειριστής. Κλείστε το εργαλείο, κάντε δεξί κλικ στο iRacing Screenshot Tool.exe > Ιδιότητες > Συμβατότητα, αποεπιλέξτε «Εκτέλεση αυτού του προγράμματος ως διαχειριστής» (επιλέξτε και «Αλλαγή ρυθμίσεων για όλους τους χρήστες»), και μετά ξεκινήστε το εργαλείο κανονικά.',
+		blockedDenied:
+			'Τα Windows αρνούνται τη λήψη οθόνης για αυτήν την εφαρμογή ({hresult}). Μια ρύθμιση απορρήτου, μια εταιρική πολιτική ή κάποιο λογισμικό ασφαλείας σε αυτόν τον υπολογιστή ενδέχεται να το εμποδίζει. Η Λειτουργία συμβατότητας με ReShade δεν επηρεάζεται.',
+		reshadeIniMissing:
+			'Δεν βρέθηκε αρχείο ρυθμίσεων του ReShade στο {path}. Στις Ρυθμίσεις, επιλέξτε το ReShade.ini σας — βρίσκεται δίπλα στο iRacingSim64DX11.exe, μέσα στον φάκελο όπου εγκαταστάθηκε το ReShade — ή απενεργοποιήστε τη Λειτουργία συμβατότητας με ReShade.',
+		reshadeIniUnreadable:
+			'Το αρχείο ρυθμίσεων του ReShade στο {path} δεν ήταν δυνατό να διαβαστεί. Ελέγξτε αν έχετε δικαίωμα ανάγνωσης, ή επιλέξτε διαφορετικό ReShade.ini στις Ρυθμίσεις.',
+		reshadeIniPreset:
+			'Το {path} είναι ένα προεπιλεγμένο πρότυπο (preset) του ReShade, όχι οι δικές του ρυθμίσεις. Τα presets περιέχουν ρυθμίσεις εφέ και όχι φάκελο στιγμιότυπων. Στις Ρυθμίσεις, επιλέξτε το ReShade.ini — βρίσκεται στον ίδιο φάκελο — ή απενεργοποιήστε τη Λειτουργία συμβατότητας με ReShade.',
+		reshadeIniNoSavePath:
+			'Το ReShade δεν έχει ορισμένο φάκελο στιγμιότυπων στο {path}. Ανοίξτε την επικάλυψη (overlay) του ReShade μέσα στο iRacing, μεταβείτε στην καρτέλα Ρυθμίσεις του και ορίστε μια διαδρομή στιγμιότυπων, και μετά δοκιμάστε ξανά.',
+		reshadeIniNotConfig:
+			'Το {path} δεν είναι αρχείο ρυθμίσεων του ReShade. Στις Ρυθμίσεις, επιλέξτε το ReShade.ini σας — βρίσκεται δίπλα στο iRacingSim64DX11.exe, μέσα στον φάκελο όπου εγκαταστάθηκε το ReShade — ή απενεργοποιήστε τη Λειτουργία συμβατότητας με ReShade.',
 		unknownError: 'Άγνωστο σφάλμα στιγμιότυπου',
 		outputTooSmall: 'Η έξοδος λήψης είναι πολύ μικρή ({width}x{height})',
 		blackFrame:
@@ -630,246 +640,9 @@ const el: Catalog = {
 		minutesSeconds: '{minutes} λεπ. {seconds} δευτ.',
 	},
 
-	// The iRacing configuration editor page. Setting labels/helps are addressed
-	// mechanically as settings.<sectionSlug>.<key>.label|.help — the schema in
-	// utilities/iracing-settings-schema.ts derives the keys, and its test fails
-	// if one is missing here.
-	iniEditor: {
-		title: 'Επεξεργασία διαμόρφωσης iRacing',
-		nav: {
-			home: 'Στιγμιότυπα',
-			config: 'Διαμόρφωση iRacing',
-		},
-		tabs: {
-			monitor: 'Οθόνη / Απεικόνιση',
-			graphics: 'Γραφικά',
-		},
-		mode: {
-			label: 'Επεξεργάζεστε τη διαμόρφωση:',
-			// Mode names come from iRacing's own filenames; Legacy is the bare
-			// rendererDX11.ini only old-website launches still read.
-			legacy: 'Παλαιού τύπου',
-		},
-		actions: {
-			save: 'Αποθήκευση αλλαγών',
-			discard: 'Απόρριψη',
-			reload: 'Επαναφόρτωση',
-			browse: 'Αναζήτηση…',
-		},
-		state: {
-			dirty: {
-				one: '{count} μη αποθηκευμένη αλλαγή',
-				other: '{count} μη αποθηκευμένες αλλαγές',
-			},
-			saved: 'Οι αλλαγές αποθηκεύτηκαν στο {file}',
-			simRunning:
-				'Το iRacing εκτελείται. Διατηρεί αυτές τις ρυθμίσεις στη μνήμη και ξαναγράφει το αρχείο όταν κλείνει, οπότε οι αλλαγές που θα γίνουν τώρα θα χαθούν. Κλείστε το iRacing για να κάνετε επεξεργασία.',
-			stale: 'Αυτό το αρχείο άλλαξε στον δίσκο από τότε που φορτώθηκε — συνήθως επειδή το iRacing το ξαναέγραψε όταν έκλεισε. Κάντε επαναφόρτωση για να δείτε τις τρέχουσες τιμές.',
-			keyMissing: 'Δεν υπάρχει σε αυτό το αρχείο',
-			noModes:
-				'Δεν βρέθηκαν αρχεία διαμόρφωσης γραφικών στο {folder}. Εκκινήστε το iRacing μία φορά για να δημιουργηθούν, ή υποδείξτε στο εργαλείο τον φάκελο του iRacing σας.',
-			loadFailed: 'Δεν ήταν δυνατή η ανάγνωση του αρχείου διαμόρφωσης.',
-			discardConfirm: 'Απόρριψη {count} μη αποθηκευμένων αλλαγών;',
-		},
-		folder: {
-			label: 'Φάκελος iRacing',
-			autoDetected: 'Ανιχνεύθηκε αυτόματα',
-			reset: 'Χρήση αυτόματης ανίχνευσης',
-			help: 'Εκεί όπου το iRacing διατηρεί τα αρχεία διαμόρφωσής του. Αφήστε το κενό για αυτόματη ανίχνευση του φακέλου Documents\\iRacing.',
-		},
-		errors: {
-			iracingRunning:
-				'Κλείστε πρώτα το iRacing — θα αντικαθιστούσε την αλλαγή όταν κλείσει.',
-			staleFile:
-				'Το αρχείο άλλαξε στον δίσκο από τότε που φορτώθηκε. Κάντε επαναφόρτωση και δοκιμάστε ξανά.',
-			validationFailed:
-				'Μία από τις τιμές δεν είναι έγκυρη. Καμία αλλαγή δεν έγινε.',
-			keyNotFound:
-				'Μια ρύθμιση έλειπε από το αρχείο, οπότε καμία αλλαγή δεν έγινε. Κάντε επαναφόρτωση και δοκιμάστε ξανά.',
-			fileNotFound: 'Το αρχείο διαμόρφωσης δεν υπάρχει πια.',
-			ioError:
-				'Δεν ήταν δυνατή η εγγραφή του αρχείου. Καμία αλλαγή δεν έγινε.',
-		},
-		groups: {
-			window: 'Τοποθέτηση παραθύρου',
-			fullscreen: 'Πλήρης οθόνη',
-			quality: 'Ποιότητα και λεπτομέρεια',
-			aa: 'Εξομάλυνση και όξυνση',
-			post: 'Μετεπεξεργασία',
-			perf: 'Επιδόσεις',
-			misc: 'Διάφορα',
-		},
-		// Shared tier vocabulary for enum settings.
-		levels: {
-			off: 'Ανενεργό',
-			low: 'Χαμηλό',
-			medium: 'Μεσαίο',
-			high: 'Υψηλό',
-			max: 'Μέγιστο',
-			ultra: 'Ultra',
-		},
-		nvReflex: {
-			off: 'Ανενεργό',
-			on: 'Ενεργό',
-			onBoost: 'Boost',
-		},
-		shadowDetail: {
-			fewer: 'Λιγότερες σκιές',
-			maximum: 'Μέγιστες σκιές',
-		},
-		aaMethod: {
-			none: 'Καμία',
-			msaa: 'MSAA',
-			fxaa: 'FXAA',
-			smaa: 'SMAA',
-		},
-		msaaSamples: {
-			x2: '2x',
-			x4: '4x',
-			x8: '8x',
-		},
-		msaaFilter: {
-			soft: 'Απαλό',
-			neutral: 'Ουδέτερο',
-			sharp: 'Ευκρινές',
-			simple: 'Απλό',
-		},
-		dnsmFilter: {
-			off: 'Ανενεργό',
-			simple: 'Απλό',
-			pcf4: 'PCF4',
-			pcf4p: 'PCF4P',
-			pcf8p: 'PCF8P',
-			pcf16p: 'PCF16P',
-		},
-		dynamicShadowMaps: {
-			off: 'Ανενεργοί',
-			mainView: 'Στην κύρια προβολή',
-			mainViewMirrors: 'Στην κύρια προβολή και στους καθρέφτες',
-		},
-		hideObstructions: {
-			none: 'Κανένα',
-			halo: 'Απόκρυψη του halo',
-			pillarRollcage: 'Απόκρυψη των κολόνων Α και του κλωβού ασφαλείας',
-			everything: 'Απόκρυψη όλων',
-		},
-		replayScope: {
-			label: 'Εφαρμογή και στα γραφικά του replay',
-		},
-		// Inline hints under a field whose pending value cannot be saved. Only
-		// numeric inputs can go invalid (switches and dropdowns cannot), and
-		// every bounded numeric in the schema carries both bounds.
-		invalid: {
-			intRange: 'Εισαγάγετε έναν ακέραιο αριθμό μεταξύ {min} και {max}.',
-			int: 'Εισαγάγετε έναν ακέραιο αριθμό.',
-			floatRange: 'Εισαγάγετε έναν αριθμό μεταξύ {min} και {max}.',
-			float: 'Εισαγάγετε έναν αριθμό.',
-		},
-		layout: {
-			title: 'Διάταξη οθονών',
-			primary: 'Κύρια',
-			windowTarget: 'Παράθυρο iRacing',
-			estimated:
-				'Κατά προσέγγιση — τα Windows και το iRacing αριθμούν τις οθόνες διαφορετικά, οπότε η επισήμανση αντιστοιχίζεται με βάση τη θέση.',
-		},
-		settings: {
-			display: {
-				border: { label: 'Περίγραμμα παραθύρου' },
-				windowedXPos: { label: 'Αριστερό άκρο παραθύρου' },
-				windowedYPos: { label: 'Πάνω άκρο παραθύρου' },
-				windowedWidth: { label: 'Πλάτος παραθύρου' },
-				windowedHeight: { label: 'Ύψος παραθύρου' },
-				windowedMaximized: {
-					label: 'Εκκίνηση σε μεγιστοποιημένο παράθυρο',
-				},
-				windowedAlignment: {
-					label: 'Στοίχιση παραθύρου',
-					help: 'Το iRacing δεν τεκμηριώνει αυτήν την τιμή. Αφήστε την ως έχει, εκτός αν γνωρίζετε τον δείκτη στοίχισης που θέλετε.',
-				},
-				fullScreen: { label: 'Πλήρης οθόνη' },
-				fullScreenWidth: { label: 'Πλάτος πλήρους οθόνης' },
-				fullScreenHeight: { label: 'Ύψος πλήρους οθόνης' },
-				fullScreenDepth: {
-					label: 'Βάθος χρώματος πλήρους οθόνης',
-					help: 'Bit ανά pixel. 32 σε ουσιαστικά κάθε σύγχρονο σύστημα.',
-				},
-				RefreshRate: {
-					label: 'Ρυθμός ανανέωσης',
-					help: 'Το 0 χρησιμοποιεί τον προεπιλεγμένο ρυθμό ανανέωσης της οθόνης.',
-				},
-			},
-			graphics: {
-				ShaderQuality: { label: 'Ποιότητα shader' },
-				ShadowDetail: { label: 'Λεπτομέρεια σκιών' },
-				DynamicShadowMaps: {
-					label: 'Δυναμικοί χάρτες σκιών',
-					help: 'Χάρτες σκιών για τα αυτοκίνητα και άλλα κινούμενα αντικείμενα. Μόνο κατά τη διάρκεια της ημέρας.',
-				},
-				DNSMFilter: {
-					label: 'Φίλτρο χάρτη σκιών',
-					help: 'Το φίλτρο που χρησιμοποιείται για τους δυναμικούς νυχτερινούς χάρτες σκιών.',
-				},
-				CarDetail: { label: 'Λεπτομέρεια αυτοκινήτων' },
-				PitObjectDetail: { label: 'Λεπτομέρεια αντικειμένων στα pit' },
-				CrowdDetail: { label: 'Λεπτομέρεια πλήθους' },
-				GrandstandDetail: { label: 'Λεπτομέρεια κερκίδων' },
-				ObjectDetail: { label: 'Λεπτομέρεια αντικειμένων' },
-				FoliageDetail: { label: 'Λεπτομέρεια βλάστησης' },
-				ParticleDetail: { label: 'Λεπτομέρεια σωματιδίων' },
-				ParticlesFullRes: { label: 'Σωματίδια σε πλήρη ανάλυση' },
-				MirrorDetail: { label: 'Περισσότερη λεπτομέρεια στους καθρέφτες' },
-				MaxCockpitMirrors: { label: 'Μέγιστοι καθρέφτες κόκπιτ' },
-				AntiAliasMethod: { label: 'Μέθοδος εξομάλυνσης' },
-				MSAASamples: { label: 'Δείγματα MSAA' },
-				MSAAUseFilter: { label: 'Φίλτρο MSAA' },
-				Sharpening: { label: 'Όξυνση' },
-				SharpeningAmount: {
-					label: 'Ένταση όξυνσης',
-					help: 'Η ισχύς του φίλτρου όξυνσης.',
-				},
-				FSRSharpness: {
-					label: 'Ευκρίνεια FSR',
-					help: 'Η ευκρίνεια που χρησιμοποιείται όταν η κλιμάκωση ανάλυσης μεγεθύνει την εικόνα με FSR.',
-				},
-				AutoExposure: {
-					label: 'Αυτόματη έκθεση',
-					help: 'Λειτουργεί μόνο όσο είναι ενεργοποιημένη η απόδοση HDR.',
-				},
-				SSAO: { label: 'Περιβαλλοντική σκίαση (SSAO)' },
-				SSRLevel: {
-					label: 'Ανακλάσεις χώρου οθόνης',
-					help: 'Το Χαμηλό αποδίδει τις ανακλάσεις σε χαμηλότερη ανάλυση, το Υψηλό σε πλήρη ανάλυση.',
-				},
-				SSRRainOnly: {
-					label: 'Ανακλάσεις μόνο στη βροχή',
-					help: 'Περιορίζει τις ανακλάσεις χώρου οθόνης σε συνθήκες βρεγμένης πίστας — οι επιλογές Low Rain και High Rain στο σύστημα προσομοίωσης.',
-				},
-				HeatHaze: { label: 'Θερμική θόλωση' },
-				DepthOfField: { label: 'Βάθος πεδίου' },
-				MotionBlurStrength: { label: 'Ένταση θολώματος κίνησης' },
-				Distortion: { label: 'Παραμόρφωση φακού' },
-				EnableHDR: { label: 'Απόδοση HDR' },
-				LimitFrameRate: { label: 'Περιορισμός ρυθμού καρέ' },
-				DesiredFPSLimit: { label: 'Όριο ρυθμού καρέ' },
-				VerticalSync: { label: 'Κατακόρυφος συγχρονισμός' },
-				NvReflexMode: { label: 'NVIDIA Reflex' },
-				MaxPreRenderedFrames: {
-					label: 'Μέγιστα καρέ προ-απόδοσης',
-					help: 'Πόσα καρέ επιτρέπεται να καθυστερεί η GPU πίσω από τη CPU. Το 1 είναι το φυσιολογικό· το 0 απενεργοποιεί την ουρά για διατάξεις με πολλαπλές GPU.',
-				},
-				SysMemToUseMB: { label: 'Μνήμη συστήματος προς χρήση' },
-				VidMemToUseMB: { label: 'Μνήμη βίντεο προς χρήση' },
-				MaxCarsToDraw: { label: 'Μέγιστα αυτοκίνητα προς απόδοση' },
-				MaxCarsToDrawInMirrors: {
-					label: 'Μέγιστα αυτοκίνητα στους καθρέφτες',
-				},
-				VirtualMirrors: { label: 'Εικονικοί καθρέφτες' },
-				UIScale: { label: 'Κλίμακα UI' },
-				EnableTireMarks: { label: 'Σημάδια ελαστικών' },
-				HideCockpitObstructions: { label: 'Απόκρυψη εμποδίων κόκπιτ' },
-				HeadlightLevel: { label: 'Ποιότητα προβολέων' },
-			},
-		},
+	// The navigation rail’s tooltips.
+	nav: {
+		home: 'Στιγμιότυπα',
 	},
 };
 

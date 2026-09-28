@@ -30,10 +30,15 @@ import {
 	resolveReshadeBasePath,
 	remapForeignUserProfileFolder,
 	createReshadeConfigError,
+	describeReshadeIniError,
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
 	parseCameraState,
 } from './main-utils';
+import { describeReshadeIniProblem } from '../utilities/reshade-config';
+
+// The path both ReShade field reports carried, and our shipped default.
+const INI = 'C:\\Program Files (x86)\\iRacing\\ReShade.ini';
 
 // ---------------------------------------------------------------------------
 // isPlainObject
@@ -632,13 +637,140 @@ describe('createReshadeConfigError', () => {
 });
 
 // ---------------------------------------------------------------------------
+// describeReshadeIniError
+// ---------------------------------------------------------------------------
+describe('describeReshadeIniError', () => {
+	function errno(code: string, message: string): NodeJS.ErrnoException {
+		const error = new Error(message) as NodeJS.ErrnoException;
+		error.code = code;
+		return error;
+	}
+
+	// The field case: this exact error reached the user as a toast fourteen times.
+	test('rewrites the ENOENT the field reports carried', () => {
+		const raw = errno(
+			'ENOENT',
+			`ENOENT: no such file or directory, open '${INI}'`
+		);
+		const described = describeReshadeIniError(raw, INI) as Error;
+
+		expect(described).not.toBe(raw);
+		expect(described.message).not.toContain('ENOENT');
+		expect(described.message).toContain(INI);
+	});
+
+	test('rewrites a permission failure differently', () => {
+		const missing = describeReshadeIniError(
+			errno('ENOENT', 'nope'),
+			INI
+		) as Error;
+		const unreadable = describeReshadeIniError(
+			errno('EACCES', 'nope'),
+			INI
+		) as Error;
+		expect(unreadable.message).not.toBe(missing.message);
+	});
+
+	// The sentence the user reads is ours; the line the log keeps is still the
+	// OS's. Without originalMessage the rewrite would erase the only record of
+	// what the filesystem actually said, since it also replaces the stack.
+	test('keeps the filesystem’s own wording and errno in meta', () => {
+		const raw = errno(
+			'ENOENT',
+			"ENOENT: no such file or directory, open 'x'"
+		);
+		const described = describeReshadeIniError(raw, INI) as Error & {
+			meta: Record<string, unknown>;
+		};
+
+		expect(described.meta).toMatchObject({
+			reshadeFile: INI,
+			code: 'ENOENT',
+			problem: 'missing',
+			originalMessage: raw.message,
+		});
+	});
+
+	// meta rides into the report automatically — createScreenshotErrorPayload
+	// merges an Error's own .meta over the caller's defaults.
+	test('its meta reaches the screenshot error payload', () => {
+		const described = describeReshadeIniError(errno('ENOENT', 'x'), INI);
+		const payload = createScreenshotErrorPayload(described, {
+			context: 'resize-screenshot:reshade-preflight',
+			meta: { request: { width: 7680 } },
+		});
+
+		expect(payload.context).toBe('resize-screenshot:reshade-preflight');
+		expect(payload.meta).toMatchObject({
+			request: { width: 7680 },
+			code: 'ENOENT',
+			problem: 'missing',
+		});
+	});
+
+	// A confident wrong explanation is worse than a raw errno: it sends the user
+	// to fix a setting that was never broken and erases the real evidence.
+	test('passes an unrecognised errno through untouched', () => {
+		const raw = errno('EBUSY', 'EBUSY: resource busy');
+		expect(describeReshadeIniError(raw, INI)).toBe(raw);
+	});
+
+	// getReshadeScreenshotFolder's own throw carries no errno and is already
+	// worded, so the pre-flight must not overwrite it with a filesystem story.
+	test('passes an already-worded config error through untouched', () => {
+		const raw = createReshadeConfigError(
+			'Unable to determine the ReShade screenshot folder'
+		);
+		expect(describeReshadeIniError(raw, INI)).toBe(raw);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // getReshadeScreenshotFolder
 // ---------------------------------------------------------------------------
 describe('getReshadeScreenshotFolder', () => {
-	test('throws when no screenshot path is configured', () => {
-		expect(() => getReshadeScreenshotFolder({})).toThrow(
-			'Unable to determine the ReShade screenshot folder'
-		);
+	// The message used to be a flat, English-only "Unable to determine the ReShade
+	// screenshot folder" — a symptom that named neither the mistake nor the fix.
+	// It now says which of several quite different files the user handed us.
+	test('throws a named, localized problem when no screenshot path is configured', () => {
+		const empty = () => getReshadeScreenshotFolder({}, INI);
+		expect(empty).toThrow(describeReshadeIniProblem('notConfig', INI));
+		expect(empty).not.toThrow('Unable to determine');
+	});
+
+	// The 2026-08-28 field case: a ReShade PRESET selected instead of the config.
+	test('names a preset as a preset rather than as a missing folder', () => {
+		expect(() =>
+			getReshadeScreenshotFolder({ Techniques: 'A@A.fx' }, INI)
+		).toThrow(describeReshadeIniProblem('preset', INI));
+	});
+
+	// The right file, but ReShade itself has no screenshot path set — a different
+	// mistake with a fix that is not in our settings at all.
+	test('separates a config with no save path from a wrong-kind file', () => {
+		expect(() =>
+			getReshadeScreenshotFolder({ GENERAL: {}, SCREENSHOT: {} }, INI)
+		).toThrow(describeReshadeIniProblem('noSavePath', INI));
+	});
+
+	// The old error carried no meta whatsoever, so the 2026-08-28 report could
+	// only IMPLY "that was a preset" from the filename — the log could not say.
+	test('carries the problem and the sections it found in meta', () => {
+		let caught: (Error & { meta?: Record<string, unknown> }) | null = null;
+		try {
+			getReshadeScreenshotFolder(
+				{ Techniques: 'A@A.fx', Vignette: {} },
+				INI
+			);
+		} catch (error) {
+			caught = error as Error & { meta?: Record<string, unknown> };
+		}
+
+		expect(caught?.meta).toMatchObject({
+			reshadeFile: INI,
+			problem: 'preset',
+			iniSections: ['Techniques', 'Vignette'],
+		});
 	});
 
 	test('resolves SCREENSHOT.SavePath as absolute', () => {

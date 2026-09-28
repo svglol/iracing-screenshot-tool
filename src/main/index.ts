@@ -21,6 +21,7 @@ import * as path from 'path';
 const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
+import { listForeignModules } from '../utilities/foreign-modules';
 import * as irsdk from './iracing-sdk';
 import {
 	resizeIracingWindow,
@@ -35,10 +36,16 @@ import {
 	decideCaptureBackend,
 	classifyWgcResult,
 	decideLongExposureAvailability,
+	decideCaptureBlock,
+	captureBlockMessage,
+	type CaptureBlock,
 } from './capture-decisions';
 import {
 	captureIracingWindowNative,
+	getCaptureConsentStatus,
+	getCapturePermission,
 	getLastNativeFailureReason,
+	getProcessElevation,
 	getWgcSupport,
 	getWgcUnavailableReason,
 	isWgcAvailable,
@@ -78,13 +85,6 @@ import {
 	saveActiveAs,
 	type StoreContext as ProfilesStoreContext,
 } from './iracing-profiles-store';
-import {
-	listModes as listConfigModes,
-	readConfig as readIracingConfig,
-	saveConfig as saveIracingConfig,
-	type ConfigStoreContext,
-	type SettingEdit,
-} from './iracing-config-store';
 import { resolveCaptureDimensions } from '../utilities/capture-resolution';
 import { describeSampleStats } from '../utilities/long-exposure/sample-stats';
 import sharp from 'sharp';
@@ -111,9 +111,12 @@ import {
 	summarizeDesktopSource,
 	summarizeDesktopSources,
 	createScreenshotErrorPayload,
+	describeReshadeIniError,
 	getReshadeScreenshotFolder,
 	normalizeFileKey,
 	parseCameraState as parseCameraStateFromArray,
+	type ReshadeIni,
+	type ReshadeScreenshotFolder,
 } from './main-utils';
 import {
 	applyUpdateEvent,
@@ -457,7 +460,61 @@ function getCaptureBackendDiagnostics(): Record<string, unknown> {
 		// Pre-exit snapshot taken at capture start, so the disconnect diagnostic
 		// carries usage that actually supports the OOM hypothesis (obs-capture-diagnostics#3).
 		vramAtCaptureStart: captureStartVram,
+		// The Windows screenshots-privacy consent as the registry stores it (24H2+).
+		// A 'Deny' in any field fails CreateForWindow for BOTH backends at once —
+		// and the Settings UI can disagree with an HKLM policy value, so the log
+		// needs the registry truth, not the user's reading of the toggle. Read
+		// live per failure; null = unreadable or a pre-24H2 OS with no store.
+		captureConsent: (() => {
+			try {
+				return getCaptureConsentStatus();
+			} catch {
+				return null;
+			}
+		})(),
+		// The our-process-specific family (field case 2026-08: CreateForWindow
+		// failed from this app while Discord converted the same iRacing window,
+		// so machine, consent and window were fine and the difference had to be
+		// inside THIS process). elevated = our token; compatLayer = AppCompat
+		// shims on our exe (RUNASADMIN, WIN8RTM… — durable, inherited by every
+		// child process); foreignModules = DLLs from neither Windows nor our
+		// install, the fingerprint of third-party injection. All fail-open.
+		processContext: {
+			elevated: (() => {
+				try {
+					return getProcessElevation();
+				} catch {
+					return null;
+				}
+			})(),
+			compatLayer: process.env.__COMPAT_LAYER ?? null,
+			foreignModules: listForeignModules(),
+			// Whether Windows lets this process capture at all (taskbar probe).
+			capturePermission: (() => {
+				try {
+					return getCapturePermission();
+				} catch {
+					return null;
+				}
+			})(),
+		},
 	};
+}
+
+// Whether any capture can work in this process right now (decideCaptureBlock).
+// `reshade` is the caller's backend: ReShade never asks Windows, so it is never
+// blocked. Asked live at each capture — cheap (no session, no frame) and the
+// answer can change if the user edits a privacy setting while we run.
+function currentCaptureBlock(
+	reshade: boolean
+): { block: CaptureBlock; hresult: string | null } | null {
+	const permission = getCapturePermission();
+	const block = decideCaptureBlock({
+		reshade,
+		permission,
+		elevated: getProcessElevation(),
+	});
+	return block ? { block, hresult: permission?.hresult ?? null } : null;
 }
 
 function buildMainScreenshotDiagnostics() {
@@ -931,6 +988,10 @@ ipcMain.handle('get-vram-info', () => {
 ipcMain.handle('get-iracing-fullscreen-state', () =>
 	getIracingExclusiveFullscreenState()
 );
+// Whether Windows refuses capture to this process, for the sidebar's proactive
+// warning. Asked as if not in ReShade mode — the sidebar hides it under ReShade
+// itself, so toggling the mode needs no second round-trip. Fails open to null.
+ipcMain.handle('get-capture-block', () => currentCaptureBlock(false));
 // #11: whether the WGC native-capture path loaded on this machine (addon present
 // + the OS floors in decideWgcSupport). Settings uses this (sendSync) to disable
 // the toggle on an unsupported system. Fails open in the loader, so a false here
@@ -1097,81 +1158,6 @@ ipcMain.handle('profiles:revealFolder', async () => {
 	}
 	await shell.openPath(dir);
 });
-
-// ---------------------------------------------------------------------------
-// iRacing configuration editor
-//
-// See docs/design/iracing-config-editor.md. All file handling lives in
-// iracing-config-store (curated schema + span-replacing writer); these
-// handlers only supply the folder override and the sim-running signal. Kept
-// deliberately separate from the profiles feature above — a direct edit here
-// legitimately flips the active profile's state to "modified".
-// ---------------------------------------------------------------------------
-
-function iracingConfigContext(): ConfigStoreContext {
-	return {
-		iracingFolder: configModule.get('iracingFolder'),
-		// Same readiness signal as profilesContext, and here it guards EVERY
-		// write: iRacing rewrites these files from memory when it exits.
-		iracingRunning: iracing.telemetry != null,
-	};
-}
-
-ipcMain.handle('iracing-config:modes', () =>
-	listConfigModes(iracingConfigContext())
-);
-
-ipcMain.handle('iracing-config:read', (_event, payload: { mode: string }) =>
-	readIracingConfig(payload.mode, iracingConfigContext())
-);
-
-ipcMain.handle(
-	'iracing-config:save',
-	(
-		_event,
-		payload: {
-			mode: string;
-			edits: SettingEdit[];
-			expectedMtimeMs: number;
-			pairReplay?: boolean;
-		}
-	) => {
-		const result = saveIracingConfig(
-			payload.mode,
-			payload.edits,
-			payload.expectedMtimeMs,
-			iracingConfigContext(),
-			{ pairReplay: payload.pairReplay }
-		);
-		if (result.ok) {
-			log.info('iRacing config saved', {
-				mode: payload.mode,
-				edits: payload.edits.length,
-				backedUp: result.backedUp,
-			});
-		} else {
-			log.warn('iRacing config save refused', {
-				mode: payload.mode,
-				reason: result.error,
-			});
-		}
-		return result;
-	}
-);
-
-// The OS display list for the monitor-layout visual. Bounds are DIP-based;
-// the renderer multiplies by scaleFactor to compare against iRacing's
-// physical-pixel ini coordinates.
-ipcMain.handle('iracing-config:displays', () => ({
-	displays: screen.getAllDisplays().map((display) => ({
-		id: display.id,
-		bounds: display.bounds,
-		scaleFactor: display.scaleFactor,
-		rotation: display.rotation,
-		internal: display.internal,
-	})),
-	primaryId: screen.getPrimaryDisplay().id,
-}));
 
 // ---------------------------------------------------------------------------
 // Long-exposure photo mode
@@ -1362,6 +1348,22 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 	// cannot attribute the shell's fullscreen state to iRacing. It is kept because it
 	// costs nothing and stashes `lastCaptureFullscreenState`; the sample that can
 	// actually refuse is `exclusiveFullscreenRefusal` below, taken after the raise.
+	// Long exposure is WGC-only, so a capture refusal from Windows would only
+	// surface after the whole playback as "no frames". Refuse up front instead.
+	const blocked = currentCaptureBlock(false);
+	if (blocked) {
+		log.warn('Long exposure rejected', {
+			reason: `capture-blocked-${blocked.block}`,
+			hresult: blocked.hresult,
+		});
+		return {
+			ok: false,
+			failure: 'capture-blocked',
+			message: captureBlockMessage(blocked.block, blocked.hresult),
+			warnings: [],
+		};
+	}
+
 	const fullscreen = getIracingExclusiveFullscreenState();
 	lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
 	if (fullscreen && fullscreen.exclusiveFullscreen) {
@@ -1975,6 +1977,27 @@ app.on('ready', async () => {
 		// stashed state — be the backstop. Fails open: null (native off / iRacing
 		// closed) just proceeds.
 		if (!config.get('reshade')) {
+			// Capture-permission pre-flight: when Windows refuses this process
+			// (field case: the app set to "Run as administrator"), WGC and the
+			// getUserMedia fallback are both refused, so the capture would fail
+			// twice and surface as "Could not start video source". Say why instead,
+			// before touching the sim.
+			const blocked = currentCaptureBlock(false);
+			if (blocked) {
+				log.warn('Screenshot rejected', {
+					reason: `capture-blocked-${blocked.block}`,
+					hresult: blocked.hresult,
+				});
+				reportScreenshotError(
+					captureBlockMessage(blocked.block, blocked.hresult),
+					{
+						context: `resize-screenshot:capture-blocked-${blocked.block}`,
+						meta: { request: data },
+					}
+				);
+				return;
+			}
+
 			const fullscreen = getIracingExclusiveFullscreenState();
 			lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
 			if (fullscreen && fullscreen.exclusiveFullscreen) {
@@ -1989,6 +2012,45 @@ app.on('ready', async () => {
 			}
 		} else {
 			lastCaptureFullscreenState = null;
+		}
+
+		// ReShade pre-flight (field case 2026-08: 14 identical reports from one
+		// user over a week). This read used to sit inside the ReShade branch below
+		// — after takingScreenshot had latched, after the watchdog was armed, after
+		// the sim's UI was hidden, and after the window had been resized to capture
+		// size. So a missing ini cost a full resize/restore cycle on every press,
+		// and on the reporting machine each of those cycles had iRacing allocate
+		// 3-7 GB of render targets (one reaching 93.7% of a 12 GB card) for a
+		// capture that could never happen. None of that work can change this
+		// answer, so ask it HERE, alongside the other refusals, while the sim is
+		// still untouched.
+		//
+		// Resolved ONCE and carried down rather than re-read in the branch: two
+		// reads are two chances to disagree, and the branch would then be reporting
+		// a fault the pre-flight had already cleared.
+		let reshadeLocation: ReshadeScreenshotFolder | null = null;
+		if (config.get('reshade')) {
+			const reshadeIniPath = config.get('reshadeFile');
+			try {
+				const reshadeIni = loadIniFile.sync(reshadeIniPath) as ReshadeIni;
+				// Pulled forward for exactly the same reason: an ini that parses but
+				// names no screenshot folder is just as fatal and just as knowable
+				// before we touch the window.
+				reshadeLocation = getReshadeScreenshotFolder(
+					reshadeIni,
+					reshadeIniPath
+				);
+			} catch (error) {
+				log.info('Screenshot rejected', { reason: 'reshade-config' });
+				reportScreenshotError(
+					describeReshadeIniError(error, reshadeIniPath),
+					{
+						context: 'resize-screenshot:reshade-preflight',
+						meta: { request: data, reshadeFile: reshadeIniPath },
+					}
+				);
+				return;
+			}
 		}
 
 		// Defensive clamp: the sidebar's o-input max is only a hint and the
@@ -2184,13 +2246,10 @@ app.on('ready', async () => {
 		// foreground) just like the non-ReShade path — a quiet reposition would
 		// leave a minimized/background iRacing un-composited so ReShade's grab
 		// gets no frame. No desktopCapturer.getSources here, so just await it.
-		let reshadeLocation: {
-			folder: string;
-			rawFolder: string;
-			basePath: string;
-			remappedFrom: string;
-		} | null = null;
-
+		//
+		// reshadeLocation is already resolved by the pre-flight above: reaching this
+		// line means the ini was read AND named a screenshot folder, so the only
+		// config failure left here is the wait for ReShade's own grab.
 		try {
 			// Raising pre-capture resize INSIDE the try so a rejection here recovers
 			// via the catch instead of wedging: it previously sat outside the ReShade
@@ -2221,12 +2280,6 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			const reshadeIniPath = config.get('reshadeFile');
-			const reshadeIni = loadIniFile.sync(reshadeIniPath);
-			reshadeLocation = getReshadeScreenshotFolder(
-				reshadeIni,
-				reshadeIniPath
-			);
 			const reshadeFile = await waitForReshadeScreenshot(
 				reshadeLocation.folder
 			);
