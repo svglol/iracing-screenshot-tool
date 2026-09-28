@@ -299,6 +299,22 @@ export function describeUpdate(
 // silent: a spinner that appears every six hours to say nothing would be worse than
 // the arrow it replaced. Errors stay in the log and the Settings line — an update
 // check failing is not something the user asked about or can act on from here.
+// The action a click on the update status performs, or null when the status is
+// only information. Settings uses it to make its status line a button exactly
+// when describeUpdate's sentence says "Click to…" — before, that sentence was
+// plain text there, and clicking it did nothing.
+export function updateActionChannel(
+	phase: UpdatePhase
+): 'update:download' | 'update:install' | null {
+	if (phase === 'available') {
+		return 'update:download';
+	}
+	if (phase === 'downloaded') {
+		return 'update:install';
+	}
+	return null;
+}
+
 export function shouldShowUpdateBadge(state: UpdateState): boolean {
 	return (
 		state.phase === 'available' ||
