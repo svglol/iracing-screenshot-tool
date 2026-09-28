@@ -122,42 +122,75 @@
 						</o-button>
 					</div>
 
+					<!-- Icon-only, so each button carries its label twice: aria-label
+					     for screen readers, and a tooltip that opens on hover AND on
+					     keyboard focus. Not teleported: the theme's tooltip z-index
+					     (38) sits under Bulma's modal (40), so a tooltip moved to
+					     <body> would render behind this dialog. -->
 					<div v-else class="profiles-row__actions">
 						<!-- Load is also disabled for the profile that IS the live
 						     config (clean match) — loading it again would change
 						     nothing. A modified match keeps its Load: that press
 						     restores the stored version and discards the drift. -->
-						<o-button
-							class="button is-small is-primary"
-							:disabled="
-								iracingRunning ||
-								!profile.valid ||
-								isLoaded(profile.name)
-							"
-							:loading="busy === profile.name"
-							@click="apply(profile.name)"
+						<o-tooltip
+							:label="$t('graphicsProfiles.actions.load')"
+							position="top"
+							open-on-focus
 						>
-							{{ $t('graphicsProfiles.actions.load') }}
-						</o-button>
-						<o-button
-							class="button is-small"
-							:disabled="!activeExists"
-							@click="overwrite(profile.name)"
+							<o-button
+								class="button is-small is-primary profiles-icon-btn"
+								:aria-label="$t('graphicsProfiles.actions.load')"
+								:disabled="
+									iracingRunning ||
+									!profile.valid ||
+									isLoaded(profile.name)
+								"
+								:loading="busy === profile.name"
+								@click="apply(profile.name)"
+							>
+								<font-awesome-icon :icon="['fas', 'check']" />
+							</o-button>
+						</o-tooltip>
+						<o-tooltip
+							:label="$t('graphicsProfiles.actions.overwrite')"
+							position="top"
+							open-on-focus
 						>
-							{{ $t('graphicsProfiles.actions.overwrite') }}
-						</o-button>
-						<o-button
-							class="button is-small"
-							@click="exportProfile(profile.name)"
+							<o-button
+								class="button is-small profiles-icon-btn is-quiet"
+								:aria-label="$t('graphicsProfiles.actions.overwrite')"
+								:disabled="!activeExists"
+								@click="overwrite(profile.name)"
+							>
+								<font-awesome-icon :icon="['fas', 'file-import']" />
+							</o-button>
+						</o-tooltip>
+						<o-tooltip
+							:label="$t('graphicsProfiles.actions.export')"
+							position="top"
+							open-on-focus
 						>
-							{{ $t('graphicsProfiles.actions.export') }}
-						</o-button>
-						<o-button
-							class="button is-small is-danger is-outlined"
-							@click="startDelete(profile.name)"
+							<o-button
+								class="button is-small profiles-icon-btn is-quiet"
+								:aria-label="$t('graphicsProfiles.actions.export')"
+								@click="exportProfile(profile.name)"
+							>
+								<font-awesome-icon :icon="['fas', 'download']" />
+							</o-button>
+						</o-tooltip>
+						<o-tooltip
+							:label="$t('graphicsProfiles.actions.delete')"
+							position="top"
+							open-on-focus
 						>
-							{{ $t('graphicsProfiles.actions.delete') }}
-						</o-button>
+							<o-button
+								class="button is-small profiles-icon-btn is-quiet is-destructive"
+								:aria-label="$t('graphicsProfiles.actions.delete')"
+								@click="startDelete(profile.name)"
+							>
+								<font-awesome-icon :icon="['fas', 'trash']" />
+							</o-button>
+						</o-tooltip>
 					</div>
 				</li>
 			</ul>
@@ -790,8 +823,60 @@ export default {
 .profiles-row__actions {
 	display: flex;
 	align-items: center;
-	gap: 0.35rem;
+	gap: 0.25rem;
 	flex-wrap: wrap;
+}
+
+/* Material-style round icon buttons. Load keeps Bulma's filled primary so the
+   main action still stands out; the rest are quiet until hovered. */
+.profiles-icon-btn {
+	width: 2rem;
+	height: 2rem;
+	padding: 0;
+	border-radius: 9999px;
+	transition:
+		background-color 150ms ease,
+		color 150ms ease;
+}
+
+/* Bulma's is-small sets 0.75rem, which renders these glyphs at 12px — too
+   small to tell apart without a label next to them. */
+.profiles-icon-btn svg {
+	font-size: 0.95rem;
+}
+
+.profiles-icon-btn.is-quiet {
+	background-color: transparent;
+	border-color: transparent;
+	color: #dbdbdb;
+}
+
+.profiles-icon-btn.is-quiet:hover,
+.profiles-icon-btn.is-quiet:focus-visible {
+	background-color: rgba(255, 255, 255, 0.1);
+	color: white;
+}
+
+.profiles-icon-btn.is-destructive {
+	color: #ff7b96;
+}
+
+.profiles-icon-btn.is-destructive:hover,
+.profiles-icon-btn.is-destructive:focus-visible {
+	background-color: rgba(241, 70, 104, 0.15);
+	color: #ff7b96;
+}
+
+.profiles-icon-btn:focus-visible {
+	outline: 2px solid rgba(255, 255, 255, 0.6);
+	outline-offset: 2px;
+}
+
+/* Chromium does not reliably dispatch mouse events to a disabled <button>, so
+   let them fall through to the tooltip's trigger wrapper — a greyed-out Load
+   should still say what it is. */
+.profiles-icon-btn[disabled] {
+	pointer-events: none;
 }
 
 .profiles-confirm {

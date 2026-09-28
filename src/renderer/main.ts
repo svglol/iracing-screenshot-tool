@@ -18,6 +18,7 @@ import {
 	Carousel,
 	Notification,
 	Dropdown,
+	Tooltip,
 } from '@oruga-ui/oruga-next';
 import { bulmaConfig } from '@oruga-ui/theme-bulma';
 import { library } from '@fortawesome/fontawesome-svg-core';
@@ -43,6 +44,11 @@ import {
 	faSliders,
 	// Nav rail: Home (gallery).
 	faImages,
+	// Graphics Profiles row actions: Load, Update from current (import) and
+	// Export (download). Delete reuses faTrash.
+	faCheck,
+	faFileImport,
+	faDownload,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -66,6 +72,9 @@ library.add(
 	faRotateRight,
 	faSliders,
 	faImages,
+	faCheck,
+	faFileImport,
+	faDownload,
 	faDiscord
 );
 
@@ -102,6 +111,7 @@ const oruga = createOruga();
 	Carousel,
 	Notification,
 	Dropdown,
+	Tooltip,
 ].forEach((p) => oruga.use(p));
 app.use(oruga, {
 	...bulmaConfig,
