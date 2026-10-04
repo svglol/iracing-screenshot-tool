@@ -151,6 +151,12 @@ const nl: Catalog = {
 		passes4: '4× — vier keer zo lang wachten',
 		passes8: '8× — acht keer zo lang wachten',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Sluitertijdenreeks',
 		highlightRecovery: 'Hoge lichten herstellen (stops)',
 
@@ -167,11 +173,14 @@ const nl: Catalog = {
 				other: '{count} doorgangen',
 			},
 			bracketed: 'reeks',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '{stops} stops herstel',
 		},
 
 		progress: {
 			working: 'Bezig…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Zoeken…{pass}',
 			accumulating: 'Belichten… {count} samples{pass}',
 			resolving: 'Ontwikkelen…',
@@ -276,6 +285,10 @@ const nl: Catalog = {
 				'Wat het wél kost, is geheugen. Elke stand heeft een eigen accumulator op volledige resolutie nodig, dus elf standen vragen elf keer het videogeheugen van één, wat op 8K meer is dan de meeste kaarten hebben. De opname controleert dit vooraf en weigert in plaats van iRacing te laten vastlopen; wordt een reeks geweigerd, verlaag dan de resolutie of kies een kortere sluitertijd — wat meteen ook een kortere ladder oplevert.',
 			bracketNamingBody:
 				'De stand die je koos wordt onder de gebruikelijke naam opgeslagen en is degene die in de galerij verschijnt; de andere staan ernaast, met hun sluitertijd in de bestandsnaam.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Hoge lichten herstellen',
 			highlightsBody:
@@ -527,6 +540,8 @@ const nl: Catalog = {
 		cancelled: 'Opname geannuleerd.',
 		seekTimeout:
 			'De replay bereikte beeld {frame} niet op tijd. Mogelijk wordt hij nog geladen.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Een opname moet minstens één doorgang uitvoeren.',
 		playbackStalled:
 			'De replay begon niet af te spelen. Controleer of iRacing niet door een ander programma is gepauzeerd.',
@@ -557,6 +572,8 @@ const nl: Catalog = {
 			'De replay is naar een andere sessie gegaan sinds deze opname werd voorbereid. Kies het moment opnieuw.',
 		singleSampleMultiPass:
 			'Deze sluitertijd is zo kort dat er per doorgang maar ongeveer één beeld in valt, dus {passes} doorgangen verzamelen ruwweg {passes} samples. Een tragere afspeelsnelheid of een langere sluitertijd levert veel meer op.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Deze sluitertijd is zo kort dat er maar één beeld in valt, dus het resultaat heeft geen bewegingsonscherpte. Een tragere afspeelsnelheid of een langere sluitertijd levert samples op.',
 		bracketVsInterpolation:

@@ -207,6 +207,15 @@ const schema = {
 		minimum: 1,
 		maximum: 16,
 	},
+	// Seconds of replay played at 1x before each pass's window so the effects a
+	// seek wipes (dirt, smoke, exhaust flames, wheel-spin blur) are back when the
+	// exposure opens. 0 = off. Costs about this many seconds per pass.
+	longExposureWarmUpSeconds: {
+		type: 'number',
+		default: 3,
+		minimum: 0,
+		maximum: 10,
+	},
 	// Emit one image per shutter stop at or faster than the chosen one, from the
 	// same captured frames. Nearly free in time, NOT free in VRAM — every stop owns
 	// a full-size accumulator — so it is off by default and pre-flighted.

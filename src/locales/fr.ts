@@ -153,6 +153,12 @@ const fr: Catalog = {
 		passes4: '4× — quatre fois plus d’attente',
 		passes8: '8× — huit fois plus d’attente',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Bracketing des vitesses',
 		highlightRecovery: 'Récupération des hautes lumières (IL)',
 
@@ -169,11 +175,14 @@ const fr: Catalog = {
 				other: '{count} passes',
 			},
 			bracketed: 'bracketing',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: 'récupération de {stops} IL',
 		},
 
 		progress: {
 			working: 'Traitement…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Recherche…{pass}',
 			accumulating: 'Exposition… {count} échantillons{pass}',
 			resolving: 'Développement…',
@@ -280,6 +289,10 @@ const fr: Catalog = {
 				'Ce que cela coûte, c’est de la mémoire. Chaque cran a besoin de son propre accumulateur en pleine résolution : onze crans demandent donc onze fois la mémoire vidéo d’un seul, ce qui, en 8K, dépasse ce dont disposent la plupart des cartes. La capture vérifie ce point avant de démarrer et refuse plutôt que de faire planter iRacing. Si un bracketing est refusé, baissez la résolution ou choisissez une vitesse plus rapide — ce qui raccourcit aussi l’échelle.',
 			bracketNamingBody:
 				'Le cran que vous avez choisi est enregistré sous le nom habituel et c’est celui qui apparaît dans la galerie ; les autres se placent à côté, avec leur vitesse dans le nom de fichier.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Récupération des hautes lumières',
 			highlightsBody:
@@ -532,6 +545,8 @@ const fr: Catalog = {
 		cancelled: 'Capture annulée.',
 		seekTimeout:
 			'Le replay n’a pas atteint l’image {frame} à temps. Il est peut-être encore en cours de chargement.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Une capture doit effectuer au moins une passe.',
 		playbackStalled:
 			'Le replay n’a pas démarré. Vérifiez qu’iRacing n’est pas mis en pause par un autre outil.',
@@ -562,6 +577,8 @@ const fr: Catalog = {
 			'Le replay est passé à une autre session depuis la préparation de cette prise. Sélectionnez à nouveau l’instant.',
 		singleSampleMultiPass:
 			'Cette vitesse est si courte qu’environ une seule image y tombe par passe : {passes} passes ne recueillent donc qu’environ {passes} échantillons. Une vitesse de lecture plus lente ou une vitesse d’obturation plus lente en apporte bien davantage.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Cette vitesse est si courte qu’une seule image y tombera : le résultat n’aura donc aucun flou de mouvement. Une vitesse de lecture plus lente ou une vitesse d’obturation plus lente apporte des échantillons.',
 		bracketVsInterpolation:

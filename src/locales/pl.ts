@@ -159,6 +159,12 @@ const pl: Catalog = {
 		passes4: '4× — czterokrotnie dłuższe oczekiwanie',
 		passes8: '8× — ośmiokrotnie dłuższe oczekiwanie',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Bracketing czasów migawki',
 		highlightRecovery: 'Odzyskiwanie świateł (EV)',
 
@@ -177,11 +183,14 @@ const pl: Catalog = {
 				other: '{count} przebiegów',
 			},
 			bracketed: 'bracketing',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: 'odzyskiwanie {stops} EV',
 		},
 
 		progress: {
 			working: 'Pracuję…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Wyszukiwanie…{pass}',
 			accumulating: 'Naświetlanie… próbek: {count}{pass}',
 			resolving: 'Wywoływanie…',
@@ -286,6 +295,10 @@ const pl: Catalog = {
 				'Kosztuje natomiast pamięć. Każdy czas potrzebuje własnego akumulatora w pełnej rozdzielczości, więc jedenaście czasów wymaga jedenastokrotnie więcej pamięci karty niż jeden, co przy 8K przekracza możliwości większości kart. Przechwytywanie sprawdza to przed startem i odmawia, zamiast doprowadzić do awarii iRacing; jeśli bracketing zostanie odrzucony, obniż rozdzielczość albo wybierz krótszy czas migawki — co daje też krótszą drabinkę.',
 			bracketNamingBody:
 				'Wybrany przez Ciebie czas jest zapisywany pod zwykłą nazwą i to on pojawia się w galerii; pozostałe leżą obok, z czasem migawki w nazwie pliku.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Odzyskiwanie świateł',
 			highlightsBody:
@@ -541,6 +554,8 @@ const pl: Catalog = {
 		cancelled: 'Przechwytywanie anulowane.',
 		seekTimeout:
 			'Powtórka nie dotarła na czas do klatki {frame}. Może się jeszcze wczytywać.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Przechwytywanie musi wykonać co najmniej jeden przebieg.',
 		playbackStalled:
 			'Powtórka nie ruszyła. Sprawdź, czy iRacing nie został wstrzymany przez inne narzędzie.',
@@ -572,6 +587,8 @@ const pl: Catalog = {
 			'Od czasu przygotowania tego ujęcia powtórka przeszła do innej sesji. Wybierz moment ponownie.',
 		singleSampleMultiPass:
 			'Ten czas migawki jest tak krótki, że mieści się w nim około jednej klatki na przebieg, więc {passes} przebiegów zbierze mniej więcej {passes} próbek. Wolniejsza prędkość odtwarzania albo dłuższy czas migawki dadzą znacznie więcej.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Ten czas migawki jest tak krótki, że zmieści się w nim tylko jedna klatka, więc wynik nie będzie miał rozmycia ruchu. Wolniejsza prędkość odtwarzania albo dłuższy czas migawki dostarczą próbek.',
 		bracketVsInterpolation:

@@ -158,6 +158,12 @@ const ja: Catalog = {
 		passes4: '4× — 待ち時間は 4 倍',
 		passes8: '8× — 待ち時間は 8 倍',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'シャッターのブラケット撮影',
 		highlightRecovery: 'ハイライト復元（段）',
 
@@ -175,11 +181,14 @@ const ja: Catalog = {
 				other: '{count} パス',
 			},
 			bracketed: 'ブラケット撮影',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '復元 {stops} 段',
 		},
 
 		progress: {
 			working: '処理中…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'シーク中…{pass}',
 			accumulating: '露光中… サンプル数 {count}{pass}',
 			resolving: '現像中…',
@@ -285,6 +294,10 @@ const ja: Catalog = {
 				'代わりにかかるのはメモリです。各段にフル解像度のアキュムレーターが 1 つずつ必要なので、11 段では 1 段の 11 倍のビデオメモリを使い、8K では大半のカードの容量を超えます。キャプチャは開始前にこれを確認し、iRacing をクラッシュさせるくらいなら実行を断ります。ブラケット撮影が断られた場合は、解像度を下げるか、より速いシャッターを選んでください。段数も短くなります。',
 			bracketNamingBody:
 				'選んだ段は通常のファイル名で保存され、ギャラリーに表示されるのもこれです。他の段はその隣に、ファイル名にシャッター速度を付けて並びます。',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'ハイライト復元',
 			highlightsBody:
@@ -540,6 +553,8 @@ const ja: Catalog = {
 		cancelled: 'キャプチャをキャンセルしました。',
 		seekTimeout:
 			'リプレイが時間内にフレーム {frame} へ到達しませんでした。まだ読み込み中の可能性があります。',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'キャプチャには少なくとも 1 パスが必要です。',
 		playbackStalled:
 			'リプレイの再生が始まりませんでした。iRacing が他のツールによって一時停止されていないか確認してください。',
@@ -570,6 +585,8 @@ const ja: Catalog = {
 			'この撮影を設定してから、リプレイが別のセッションに移りました。瞬間を選び直してください。',
 		singleSampleMultiPass:
 			'このシャッターは短く、1 パスあたり約 1 枚しかフレームが収まりません。そのため {passes} パスでもおよそ {passes} サンプルにしかなりません。再生速度を遅くするか、シャッターを遅くするほうがはるかに多く得られます。',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'このシャッターは短く、収まるフレームは 1 枚だけです。そのため結果に被写体ブレは生じません。再生速度を遅くするか、シャッターを遅くするとサンプルが得られます。',
 		bracketVsInterpolation:

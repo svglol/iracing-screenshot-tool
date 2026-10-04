@@ -434,3 +434,123 @@ describe('waitForFrame', () => {
 		expect(result.elapsedMs).toBeGreaterThanOrEqual(100);
 	});
 });
+
+describe('ReplayController.warmUpIntoWindow', () => {
+	// A transport for these tests: a seek lands exactly, 1x advances one frame per
+	// poll, and slow motion does whatever `slowRate` says (0 = stuck).
+	function transport(
+		harness: ReturnType<typeof makeHarness>,
+		opts: { realTimeRate?: number; slowRate?: number } = {}
+	) {
+		let seen = 0;
+		let rate = 0;
+		// Continuous position; telemetry reports its floor, as the sim does.
+		let position = harness.state.replayFrameNum;
+		harness.setOnRead((state) => {
+			for (; seen < harness.broadcasts.length; seen += 1) {
+				const b = harness.broadcasts[seen];
+				if (b.kind === 'position') {
+					position = b.b as number;
+					rate = 0;
+				} else if (b.a === 0) {
+					rate = 0;
+				} else if (b.a === 1 && b.b === false) {
+					rate = opts.realTimeRate ?? 1;
+				} else {
+					rate = opts.slowRate ?? 0;
+				}
+			}
+			position += rate;
+			state.replayFrameNum = Math.floor(position);
+		});
+	}
+
+	it('refuses without touching the replay when the tape leaves no room', async () => {
+		const harness = makeHarness();
+		const result = await harness.controller.warmUpIntoWindow(5, {
+			warmUpFrames: 180,
+			brakeFrames: 6,
+			captureDivisor: 16,
+		});
+		expect(result.ready).toBe(false);
+		expect(result.overshot).toBe(false);
+		expect(harness.broadcasts).toEqual([]);
+	});
+
+	it('gives up and pauses when the 1x roll never reaches the brake', async () => {
+		const harness = makeHarness({ replayFrameNum: 5000 });
+		transport(harness, { realTimeRate: 0 });
+		const result = await harness.controller.warmUpIntoWindow(4992, {
+			warmUpFrames: 180,
+			brakeFrames: 6,
+			captureDivisor: 16,
+		});
+		expect(result.ready).toBe(false);
+		expect(result.overshot).toBe(false);
+		expect(harness.broadcasts.at(-1)).toEqual({
+			kind: 'speed',
+			a: 0,
+			b: false,
+		});
+	});
+
+	// At 1/2 there is no dwell test to fall back on, so a transport that neither
+	// moves nor reports its speed must time out rather than hang.
+	it('gives up and pauses when the slowdown never shows and nothing moves', async () => {
+		const harness = makeHarness({ replayFrameNum: 5000 });
+		transport(harness, { slowRate: 0 });
+		const result = await harness.controller.warmUpIntoWindow(4992, {
+			warmUpFrames: 180,
+			brakeFrames: 6,
+			captureDivisor: 2,
+		});
+		expect(result.ready).toBe(false);
+		expect(result.overshot).toBe(false);
+		expect(result.warmUpFrames).toBe(180);
+		expect(harness.broadcasts.at(-1)).toEqual({
+			kind: 'speed',
+			a: 0,
+			b: false,
+		});
+	});
+
+	it('reports an overshoot, and pauses, when 1x runs into the window', async () => {
+		const harness = makeHarness({ replayFrameNum: 5000 });
+		// "Slow motion" that is really still 1x and never reported as anything else.
+		transport(harness, { slowRate: 1 });
+		const result = await harness.controller.warmUpIntoWindow(4992, {
+			warmUpFrames: 180,
+			brakeFrames: 6,
+			captureDivisor: 2,
+		});
+		expect(result.ready).toBe(false);
+		expect(result.overshot).toBe(true);
+		expect(result.frame).toBeGreaterThanOrEqual(4992);
+		expect(harness.broadcasts.at(-1)).toEqual({
+			kind: 'speed',
+			a: 0,
+			b: false,
+		});
+	});
+
+	it('hands over rolling, short of the window, once the slowdown is confirmed', async () => {
+		const harness = makeHarness({ replayFrameNum: 5000 });
+		transport(harness, { slowRate: 0.0625 });
+		const result = await harness.controller.warmUpIntoWindow(4992, {
+			warmUpFrames: 180,
+			brakeFrames: 6,
+			captureDivisor: 16,
+		});
+		expect(result.ready).toBe(true);
+		expect(result.confirmedBy).toBe('dwell');
+		expect(result.frame).toBeLessThan(4992);
+		expect(result.warmUpFrames).toBe(180);
+		// Seek, roll at 1x, brake to 1/16 — and NO pause after the brake.
+		expect(harness.broadcasts).toEqual([
+			{ kind: 'speed', a: 0, b: false },
+			{ kind: 'position', a: RPY_POS_BEGIN, b: 4992 - 6 - 180 },
+			{ kind: 'speed', a: 1, b: false },
+			{ kind: 'speed', a: 16, b: true },
+		]);
+	});
+});

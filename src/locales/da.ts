@@ -151,6 +151,12 @@ const da: Catalog = {
 		passes4: '4× — fire gange så lang ventetid',
 		passes8: '8× — otte gange så lang ventetid',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Lukkertidsbracketing',
 		highlightRecovery: 'Genskabelse af højlys (trin)',
 
@@ -167,11 +173,14 @@ const da: Catalog = {
 				other: '{count} gennemløb',
 			},
 			bracketed: 'bracketing',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '{stops} trins genskabelse',
 		},
 
 		progress: {
 			working: 'Arbejder…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Søger…{pass}',
 			accumulating: 'Eksponerer… {count} prøver{pass}',
 			resolving: 'Fremkalder…',
@@ -276,6 +285,10 @@ const da: Catalog = {
 				'Det, det koster, er hukommelse. Hvert trin har brug for sin egen akkumulator i fuld opløsning, så elleve trin kræver elleve gange så meget grafikhukommelse som ét, hvilket i 8K er mere, end de fleste kort har. Optagelsen kontrollerer dette, før den går i gang, og afviser hellere end at få iRacing til at gå ned; bliver en bracketing afvist, så sænk opløsningen eller vælg en hurtigere lukkertid — hvilket også giver en kortere stige.',
 			bracketNamingBody:
 				'Det trin, du valgte, gemmes under det sædvanlige navn og er det, der vises i galleriet; de øvrige ligger ved siden af med deres lukkertid i filnavnet.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Genskabelse af højlys',
 			highlightsBody:
@@ -524,6 +537,8 @@ const da: Catalog = {
 		cancelled: 'Optagelsen blev annulleret.',
 		seekTimeout:
 			'Replayet nåede ikke billede {frame} i tide. Det er måske stadig ved at indlæse.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'En optagelse skal køre mindst ét gennemløb.',
 		playbackStalled:
 			'Replayet gik ikke i gang. Kontrollér, at iRacing ikke er sat på pause af et andet værktøj.',
@@ -553,6 +568,8 @@ const da: Catalog = {
 			'Replayet er skiftet til en anden session, siden dette billede blev sat op. Vælg øjeblikket igen.',
 		singleSampleMultiPass:
 			'Denne lukkertid er så kort, at der kun lander cirka ét billede inden for den pr. gennemløb, så {passes} gennemløb samler omtrent {passes} prøver. En langsommere afspilningshastighed eller en længere lukkertid giver langt flere.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Denne lukkertid er så kort, at der kun lander ét billede inden for den, så resultatet får ingen bevægelsesuskarphed. En langsommere afspilningshastighed eller en længere lukkertid giver prøver.',
 		bracketVsInterpolation:

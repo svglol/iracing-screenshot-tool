@@ -171,6 +171,12 @@ export default {
 		passes4: '4× — four times the wait',
 		passes8: '8× — eight times the wait',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Bracket shutters',
 		highlightRecovery: 'Highlight recovery (stops)',
 
@@ -191,11 +197,14 @@ export default {
 				other: '{count} passes',
 			},
 			bracketed: 'bracketed',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '{stops} stop recovery',
 		},
 
 		progress: {
 			working: 'Working…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Seeking…{pass}',
 			accumulating: 'Exposing… {count} samples{pass}',
 			resolving: 'Developing…',
@@ -300,6 +309,10 @@ export default {
 				'What it does cost is memory. Each stop needs its own full-resolution accumulator, so eleven stops need eleven times the video memory of one, which at 8K is more than most cards have. The capture checks this before it starts and refuses rather than crashing iRacing, so if a bracket is declined, lower the resolution or pick a faster shutter — which is also a shorter ladder.',
 			bracketNamingBody:
 				'The stop you chose is saved under the usual name and is the one that appears in the gallery; the others sit beside it with their shutter in the filename.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Highlight recovery',
 			highlightsBody:
@@ -558,6 +571,8 @@ export default {
 		cancelled: 'Capture cancelled.',
 		seekTimeout:
 			'The replay did not reach frame {frame} in time. It may still be loading.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'A capture must run at least one pass.',
 		playbackStalled:
 			'The replay did not start playing. Check that iRacing is not paused by another tool.',
@@ -593,6 +608,8 @@ export default {
 			'The replay has moved to a different session since this shot was set up. Re-select the moment.',
 		singleSampleMultiPass:
 			'This shutter is short enough that only about one frame lands inside it per pass, so {passes} passes collect roughly {passes} samples. A slower playback speed or a slower shutter buys far more.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'This shutter is short enough that only one frame will land inside it, so the result has no motion blur. A slower playback speed or a slower shutter buys samples.',
 		bracketVsInterpolation:

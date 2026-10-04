@@ -159,6 +159,12 @@ const cs: Catalog = {
 		passes4: '4× — čtyřnásobné čekání',
 		passes8: '8× — osminásobné čekání',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Braketing závěrek',
 		highlightRecovery: 'Obnova světel (EV)',
 
@@ -177,11 +183,14 @@ const cs: Catalog = {
 				other: '{count} průchodů',
 			},
 			bracketed: 'braketing',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: 'obnova {stops} EV',
 		},
 
 		progress: {
 			working: 'Pracuji…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Hledám…{pass}',
 			accumulating: 'Exponuji… vzorků: {count}{pass}',
 			resolving: 'Vyvolávám…',
@@ -286,6 +295,10 @@ const cs: Catalog = {
 				'Co to naopak stojí, je paměť. Každá hodnota potřebuje vlastní akumulátor v plném rozlišení, takže jedenáct hodnot potřebuje jedenáctkrát více grafické paměti než jedna, což je v 8K více, než má většina karet. Snímání to před spuštěním zkontroluje a raději odmítne, než aby shodilo iRacing; pokud je braketing odmítnut, snižte rozlišení nebo zvolte rychlejší závěrku — což zároveň zkrátí žebřík.',
 			bracketNamingBody:
 				'Hodnota, kterou jste zvolili, se uloží pod obvyklým názvem a je to ta, která se objeví v galerii; ostatní leží vedle ní a mají svou závěrku v názvu souboru.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Obnova světel',
 			highlightsBody:
@@ -532,6 +545,8 @@ const cs: Catalog = {
 		cancelled: 'Snímání zrušeno.',
 		seekTimeout:
 			'Záznam nedosáhl snímku {frame} včas. Možná se ještě načítá.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Snímání musí provést alespoň jeden průchod.',
 		playbackStalled:
 			'Záznam se nerozeběhl. Zkontrolujte, že iRacing nebyl pozastaven jiným nástrojem.',
@@ -560,6 +575,8 @@ const cs: Catalog = {
 			'Záznam od přípravy tohoto snímku přešel do jiné relace. Zvolte okamžik znovu.',
 		singleSampleMultiPass:
 			'Tato závěrka je tak krátká, že do ní na jeden průchod padne asi jediný snímek, takže {passes} průchodů nasbírá zhruba {passes} vzorků. Pomalejší rychlost přehrávání nebo pomalejší závěrka přinesou mnohem víc.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Tato závěrka je tak krátká, že do ní padne jen jediný snímek, takže výsledek nebude mít žádné rozmazání pohybem. Pomalejší rychlost přehrávání nebo pomalejší závěrka přinesou vzorky.',
 		bracketVsInterpolation:

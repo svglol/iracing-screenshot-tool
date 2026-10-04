@@ -423,3 +423,34 @@ describe('extractSessionContext', () => {
 		).toBe('Race');
 	});
 });
+
+describe('buildSidecar — effects warm-up', () => {
+	it('records the requested and achieved warm-up in seconds', () => {
+		const written = buildSidecar({
+			recipe,
+			plan,
+			stats,
+			backend: 'd3d11-compute',
+			warmUp: { achievedFrames: 92, brakeRetries: 1, fellBack: false },
+			imageWidth: 1920,
+			imageHeight: 1080,
+			toolName: 'iRacing Screenshot Tool',
+			toolVersion: '3.2.0',
+			capturedAt: '2026-08-02T12:00:00.000Z',
+			context,
+		});
+		expect(written.recipe.warmUpSeconds).toBe(3);
+		expect(written.exposure.warmUp).toEqual({
+			requestedSeconds: 3,
+			achievedSeconds: 1.533,
+			brakeRetries: 1,
+			fellBack: false,
+		});
+	});
+
+	// A writer with no capture behind it cannot say what happened, so it says null
+	// rather than echoing the request as if it had been met.
+	it('records null when the capture did not report it', () => {
+		expect(sidecar().exposure.warmUp).toBeNull();
+	});
+});

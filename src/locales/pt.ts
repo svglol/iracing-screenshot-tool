@@ -153,6 +153,12 @@ const pt: Catalog = {
 		passes4: '4× — quatro vezes a espera',
 		passes8: '8× — oito vezes a espera',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Bracketing de obturador',
 		highlightRecovery: 'Recuperação de altas luzes (stops)',
 
@@ -169,11 +175,14 @@ const pt: Catalog = {
 				other: '{count} passagens',
 			},
 			bracketed: 'bracketing',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: 'recuperação de {stops} stops',
 		},
 
 		progress: {
 			working: 'A processar…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'A procurar…{pass}',
 			accumulating: 'A expor… {count} amostras{pass}',
 			resolving: 'A revelar…',
@@ -278,6 +287,10 @@ const pt: Catalog = {
 				'O que custa mesmo é memória. Cada passo precisa do seu próprio acumulador em resolução completa, pelo que onze passos precisam de onze vezes a memória de vídeo de um só, o que em 8K é mais do que a maioria das placas tem. A captura verifica isto antes de começar e recusa em vez de fazer o iRacing falhar; se um bracketing for recusado, baixa a resolução ou escolhe um obturador mais rápido — o que também encurta a escada.',
 			bracketNamingBody:
 				'O passo que escolheste é guardado com o nome habitual e é o que aparece na galeria; os restantes ficam ao lado, com o respetivo obturador no nome do ficheiro.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Recuperação de altas luzes',
 			highlightsBody:
@@ -526,6 +539,8 @@ const pt: Catalog = {
 		cancelled: 'Captura cancelada.',
 		seekTimeout:
 			'A repetição não chegou ao fotograma {frame} a tempo. Pode ainda estar a carregar.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Uma captura tem de executar pelo menos uma passagem.',
 		playbackStalled:
 			'A repetição não começou a reproduzir. Verifica se o iRacing não foi colocado em pausa por outra ferramenta.',
@@ -557,6 +572,8 @@ const pt: Catalog = {
 			'A repetição mudou para outra sessão desde que esta captura foi preparada. Volta a selecionar o instante.',
 		singleSampleMultiPass:
 			'Este obturador é tão curto que só cai nele cerca de um fotograma por passagem, pelo que {passes} passagens recolhem aproximadamente {passes} amostras. Uma velocidade de reprodução ou um obturador mais lentos rendem muito mais.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Este obturador é tão curto que só um fotograma cairá dentro dele, pelo que o resultado não terá desfoque de movimento. Uma velocidade de reprodução ou um obturador mais lentos rendem amostras.',
 		bracketVsInterpolation:

@@ -1458,6 +1458,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			stats: outcome.stats,
 			backend: outcome.backend,
 			interpolation: outcome.interpolation,
+			warmUp: outcome.warmUp ?? null,
 			screenshotDir: path.resolve(config.get('screenshotFolder')),
 			cacheDir: path.join(app.getPath('userData'), 'Cache'),
 			// Beside app.log rather than beside the image: a sidecar is a diagnostic
@@ -1519,6 +1520,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 						meanFrameMs: outcome.interpolation.meanFrameMs,
 					}
 				: null,
+			warmUp: outcome.warmUp ?? null,
 		});
 
 		// Same gallery notification the still path uses, so a long exposure appears

@@ -287,6 +287,94 @@ export function predictWallClockSeconds(opts: {
 	return exposureSeconds * playbackDivisor;
 }
 
+// ---------------------------------------------------------------------------
+// Effects warm-up
+//
+// FIELD FINDING (2026-10-04): iRacing does not store particles in the replay. Dirt
+// kicked up, tyre smoke, exhaust flames and the spinning-wheel blur are simulated
+// live during playback, and a SEEK discards all of them — they rebuild over the
+// next second or more of replay time. The capture used to seek three frames before
+// the window and roll straight in, so every exposure opened on a "frozen" scene
+// with the effects missing, and every pass of a multi-pass shot added its own
+// frozen start.
+//
+// A playback SPEED change does not reset them (confirmed by hand on a live replay).
+// So the pre-roll seeks further back, plays the warm-up at 1x with the gate closed
+// — 3 s of warm-up costs 3 s, where the same at 1/16 would cost 48 — and drops to
+// the capture speed a few frames before the window, without pausing or seeking.
+// ---------------------------------------------------------------------------
+
+// The warm-up choices the panel offers, in seconds of replay time. 0 is off: the
+// pre-roll is the old three-frame lead and nothing else.
+export const WARM_UP_SECONDS_OPTIONS = [0, 1, 3, 5] as const;
+export const DEFAULT_WARM_UP_SECONDS = 3;
+// Ceiling for a recipe from IPC or a sidecar. A patience bound, not a technical
+// one — the warm-up plays at 1x, so 10 s of it is 10 s per pass.
+export const MAX_WARM_UP_SECONDS = 10;
+
+// Replay frames between dropping to the capture speed and the window start. At 1x
+// one frame is 16.7 ms, so six frames give the speed command ~100 ms to take effect
+// — several times the SDK's broadcast latency plus one telemetry poll. Played at
+// the capture speed, so they cost `6 x divisor / 60` s: 1.6 s per pass at 1/16.
+export const WARM_UP_BRAKE_FRAMES = 6;
+// The brake margin for the one retry after an overshoot. A brake that misses twice
+// falls back to the plain pre-roll rather than escalating further.
+export const WARM_UP_RETRY_BRAKE_FRAMES = 18;
+
+export function warmUpFramesForSeconds(seconds: number): number {
+	if (!isFiniteNumber(seconds) || seconds <= 0) {
+		return 0;
+	}
+	return Math.round(
+		Math.min(seconds, MAX_WARM_UP_SECONDS) * REPLAY_FRAMES_PER_SECOND
+	);
+}
+
+// The warm-up a window starting at `startFrame` can actually have: the request,
+// cut short by the start of the tape. The brake frames come off first, since they
+// are what keeps the window itself out of the 1x part of the roll.
+export function availableWarmUpFrames(opts: {
+	startFrame: number;
+	requestedFrames: number;
+}): number {
+	const { startFrame, requestedFrames } = opts;
+	if (
+		!isFiniteNumber(startFrame) ||
+		!isFiniteNumber(requestedFrames) ||
+		requestedFrames <= 0
+	) {
+		return 0;
+	}
+	return Math.max(
+		0,
+		Math.min(
+			Math.round(requestedFrames),
+			Math.floor(startFrame) - WARM_UP_BRAKE_FRAMES
+		)
+	);
+}
+
+// Wall-clock seconds one pass spends before its window opens because of the
+// warm-up: the warm-up itself at 1x, then the brake frames at the capture speed.
+// Zero when there is no warm-up — the plain pre-roll has never been counted.
+export function predictWarmUpSeconds(opts: {
+	warmUpFrames: number;
+	playbackDivisor: number;
+}): number {
+	const { warmUpFrames, playbackDivisor } = opts;
+	if (!isFiniteNumber(warmUpFrames) || warmUpFrames <= 0) {
+		return 0;
+	}
+	const divisor =
+		isFiniteNumber(playbackDivisor) && playbackDivisor > 0
+			? playbackDivisor
+			: 1;
+	return (
+		warmUpFrames / REPLAY_FRAMES_PER_SECOND +
+		(WARM_UP_BRAKE_FRAMES * divisor) / REPLAY_FRAMES_PER_SECOND
+	);
+}
+
 // Pick the SLOWEST-DIVISOR (= fastest playback, least waiting) rung of the ladder
 // that still reaches targetSamples. Returns the largest divisor when even 1/16
 // can't reach the target — we get as close as the ladder allows rather than

@@ -163,6 +163,12 @@ const ru: Catalog = {
 		passes4: '4× — вчетверо дольше ожидание',
 		passes8: '8× — в восемь раз дольше ожидание',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Брекетинг выдержек',
 		highlightRecovery: 'Восстановление светов (EV)',
 
@@ -181,11 +187,14 @@ const ru: Catalog = {
 				other: '{count} прохода',
 			},
 			bracketed: 'брекетинг',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: 'восстановление {stops} EV',
 		},
 
 		progress: {
 			working: 'Обработка…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Перемотка…{pass}',
 			accumulating: 'Экспонирование… выборок: {count}{pass}',
 			resolving: 'Проявка…',
@@ -291,6 +300,10 @@ const ru: Catalog = {
 				'Чего это стоит, так это памяти. Каждой ступени нужен свой накопитель в полном разрешении, поэтому одиннадцать ступеней требуют в одиннадцать раз больше видеопамяти, чем одна, а в 8K это больше, чем есть у большинства карт. Захват проверяет это перед запуском и отказывается работать, вместо того чтобы уронить iRacing; поэтому если брекетинг отклонён, снизьте разрешение или выберите более короткую выдержку — что заодно укорачивает лестницу ступеней.',
 			bracketNamingBody:
 				'Выбранная вами ступень сохраняется под обычным именем, и именно она появляется в галерее; остальные лежат рядом, с выдержкой в имени файла.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Восстановление светов',
 			highlightsBody:
@@ -545,6 +558,8 @@ const ru: Catalog = {
 		cancelled: 'Захват отменён.',
 		seekTimeout:
 			'Повтор не дошёл до кадра {frame} вовремя. Возможно, он ещё загружается.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Захват должен выполнить хотя бы один проход.',
 		playbackStalled:
 			'Повтор не начал воспроизводиться. Проверьте, что iRacing не поставлен на паузу другой программой.',
@@ -573,6 +588,8 @@ const ru: Catalog = {
 			'С момента подготовки этого снимка повтор перешёл к другой сессии. Выберите момент заново.',
 		singleSampleMultiPass:
 			'Эта выдержка настолько коротка, что в неё попадает примерно один кадр за проход, поэтому при {passes} проходах наберётся примерно столько же выборок — около {passes}. Более медленная скорость воспроизведения или более длинная выдержка дадут гораздо больше.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Эта выдержка настолько коротка, что в неё попадёт только один кадр, поэтому в результате не будет смаза движения. Более медленная скорость воспроизведения или более длинная выдержка дадут выборки.',
 		bracketVsInterpolation:

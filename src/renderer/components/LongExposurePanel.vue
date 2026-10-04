@@ -168,6 +168,27 @@
 						</o-select>
 					</o-field>
 
+					<!-- After Passes because it is the other control that spends wall clock
+			     once per pass. It does not touch the exposure at all: it only decides
+			     whether the dirt, smoke and wheel blur a seek wipes have rebuilt by
+			     the time the window opens. -->
+					<o-field :label="$t('longExposure.warmUp')">
+						<o-select v-model="warmUpSeconds" expanded :disabled="busy">
+							<option :value="0">
+								{{ $t('longExposure.warmUpOff') }}
+							</option>
+							<option :value="1">
+								{{ $t('longExposure.warmUp1') }}
+							</option>
+							<option :value="3">
+								{{ $t('longExposure.warmUp3') }}
+							</option>
+							<option :value="5">
+								{{ $t('longExposure.warmUp5') }}
+							</option>
+						</o-select>
+					</o-field>
+
 					<!-- Bracketing sits with Passes because both change what ONE capture
 			     yields — but in opposite directions: passes spend more wall clock on
 			     the same picture, bracketing spends more VRAM on more pictures for
@@ -267,6 +288,7 @@
 import { defineComponent } from 'vue';
 import config from '../../utilities/config';
 import {
+	DEFAULT_WARM_UP_SECONDS,
 	PLAYBACK_DIVISORS,
 	SHUTTER_LADDER,
 } from '../../utilities/long-exposure/exposure-math';
@@ -330,6 +352,7 @@ export default defineComponent({
 			targetSamples: String(config.get('longExposureTargetSamples')),
 			interpolation: config.get('longExposureInterpolation'),
 			passes: config.get('longExposurePasses'),
+			warmUpSeconds: config.get('longExposureWarmUpSeconds'),
 			bracket: config.get('longExposureBracket') === true,
 			weighting: config.get('longExposureWeighting'),
 			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
@@ -432,6 +455,15 @@ export default defineComponent({
 			if (this.bracket) {
 				active.push(this.$t('longExposure.modified.bracketed'));
 			}
+			if (Number(this.warmUpSeconds) !== DEFAULT_WARM_UP_SECONDS) {
+				active.push(
+					Number(this.warmUpSeconds) === 0
+						? this.$t('longExposure.modified.warmUpOff')
+						: this.$t('longExposure.modified.warmUp', {
+								seconds: Number(this.warmUpSeconds),
+							})
+				);
+			}
 			const recovery = parseFloat(this.highlightRecovery);
 			if (Number.isFinite(recovery) && recovery !== 0) {
 				active.push(
@@ -442,10 +474,10 @@ export default defineComponent({
 		},
 		// How many controls the fold is hiding. Interpolation is only rendered on
 		// hardware that can do it, so the count has to agree with what is actually
-		// in there. Weighting, passes, highlight recovery, and interpolation where it
-		// is offered.
+		// in there. Weighting, passes, warm-up, highlight recovery, and interpolation
+		// where it is offered.
 		advancedCount(): number {
-			return this.interpolationSupported ? 5 : 4;
+			return this.interpolationSupported ? 6 : 5;
 		},
 		// Every notice this panel raises, as data for the single NoticeCard: the
 		// availability banner, the tuning notes that used to sit inside Advanced,
@@ -628,6 +660,10 @@ export default defineComponent({
 					return this.$t('longExposure.progress.seeking', {
 						pass: this.passLabel,
 					});
+				case 'warming':
+					return this.$t('longExposure.progress.warming', {
+						pass: this.passLabel,
+					});
 				case 'accumulating':
 					return this.$t('longExposure.progress.accumulating', {
 						count: this.progress.accepted ?? 0,
@@ -680,6 +716,10 @@ export default defineComponent({
 				// as chosen. An addon build too old to run passes degrades to one and
 				// says so in the outcome's warnings.
 				passes: Number(this.passes) || 1,
+				// 0 is a real choice (off), so `|| default` would be wrong here.
+				warmUpSeconds: Number.isFinite(Number(this.warmUpSeconds))
+					? Number(this.warmUpSeconds)
+					: DEFAULT_WARM_UP_SECONDS,
 				// Every stop at or faster than the chosen shutter, from one capture.
 				bracket: this.bracket === true,
 				weighting: this.weighting,
@@ -725,6 +765,12 @@ export default defineComponent({
 			config.set('longExposurePasses', Number(value));
 			// Multiplies the predicted wait and sample count, which is the whole cost
 			// of the setting — the preview must not keep quoting one pass.
+			void this.refreshPreview();
+		},
+		warmUpSeconds(value) {
+			config.set('longExposureWarmUpSeconds', Number(value));
+			// Adds its seconds to every pass, and can raise a shortened-warm-up
+			// warning near the start of the tape — both belong in the verdict.
 			void this.refreshPreview();
 		},
 		weighting(value) {

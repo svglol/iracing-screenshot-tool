@@ -156,6 +156,12 @@ const zhTW: Catalog = {
 		passes4: '4×（等待時間四倍）',
 		passes8: '8×（等待時間八倍）',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: '快門包圍曝光',
 		highlightRecovery: '亮部細節復原（級數）',
 
@@ -173,11 +179,14 @@ const zhTW: Catalog = {
 				other: '{count} 遍',
 			},
 			bracketed: '包圍曝光',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '復原 {stops} 級',
 		},
 
 		progress: {
 			working: '處理中…',
+			warming: 'Warming up effects…{pass}',
 			seeking: '尋找中…{pass}',
 			accumulating: '曝光中… 已取樣 {count} 次{pass}',
 			resolving: '沖洗中…',
@@ -281,6 +290,10 @@ const zhTW: Catalog = {
 				'真正要付出的代價是記憶體。每一級快門都需要自己的全解析度累加器，因此十一級就需要一級的十一倍顯示記憶體，在 8K 下超過多數顯示卡的容量。擷取會在開始前先檢查，寧可拒絕也不讓 iRacing 當機；如果包圍曝光被拒絕，請降低解析度或選擇更快的快門（那同時也代表更短的階梯）。',
 			bracketNamingBody:
 				'您選擇的那一級會以平常的檔名儲存，也是出現在圖庫中的那一張；其他各級就放在它旁邊，檔名中帶有各自的快門。',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: '亮部細節復原',
 			highlightsBody:
@@ -519,6 +532,8 @@ const zhTW: Catalog = {
 		windowNotFound: '找不到 iRacing 視窗。',
 		cancelled: '已取消擷取。',
 		seekTimeout: '重播沒能及時到達第 {frame} 格，它可能還在載入。',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: '一次擷取至少要跑一遍。',
 		playbackStalled: '重播沒有開始播放。請確認 iRacing 沒有被其他工具暫停。',
 		exposureTimeout: '曝光沒能在 {seconds} 秒內到達第 {frame} 格。',
@@ -545,6 +560,8 @@ const zhTW: Catalog = {
 			'自從設定這張作品之後，重播已經換到了不同的賽段。請重新選擇瞬間。',
 		singleSampleMultiPass:
 			'這個快門短到每一遍大約只有一格畫面落在其中，因此 {passes} 遍大約只能收集到 {passes} 個取樣。放慢播放速度或改用較慢的快門，能換到的取樣多得多。',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'這個快門短到只會有一格畫面落在其中，因此結果不會有動態模糊。放慢播放速度或改用較慢的快門才能換到取樣。',
 		bracketVsInterpolation:
