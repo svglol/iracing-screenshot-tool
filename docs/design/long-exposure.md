@@ -528,18 +528,37 @@ Why each piece is the way it is:
 - **Near the tape start** the warm-up is cut short (`availableWarmUpFrames`, brake
   first) and `validation.warmUpShortened` says so; below one frame it is skipped.
 
-What is NOT verified on hardware yet:
+**Hardware session 2026-10-04 (RTX 4090, Adelaide replay, shots 32–41)** — run on
+the 6-frame build; the 10-frame margin above came out of it:
 
-1. That 3 s is enough. Tyre smoke lingers; shoot the same smoky anchor at 0/1/3/5 s
-   and compare the start of the streak.
-2. Multi-pass interleaving. The dither still delays playback after the paused
-   settle, but the sim-time phase of a pass is now set at the BRAKE, whose jitter at
-   1x (a 16 ms poll, a render period) dwarfs the 1.4 ms slow-motion sample spacing.
-   Phases are effectively randomised per pass rather than forced apart. Re-measure
-   merged `maxGapSeconds`, 1 pass vs 4 — the clean test in the multi-pass brief.
-3. Which confirmation fires in practice (`confirmedBy` in the log).
-4. A warm-up that crosses a session boundary on the tape gets its effects reset at
+- **Effects come back.** Particles absent from the plain pre-roll shot are present
+  in the warm-up shot of the same moment, and the user judged the result correct.
+- **Confirmation is telemetry.** Every hand-over logged `confirmedBy: telemetry`
+  with `ReplayPlaySpeed` 16 and `ReplayPlaySlowMotion` true; the dwell test never
+  had to fire. That also settles how the sim reports slow motion.
+- **A direct 1x → 1/16 switch still interpolates.** 1440p, 1/60, 8 passes: 86–93
+  distinct samples (~11 per pass, against 64 predicted), blur correct.
+- **Interleaving is unaffected.** Same anchor, 1/60, 8 passes, 1440p — merged
+  `maxGapSeconds` 1.250 ms off, 1.312 ms at 1 s, 1.375 ms at 5 s. The randomised
+  phase costs at most ~10% against the dither it replaces, so the worry below was
+  not borne out.
+- **8K is sample-starved regardless of warm-up.** ~1 frame per pass (9 for a
+  predicted 64), identical on the pre-warm-up build — so a 1/60 at 8K looks static.
+  A resolution ceiling, not a warm-up defect. The one overshoot of the session was
+  an 8K first pass, which is why `B` went 6 → 10.
+
+Still open:
+
+1. Whether 3 s is the right default for lingering tyre smoke. Shots at 0/1/5 s were
+   taken (39–41) and the user is happy with the result, but no smoke-heavy scene has
+   been compared side by side.
+2. The 10-frame margin itself has not been on hardware yet; at 1440p the 6-frame
+   build confirmed with 1–4 frames to spare, so 10 is expected to remove retries.
+3. A warm-up that crosses a session boundary on the tape gets its effects reset at
    the transition — equivalent to a shortened warm-up, and not detected.
+4. The phase dither is now mostly decorative on the warm-up path (the brake's 1x
+   jitter dwarfs the 1.4 ms slow-motion sample spacing). Measured harmless above;
+   removing it is a tidy-up, not a fix.
 
 ### How anchor restoration is guaranteed on *every* exit path
 
