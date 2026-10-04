@@ -139,12 +139,6 @@ const nl: Catalog = {
 		weightingLinear: 'Lineair (scherp aan het eind)',
 		weightingEase: 'Ease (scherpere kop, lange staart)',
 
-		interpolation: 'Beeldinterpolatie',
-		interpolationOff: 'Uit',
-		interpolation2: '2× (één tussenbeeld)',
-		interpolation4: '4× (drie tussenbeelden)',
-		interpolation8: '8× (zeven tussenbeelden)',
-
 		passes: 'Doorgangen',
 		passes1: '1 (één doorgang)',
 		passes2: '2× — twee keer zo lang wachten',
@@ -167,7 +161,6 @@ const nl: Catalog = {
 		modified: {
 			weighting_linear: 'lineair',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× interpolatie',
 			passes: {
 				one: '{count} doorgang',
 				other: '{count} doorgangen',
@@ -194,15 +187,8 @@ const nl: Catalog = {
 			unavailableWithReason:
 				'Lange sluitertijd is niet beschikbaar op deze machine: {reason}',
 			unavailable: 'Lange sluitertijd is niet beschikbaar op deze machine.',
-			interpolationCost:
-				'Interpolatie verzint beelden tussen de echte om de streep gelijkmatiger te maken. Het kost GPU-tijd per beeld, dus vergelijk het aantal echte samples van de opgeslagen opname met dezelfde opname zonder interpolatie — daalt dat aantal, dan koopt zij verzonnen samples met echte.',
-			passesAndInterpolation:
-				'Doorgangen en interpolatie concurreren om hetzelfde budget per beeld. Staan beide aan, dan legt elke doorgang minder echte beelden vast — interpolatie uitzetten levert meestal een betere opname op bij dezelfde wachttijd.',
 			passes:
 				'Elke doorgang speelt hetzelfde moment opnieuw af en vangt beelden op die de andere misten, zodat de streep gelijkmatiger wordt in plaats van helderder. Vooral nuttig bij korte sluitertijden, waar één doorgang maar een handjevol samples oplevert.',
-			interpolationUnsupported:
-				'Beeldinterpolatie vereist een NVIDIA Turing-GPU of nieuwer{adapter}. Al het andere aan lange sluitertijd werkt gewoon.',
-			interpolationAdapter: ' (deze opname draait op {adapter})',
 			reshade:
 				'Lange sluitertijd legt natively vast en gebruikt ReShade niet, dus ReShade-effecten verschijnen niet in het resultaat.',
 		},
@@ -264,17 +250,11 @@ const nl: Catalog = {
 			weightingBody:
 				'Hoeveel elk vastgelegd beeld bijdraagt aan het resultaat. <b>Box</b> weegt ze allemaal even zwaar en geeft een gelijkmatige streep. <b>Lineair</b> loopt op naar het einde van het venster, zodat het onderwerp het scherpst is waar het eindigde en langs zijn baan vervaagt. <b>Ease</b> is hetzelfde idee met een scherpere kop en een langere staart.',
 
-			interpolation: 'Beeldinterpolatie',
-			interpolationBody:
-				'Verzint extra beelden tussen de echte met de optical-flow-engine van de GPU en vult zo de gaten in de streep op. Vereist een NVIDIA Turing-kaart of nieuwer en wordt volledig verborgen op hardware die dit niet aankan.',
-			interpolationCostBody:
-				'Het is niet gratis: het kost GPU-tijd bij elk vastgelegd beeld, en het budget is één iRacing-beeld. Kan het dat niet bijhouden, dan begint het <i>echte</i> beelden te missen om synthetische te fabriceren, wat per saldo verlies is — de streep wordt korter en grover. De kosten schalen met megapixels maal de factor, dus wat comfortabel is op 2560×1440 is niet haalbaar op 8K. Om dit te controleren maak je dezelfde opname twee keer, met en zonder, en vergelijk je het aantal echte samples; de app waarschuwt je achteraf ook als een opname tekortschoot.',
-
 			passes: 'Doorgangen',
 			passesBody:
 				'Bezoekt hetzelfde moment meerdere keren en verzamelt alles in één afbeelding. Elke doorgang vangt beelden op die de andere toevallig misten, zodat de streep gelijkmatiger wordt — niet helderder, want het resultaat wordt genormaliseerd naar hoeveel licht er werkelijk op elke pixel viel.',
 			passesTradeBody:
-				'Doorgangen kopen hetzelfde als interpolatie, maar met een andere munt: werkelijke tijd in plaats van GPU-tijd. Acht doorgangen duren ruwweg acht keer zo lang, maar kunnen je nooit echte beelden kosten. Daarmee zijn ze de juiste hefboom bij hoge resoluties, waar interpolatie het niet bijhoudt, en bij korte sluitertijden, waar één doorgang heel weinig samples oplevert. Beide tegelijk gebruiken is meestal het slechtste van twee werelden — ze concurreren om hetzelfde budget per beeld.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Sluitertijdenreeks',
 			bracketBody:
@@ -576,10 +556,6 @@ const nl: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Deze sluitertijd is zo kort dat er maar één beeld in valt, dus het resultaat heeft geen bewegingsonscherpte. Een tragere afspeelsnelheid of een langere sluitertijd levert samples op.',
-		bracketVsInterpolation:
-			'Een sluitertijdenreeks en {factor}x beeldinterpolatie kunnen niet allebei draaien, dus deze opname wordt zonder interpolatie gemaakt. Zet de reeks uit als de tussenbeelden je meer waard zijn dan de extra standen.',
-		passesVsInterpolation:
-			'Zowel meerdere doorgangen als {factor}x interpolatie staan aan. Ze concurreren: interpolatie vertraagt elke doorgang zodanig dat die echte beelden misloopt, waardoor dezelfde wachttijd minder echte samples oplevert dan doorgangen alleen. Interpolatie uitzetten geeft meestal de betere opname.',
 		shortOfTarget:
 			'Zelfs op snelheid 1/{divisor} haalt deze belichting ongeveer {samples} samples, minder dan de gevraagde {target}. Gebruik een langere sluitertijd voor meer.',
 		longCaptureEscalate:
@@ -593,8 +569,6 @@ const nl: Catalog = {
 			'Een hogere afspeelsnelheid is eerder klaar, met minder samples.',
 		pastLogCap:
 			'Naar verwachting verzamelt deze opname ongeveer {samples} samples over {passes} doorgangen, meer dan de {cap} die het diagnostische logboek bevat. De afbeelding blijft onaangetast — alleen de gelijkmatigheids- en gatcijfers beschrijven dan het eerste deel van de opname.',
-		interpolationLossy:
-			'Op dit formaat heeft {factor}x interpolatie deze machine eerder al echte samples gekost. Overweeg een lagere factor, een lagere resolutie of in plaats daarvan meer doorgangen.',
 	},
 
 	duration: {

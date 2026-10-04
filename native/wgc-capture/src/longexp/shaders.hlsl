@@ -12,16 +12,6 @@
 //   CSResolve    normalise by accumulated weight, expose, tonemap, box-downsample
 //                the supersample, linear -> sRGB, pack to 16-bit UNORM RGBA
 //
-// Two further kernels serve the OPTIONAL NVIDIA optical-flow interpolation path.
-// They are compiled with the rest (so a compile break is caught by the probe on
-// every machine) but only ever dispatched when NVOFA is present and enabled:
-//
-//   CSLuma            RGBA8 -> R8_UNORM luma plane, the input NVOFA consumes
-//   CSWarpAccumulate  warp both frames along the flow field to EVERY synthetic
-//                     position, sum them weighted in registers, and pay for the
-//                     accumulator exactly once — one dispatch per captured frame,
-//                     not one per synthetic sample
-//
 // PORTABILITY NOTE — why the accumulator is a StructuredBuffer and not an
 // RWTexture2D<float4>: at D3D11 feature level 11_0, typed UAV *loads* are only
 // guaranteed for R32_{FLOAT,UINT,SINT}. A read-modify-write of an
@@ -46,28 +36,14 @@
 // Distinct registers throughout: fxc rejects overlapping bindings across a single
 // translation unit even when a given entry point uses only one of them.
 
-// gSource carries the frame that just arrived. CSAccumulate / CSDigest / CSLuma bind
-// WGC's own texture here through a plain _UNORM view, so they see sRGB-ENCODED
-// values and convert in the shader. CSWarpAccumulate instead binds our owned
-// _TYPELESS copy through an _UNORM_SRGB view, so the texture unit has already
-// linearised — see the note above CSWarpAccumulate for why that is a correctness fix
-// and not merely a saving.
+// gSource carries the frame that just arrived, bound through a plain _UNORM view,
+// so CSAccumulate / CSDigest see sRGB-ENCODED values and convert in the shader.
 Texture2D<float4>          gSource    : register(t0);
 StructuredBuffer<float4>   gAccumRead : register(t1);
-// Interpolation inputs. int2 because the flow buffers are R16G16_SINT.
-Texture2D<int2>            gFlowFwd   : register(t2);   // prev -> cur
-Texture2D<int2>            gFlowBwd   : register(t3);   // cur  -> prev
-Texture2D<float4>          gPrev      : register(t4);   // retained previous frame,
-                                                        // also through an _SRGB view
 
 RWStructuredBuffer<float4> gAccum     : register(u0);
 RWStructuredBuffer<uint>   gDigest    : register(u1);
 RWStructuredBuffer<uint2>  gOutput    : register(u2);
-RWTexture2D<float>         gLuma      : register(u3);
-
-// Bilinear, clamped at the edges. Only the warp uses it; integer flow textures are
-// not filterable so they are sampled by hand below.
-SamplerState               gLinear    : register(s0);
 
 cbuffer AccumulateParams : register(b0)
 {
@@ -88,32 +64,6 @@ cbuffer ResolveParams : register(b1)
     float gResolveHighlightGain;
     float2 gPadR;
 };
-
-cbuffer WarpParams : register(b2)
-{
-    uint2 gWarpSize;      // render (== accumulator) dimensions
-    uint2 gFlowSize;      // flow field dimensions = ceil(render / gFlowGrid)
-    // The whole synthetic run is described by three numbers rather than dispatched
-    // once per sample: positions are k/gFactor for k in 1..gFactor-1, and each
-    // sample's weight is the weighting curve at that position — which, because the
-    // curve is parameterised by POSITION and not by sample index, is exactly the
-    // lerp between the two real frames' weights.
-    uint  gFactor;        // 2/4/8; this dispatch emits gFactor-1 synthetic samples
-    float gPrevWeight;    // weight the retained frame was accumulated with
-    float gCurWeight;     // weight the frame that just arrived will be
-    uint  gFlowGrid;      // 1, 2 or 4 pixels per flow vector
-    uint  gHasBwd;        // 1 when the driver gave us a backward field too
-    float gConsistencyPx; // fwd/bwd disagreement, in px, at which trust hits zero
-    float gWarpHighlightGain; // same as gHighlightGain; synthetic samples must be
-                              // treated identically to real ones or the streak
-                              // would pulse in brightness between the two
-    float gPadW;
-};
-
-// Flow vectors are S10.5 fixed point: sign, 10 integer bits, 5 fractional bits
-// (NV_OF_FLOW_VECTOR in nvOpticalFlowCommon.h). 2^5 = 32 units per pixel.
-// KEEP IN SYNC with FLOW_FIXED_POINT_SCALE in nvof.rs — a test asserts they match.
-#define FLOW_FIXED_POINT_SCALE 32.0f
 
 // --- Colour ----------------------------------------------------------------
 // Exact sRGB transfer functions, not the 2.2 power approximation. Accumulating in
@@ -364,182 +314,6 @@ void CSDigest(uint3 tid : SV_DispatchThreadID)
 
     InterlockedAdd(gDigest[0], mixed);
     InterlockedXor(gDigest[1], mixed * 0x27D4EB2Fu);
-}
-
-// --- Optional pass A: luma plane for the optical-flow engine ----------------
-//
-// NVOFA's GRAYSCALE8 input format is DXGI_FORMAT_R8_UNORM. Our capture is RGBA8, and
-// NVOFA's only packed-colour format (ABGR8) is B8G8R8A8_UNORM — the opposite channel
-// order — so a conversion pass is required either way. Luma is the cheaper target:
-// a quarter of the bytes into the flow engine, and what a block-matching optical
-// flow accelerator reduces colour to internally regardless.
-//
-// Rec.709 luma on the GAMMA-ENCODED values, deliberately: this is the same Y' a
-// video pipeline would hand NVOFA, and the engine is tuned for it. Linearising first
-// would stretch the shadows and change the contrast the block matcher sees.
-
-[numthreads(TILE, TILE, 1)]
-void CSLuma(uint3 tid : SV_DispatchThreadID)
-{
-    if (tid.x >= gSize.x || tid.y >= gSize.y)
-    {
-        return;
-    }
-    float3 c = gSource[tid.xy].rgb;
-    gLuma[tid.xy] = saturate(0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b);
-}
-
-// --- Optional pass B: warp to every synthetic position, and accumulate once ---
-//
-// The flow field is defined on a coarse grid, so read it with an explicit bilinear
-// filter (integer texture formats are not hardware-filterable).
-
-float2 loadFlow(Texture2D<int2> field, int2 c)
-{
-    c = clamp(c, int2(0, 0), int2(gFlowSize) - int2(1, 1));
-    return float2(field.Load(int3(c, 0))) / FLOW_FIXED_POINT_SCALE;
-}
-
-float2 sampleFlow(Texture2D<int2> field, float2 p)
-{
-    // `p` is a full-resolution pixel centre. Flow cell (i,j) covers the pixel block
-    // [i*grid, (i+1)*grid), so its centre lies at (i + 0.5) * grid — hence the -0.5.
-    float2 g = p / float(gFlowGrid) - 0.5f;
-    float2 base = floor(g);
-    float2 frac = g - base;
-    int2 i0 = int2(base);
-
-    float2 f00 = loadFlow(field, i0);
-    float2 f10 = loadFlow(field, i0 + int2(1, 0));
-    float2 f01 = loadFlow(field, i0 + int2(0, 1));
-    float2 f11 = loadFlow(field, i0 + int2(1, 1));
-
-    return lerp(lerp(f00, f10, frac.x), lerp(f01, f11, frac.x), frac.y);
-}
-
-// WHY THE SYNTHETIC LOOP LIVES INSIDE THE KERNEL.
-//
-// This used to be dispatched once per synthetic sample, and each dispatch read AND
-// wrote the whole accumulator. At 5120x2880 that is 236 MB in + 236 MB out — about
-// 80% of the pass's memory traffic — repeated factor-1 times, against ~8 B/px of
-// actual texture reads.
-//
-// So the loop is folded in: one dispatch computes every warped sample, sums them
-// WEIGHTED IN REGISTERS, and touches the accumulator exactly once. Texture sampling
-// is unchanged; accumulator traffic drops by factor-1. That also makes factor 8
-// nearly as cheap as factor 2, since the fixed cost no longer multiplies.
-//
-// Measured: 8K per-frame consumption 60.0 -> 40.9 ms, and on a live replay at 5K
-// 91 -> 34.6 ms. The GROUP SHAPE was then swept (8x8 / 32x2 / 32x8 / 64x4) and made
-// no difference at all — within 1%, i.e. noise — so 8x8 stayed. Do not re-litigate
-// tile width here expecting a win: every accumulator element is visited by some
-// group, so L2 coalesces across groups and the per-wave pattern does not matter.
-//
-// WHY THE INPUTS ARE BOUND THROUGH _SRGB VIEWS.
-//
-// gPrev and gSource are our own R8G8B8A8_TYPELESS copies viewed as _UNORM_SRGB, so
-// the texture unit decodes sRGB as PART OF the bilinear filter. This is not only
-// cheaper (no pow() per tap); it is the fix for a real compromise. Filtering
-// sRGB-ENCODED values and linearising afterwards blends in the wrong space — the
-// average of gamma-encoded values is not the gamma encoding of the average — and
-// every warp tap is a bilinear filter. Now the blend, the cross-dissolve and the
-// prev/cur lerp all happen in linear light, which is what they always should have.
-//
-// Everything below therefore works in LINEAR values from the first line.
-
-[numthreads(TILE, TILE, 1)]
-void CSWarpAccumulate(uint3 tid : SV_DispatchThreadID)
-{
-    if (tid.x >= gWarpSize.x || tid.y >= gWarpSize.y)
-    {
-        return;
-    }
-
-    float2 p = float2(tid.xy) + 0.5f;
-    float2 texel = 1.0f / float2(gWarpSize);
-
-    // Backward warp: for the output pixel p at time t, find where that point sat in
-    // each source frame. Evaluating the field AT p (rather than solving for the
-    // source position that lands on p) is the standard approximation, and it is a
-    // good one precisely in our regime — measured per-sample displacement is ~4 px.
-    //
-    // Neither the flow nor the trust derived from it depends on t, so both are read
-    // ONCE for the whole run rather than once per synthetic sample.
-    float2 fwd = sampleFlow(gFlowFwd, p);
-    float2 bwd = float2(0.0f, 0.0f);
-    float trust = 1.0f;   // forward-only: nothing to cross-check against
-
-    if (gHasBwd != 0)
-    {
-        bwd = sampleFlow(gFlowBwd, p);
-
-        // Forward and backward flow describe the same motion in opposite directions,
-        // so fwd + bwd should be ~0. Where it is not, the point is visible in only
-        // one of the two frames — a disocclusion — and ANY warp of it is invention.
-        // This is the occlusion handling that a naive warp lacks and that shows up as
-        // smearing around moving edges.
-        float residual = length(fwd + bwd);
-        trust = saturate(1.0f - residual / max(gConsistencyPx, 1e-3f));
-    }
-
-    // The unwarped pair, fetched once and reused at every position. These feed the
-    // cross-dissolve fallback: where flow cannot be trusted the result is a straight
-    // dissolve of the UNWARPED frames, which is exactly the image this feature
-    // produces with interpolation switched off — so a bad flow field degrades to the
-    // status quo rather than inventing a new artefact. That is the property that
-    // makes shipping this safe.
-    //
-    // DELIBERATELY SampleLevel AND NOT Load, even though the coordinate is the exact
-    // texel centre and the filter therefore returns that texel unchanged. Whether a
-    // `Load` through an _SRGB view applies the sRGB->linear decode is not something
-    // this shader should have to be right about: if it did not, these two values
-    // would be gamma-ENCODED while `warped` below is linear, and the mix of the two
-    // would be wrong precisely at the disocclusions around a moving car — the least
-    // forgiving place in the frame. Sampling goes through the filter path, where the
-    // decode is unambiguous. The extra taps land in the same cache lines the warp is
-    // already reading, and there are two of them against 2*(gFactor-1) in the loop.
-    float3 prevPlain = gPrev.SampleLevel(gLinear, p * texel, 0.0f).rgb;
-    float3 curPlain  = gSource.SampleLevel(gLinear, p * texel, 0.0f).rgb;
-
-    float3 sum = float3(0.0f, 0.0f, 0.0f);
-    float sumWeight = 0.0f;
-    float invFactor = 1.0f / max(float(gFactor), 1.0f);
-
-    // gFactor is a constant buffer value, so the trip count is uniform across the
-    // whole dispatch — no divergence, and one branch per iteration for a body that
-    // does two filtered texture fetches.
-    [loop]
-    for (uint k = 1; k < gFactor; ++k)
-    {
-        float t = float(k) * invFactor;
-        float weight = lerp(gPrevWeight, gCurWeight, t);
-
-        float2 prevPos = p - t * fwd;
-        float2 curPos = (gHasBwd != 0)
-            ? (p - (1.0f - t) * bwd)
-            : (p + (1.0f - t) * fwd);
-
-        float3 warped = lerp(
-            gPrev.SampleLevel(gLinear, prevPos * texel, 0.0f).rgb,
-            gSource.SampleLevel(gLinear, curPos * texel, 0.0f).rgb,
-            t);
-
-        float3 blended = lerp(lerp(prevPlain, curPlain, t), warped, trust);
-
-        // Expanded AFTER blending, so a synthesised frame is treated exactly like the
-        // real frame it stands in for: the sim would have rendered — and clipped — it
-        // the same way. Both warp taps carry the highlight (that is what the warp is
-        // for), so the blend of two highlights stays above the knee.
-        sum += expand_highlights(blended, gWarpHighlightGain) * weight;
-        sumWeight += weight;
-    }
-
-    // The single read-modify-write this whole kernel shape exists to reach.
-    uint idx = tid.y * gWarpSize.x + tid.x;
-    float4 acc = gAccum[idx];
-    acc.rgb += sum;
-    acc.a   += sumWeight;
-    gAccum[idx] = acc;
 }
 
 // --- Pass 3: resolve -------------------------------------------------------

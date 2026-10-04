@@ -43,10 +43,7 @@ import {
 	windowFramesForExposure,
 } from '../../utilities/long-exposure/exposure-math';
 import type { SampleStats } from '../../utilities/long-exposure/sample-stats';
-import type {
-	LongExposureInterpolationReport,
-	LongExposureWarmUpReport,
-} from './capture-session';
+import type { LongExposureWarmUpReport } from './capture-session';
 import { createLogger } from '../../utilities/logger';
 
 const log = createLogger('long-exposure/output');
@@ -268,12 +265,9 @@ export interface WriteLongExposureOptions {
 	plan: ResolvedPlan;
 	stats: SampleStats;
 	backend: string | null;
-	// What optical-flow interpolation actually did, straight from the capture.
-	// Optional so callers that do not have it (older tests, non-capture writers) keep
-	// working; the sidecar simply records null.
-	interpolation?: LongExposureInterpolationReport | null;
-	// What the effects warm-up did, straight from the capture. Optional for the
-	// same reason as `interpolation`; the sidecar records null without it.
+	// What the effects warm-up did, straight from the capture. Optional so callers
+	// that do not have it (older tests, non-capture writers) keep working; the
+	// sidecar then records null.
 	warmUp?: LongExposureWarmUpReport | null;
 	screenshotDir: string;
 	cacheDir: string;
@@ -606,7 +600,6 @@ export async function writeLongExposure(
 	}
 
 	// --- sidecar ----------------------------------------------------------
-	const interpolation = options.interpolation ?? null;
 	const sidecar = buildSidecar({
 		recipe,
 		// Routed through the same helper the bracket stops use, so there is no special
@@ -625,11 +618,6 @@ export async function writeLongExposure(
 		// shot's output.
 		stats: { ...stats, accepted: image.accepted },
 		backend,
-		// Spread rather than field-by-field: an explicit mapping here silently dropped
-		// setupFrameMs / load / achievedRatio when they were added, so the sidecar —
-		// the one place these diagnostics are actually read — reported none of them.
-		interpolation,
-		synthesizedSamples: interpolation?.syntheticSamples ?? 0,
 		warmUp: options.warmUp ?? null,
 		imageWidth: image.width,
 		imageHeight: image.height,
@@ -698,8 +686,6 @@ export async function writeLongExposure(
 						// rather than measuring it. Noted, not faked.
 						stats: { ...stats, accepted: stop.accepted },
 						backend,
-						interpolation,
-						synthesizedSamples: interpolation?.syntheticSamples ?? 0,
 						// Every stop rode the same passes, so the same warm-up.
 						warmUp: options.warmUp ?? null,
 						imageWidth: stop.width,

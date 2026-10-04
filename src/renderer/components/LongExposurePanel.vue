@@ -123,34 +123,9 @@
 			     it, so it lost the trade it existed to make. Pick a higher
 			     Resolution instead; that control now works. -->
 
-					<!-- Optical-flow interpolation. Shown only where the hardware can
-			     actually do it: offering a control that silently does nothing is
-			     worse than not offering it. The base feature is never gated on
-			     this. -->
-					<o-field
-						v-if="interpolationSupported"
-						:label="$t('longExposure.interpolation')"
-					>
-						<o-select v-model="interpolation" expanded :disabled="busy">
-							<option :value="1">
-								{{ $t('longExposure.interpolationOff') }}
-							</option>
-							<option :value="2">
-								{{ $t('longExposure.interpolation2') }}
-							</option>
-							<option :value="4">
-								{{ $t('longExposure.interpolation4') }}
-							</option>
-							<option :value="8">
-								{{ $t('longExposure.interpolation8') }}
-							</option>
-						</o-select>
-					</o-field>
-
-					<!-- Passes sit next to interpolation because they are ALTERNATIVES,
-			     not companions: both buy sample density, one with GPU time we may
-			     not have and one with wall clock we always do. Needs no particular
-			     hardware, so unlike interpolation it is always offered. -->
+					<!-- Passes buy sample density with wall clock: each visit to the
+			     window catches a different share of iRacing's presents. Needs no
+			     particular hardware, so it is always offered. -->
 					<o-field :label="$t('longExposure.passes')">
 						<o-select v-model="passes" expanded :disabled="busy">
 							<option :value="1">
@@ -292,7 +267,6 @@ import {
 	PLAYBACK_DIVISORS,
 	SHUTTER_LADDER,
 } from '../../utilities/long-exposure/exposure-math';
-import { plannedSinkCount } from '../../utilities/long-exposure/accumulator-sinks';
 import { dedupeNotices } from '../../utilities/long-exposure/notices';
 import { useOruga } from '@oruga-ui/oruga-next';
 import NoticeCard, { type Notice } from './NoticeCard.vue';
@@ -331,11 +305,6 @@ export default defineComponent({
 			// user can clear with a switch. Distinct from `!available`, which also
 			// covers a machine that cannot run the compute backend at all.
 			needsNativeCapture: false,
-			// Optical-flow interpolation support, reported independently of the
-			// compute backend. Null until the first poll answers.
-			interpolationSupported: false,
-			interpolationReason: null as string | null,
-			adapter: null as string | null,
 			// Whether the sim is giving us a replay position to anchor on. NOT
 			// "the user has a replay open" — iRacing writes its replay buffer
 			// continuously, so a live session reports one too and long exposure
@@ -350,7 +319,6 @@ export default defineComponent({
 			shutter: config.get('longExposureShutter'),
 			playbackSpeed: config.get('longExposurePlaybackSpeed'),
 			targetSamples: String(config.get('longExposureTargetSamples')),
-			interpolation: config.get('longExposureInterpolation'),
 			passes: config.get('longExposurePasses'),
 			warmUpSeconds: config.get('longExposureWarmUpSeconds'),
 			bracket: config.get('longExposureBracket') === true,
@@ -404,24 +372,6 @@ export default defineComponent({
 				!this.externallyBusy
 			);
 		},
-		// Whether interpolation is going to run for the shot as currently configured:
-		// asked for, supported by the hardware, and not overridden by bracketing.
-		//
-		// Bracketing wins because the two cannot share the native session's retained
-		// -frame state — `executeRecipe` forces the factor to 1 whenever more than one
-		// sink is planned. The sink count comes from `plannedSinkCount`, the same
-		// helper the capture plans from and validatePlan warns from, so the panel
-		// cannot advertise interpolation for a shot that will not use it.
-		interpolationWillRun(): boolean {
-			return (
-				this.interpolationSupported &&
-				Number(this.interpolation) > 1 &&
-				plannedSinkCount({
-					bracket: this.bracket === true,
-					shutterKey: this.shutter,
-				}) === 1
-			);
-		},
 		// Which advanced settings are away from their default, named the way the user
 		// would recognise them.
 		//
@@ -434,13 +384,6 @@ export default defineComponent({
 			if (this.weighting !== 'box') {
 				active.push(
 					this.$t(`longExposure.modified.weighting_${this.weighting}`)
-				);
-			}
-			if (this.interpolationSupported && Number(this.interpolation) > 1) {
-				active.push(
-					this.$t('longExposure.modified.interpolation', {
-						factor: this.interpolation,
-					})
 				);
 			}
 			// Named rather than counted, and for the sharpest version of the reason
@@ -472,12 +415,10 @@ export default defineComponent({
 			}
 			return active;
 		},
-		// How many controls the fold is hiding. Interpolation is only rendered on
-		// hardware that can do it, so the count has to agree with what is actually
-		// in there. Weighting, passes, warm-up, highlight recovery, and interpolation
-		// where it is offered.
+		// How many controls the fold is hiding: weighting, passes, warm-up,
+		// bracketing and highlight recovery.
 		advancedCount(): number {
-			return this.interpolationSupported ? 6 : 5;
+			return 5;
 		},
 		// Every notice this panel raises, as data for the single NoticeCard: the
 		// availability banner, the tuning notes that used to sit inside Advanced,
@@ -566,51 +507,10 @@ export default defineComponent({
 				return notices;
 			}
 
-			// Interpolation adds GPU work to every captured frame against a budget of
-			// one iRacing present. Slower than the sim presents and we drop REAL
-			// samples to manufacture synthetic ones — a net loss, and one the sidecar
-			// records both halves of so it can be checked rather than assumed.
-			//
-			// Both of the interpolation notices below are gated on it actually being
-			// going to run: a bracket takes the shot without it, and advice about a
-			// setting that is inert sends the user to tune something that cannot
-			// affect the result. The accurate "these two cannot both run" message
-			// comes from validatePlan, through previewWarnings above.
-			if (this.interpolationWillRun) {
-				notices.push({
-					level: 'warning',
-					text: this.$t('longExposure.notices.interpolationCost'),
-				});
-			}
-
-			// Both on is the worst of the trade, and validatePlan says so too — this
-			// is the same fact stated where the controls are.
-			if (Number(this.passes) > 1 && this.interpolationWillRun) {
-				notices.push({
-					level: 'warning',
-					text: this.$t('longExposure.notices.passesAndInterpolation'),
-				});
-			}
-
 			if (Number(this.passes) > 1) {
 				notices.push({
 					level: 'info',
 					text: this.$t('longExposure.notices.passes'),
-				});
-			}
-
-			// Asked for on hardware that can't do it: say so, rather than showing a
-			// control that quietly does nothing.
-			if (!this.interpolationSupported && this.interpolationReason) {
-				notices.push({
-					level: 'info',
-					text: this.$t('longExposure.notices.interpolationUnsupported', {
-						adapter: this.adapter
-							? this.$t('longExposure.notices.interpolationAdapter', {
-									adapter: this.adapter,
-								})
-							: '',
-					}),
 				});
 			}
 
@@ -707,13 +607,7 @@ export default defineComponent({
 					this.playbackSpeed === 0
 						? parseInt(this.targetSamples, 10) || 240
 						: null,
-				// Sent as 1 unless the hardware actually supports it, so a value
-				// persisted on a previous GPU cannot silently ride along.
-				interpolationFactor: this.interpolationSupported
-					? this.interpolation
-					: 1,
-				// Unlike interpolation this needs no particular hardware, so it is sent
-				// as chosen. An addon build too old to run passes degrades to one and
+				// Needs no particular hardware, so it is sent as chosen. An addon build too old to run passes degrades to one and
 				// says so in the outcome's warnings.
 				passes: Number(this.passes) || 1,
 				// 0 is a real choice (off), so `|| default` would be wrong here.
@@ -747,12 +641,6 @@ export default defineComponent({
 			if (Number.isFinite(n)) {
 				config.set('longExposureTargetSamples', n);
 			}
-			void this.refreshPreview();
-		},
-		interpolation(value) {
-			config.set('longExposureInterpolation', Number(value));
-			// Affects VRAM, not the sample-count prediction, so refresh the preview
-			// to keep the pre-flight honest.
 			void this.refreshPreview();
 		},
 		bracket(value) {
@@ -831,12 +719,6 @@ export default defineComponent({
 				this.available = status.available;
 				this.unavailableReason = status.reason;
 				this.needsNativeCapture = status.needsNativeCapture === true;
-				this.adapter = status.adapter ?? null;
-				// Absent (older addon) is treated exactly like unsupported: the
-				// control stays hidden and shots are taken without interpolation.
-				this.interpolationSupported =
-					status.interpolation?.available === true;
-				this.interpolationReason = status.interpolation?.reason ?? null;
 				this.hasReplayData = status.hasReplayData;
 				this.liveAnchor = status.anchorFrame;
 				// Don't let the main process's own busy flag fight our local latch

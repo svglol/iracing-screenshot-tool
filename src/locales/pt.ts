@@ -141,12 +141,6 @@ const pt: Catalog = {
 		weightingLinear: 'Linear (nítida no fim)',
 		weightingEase: 'Ease (cabeça mais nítida, cauda longa)',
 
-		interpolation: 'Interpolação de fotogramas',
-		interpolationOff: 'Desativada',
-		interpolation2: '2× (um fotograma intermédio)',
-		interpolation4: '4× (três fotogramas intermédios)',
-		interpolation8: '8× (sete fotogramas intermédios)',
-
 		passes: 'Passagens',
 		passes1: '1 (passagem única)',
 		passes2: '2× — o dobro da espera',
@@ -169,7 +163,6 @@ const pt: Catalog = {
 		modified: {
 			weighting_linear: 'linear',
 			weighting_ease: 'ease',
-			interpolation: 'interpolação {factor}×',
 			passes: {
 				one: '{count} passagem',
 				other: '{count} passagens',
@@ -196,15 +189,8 @@ const pt: Catalog = {
 			unavailableWithReason:
 				'A longa exposição está indisponível nesta máquina: {reason}',
 			unavailable: 'A longa exposição está indisponível nesta máquina.',
-			interpolationCost:
-				'A interpolação inventa fotogramas entre os reais para suavizar o rasto. Custa tempo de GPU por fotograma, por isso compara o número de amostras reais da captura guardada com a mesma captura sem interpolação: se esse número descer, está a comprar amostras inventadas com amostras reais.',
-			passesAndInterpolation:
-				'As passagens e a interpolação competem pelo mesmo orçamento por fotograma. Com ambas ativas, cada passagem capta menos fotogramas reais — desativar a interpolação costuma dar uma captura melhor com a mesma espera.',
 			passes:
 				'Cada passagem repete o mesmo instante e apanha fotogramas que as outras falharam, pelo que o rasto fica mais uniforme e não mais claro. Ideal em obturadores rápidos, onde uma única passagem recolhe pouquíssimas amostras.',
-			interpolationUnsupported:
-				'A interpolação de fotogramas exige uma GPU NVIDIA Turing ou mais recente{adapter}. Tudo o resto na longa exposição funciona normalmente.',
-			interpolationAdapter: ' (esta captura corre em {adapter})',
 			reshade:
 				'A longa exposição capta de forma nativa e não usa o ReShade, pelo que os efeitos do ReShade não aparecerão no resultado.',
 		},
@@ -266,17 +252,11 @@ const pt: Catalog = {
 			weightingBody:
 				'Quanto cada fotograma captado contribui para o resultado. <b>Box</b> pondera-os todos por igual, dando um rasto uniforme. <b>Linear</b> aumenta em direção ao fim da janela, pelo que o motivo fica mais nítido onde terminou e se esbate ao longo do seu percurso. <b>Ease</b> é a mesma ideia com uma cabeça mais nítida e uma cauda mais longa.',
 
-			interpolation: 'Interpolação de fotogramas',
-			interpolationBody:
-				'Inventa fotogramas adicionais entre os reais usando o motor de fluxo ótico da GPU, preenchendo as falhas ao longo do rasto. Exige uma placa NVIDIA Turing ou mais recente e fica totalmente oculta em hardware que não o consegue fazer.',
-			interpolationCostBody:
-				'Não é gratuita: custa tempo de GPU em cada fotograma captado, e o orçamento é um fotograma do iRacing. Se não acompanhar, começa a falhar fotogramas <i>reais</i> para fabricar sintéticos, o que é uma perda líquida — o rasto sai mais curto e mais grosseiro. O custo escala com os megapíxeis vezes o fator, pelo que o que é confortável a 2560×1440 não é viável em 8K. Para verificar, capta o mesmo instante duas vezes, com e sem, e compara o número de amostras reais; a aplicação também te avisa depois se uma captura ficou aquém.',
-
 			passes: 'Passagens',
 			passesBody:
 				'Visita o mesmo instante várias vezes, acumulando numa só imagem. Cada passagem apanha fotogramas que as outras falharam, pelo que o rasto fica mais uniforme — não mais claro, porque o resultado é normalizado pela luz que efetivamente chegou a cada píxel.',
 			passesTradeBody:
-				'As passagens compram o mesmo que a interpolação, mas noutra moeda: tempo real em vez de tempo de GPU. Oito passagens demoram cerca de oito vezes mais, mas nunca te podem custar fotogramas reais. Isso faz delas a alavanca certa em resoluções altas, onde a interpolação não acompanha, e em obturadores rápidos, onde uma única passagem recolhe muito poucas amostras. Usar as duas ao mesmo tempo é normalmente o pior dos dois mundos — competem pelo mesmo orçamento por fotograma.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Bracketing de obturador',
 			bracketBody:
@@ -576,10 +556,6 @@ const pt: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Este obturador é tão curto que só um fotograma cairá dentro dele, pelo que o resultado não terá desfoque de movimento. Uma velocidade de reprodução ou um obturador mais lentos rendem amostras.',
-		bracketVsInterpolation:
-			'O bracketing de obturador e a interpolação de fotogramas {factor}x não podem funcionar em conjunto, pelo que esta captura será feita sem interpolação. Desativa o bracketing se os fotogramas intermédios te importarem mais do que os passos adicionais.',
-		passesVsInterpolation:
-			'Estão ativas tanto as passagens múltiplas como a interpolação {factor}x. Competem entre si: a interpolação abranda cada passagem o suficiente para lhe custar fotogramas reais, pelo que a mesma espera compra menos amostras reais do que as passagens sozinhas. Desativar a interpolação costuma dar uma captura melhor.',
 		shortOfTarget:
 			'Mesmo à velocidade 1/{divisor}, esta exposição chega a cerca de {samples} amostras, aquém das {target} pedidas. Usa um obturador mais lento para obteres mais.',
 		longCaptureEscalate:
@@ -594,8 +570,6 @@ const pt: Catalog = {
 			'Uma velocidade de reprodução mais alta termina mais cedo, com menos amostras.',
 		pastLogCap:
 			'Prevê-se que esta captura recolha cerca de {samples} amostras ao longo de {passes} passagens, acima das {cap} que o registo de diagnóstico comporta. A imagem não é afetada — apenas os valores de uniformidade e de intervalo descreverão a primeira parte da captura.',
-		interpolationLossy:
-			'Neste tamanho, a interpolação {factor}x já custou amostras reais a esta máquina. Considera um fator mais baixo, uma resolução mais baixa ou, em alternativa, mais passagens.',
 	},
 
 	duration: {

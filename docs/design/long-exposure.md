@@ -94,6 +94,10 @@ portable equivalent, and the work is genuinely not memory-bound. That is the
 feature that should motivate a CUDA backend, and by then it slots in behind the
 `AccumulateBackend` trait described in §5 rather than being retrofitted.
 
+> **Update 2026-10-04:** it was built — without CUDA, through NVOFA's D3D11 interface
+> — and then removed, because multi-pass accumulation beat it on a live replay. See
+> `long-exposure-frame-interpolation.md` §11.
+
 **Decision: `AccumulateBackend` trait, one implementation (`D3d11ComputeBackend`).**
 
 ---

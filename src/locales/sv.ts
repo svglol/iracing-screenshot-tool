@@ -139,12 +139,6 @@ const sv: Catalog = {
 		weightingLinear: 'Linjär (skarp i slutet)',
 		weightingEase: 'Ease (skarpare början, lång svans)',
 
-		interpolation: 'Bildinterpolering',
-		interpolationOff: 'Av',
-		interpolation2: '2× (en mellanbild)',
-		interpolation4: '4× (tre mellanbilder)',
-		interpolation8: '8× (sju mellanbilder)',
-
 		passes: 'Pass',
 		passes1: '1 (ett enda pass)',
 		passes2: '2× — dubbelt så lång väntan',
@@ -167,7 +161,6 @@ const sv: Catalog = {
 		modified: {
 			weighting_linear: 'linjär',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× interpolering',
 			passes: {
 				one: '{count} pass',
 				other: '{count} pass',
@@ -195,15 +188,8 @@ const sv: Catalog = {
 				'Långtidsexponering är inte tillgänglig på den här datorn: {reason}',
 			unavailable:
 				'Långtidsexponering är inte tillgänglig på den här datorn.',
-			interpolationCost:
-				'Interpolering hittar på bildrutor mellan de verkliga för att jämna ut strecket. Det kostar GPU-tid per bildruta, så jämför antalet verkliga sampel i den sparade bilden med samma bild utan interpolering — om siffran sjunker köper den påhittade sampel med verkliga.',
-			passesAndInterpolation:
-				'Pass och interpolering konkurrerar om samma budget per bildruta. Med båda på fångar varje pass färre verkliga bildrutor — att stänga av interpoleringen ger oftast en bättre bild för samma väntan.',
 			passes:
 				'Varje pass spelar upp samma ögonblick igen och fångar bildrutor som de andra missade, så strecket blir jämnare snarare än ljusare. Fungerar bäst vid korta slutartider, där ett enda pass bara samlar en handfull sampel.',
-			interpolationUnsupported:
-				'Bildinterpolering kräver en NVIDIA Turing-GPU eller nyare{adapter}. Allt annat i långtidsexponeringen fungerar som vanligt.',
-			interpolationAdapter: ' (den här inspelningen körs på {adapter})',
 			reshade:
 				'Långtidsexponering spelar in nativt och använder inte ReShade, så ReShade-effekter syns inte i resultatet.',
 		},
@@ -265,17 +251,11 @@ const sv: Catalog = {
 			weightingBody:
 				'Hur mycket varje fångad bildruta bidrar till resultatet. <b>Box</b> viktar dem alla lika och ger ett jämnt streck. <b>Linjär</b> ökar mot slutet av fönstret, så motivet är skarpast där det slutade och tonar bort längs sin bana. <b>Ease</b> är samma idé med skarpare början och längre svans.',
 
-			interpolation: 'Bildinterpolering',
-			interpolationBody:
-				'Hittar på extra bildrutor mellan de verkliga med hjälp av GPU:ns optical flow-motor och fyller igen luckorna längs strecket. Kräver ett NVIDIA Turing-kort eller nyare och döljs helt på hårdvara som inte klarar det.',
-			interpolationCostBody:
-				'Det är inte gratis: det kostar GPU-tid på varje fångad bildruta, och budgeten är en iRacing-bildruta. Om den inte hinner med börjar den missa <i>verkliga</i> bildrutor för att tillverka syntetiska, vilket är en nettoförlust — strecket blir kortare och grövre. Kostnaden skalar med megapixlar gånger faktorn, så det som är bekvämt vid 2560×1440 är inte gångbart i 8K. För att kontrollera det: fotografera samma ögonblick två gånger, med och utan, och jämför antalet verkliga sampel; appen varnar dig också i efterhand om en bild blev för snål.',
-
 			passes: 'Pass',
 			passesBody:
 				'Besöker samma ögonblick flera gånger och ackumulerar allt till en bild. Varje pass fångar bildrutor som de andra råkade missa, så strecket blir jämnare — inte ljusare, eftersom resultatet normaliseras efter hur mycket ljus som faktiskt landade på varje bildpunkt.',
 			passesTradeBody:
-				'Pass köper samma sak som interpolering, fast i en annan valuta: verklig tid i stället för GPU-tid. Åtta pass tar ungefär åtta gånger så lång tid, men de kan aldrig kosta dig verkliga bildrutor. Det gör dem till rätt verktyg vid höga upplösningar, där interpoleringen inte hinner med, och vid korta slutartider, där ett enda pass samlar väldigt få sampel. Att använda båda samtidigt är oftast det sämsta av två världar — de konkurrerar om samma budget per bildruta.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Slutartidsgaffling',
 			bracketBody:
@@ -572,10 +552,6 @@ const sv: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Den här slutartiden är så kort att bara en bildruta hamnar inom den, så resultatet får ingen rörelseoskärpa. En långsammare uppspelningshastighet eller en längre slutartid ger sampel.',
-		bracketVsInterpolation:
-			'Slutartidsgaffling och {factor}x bildinterpolering kan inte köras samtidigt, så den här bilden tas utan interpolering. Stäng av gafflingen om mellanbilderna betyder mer för dig än de extra stegen.',
-		passesVsInterpolation:
-			'Både flera pass och {factor}x interpolering är på. De konkurrerar: interpoleringen bromsar varje pass så mycket att det kostar verkliga bildrutor, så samma väntan köper färre verkliga sampel än enbart pass skulle göra. Att stänga av interpoleringen ger oftast den bättre bilden.',
 		shortOfTarget:
 			'Även vid hastigheten 1/{divisor} når den här exponeringen omkring {samples} sampel, färre än de {target} som begärdes. Använd en längre slutartid för fler.',
 		longCaptureEscalate:
@@ -588,8 +564,6 @@ const sv: Catalog = {
 			'En snabbare uppspelningshastighet blir klar tidigare, med färre sampel.',
 		pastLogCap:
 			'Den här inspelningen beräknas samla omkring {samples} sampel över {passes} pass, mer än de {cap} som diagnostikloggen rymmer. Bilden påverkas inte — bara jämnhets- och gluggsiffrorna kommer att beskriva inspelningens första del.',
-		interpolationLossy:
-			'I den här storleken har {factor}x interpolering tidigare kostat den här datorn verkliga sampel. Överväg en lägre faktor, en lägre upplösning eller fler pass i stället.',
 	},
 
 	duration: {

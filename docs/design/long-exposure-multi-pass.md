@@ -256,6 +256,10 @@ not. Let the UI say so: default 1, and surface the control (or a suggestion) whe
 
 ## 4. Interaction with frame interpolation — they are alternatives, not partners
 
+> **Moot since 2026-10-04: frame interpolation was removed**, after matched shots
+> showed it never beat multi-pass (`long-exposure-frame-interpolation.md` §11).
+> Kept for the record.
+
 The point of multi-pass is that it supplies **real** samples where interpolation
 supplies synthetic ones, at a lower per-frame cost (23 ms vs 34.6 at 5K, §9.7). Eight
 passes with interpolation **off** is ~120 real samples against today's 7 real + ~49

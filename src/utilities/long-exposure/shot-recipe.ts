@@ -38,7 +38,6 @@ import {
 	type PlaybackDivisor,
 	type WeightingCurve,
 } from './exposure-math';
-import { plannedSinkCount } from './accumulator-sinks';
 import { resolveCropTarget } from '../screenshot-output';
 import { t } from '../i18n';
 
@@ -52,8 +51,7 @@ export type Tonemapper = (typeof TONEMAPPERS)[number];
 // per-sample displacement: a ladder of discrete ghosts, which is a structured
 // artefact the eye reads as a defect. The aliasing it removed is unstructured and
 // the motion blur already hides most of it, so on the moving subjects this feature
-// exists for it was a losing trade — the interpolation note §9.9 had already made
-// "turn supersampling off" its leading recommendation.
+// exists for it was a losing trade.
 //
 // What replaced it is simply picking a higher Resolution, which became possible to
 // do honestly once main could read that setting (see utilities/capture-resolution).
@@ -65,16 +63,16 @@ export type Tonemapper = (typeof TONEMAPPERS)[number];
 // re-verification of the most safety-critical pass in the feature, for no
 // user-visible gain.
 
-// Optical-flow frame interpolation. 1 is off; 2/4/8 synthesise that many samples per
-// captured frame (factor-1 of them invented), to close the gap between consecutive
-// real samples and turn a ladder of discrete ghosts into a continuous streak.
+// OPTICAL-FLOW FRAME INTERPOLATION IS GONE (2026-10-04). It synthesised in-between
+// samples on NVIDIA hardware, and measured on a live replay it never beat
+// multi-pass: at equal sample counts the synthetic samples were at best as good as
+// real ones, its ceiling was factor x real (2 real frames at 1/250 gave 9 samples
+// against 35 real from 8 passes), one pass could only fill between its first and
+// last real frame (41-81% of the window), and where flow failed it fell back to a
+// cross-dissolve that left a visible ladder. Passes buy real samples instead.
 //
-// This is an OPTIONAL ACCELERATOR. It needs NVIDIA Turing-or-newer hardware and
-// fails soft to 1 everywhere else, so it is a preference rather than a requirement —
-// a recipe carrying factor 4 still executes correctly on an AMD card, just without
-// the in-betweens. Nothing about the base feature is gated on it.
-export const INTERPOLATION_FACTORS = [1, 2, 4, 8] as const;
-export type InterpolationFactor = (typeof INTERPOLATION_FACTORS)[number];
+// A stored `interpolationFactor` is dropped, not honoured — the same treatment as
+// `supersample` above. See docs/design/long-exposure-frame-interpolation.md §11.
 
 // Highlight recovery is expressed in STOPS, like exposure compensation, so it reads
 // as a photographic control rather than an arbitrary multiplier. 0 is off; 8 stops is
@@ -176,10 +174,6 @@ export interface LongExposureRecipe {
 	// Legacy corner-only mode. Meaningless unless `crop` is on.
 	cropTopLeft: boolean;
 
-	// Requested optical-flow interpolation factor. A REQUEST, not a guarantee: the
-	// achieved factor is reported back from the capture and written to the sidecar.
-	interpolationFactor: InterpolationFactor;
-
 	// Highlight recovery, in stops of gain applied to near-clipped values BEFORE
 	// accumulation. 0 = off, and off is bit-for-bit identity.
 	//
@@ -190,8 +184,8 @@ export interface LongExposureRecipe {
 	// bright light sweeping through 1% of the exposure reads as a grey smudge rather
 	// than a bright trail. This puts the nonlinearity back where a sensor has it.
 	//
-	// Unlike interpolation this needs no particular hardware: it is a shader constant
-	// and behaves identically on every GPU.
+	// It needs no particular hardware: it is a shader constant and behaves
+	// identically on every GPU.
 	highlightRecovery: number;
 
 	// How many times to visit the exposure window, accumulating into one buffer
@@ -287,10 +281,7 @@ export function createDefaultRecipe(opts: {
 		// setting from longExposureDefaults(), which is where Settings is read.
 		crop: false,
 		cropTopLeft: false,
-		// Off by default. It is hardware-specific, it costs per-frame time that could
-		// otherwise buy real samples, and the base feature must stand on its own.
-		interpolationFactor: 1,
-		// Also off by default, for a different reason: a sidecar written before this
+		// Off by default: a sidecar written before this
 		// existed has no such field, so a non-zero default would silently make old
 		// recipes reproduce differently. Reproducibility outranks a better first look.
 		highlightRecovery: 0,
@@ -439,11 +430,9 @@ export function normalizeRecipe(
 		// such a recipe now yields `width` x `height` exactly, which is the sidecar's
 		// own image dimensions in the 1x case and double them in the 2x case. The
 		// version bump is what tells the reader that.
-		interpolationFactor: (
-			INTERPOLATION_FACTORS as readonly number[]
-		).includes(Number(input.interpolationFactor))
-			? (Number(input.interpolationFactor) as InterpolationFactor)
-			: (defaults.interpolationFactor ?? 1),
+		//
+		// `input.interpolationFactor` is dropped for the same reason: the feature is
+		// gone, and its in-between samples cannot be reproduced on this build.
 		highlightRecovery,
 		// Absent reads as 1, which is exactly what every sidecar written before
 		// multi-pass existed meant.
@@ -540,8 +529,7 @@ export interface ResolvedPlan {
 	predictedTotalWallClockSeconds: number;
 	// Dimensions iRacing's window is resized to, and the size the frame is
 	// accumulated at. Identical to the recipe's width/height; kept as distinct fields
-	// because everything downstream — the VRAM pre-flight, the interpolation load,
-	// the resolve — is about what is RENDERED, and conflating the two is how a 2x
+	// because everything downstream — the VRAM pre-flight, the resolve — is about what is RENDERED, and conflating the two is how a 2x
 	// supersample used to hide a 4x cost behind a 1x-looking number.
 	renderWidth: number;
 	renderHeight: number;
@@ -664,19 +652,6 @@ export interface RecipeValidation {
 	warnings: string[];
 }
 
-// How much interpolation work a configuration asks for: render megapixels times the
-// factor. One scalar, and the only one that has to be comparable across shots.
-export function interpolationLoad(opts: {
-	renderWidth: number;
-	renderHeight: number;
-	interpolationFactor: number;
-}): number {
-	const megapixels = (opts.renderWidth * opts.renderHeight) / 1e6;
-	return Number(
-		(megapixels * Math.max(1, opts.interpolationFactor)).toFixed(3)
-	);
-}
-
 // Validate a plan against live replay bounds. Split from resolvePlan so the UI can
 // show live feasibility without attempting a capture.
 export function validatePlan(opts: {
@@ -688,27 +663,10 @@ export function validatePlan(opts: {
 	// Callers convert through `tapeEndFrame`.
 	replayEndFrame: number | null;
 	currentSessionNum: number | null;
-	// The smallest interpolation load THIS MACHINE has been observed to choke on,
-	// learned from previous captures. Null until there is evidence.
-	//
-	// Deliberately measured rather than hard-coded: the point at which interpolation
-	// stops being free depends entirely on the GPU, and a threshold calibrated on one
-	// card would be wrong everywhere else. Silent until this machine has actually
-	// demonstrated a limit.
-	lossyInterpolationLoad?: number | null;
 }): RecipeValidation {
 	const { plan, recipe, replayEndFrame, currentSessionNum } = opts;
 	const errors: string[] = [];
 	const warnings: string[] = [];
-	// Whether this recipe actually resolves to more than one accumulator. Asked once,
-	// through the same helper the capture plans from, because two of the warnings
-	// below turn on it and a warning that disagrees with what the capture does is
-	// worse than no warning.
-	const bracketed =
-		plannedSinkCount({
-			bracket: recipe.bracket,
-			shutterKey: recipe.shutter,
-		}) > 1;
 
 	if (plan.startFrame < 0) {
 		// A trailing window means an anchor near the END of the replay is always
@@ -762,46 +720,6 @@ export function validatePlan(opts: {
 			plan.passes > 1
 				? t('validation.singleSampleMultiPass', { passes: plan.passes })
 				: t('validation.singleSample')
-		);
-	}
-
-	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN. This is a correctness limit, not
-	// a preference: the native session keeps ONE retained-frame ping-pong and
-	// advances it inside `accumulate_sample`, which the frame handler calls once per
-	// OPEN SINK. On the second and later stops of a captured frame both slots already
-	// hold that same frame, so the flow estimate runs between identical inputs and
-	// the warp deposits `factor - 1` zero-motion COPIES of the real frame instead of
-	// in-betweens. Every stop but the primary comes out quietly wrong, in the way
-	// that reads as merely under-blurred rather than as broken.
-	//
-	// Interpolation is what gives way, because it is the optional accelerator while
-	// bracketing is what the user asked for by name. `executeRecipe` applies that
-	// downgrade; this says so before the shot rather than after.
-	//
-	// The proper fix is the N-UAV warp kernel in
-	// docs/design/long-exposure-bracketing.md §3.1, which warps once and does one
-	// read-modify-write per sink from values already in registers.
-	if (bracketed && recipe.interpolationFactor > 1) {
-		warnings.push(
-			t('validation.bracketVsInterpolation', {
-				factor: recipe.interpolationFactor,
-			})
-		);
-	}
-
-	// Both are optional accelerators competing for the same per-frame budget, and
-	// running them together is the worst of the trade: interpolation roughly halves
-	// each pass's real-sample yield, so the wall clock buys synthetic samples where
-	// plain multi-pass would have bought real ones (frame-interpolation note §10.2).
-	//
-	// Silent on a bracketed shot: interpolation is already being dropped above, so
-	// advising the user to turn off something that is not going to run would send
-	// them looking for a setting that is no longer doing anything.
-	if (!bracketed && plan.passes > 1 && recipe.interpolationFactor > 1) {
-		warnings.push(
-			t('validation.passesVsInterpolation', {
-				factor: recipe.interpolationFactor,
-			})
 		);
 	}
 
@@ -862,28 +780,6 @@ export function validatePlan(opts: {
 				cap: NATIVE_SAMPLE_LOG_CAP,
 			})
 		);
-	}
-
-	// Interpolation that cannot keep up buys synthetic samples with real ones, and the
-	// result looks under-blurred rather than obviously broken — so it is worth saying
-	// BEFORE the shot, once this machine has shown where its limit is.
-	//
-	// Silent on a bracketed shot, for the same reason as the multi-pass warning above:
-	// interpolation is not going to run, so it cannot cost this capture anything.
-	if (!bracketed && recipe.interpolationFactor > 1) {
-		const load = interpolationLoad({
-			renderWidth: plan.renderWidth,
-			renderHeight: plan.renderHeight,
-			interpolationFactor: recipe.interpolationFactor,
-		});
-		const limit = opts.lossyInterpolationLoad;
-		if (typeof limit === 'number' && limit > 0 && load >= limit) {
-			warnings.push(
-				t('validation.interpolationLossy', {
-					factor: recipe.interpolationFactor,
-				})
-			);
-		}
 	}
 
 	return { errors, warnings };

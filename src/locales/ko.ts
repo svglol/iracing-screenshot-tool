@@ -144,12 +144,6 @@ const ko: Catalog = {
 		weightingLinear: 'Linear (끝부분이 선명)',
 		weightingEase: 'Ease (앞부분이 더 선명, 긴 꼬리)',
 
-		interpolation: '프레임 보간',
-		interpolationOff: '끔',
-		interpolation2: '2× (중간 프레임 1장)',
-		interpolation4: '4× (중간 프레임 3장)',
-		interpolation8: '8× (중간 프레임 7장)',
-
 		passes: '패스',
 		passes1: '1 (단일 패스)',
 		passes2: '2× — 대기 시간 2배',
@@ -173,7 +167,6 @@ const ko: Catalog = {
 		modified: {
 			weighting_linear: 'linear',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× 보간',
 			passes: {
 				other: '{count} 패스',
 			},
@@ -199,15 +192,8 @@ const ko: Catalog = {
 			unavailableWithReason:
 				'이 컴퓨터에서는 장노출을 사용할 수 없습니다: {reason}',
 			unavailable: '이 컴퓨터에서는 장노출을 사용할 수 없습니다.',
-			interpolationCost:
-				'보간은 실제 프레임 사이에 프레임을 지어내어 궤적을 매끄럽게 만듭니다. 프레임마다 GPU 시간을 쓰므로, 저장된 사진의 실제 샘플 수를 보간을 끄고 찍은 같은 사진과 비교해 보세요. 그 수가 줄어든다면 실제 샘플을 대가로 지어낸 샘플을 사는 셈입니다.',
-			passesAndInterpolation:
-				'패스와 보간은 같은 프레임당 예산을 두고 경쟁합니다. 둘 다 켜면 각 패스가 실제 프레임을 더 적게 캡처하므로, 같은 시간을 기다린다면 보간을 끄는 편이 대체로 더 나은 사진을 만듭니다.',
 			passes:
 				'각 패스는 같은 순간을 다시 재생하며 다른 패스가 놓친 프레임을 잡아내므로, 궤적이 밝아지는 것이 아니라 매끄러워집니다. 단일 패스로는 샘플이 몇 개밖에 모이지 않는 빠른 셔터에서 가장 효과적입니다.',
-			interpolationUnsupported:
-				'프레임 보간에는 NVIDIA Turing 이상의 GPU가 필요합니다{adapter}. 장노출의 나머지 기능은 평소대로 작동합니다.',
-			interpolationAdapter: ' (이 캡처는 {adapter}에서 실행됩니다)',
 			reshade:
 				'장노출은 네이티브로 캡처하며 ReShade를 사용하지 않으므로, ReShade 효과는 결과물에 나타나지 않습니다.',
 		},
@@ -269,17 +255,11 @@ const ko: Catalog = {
 			weightingBody:
 				'캡처한 각 프레임이 결과에 얼마나 기여하는지 정합니다. <b>Box</b>는 모두 같은 비중으로 다루어 균일한 궤적을 만듭니다. <b>Linear</b>는 노출 구간의 끝으로 갈수록 비중이 커지므로, 피사체는 마지막 위치에서 가장 선명하고 지나온 경로를 따라 흐려집니다. <b>Ease</b>는 같은 개념에 더 선명한 머리와 더 긴 꼬리를 더한 것입니다.',
 
-			interpolation: '프레임 보간',
-			interpolationBody:
-				'GPU의 옵티컬 플로 엔진으로 실제 프레임 사이에 프레임을 지어내어 궤적의 빈틈을 채웁니다. NVIDIA Turing 이상의 카드가 필요하며, 지원하지 않는 하드웨어에서는 아예 표시되지 않습니다.',
-			interpolationCostBody:
-				'공짜는 아닙니다. 캡처하는 프레임마다 GPU 시간을 쓰는데, 주어진 예산은 iRacing 프레임 하나입니다. 따라가지 못하면 합성 프레임을 만들려고 <i>실제</i> 프레임을 놓치기 시작하며, 이는 결국 손해입니다. 궤적이 더 짧고 거칠어집니다. 비용은 메가픽셀 수에 배수를 곱한 만큼 늘어나므로, 2560×1440에서 여유로운 설정도 8K에서는 무리입니다. 확인하려면 같은 순간을 보간을 켜고 한 번, 끄고 한 번 찍어 실제 샘플 수를 비교해 보세요. 사진이 목표에 못 미치면 앱이 촬영 후에 알려 주기도 합니다.',
-
 			passes: '패스',
 			passesBody:
 				'같은 순간을 여러 번 훑으며 하나의 이미지에 누적합니다. 각 패스는 다른 패스가 놓친 프레임을 잡아내므로 궤적이 매끄러워집니다. 밝아지지는 않습니다. 결과가 각 픽셀에 실제로 도달한 빛의 양으로 정규화되기 때문입니다.',
 			passesTradeBody:
-				'패스는 보간과 같은 것을 사지만 치르는 대가가 다릅니다. GPU 시간이 아니라 실제 시간입니다. 패스 8회는 대략 8배의 시간이 걸리지만 실제 프레임을 잃게 만드는 일은 결코 없습니다. 그래서 보간이 따라가지 못하는 높은 해상도와, 단일 패스로는 샘플이 거의 모이지 않는 빠른 셔터에서는 패스가 올바른 선택입니다. 둘을 함께 쓰는 것은 대체로 가장 나쁜 선택입니다. 같은 프레임당 예산을 두고 경쟁하기 때문입니다.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: '셔터 브라케팅',
 			bracketBody:
@@ -575,10 +555,6 @@ const ko: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'이 셔터는 프레임이 한 장만 들어갈 만큼 짧아서 결과에 모션 블러가 생기지 않습니다. 재생 속도를 낮추거나 더 느린 셔터를 쓰면 샘플을 모을 수 있습니다.',
-		bracketVsInterpolation:
-			'셔터 브라케팅과 {factor}x 프레임 보간은 함께 실행할 수 없으므로, 이 사진은 보간 없이 촬영됩니다. 추가 스톱보다 중간 프레임이 더 중요하다면 브라케팅을 끄세요.',
-		passesVsInterpolation:
-			'다중 패스와 {factor}x 보간이 모두 켜져 있습니다. 둘은 서로 경쟁합니다. 보간이 각 패스를 늦춰 실제 프레임을 잃게 만들므로, 같은 시간을 기다려도 패스만 쓸 때보다 실제 샘플이 적습니다. 보간을 끄는 편이 대체로 더 나은 사진을 만듭니다.',
 		shortOfTarget:
 			'1/{divisor} 속도에서도 이 노출은 약 {samples}개의 샘플에 그쳐, 요청한 {target}개에 못 미칩니다. 더 모으려면 셔터를 길게 하세요.',
 		longCaptureEscalate:
@@ -592,8 +568,6 @@ const ko: Catalog = {
 			'재생 속도를 높이면 샘플은 적지만 더 빨리 끝납니다.',
 		pastLogCap:
 			'이 캡처는 {passes}번의 패스에서 약 {samples}개의 샘플을 모을 것으로 예상되며, 이는 진단 로그가 담을 수 있는 {cap}개를 넘습니다. 이미지에는 영향이 없고, 고르기와 간격 수치만 캡처의 앞부분을 설명하게 됩니다.',
-		interpolationLossy:
-			'이 크기에서는 {factor}x 보간이 전에도 이 컴퓨터에서 실제 샘플을 잃게 만들었습니다. 더 낮은 배수나 더 낮은 해상도를 쓰거나, 대신 패스를 늘리는 것을 고려하세요.',
 	},
 
 	duration: {

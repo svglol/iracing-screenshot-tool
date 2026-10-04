@@ -126,36 +126,18 @@ describe('buildSidecar', () => {
 		).toBe(4);
 	});
 
-	// The sidecar is the record of how an image was actually made, so it has to
-	// distinguish "interpolation was on" from "interpolation was asked for".
-	it('records interpolation as null when there is nothing to report', () => {
-		expect(sidecar().interpolation).toBeNull();
-		expect(sidecar().sampling.synthesized).toBe(0);
-	});
-
-	it('records what interpolation actually did, with the MEASURED synthetic count', () => {
+	// Frame interpolation was removed in v7. A v1-v6 recipe that asked for it must
+	// not carry the request into a new sidecar, which would claim in-between samples
+	// this build cannot make.
+	it('drops a legacy interpolation request and records no interpolation block', () => {
 		const result = buildSidecar({
-			recipe: normalizeRecipe({ interpolationFactor: 4 }, recipe),
+			recipe: normalizeRecipe(
+				{ interpolationFactor: 8 } as Parameters<typeof normalizeRecipe>[0],
+				recipe
+			),
 			plan,
 			stats,
 			backend: 'd3d11-compute',
-			interpolation: {
-				requestedFactor: 4,
-				enabled: true,
-				achievedFactor: 4,
-				reason: null,
-				gridSize: 4,
-				bidirectional: true,
-				meanFrameMs: 6.25,
-				maxFrameMs: 18,
-				setupFrameMs: 33,
-				load: 14.746,
-				achievedRatio: 0.95,
-			},
-			// Deliberately NOT (factor-1) x accepted: frames whose flow estimation
-			// failed contribute a real sample and no synthetic ones, and the sidecar
-			// must record what happened rather than what was predicted.
-			synthesizedSamples: 41,
 			imageWidth: 1920,
 			imageHeight: 1080,
 			toolName: 'iRacing Screenshot Tool',
@@ -164,57 +146,10 @@ describe('buildSidecar', () => {
 			context,
 		});
 
-		expect(result.interpolation).toMatchObject({
-			requestedFactor: 4,
-			enabled: true,
-			achievedFactor: 4,
-			meanFrameMs: 6.25,
-		});
-		expect(result.sampling.synthesized).toBe(41);
-		// The real sample count stays exactly what it was, so it remains comparable
-		// against a shot taken with interpolation off.
+		expect(result.recipe).not.toHaveProperty('interpolationFactor');
+		expect(result).not.toHaveProperty('interpolation');
+		expect(result.sampling).not.toHaveProperty('synthesized');
 		expect(result.sampling.achieved).toBe(stats.accepted);
-		// The diagnostics that actually answer "did interpolation cost real frames"
-		// have to reach the sidecar — an explicit field-by-field mapping here once
-		// dropped all three of these silently.
-		expect(result.interpolation?.setupFrameMs).toBe(33);
-		expect(result.interpolation?.load).toBe(14.746);
-		expect(result.interpolation?.achievedRatio).toBe(0.95);
-	});
-
-	it('records a declined request honestly rather than as success', () => {
-		const result = buildSidecar({
-			recipe: normalizeRecipe({ interpolationFactor: 8 }, recipe),
-			plan,
-			stats,
-			backend: 'd3d11-compute',
-			interpolation: {
-				requestedFactor: 8,
-				enabled: false,
-				achievedFactor: 1,
-				reason: 'pre-Turing GPU',
-				gridSize: 0,
-				bidirectional: false,
-				meanFrameMs: null,
-				maxFrameMs: null,
-				setupFrameMs: null,
-				load: 3.686,
-				achievedRatio: 1.02,
-			},
-			synthesizedSamples: 0,
-			imageWidth: 1920,
-			imageHeight: 1080,
-			toolName: 'iRacing Screenshot Tool',
-			toolVersion: '3.2.0',
-			capturedAt: '2026-08-02T12:00:00.000Z',
-			context,
-		});
-
-		// The recipe still says what was asked for; the report says what happened.
-		expect(result.recipe.interpolationFactor).toBe(8);
-		expect(result.interpolation?.enabled).toBe(false);
-		expect(result.interpolation?.achievedFactor).toBe(1);
-		expect(result.sampling.synthesized).toBe(0);
 	});
 
 	// The requested exposure and the one replay-frame quantisation actually

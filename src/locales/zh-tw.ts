@@ -144,12 +144,6 @@ const zhTW: Catalog = {
 		weightingLinear: 'Linear（結尾銳利）',
 		weightingEase: 'Ease（開頭較銳利、拖尾較長）',
 
-		interpolation: '影格插補',
-		interpolationOff: '關閉',
-		interpolation2: '2×（插入一格）',
-		interpolation4: '4×（插入三格）',
-		interpolation8: '8×（插入七格）',
-
 		passes: '重複遍數',
 		passes1: '1（單遍）',
 		passes2: '2×（等待時間兩倍）',
@@ -174,7 +168,6 @@ const zhTW: Catalog = {
 			// ellipsis — they must stay much shorter than the option labels above.
 			weighting_linear: '線性',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× 插補',
 			passes: {
 				other: '{count} 遍',
 			},
@@ -199,15 +192,8 @@ const zhTW: Catalog = {
 				'長時間曝光需要高保真擷取（WGC），但目前是關閉的。請在「設定」中開啟以啟用長時間曝光。',
 			unavailableWithReason: '長時間曝光無法在這台電腦上使用：{reason}',
 			unavailable: '長時間曝光無法在這台電腦上使用。',
-			interpolationCost:
-				'插補會在真實影格之間憑空造出影格，讓軌跡更平滑。它每一格都要花 GPU 時間，因此請拿已儲存作品的真實取樣數，和關閉插補後拍的同一張比較；如果數字下降，代表它是拿真實取樣換來虛構的取樣。',
-			passesAndInterpolation:
-				'重複遍數與插補會爭奪同一份每格預算。兩者同時開啟時，每一遍擷取到的真實影格都會變少；在相同的等待時間下，關閉插補通常能拍出更好的成果。',
 			passes:
 				'每一遍都會重播同一個瞬間，補上其他遍漏掉的影格，因此軌跡會更平滑，而不是更亮。在快門很快、單遍只能收集到少數取樣時效果最好。',
-			interpolationUnsupported:
-				'影格插補需要 NVIDIA Turing 或更新的 GPU{adapter}。長時間曝光的其他部分一切正常。',
-			interpolationAdapter: '（這次擷取使用的是 {adapter}）',
 			reshade:
 				'長時間曝光採用原生擷取，不會經過 ReShade，因此 ReShade 的效果不會出現在成果中。',
 		},
@@ -269,17 +255,11 @@ const zhTW: Catalog = {
 			weightingBody:
 				'每一格擷取到的影格對結果的貢獻有多少。<b>Box</b> 讓所有影格權重相同，軌跡也就均勻。<b>Linear</b> 會朝曝光窗的結尾遞增，因此主體在結束的位置最銳利，並沿著行進路徑往回淡出。<b>Ease</b> 是同樣的概念，但開頭更銳利、拖尾更長。',
 
-			interpolation: '影格插補',
-			interpolationBody:
-				'利用 GPU 的光流引擎在真實影格之間造出額外的影格，填補軌跡上的空隙。需要 NVIDIA Turing 或更新的顯示卡，在做不到的硬體上會完全隱藏。',
-			interpolationCostBody:
-				'這不是免費的：每一格擷取到的影格都要花 GPU 時間，而預算只有一個 iRacing 影格。如果跟不上，它就會開始漏掉<i>真實</i>影格來製造合成影格，整體反而是虧的，軌跡會變得更短、更粗糙。成本隨百萬像素乘上倍率而增加，因此在 2560×1440 下很輕鬆的設定，到了 8K 就行不通。想確認的話，開啟與關閉插補各拍同一個瞬間一次，再比較真實取樣數；作品不如預期時，應用程式事後也會提醒您。',
-
 			passes: '重複遍數',
 			passesBody:
 				'重複造訪同一個瞬間，累積成一張影像。每一遍都會補上其他遍剛好漏掉的影格，所以軌跡會更平滑，而不是更亮，因為結果會依實際落在每個像素上的光量做正規化。',
 			passesTradeBody:
-				'重複遍數買到的東西和插補一樣，只是付的貨幣不同：花的是實際時間，而不是 GPU 時間。八遍大約要花八倍的時間，但絕不會讓您損失真實影格。因此在插補跟不上的高解析度，以及單遍只能收集到極少取樣的快速快門下，它才是正確的做法。兩者同時使用通常是最糟的組合：它們會爭奪同一份每格預算。',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: '快門包圍曝光',
 			bracketBody:
@@ -564,10 +544,6 @@ const zhTW: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'這個快門短到只會有一格畫面落在其中，因此結果不會有動態模糊。放慢播放速度或改用較慢的快門才能換到取樣。',
-		bracketVsInterpolation:
-			'快門包圍曝光和 {factor}x 影格插補不能同時執行，因此這張會在不使用插補的情況下拍攝。如果中間影格對您來說比多出來的快門級數更重要，請關閉包圍曝光。',
-		passesVsInterpolation:
-			'多遍與 {factor}x 插補同時開啟了。它們會互相競爭：插補讓每一遍慢到足以損失真實影格，因此同樣的等待時間換到的真實取樣，比單用多遍還少。關閉插補通常能拍出更好的成果。',
 		shortOfTarget:
 			'即使在 1/{divisor} 的速度下，這次曝光也只能達到約 {samples} 個取樣，少於要求的 {target}。請使用較長的快門以取得更多取樣。',
 		longCaptureEscalate:
@@ -579,8 +555,6 @@ const zhTW: Catalog = {
 		adviceFasterPlayback: '提高播放速度可以更快結束，但取樣也較少。',
 		pastLogCap:
 			'預估這次擷取會在 {passes} 遍中收集到約 {samples} 個取樣，超過診斷記錄檔能容納的 {cap}。影像不受影響，只是均勻度與間隔的數據只會描述這次擷取的前面一段。',
-		interpolationLossy:
-			'在這個尺寸下，{factor}x 插補先前曾讓這台電腦損失真實取樣。建議改用較低的倍率、較低的解析度，或改為增加遍數。',
 	},
 
 	duration: {

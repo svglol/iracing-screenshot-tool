@@ -143,12 +143,6 @@ const fi: Catalog = {
 		weightingLinear: 'Lineaarinen (terävä lopussa)',
 		weightingEase: 'Ease (terävämpi alku, pitkä häntä)',
 
-		interpolation: 'Ruutuinterpolointi',
-		interpolationOff: 'Pois',
-		interpolation2: '2× (yksi väliruutu)',
-		interpolation4: '4× (kolme väliruutua)',
-		interpolation8: '8× (seitsemän väliruutua)',
-
 		passes: 'Ajokerrat',
 		passes1: '1 (yksi ajokerta)',
 		passes2: '2× — kaksinkertainen odotus',
@@ -171,7 +165,6 @@ const fi: Catalog = {
 		modified: {
 			weighting_linear: 'lineaarinen',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× interpolointi',
 			passes: {
 				one: '{count} ajokerta',
 				other: '{count} ajokertaa',
@@ -198,15 +191,8 @@ const fi: Catalog = {
 			unavailableWithReason:
 				'Pitkä valotus ei ole käytettävissä tällä koneella: {reason}',
 			unavailable: 'Pitkä valotus ei ole käytettävissä tällä koneella.',
-			interpolationCost:
-				'Interpolointi keksii ruutuja oikeiden väliin tasoittaakseen juovaa. Se kuluttaa GPU-aikaa jokaista ruutua kohden, joten vertaa tallennetun otoksen oikeiden näytteiden määrää samaan otokseen ilman interpolointia — jos luku laskee, se ostaa keksittyjä näytteitä oikeilla.',
-			passesAndInterpolation:
-				'Ajokerrat ja interpolointi kilpailevat samasta ruutukohtaisesta budjetista. Kun molemmat ovat päällä, jokainen ajokerta kaappaa vähemmän oikeita ruutuja — interpoloinnin poistaminen tuottaa yleensä paremman otoksen samalla odotusajalla.',
 			passes:
 				'Jokainen ajokerta toistaa saman hetken uudelleen ja nappaa ruutuja, jotka muut jäivät vaille, joten juova tasoittuu eikä kirkastu. Toimii parhaiten lyhyillä suljinajoilla, joilla yksi ajokerta kerää vain kourallisen näytteitä.',
-			interpolationUnsupported:
-				'Ruutuinterpolointi vaatii NVIDIA Turing -näytönohjaimen tai uudemman{adapter}. Kaikki muu pitkässä valotuksessa toimii normaalisti.',
-			interpolationAdapter: ' (tämä kaappaus ajetaan laitteella {adapter})',
 			reshade:
 				'Pitkä valotus kaappaa natiivisti eikä käytä ReShadea, joten ReShade-tehosteet eivät näy lopputuloksessa.',
 		},
@@ -268,17 +254,11 @@ const fi: Catalog = {
 			weightingBody:
 				'Kuinka paljon kukin kaapattu ruutu vaikuttaa lopputulokseen. <b>Box</b> painottaa kaikkia yhtä paljon ja tuottaa tasaisen juovan. <b>Lineaarinen</b> nousee ikkunan loppua kohti, joten kohde on terävin siellä, mihin se päätyi, ja haalistuu polkuaan pitkin. <b>Ease</b> on sama ajatus terävämmällä alulla ja pidemmällä hännällä.',
 
-			interpolation: 'Ruutuinterpolointi',
-			interpolationBody:
-				'Keksii ylimääräisiä ruutuja oikeiden väliin näytönohjaimen optisen virtauksen moottorilla ja täyttää juovan aukot. Vaatii NVIDIA Turing -kortin tai uudemman, ja se piilotetaan kokonaan laitteistolla, joka ei siihen pysty.',
-			interpolationCostBody:
-				'Se ei ole ilmaista: se kuluttaa GPU-aikaa jokaisella kaapatulla ruudulla, ja budjettina on yksi iRacingin ruutu. Jos se ei pysy mukana, se alkaa menettää <i>oikeita</i> ruutuja valmistaakseen synteettisiä, mikä on nettotappio — juovasta tulee lyhyempi ja karkeampi. Kustannus skaalautuu megapikselien ja kertoimen tulona, joten se mikä on mukavaa tarkkuudella 2560×1440 ei ole toteuttamiskelpoista 8K:ssa. Tarkista asia kuvaamalla sama hetki kahdesti, interpoloinnin kanssa ja ilman, ja vertaa oikeiden näytteiden määriä; sovellus myös varoittaa jälkikäteen, jos otos jäi vajaaksi.',
-
 			passes: 'Ajokerrat',
 			passesBody:
 				'Käy saman hetken läpi useita kertoja ja kerää kaiken yhteen kuvaan. Jokainen ajokerta nappaa ruutuja, jotka muilta sattuivat jäämään väliin, joten juova tasoittuu — ei kirkastu, koska tulos normalisoidaan sen mukaan, kuinka paljon valoa kullekin kuvapisteelle todella osui.',
 			passesTradeBody:
-				'Ajokerrat ostavat saman asian kuin interpolointi, mutta eri valuutalla: todellista aikaa GPU-ajan sijaan. Kahdeksan ajokertaa kestää noin kahdeksan kertaa kauemmin, mutta ne eivät voi koskaan maksaa sinulle oikeita ruutuja. Siksi ne ovat oikea keino suurilla tarkkuuksilla, joilla interpolointi ei pysy mukana, ja lyhyillä suljinajoilla, joilla yksi ajokerta kerää hyvin vähän näytteitä. Molempien käyttäminen yhtä aikaa on yleensä huonoin vaihtoehto — ne kilpailevat samasta ruutukohtaisesta budjetista.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Suljinaikahaarukointi',
 			bracketBody:
@@ -575,10 +555,6 @@ const fi: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Tämä suljinaika on niin lyhyt, että sen sisään osuu vain yksi ruutu, joten tuloksessa ei ole liike-epäterävyyttä. Hitaampi toistonopeus tai pidempi suljinaika tuottaa näytteitä.',
-		bracketVsInterpolation:
-			'Suljinaikahaarukointi ja {factor}x ruutuinterpolointi eivät voi toimia yhtä aikaa, joten tämä otos otetaan ilman interpolointia. Poista haarukointi käytöstä, jos väliruudut merkitsevät sinulle enemmän kuin lisäportaat.',
-		passesVsInterpolation:
-			'Sekä useat ajokerrat että {factor}x interpolointi ovat päällä. Ne kilpailevat keskenään: interpolointi hidastaa jokaista ajokertaa niin paljon, että se menettää oikeita ruutuja, joten sama odotusaika ostaa vähemmän oikeita näytteitä kuin pelkät ajokerrat. Interpoloinnin poistaminen tuottaa yleensä paremman otoksen.',
 		shortOfTarget:
 			'Jopa nopeudella 1/{divisor} tämä valotus yltää noin {samples} näytteeseen, mikä jää pyydetystä {target}:sta. Käytä pidempää suljinaikaa saadaksesi enemmän.',
 		longCaptureEscalate:
@@ -592,8 +568,6 @@ const fi: Catalog = {
 			'Nopeampi toistonopeus valmistuu nopeammin, mutta vähemmillä näytteillä.',
 		pastLogCap:
 			'Tämän kaappauksen ennustetaan keräävän noin {samples} näytettä {passes} ajokerran aikana, enemmän kuin diagnostiikkalokiin mahtuvat {cap}. Kuvaan tämä ei vaikuta — vain tasaisuus- ja aukkoluvut kuvaavat kaappauksen alkuosaa.',
-		interpolationLossy:
-			'Tässä koossa {factor}x interpolointi on aiemmin maksanut tälle koneelle oikeita näytteitä. Harkitse pienempää kerrointa, pienempää tarkkuutta tai useampia ajokertoja.',
 	},
 
 	duration: {

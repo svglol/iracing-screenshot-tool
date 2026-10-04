@@ -147,12 +147,6 @@ const cs: Catalog = {
 		weightingLinear: 'Lineární (ostré na konci)',
 		weightingEase: 'Ease (ostřejší začátek, dlouhý ohon)',
 
-		interpolation: 'Interpolace snímků',
-		interpolationOff: 'Vypnuto',
-		interpolation2: '2× (jeden mezisnímek)',
-		interpolation4: '4× (tři mezisnímky)',
-		interpolation8: '8× (sedm mezisnímků)',
-
 		passes: 'Průchody',
 		passes1: '1 (jediný průchod)',
 		passes2: '2× — dvojnásobné čekání',
@@ -175,7 +169,6 @@ const cs: Catalog = {
 		modified: {
 			weighting_linear: 'lineární',
 			weighting_ease: 'ease',
-			interpolation: 'interpolace {factor}×',
 			passes: {
 				one: '{count} průchod',
 				few: '{count} průchody',
@@ -204,15 +197,8 @@ const cs: Catalog = {
 			unavailableWithReason:
 				'Dlouhá expozice není na tomto počítači dostupná: {reason}',
 			unavailable: 'Dlouhá expozice není na tomto počítači dostupná.',
-			interpolationCost:
-				'Interpolace vymýšlí snímky mezi skutečnými, aby stopa byla plynulejší. Stojí čas GPU na každý snímek, proto porovnejte počet skutečných vzorků uloženého snímku se stejným snímkem bez interpolace — pokud toto číslo klesne, kupuje vymyšlené vzorky za skutečné.',
-			passesAndInterpolation:
-				'Průchody a interpolace soupeří o stejný rozpočet na snímek. Když jsou zapnuté obě, každý průchod zachytí méně skutečných snímků — vypnutí interpolace obvykle přinese lepší výsledek při stejném čekání.',
 			passes:
 				'Každý průchod znovu přehraje tentýž okamžik a zachytí snímky, které ostatní minuly, takže stopa je plynulejší, nikoli jasnější. Nejlépe se hodí u krátkých závěrek, kde jediný průchod nasbírá jen hrstku vzorků.',
-			interpolationUnsupported:
-				'Interpolace snímků vyžaduje GPU NVIDIA Turing nebo novější{adapter}. Vše ostatní na dlouhé expozici funguje normálně.',
-			interpolationAdapter: ' (toto snímání běží na {adapter})',
 			reshade:
 				'Dlouhá expozice snímá nativně a nepoužívá ReShade, takže efekty ReShade se ve výsledku neobjeví.',
 		},
@@ -274,17 +260,11 @@ const cs: Catalog = {
 			weightingBody:
 				'Jak moc každý zachycený snímek přispívá k výsledku. <b>Box</b> je váží všechny stejně a dává rovnoměrnou stopu. <b>Lineární</b> stoupá ke konci okna, takže objekt je nejostřejší tam, kde skončil, a podél své dráhy slábne. <b>Ease</b> je totéž s ostřejším začátkem a delším ohonem.',
 
-			interpolation: 'Interpolace snímků',
-			interpolationBody:
-				'Pomocí jednotky optického toku na GPU vymýšlí další snímky mezi skutečnými a vyplňuje mezery ve stopě. Vyžaduje kartu NVIDIA Turing nebo novější a na hardwaru, který to neumí, je zcela skrytá.',
-			interpolationCostBody:
-				'Není zadarmo: stojí čas GPU u každého zachyceného snímku a rozpočet je jeden snímek iRacingu. Pokud nestíhá, začne vynechávat <i>skutečné</i> snímky, aby vyrobila syntetické, což je čistá ztráta — stopa vyjde kratší a hrubší. Náklady rostou s megapixely násobenými faktorem, takže co je pohodlné při 2560×1440, není únosné v 8K. Chcete-li to ověřit, pořiďte tentýž okamžik dvakrát, s interpolací i bez ní, a porovnejte počty skutečných vzorků; aplikace vás také dodatečně upozorní, pokud snímek nedosáhl očekávaného počtu.',
-
 			passes: 'Průchody',
 			passesBody:
 				'Navštíví tentýž okamžik několikrát a sčítá vše do jednoho obrazu. Každý průchod zachytí snímky, které ostatní minuly, takže stopa je hladší — nikoli jasnější, protože výsledek se normalizuje podle množství světla, které na každý pixel skutečně dopadlo.',
 			passesTradeBody:
-				'Průchody kupují totéž co interpolace, ale jinou měnou: reálným časem místo času GPU. Osm průchodů trvá zhruba osmkrát déle, ale nikdy vás nemohou připravit o skutečné snímky. Díky tomu jsou správnou pákou při vysokých rozlišeních, kde interpolace nestíhá, a u krátkých závěrek, kde jediný průchod nasbírá jen velmi málo vzorků. Používat obojí najednou je obvykle to nejhorší z obou — soupeří o tentýž rozpočet na snímek.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Braketing závěrek',
 			bracketBody:
@@ -579,10 +559,6 @@ const cs: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Tato závěrka je tak krátká, že do ní padne jen jediný snímek, takže výsledek nebude mít žádné rozmazání pohybem. Pomalejší rychlost přehrávání nebo pomalejší závěrka přinesou vzorky.',
-		bracketVsInterpolation:
-			'Braketing závěrek a {factor}x interpolace snímků nemohou běžet současně, takže tento snímek bude pořízen bez interpolace. Pokud jsou pro vás mezisnímky důležitější než hodnoty navíc, braketing vypněte.',
-		passesVsInterpolation:
-			'Zapnuto je jak více průchodů, tak {factor}x interpolace. Soupeří spolu: interpolace zpomalí každý průchod natolik, že jej připraví o skutečné snímky, takže stejné čekání koupí méně skutečných vzorků než samotné průchody. Vypnutí interpolace obvykle přinese lepší snímek.',
 		shortOfTarget:
 			'I při rychlosti 1/{divisor} dosáhne tato expozice zhruba {samples} vzorků, méně než požadovaných {target}. Pro více použijte pomalejší závěrku.',
 		longCaptureEscalate:
@@ -595,8 +571,6 @@ const cs: Catalog = {
 			'Vyšší rychlost přehrávání skončí dříve, s méně vzorky.',
 		pastLogCap:
 			'Očekává se, že toto snímání nasbírá asi {samples} vzorků během {passes} průchodů, což je více než {cap}, které pojme diagnostický protokol. Obrazu se to nedotkne — jen údaje o rovnoměrnosti a mezerách popíšou první část snímání.',
-		interpolationLossy:
-			'Při této velikosti již {factor}x interpolace tento počítač jednou připravila o skutečné vzorky. Zvažte nižší faktor, nižší rozlišení nebo místo toho více průchodů.',
 	},
 
 	duration: {

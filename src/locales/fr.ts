@@ -141,12 +141,6 @@ const fr: Catalog = {
 		weightingLinear: 'Linéaire (net à la fin)',
 		weightingEase: 'Ease (tête plus nette, longue traîne)',
 
-		interpolation: 'Interpolation d’images',
-		interpolationOff: 'Désactivée',
-		interpolation2: '2× (une image intermédiaire)',
-		interpolation4: '4× (trois images intermédiaires)',
-		interpolation8: '8× (sept images intermédiaires)',
-
 		passes: 'Passes',
 		passes1: '1 (passe unique)',
 		passes2: '2× — deux fois plus d’attente',
@@ -169,7 +163,6 @@ const fr: Catalog = {
 		modified: {
 			weighting_linear: 'linéaire',
 			weighting_ease: 'ease',
-			interpolation: 'interpolation {factor}×',
 			passes: {
 				one: '{count} passe',
 				other: '{count} passes',
@@ -196,15 +189,8 @@ const fr: Catalog = {
 			unavailableWithReason:
 				'La pose longue est indisponible sur cette machine : {reason}',
 			unavailable: 'La pose longue est indisponible sur cette machine.',
-			interpolationCost:
-				'L’interpolation invente des images entre les images réelles pour lisser la traînée. Elle coûte du temps GPU par image : comparez donc le nombre d’échantillons réels de la prise enregistrée avec la même prise sans interpolation. Si ce nombre baisse, elle achète des échantillons inventés avec des échantillons réels.',
-			passesAndInterpolation:
-				'Les passes et l’interpolation se disputent le même budget par image. Avec les deux activées, chaque passe capture moins d’images réelles — désactiver l’interpolation donne généralement une meilleure prise pour la même attente.',
 			passes:
 				'Chaque passe rejoue le même instant et rattrape les images que les autres ont manquées : la traînée devient plus régulière, pas plus lumineuse. Idéal sur les vitesses rapides, où une seule passe ne recueille qu’une poignée d’échantillons.',
-			interpolationUnsupported:
-				'L’interpolation d’images nécessite un GPU NVIDIA Turing ou plus récent{adapter}. Tout le reste de la pose longue fonctionne normalement.',
-			interpolationAdapter: ' (cette capture s’exécute sur {adapter})',
 			reshade:
 				'La pose longue capture nativement et n’utilise pas ReShade : les effets ReShade n’apparaîtront donc pas dans le résultat.',
 		},
@@ -268,17 +254,11 @@ const fr: Catalog = {
 			weightingBody:
 				'La contribution de chaque image capturée au résultat. <b>Box</b> les pondère toutes également et donne une traînée uniforme. <b>Linéaire</b> monte vers la fin de la fenêtre : le sujet est le plus net là où il a terminé et s’estompe le long de son trajet. <b>Ease</b> reprend la même idée avec une tête plus nette et une traîne plus longue.',
 
-			interpolation: 'Interpolation d’images',
-			interpolationBody:
-				'Invente des images supplémentaires entre les images réelles à l’aide du moteur de flux optique du GPU, comblant les trous le long de la traînée. Nécessite une carte NVIDIA Turing ou plus récente et est entièrement masquée sur le matériel qui ne le permet pas.',
-			interpolationCostBody:
-				'Ce n’est pas gratuit : cela coûte du temps GPU sur chaque image capturée, et le budget est d’une image iRacing. Si elle ne suit pas, elle commence à manquer des images <i>réelles</i> pour en fabriquer des synthétiques, ce qui est une perte nette — la traînée ressort plus courte et plus grossière. Le coût évolue avec les mégapixels multipliés par le facteur : ce qui est confortable en 2560×1440 n’est pas viable en 8K. Pour vérifier, photographiez deux fois le même instant, avec et sans, et comparez le nombre d’échantillons réels ; l’application vous avertit aussi après coup si une prise est restée courte.',
-
 			passes: 'Passes',
 			passesBody:
 				'Visite plusieurs fois le même instant en accumulant dans une seule image. Chaque passe attrape des images que les autres ont manquées, la traînée devient donc plus régulière — pas plus lumineuse, car le résultat est normalisé par la quantité de lumière réellement reçue par chaque pixel.',
 			passesTradeBody:
-				'Les passes achètent la même chose que l’interpolation, dans une autre monnaie : du temps réel plutôt que du temps GPU. Huit passes prennent environ huit fois plus longtemps, mais elles ne peuvent jamais vous coûter d’images réelles. C’est donc le bon levier aux hautes résolutions, où l’interpolation ne suit pas, et sur les vitesses rapides, où une seule passe recueille très peu d’échantillons. Utiliser les deux à la fois est généralement le pire des deux mondes — elles se disputent le même budget par image.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Bracketing des vitesses',
 			bracketBody:
@@ -581,10 +561,6 @@ const fr: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Cette vitesse est si courte qu’une seule image y tombera : le résultat n’aura donc aucun flou de mouvement. Une vitesse de lecture plus lente ou une vitesse d’obturation plus lente apporte des échantillons.',
-		bracketVsInterpolation:
-			'Le bracketing des vitesses et l’interpolation d’images {factor}x ne peuvent pas fonctionner ensemble : cette prise sera donc faite sans interpolation. Désactivez le bracketing si les images intermédiaires comptent plus pour vous que les crans supplémentaires.',
-		passesVsInterpolation:
-			'Le multi-passe et l’interpolation {factor}x sont tous deux activés. Ils se concurrencent : l’interpolation ralentit chaque passe au point de lui coûter des images réelles, si bien que la même attente achète moins d’échantillons réels que les passes seules. Désactiver l’interpolation donne généralement une meilleure prise.',
 		shortOfTarget:
 			'Même à la vitesse 1/{divisor}, cette exposition n’atteint qu’environ {samples} échantillons, en deçà des {target} demandés. Utilisez une vitesse d’obturation plus lente pour en obtenir davantage.',
 		longCaptureEscalate:
@@ -598,8 +574,6 @@ const fr: Catalog = {
 			'Une vitesse de lecture plus rapide se termine plus tôt, avec moins d’échantillons.',
 		pastLogCap:
 			'Cette capture devrait recueillir environ {samples} échantillons sur {passes} passes, au-delà des {cap} que contient le journal de diagnostic. L’image n’est pas affectée — seules les mesures de régularité et d’écart décriront la première partie de la capture.',
-		interpolationLossy:
-			'À cette taille, l’interpolation {factor}x a déjà coûté des échantillons réels à cette machine. Envisagez un facteur plus faible, une résolution plus basse, ou davantage de passes à la place.',
 	},
 
 	duration: {

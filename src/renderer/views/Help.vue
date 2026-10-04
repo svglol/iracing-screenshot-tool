@@ -171,13 +171,6 @@
 				<p v-html="$t('help.longExposure.weightingBody')"></p>
 			</section>
 			<section class="help-block">
-				<span class="heading">{{
-					$t('help.longExposure.interpolation')
-				}}</span>
-				<p>{{ $t('help.longExposure.interpolationBody') }}</p>
-				<p v-html="$t('help.longExposure.interpolationCostBody')"></p>
-			</section>
-			<section class="help-block">
 				<span class="heading">{{ $t('help.longExposure.passes') }}</span>
 				<p>{{ $t('help.longExposure.passesBody') }}</p>
 				<p>{{ $t('help.longExposure.passesTradeBody') }}</p>

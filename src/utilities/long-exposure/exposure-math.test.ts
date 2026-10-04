@@ -268,8 +268,7 @@ describe('predictSampleCount', () => {
 		).toBe(1920);
 	});
 
-	// Past JRT's 512 ceiling with real interpolated geometry, not synthesised
-	// in-betweens.
+	// Past JRT's 512 ceiling, with every sample a frame iRacing actually rendered.
 	it('exceeds the reference tool ceiling at 1/16 speed', () => {
 		expect(
 			predictSampleCount({
