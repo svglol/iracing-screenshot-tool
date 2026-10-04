@@ -503,25 +503,27 @@ export default defineComponent({
 				});
 			}
 
-			if (this.disableTooltips) {
-				return notices;
-			}
+			// Tips only. A block rather than an early return, deliberately: an early
+			// `return notices` here once skipped the dedupe below, so with tooltips
+			// disabled every plan warning still rendered twice after a shot.
+			if (!this.disableTooltips) {
+				if (Number(this.passes) > 1) {
+					notices.push({
+						level: 'info',
+						text: this.$t('longExposure.notices.passes'),
+					});
+				}
 
-			if (Number(this.passes) > 1) {
-				notices.push({
-					level: 'info',
-					text: this.$t('longExposure.notices.passes'),
-				});
-			}
-
-			// Accumulation always runs through the native WGC + D3D11 compute path,
-			// independent of the still-capture backend — worth saying out loud,
-			// because a ReShade user reasonably expects their stills setting to apply.
-			if (this.reshade) {
-				notices.push({
-					level: 'info',
-					text: this.$t('longExposure.notices.reshade'),
-				});
+				// Accumulation always runs through the native WGC + D3D11 compute path,
+				// independent of the still-capture backend — worth saying out loud,
+				// because a ReShade user reasonably expects their stills setting to
+				// apply.
+				if (this.reshade) {
+					notices.push({
+						level: 'info',
+						text: this.$t('longExposure.notices.reshade'),
+					});
+				}
 			}
 
 			// The pre-flight above and the last capture's outcome both carry
