@@ -138,6 +138,9 @@ const nl: Catalog = {
 		weightingBox: 'Box (gelijkmatig)',
 		weightingLinear: 'Lineair (scherp aan het eind)',
 		weightingEase: 'Ease (scherpere kop, lange staart)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineair',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Doorgangen',
 		passes1: '1 (één doorgang)',
@@ -150,6 +153,7 @@ const nl: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Sluitertijdenreeks',
 		highlightRecovery: 'Hoge lichten herstellen (stops)',

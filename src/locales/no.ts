@@ -143,6 +143,9 @@ const no: Catalog = {
 		weightingBox: 'Box (jevn)',
 		weightingLinear: 'Lineær (skarp til slutt)',
 		weightingEase: 'Ease (skarpere start, lang hale)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineær',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Gjennomkjøringer',
 		passes1: '1 (én gjennomkjøring)',
@@ -155,6 +158,7 @@ const no: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Lukkertidsbracketing',
 		highlightRecovery: 'Gjenoppretting av høylys (trinn)',

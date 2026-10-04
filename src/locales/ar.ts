@@ -160,6 +160,9 @@ const ar: Catalog = {
 		weightingBox: 'Box (متساوٍ)',
 		weightingLinear: 'خطي (حاد عند النهاية)',
 		weightingEase: 'Ease (بداية أحدّ وذيل طويل)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'خطي',
+		weightingEaseShort: 'Ease',
 
 		passes: 'التمريرات',
 		passes1: '1 (تمريرة واحدة)',
@@ -172,6 +175,7 @@ const ar: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'مضاهاة سرعات الغالق',
 		highlightRecovery: 'استرجاع الإضاءات العالية (EV)',

@@ -138,6 +138,9 @@ const sv: Catalog = {
 		weightingBox: 'Box (jämn)',
 		weightingLinear: 'Linjär (skarp i slutet)',
 		weightingEase: 'Ease (skarpare början, lång svans)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linjär',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Pass',
 		passes1: '1 (ett enda pass)',
@@ -150,6 +153,7 @@ const sv: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Slutartidsgaffling',
 		highlightRecovery: 'Högdageråterhämtning (steg)',

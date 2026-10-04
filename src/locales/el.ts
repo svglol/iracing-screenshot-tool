@@ -155,6 +155,9 @@ const el: Catalog = {
 		weightingBox: 'Box (ομοιόμορφη)',
 		weightingLinear: 'Γραμμική (ευκρίνεια στο τέλος)',
 		weightingEase: 'Ease (πιο έντονη αρχή, μακριά ουρά)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Γραμμική',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Περάσματα',
 		passes1: '1 (ένα πέρασμα)',
@@ -167,6 +170,7 @@ const el: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Μπρακετάρισμα ταχυτήτων κλείστρου',
 		highlightRecovery: 'Ανάκτηση φώτων (στάσεις)',

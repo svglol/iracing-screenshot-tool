@@ -138,6 +138,9 @@ const es: Catalog = {
 		weightingBox: 'Box (uniforme)',
 		weightingLinear: 'Lineal (nítida al final)',
 		weightingEase: 'Ease (cabeza más nítida, cola larga)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineal',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Pasadas',
 		passes1: '1 (una sola pasada)',
@@ -150,6 +153,7 @@ const es: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Horquillado de obturación',
 		highlightRecovery: 'Recuperación de altas luces (pasos)',

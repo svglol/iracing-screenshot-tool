@@ -143,6 +143,9 @@ const ko: Catalog = {
 		weightingBox: 'Box (균등)',
 		weightingLinear: 'Linear (끝부분이 선명)',
 		weightingEase: 'Ease (앞부분이 더 선명, 긴 꼬리)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: '패스',
 		passes1: '1 (단일 패스)',
@@ -155,6 +158,7 @@ const ko: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: '셔터 브라케팅',
 		highlightRecovery: '하이라이트 복구 (스톱)',
