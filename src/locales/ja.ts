@@ -164,6 +164,7 @@ const ja: Catalog = {
 
 		bracket: 'シャッターのブラケット撮影',
 		highlightRecovery: 'ハイライト復元（段）',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'キャンセル',
 		saved: '長時間露光を保存しました — サンプル数 {count}',

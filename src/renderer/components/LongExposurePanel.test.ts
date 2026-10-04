@@ -204,3 +204,40 @@ describe('LongExposurePanel warm-up readout', () => {
 		expect(at(4).spoken).toBe('longExposure.warmUpValue:{"seconds":4}');
 	});
 });
+
+describe('LongExposurePanel highlight recovery readout', () => {
+	const computed = (
+		LongExposurePanel as unknown as {
+			computed: {
+				highlightRecoveryReadout(this: unknown): string;
+				highlightRecoverySpoken(this: unknown): string;
+			};
+		}
+	).computed;
+	const $t = (key: string, params?: Record<string, unknown>) =>
+		params ? `${key}:${JSON.stringify(params)}` : key;
+	const at = (highlightRecovery: number) => {
+		const self = { highlightRecovery, $t } as Record<string, unknown>;
+		self.highlightRecoveryReadout =
+			computed.highlightRecoveryReadout.call(self);
+		return {
+			readout: self.highlightRecoveryReadout as string,
+			spoken: computed.highlightRecoverySpoken.call(self),
+		};
+	};
+
+	test('reads Off at zero', () => {
+		expect(at(0)).toEqual({
+			readout: 'longExposure.highlightRecoveryOff',
+			spoken: 'longExposure.highlightRecoveryOff',
+		});
+	});
+
+	// The label already says "(stops)"; the spoken value names the unit itself.
+	test('shows a bare number and speaks it with its unit', () => {
+		expect(at(3)).toEqual({
+			readout: '3',
+			spoken: 'longExposure.modified.recovery:{"stops":3}',
+		});
+	});
+});

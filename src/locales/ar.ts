@@ -179,6 +179,7 @@ const ar: Catalog = {
 
 		bracket: 'مضاهاة سرعات الغالق',
 		highlightRecovery: 'استرجاع الإضاءات العالية (EV)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'إلغاء',
 		saved: 'تم حفظ التعريض الطويل — عدد العينات: {count}',

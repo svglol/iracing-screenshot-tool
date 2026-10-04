@@ -157,6 +157,7 @@ const da: Catalog = {
 
 		bracket: 'Lukkertidsbracketing',
 		highlightRecovery: 'Genskabelse af højlys (trin)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Annullér',
 		saved: 'Lang eksponering gemt — {count} prøver',

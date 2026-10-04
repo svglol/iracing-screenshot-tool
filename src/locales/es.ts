@@ -157,6 +157,7 @@ const es: Catalog = {
 
 		bracket: 'Horquillado de obturación',
 		highlightRecovery: 'Recuperación de altas luces (pasos)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Cancelar',
 		saved: 'Exposición larga guardada — {count} muestras',

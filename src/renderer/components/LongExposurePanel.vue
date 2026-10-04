@@ -164,39 +164,16 @@
 
 			     A slider in whole seconds: the cost is linear in the value (each
 			     second is a second per pass), which a continuous control shows
-			     better than four unevenly spaced presets did. A plain range input
-			     rather than an Oruga slider — that plugin is not registered, and
-			     the native control brings arrow keys and a spoken value with it. -->
-					<div class="field">
-						<div class="warm-up__head">
-							<label for="long-exposure-warm-up" class="label">{{
-								$t('longExposure.warmUp')
-							}}</label>
-							<output
-								for="long-exposure-warm-up"
-								class="warm-up__value"
-								>{{ warmUpReadout }}</output
-							>
-						</div>
-						<input
-							id="long-exposure-warm-up"
-							v-model.number="warmUpSeconds"
-							type="range"
-							class="warm-up__slider"
-							min="0"
-							:max="warmUpMax"
-							step="1"
-							:disabled="busy"
-							:aria-valuetext="warmUpSpoken"
-							:title="warmUpSpoken"
-							:style="{ '--frac': warmUpSeconds / warmUpMax }"
-						/>
-						<div class="warm-up__ticks" aria-hidden="true">
-							<span v-for="n in warmUpMax + 1" :key="n">{{
-								n - 1
-							}}</span>
-						</div>
-					</div>
+			     better than four unevenly spaced presets did. -->
+					<StepSlider
+						id="long-exposure-warm-up"
+						v-model="warmUpSeconds"
+						:label="$t('longExposure.warmUp')"
+						:max="warmUpMax"
+						:readout="warmUpReadout"
+						:spoken="warmUpSpoken"
+						:disabled="busy"
+					/>
 
 					<!-- Bracketing sits with Passes because both change what ONE capture
 			     yields — but in opposite directions: passes spend more wall clock on
@@ -228,17 +205,24 @@
 			     This used to carry a banner recommending 3-5 stops whenever the value
 			     was 0 — i.e. permanently, since 0 is the default. A tip that fires on
 			     the default state is a nag, not guidance. The default stays 0, where
-			     it is exactly identity. -->
-					<o-field :label="$t('longExposure.highlightRecovery')">
-						<o-input
-							v-model="highlightRecovery"
-							type="number"
-							step="0.5"
-							min="0"
-							max="8"
-							:disabled="busy"
-						/>
-					</o-field>
+			     it is exactly identity.
+
+			     A slider in whole stops, 0-6. Each stop doubles a moving light's
+			     streak until it reaches the knee, and N stops fully restores a light
+			     on a pixel for at least 0.75 / 2^N of the exposure — 9% at 3, 1% at
+			     6. Past that only ever-briefer glints light up, so 7-8 bought
+			     sparkle, not streaks; and the transition is about one stop wide, so
+			     half-stops added nothing. The recipe still accepts up to 8 so older
+			     sidecars reproduce. -->
+					<StepSlider
+						id="long-exposure-highlight-recovery"
+						v-model="highlightRecovery"
+						:label="$t('longExposure.highlightRecovery')"
+						:max="highlightRecoveryMax"
+						:readout="highlightRecoveryReadout"
+						:spoken="highlightRecoverySpoken"
+						:disabled="busy"
+					/>
 				</div>
 			</template>
 		</div>
@@ -306,9 +290,14 @@ import {
 	weightAt,
 } from '../../utilities/long-exposure/exposure-math';
 import { dedupeNotices } from '../../utilities/long-exposure/notices';
+import {
+	PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS,
+	panelHighlightRecoveryStops,
+} from '../../utilities/long-exposure/shot-recipe';
 import { useOruga } from '@oruga-ui/oruga-next';
 import NoticeCard, { type Notice } from './NoticeCard.vue';
 import SegmentedControl from './SegmentedControl.vue';
+import StepSlider from './StepSlider.vue';
 const { ipcRenderer } = require('electron');
 
 // How often to re-poll backend availability and the live replay cursor. The
@@ -370,7 +359,7 @@ interface CaptureResult {
 
 export default defineComponent({
 	name: 'LongExposurePanel',
-	components: { NoticeCard, SegmentedControl },
+	components: { NoticeCard, SegmentedControl, StepSlider },
 	props: {
 		// Whether the still-capture path is set to ReShade. Used ONLY to explain
 		// that long exposure ignores it — never to gate the feature.
@@ -407,7 +396,10 @@ export default defineComponent({
 			),
 			bracket: config.get('longExposureBracket') === true,
 			weighting: config.get('longExposureWeighting'),
-			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
+			// Normalised to what the slider can show, as warm-up is above.
+			highlightRecovery: panelHighlightRecoveryStops(
+				config.get('longExposureHighlightRecovery')
+			),
 			// validatePlan's verdict on the CURRENT settings, from the same call the
 			// capture makes. Shown before the shot rather than after it, and now the
 			// ONLY thing the preview call is read for — the plan it also returns fed
@@ -481,6 +473,24 @@ export default defineComponent({
 			const key = WARM_UP_NOTE_KEYS[Number(this.warmUpSeconds)];
 			return key ? this.$t(key) : this.warmUpReadout;
 		},
+		highlightRecoveryMax(): number {
+			return PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS;
+		},
+		// A bare number beside the label: the label already says "(stops)", and a
+		// plural "3 stops" would need per-locale plural forms.
+		highlightRecoveryReadout(): string {
+			const stops = Number(this.highlightRecovery);
+			return stops === 0
+				? this.$t('longExposure.highlightRecoveryOff')
+				: String(stops);
+		},
+		// Spoken as the folded summary words it ("3 stop recovery").
+		highlightRecoverySpoken(): string {
+			const stops = Number(this.highlightRecovery);
+			return stops === 0
+				? this.highlightRecoveryReadout
+				: this.$t('longExposure.modified.recovery', { stops });
+		},
 		busy(): boolean {
 			return this.capturing;
 		},
@@ -527,8 +537,8 @@ export default defineComponent({
 							})
 				);
 			}
-			const recovery = parseFloat(this.highlightRecovery);
-			if (Number.isFinite(recovery) && recovery !== 0) {
+			const recovery = Number(this.highlightRecovery);
+			if (recovery !== 0) {
 				active.push(
 					this.$t('longExposure.modified.recovery', { stops: recovery })
 				);
@@ -739,7 +749,7 @@ export default defineComponent({
 				// Every stop at or faster than the chosen shutter, from one capture.
 				bracket: this.bracket === true,
 				weighting: this.weighting,
-				highlightRecovery: parseFloat(this.highlightRecovery) || 0,
+				highlightRecovery: Number(this.highlightRecovery) || 0,
 				// outputFormat, exposureCompensation and tonemap are deliberately
 				// absent. Main resolves the format from the still-capture setting so
 				// there is one place to set it, and an omitted field takes the default
@@ -787,10 +797,7 @@ export default defineComponent({
 			config.set('longExposureWeighting', value);
 		},
 		highlightRecovery(value) {
-			const n = parseFloat(value);
-			if (Number.isFinite(n)) {
-				config.set('longExposureHighlightRecovery', n);
-			}
+			config.set('longExposureHighlightRecovery', Number(value));
 		},
 		liveAnchor() {
 			// validatePlan's verdict is anchored on the cursor, and the cursor is
@@ -1046,111 +1053,5 @@ export default defineComponent({
 	stroke-width: 1.75;
 	stroke-linecap: round;
 	stroke-linejoin: round;
-}
-
-/* Effects warm-up slider: the label and its value on one line, the track, then
-   the whole-second ticks. The track and thumb take the light field colours and
-   the primary fill, matching the switches and the segmented controls. */
-.warm-up__head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 0.5rem;
-	margin-bottom: 0.35rem;
-}
-
-.warm-up__head .label {
-	margin-bottom: 0;
-}
-
-.warm-up__value {
-	font-size: 0.8rem;
-	color: rgba(255, 255, 255, 0.85);
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-
-.warm-up__slider {
-	--thumb: 16px;
-	display: block;
-	width: 100%;
-	height: 24px;
-	margin: 0;
-	background: transparent;
-	-webkit-appearance: none;
-	appearance: none;
-	cursor: pointer;
-}
-
-/* No box around the whole track — main.scss's global `:focus` outline would draw
-   one on every mouse drag. Keyboard focus rings the thumb instead (below). */
-.warm-up__slider:focus {
-	outline: none;
-}
-
-/* The fill ends under the thumb's CENTRE, which travels from half a thumb in to
-   half a thumb short of the end — not across the full track width. */
-.warm-up__slider::-webkit-slider-runnable-track {
-	height: 4px;
-	border-radius: 2px;
-	background: linear-gradient(
-		to right,
-		var(--bulma-primary, #ec202a)
-			calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--frac, 0)),
-		hsl(0, 0%, 86%)
-			calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--frac, 0))
-	);
-}
-
-.warm-up__slider::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	width: var(--thumb);
-	height: var(--thumb);
-	margin-top: calc((4px - var(--thumb)) / 2);
-	border: 2px solid var(--bulma-primary, #ec202a);
-	border-radius: 50%;
-	background: #fff;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-	transition: transform 0.1s ease;
-}
-
-.warm-up__slider:hover::-webkit-slider-thumb {
-	transform: scale(1.12);
-}
-
-.warm-up__slider:focus-visible::-webkit-slider-thumb {
-	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.55);
-}
-
-.warm-up__slider:disabled {
-	cursor: not-allowed;
-	opacity: 0.5;
-}
-
-.warm-up__slider:disabled::-webkit-slider-thumb {
-	transform: none;
-}
-
-/* Padded by half a thumb and zero-width per label, so each number sits centred
-   under the thumb position it names. */
-.warm-up__ticks {
-	display: flex;
-	justify-content: space-between;
-	padding: 0 calc(16px / 2);
-	font-size: 0.68rem;
-	color: rgba(255, 255, 255, 0.45);
-	font-variant-numeric: tabular-nums;
-}
-
-.warm-up__ticks span {
-	display: flex;
-	justify-content: center;
-	width: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.warm-up__slider::-webkit-slider-thumb {
-		transition: none;
-	}
 }
 </style>
