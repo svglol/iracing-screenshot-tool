@@ -155,6 +155,12 @@ const fi: Catalog = {
 		passes4: '4× — nelinkertainen odotus',
 		passes8: '8× — kahdeksankertainen odotus',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Suljinaikahaarukointi',
 		highlightRecovery: 'Huippuvalojen palautus (aukkoa)',
 
@@ -171,11 +177,14 @@ const fi: Catalog = {
 				other: '{count} ajokertaa',
 			},
 			bracketed: 'haarukointi',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '{stops} aukon palautus',
 		},
 
 		progress: {
 			working: 'Työstetään…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Haetaan…{pass}',
 			accumulating: 'Valotetaan… {count} näytettä{pass}',
 			resolving: 'Kehitetään…',
@@ -280,6 +289,10 @@ const fi: Catalog = {
 				'Muistia se sen sijaan kuluttaa. Jokainen porras tarvitsee oman täysitarkkuisen kerääjänsä, joten yksitoista porrasta vaatii yksitoista kertaa yhden näyttömuistin, mikä 8K:ssa on enemmän kuin useimmilla korteilla on. Kaappaus tarkistaa tämän ennen aloitusta ja kieltäytyy mieluummin kuin kaataa iRacingin; jos haarukointi hylätään, laske tarkkuutta tai valitse nopeampi suljinaika — mikä lyhentää samalla porrasta.',
 			bracketNamingBody:
 				'Valitsemasi porras tallennetaan tavanomaisella nimellä ja se näkyy galleriassa; muut ovat sen vieressä, ja niiden suljinaika on tiedostonimessä.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Huippuvalojen palautus',
 			highlightsBody:
@@ -527,6 +540,8 @@ const fi: Catalog = {
 		cancelled: 'Kaappaus peruutettiin.',
 		seekTimeout:
 			'Uusinta ei ehtinyt ruutuun {frame} ajoissa. Se saattaa vielä latautua.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Kaappauksen on suoritettava vähintään yksi ajokerta.',
 		playbackStalled:
 			'Uusinta ei lähtenyt käyntiin. Tarkista, ettei jokin toinen työkalu ole pysäyttänyt iRacingia.',
@@ -556,6 +571,8 @@ const fi: Catalog = {
 			'Uusinta on siirtynyt toiseen sessioon sen jälkeen, kun tämä otos määritettiin. Valitse hetki uudelleen.',
 		singleSampleMultiPass:
 			'Tämä suljinaika on niin lyhyt, että sen sisään osuu vain noin yksi ruutu ajokertaa kohden, joten {passes} ajokertaa kerää suunnilleen {passes} näytettä. Hitaampi toistonopeus tai pidempi suljinaika tuottaa huomattavasti enemmän.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Tämä suljinaika on niin lyhyt, että sen sisään osuu vain yksi ruutu, joten tuloksessa ei ole liike-epäterävyyttä. Hitaampi toistonopeus tai pidempi suljinaika tuottaa näytteitä.',
 		bracketVsInterpolation:

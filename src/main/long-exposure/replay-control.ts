@@ -29,6 +29,7 @@
 // All deps are injected so the whole state machine is unit-testable with no sim.
 
 import { createLogger } from '../../utilities/logger';
+import { replayFrameWallMs } from '../../utilities/long-exposure/exposure-math';
 
 const log = createLogger('long-exposure/replay');
 
@@ -67,6 +68,18 @@ export const RESTORE_TIMEOUT_MS = 6000;
 // or the first wait consumes the whole budget and no corrective seek ever gets
 // issued — which is precisely the case the corrections exist for.
 export const RESTORE_ATTEMPT_TIMEOUT_MS = 1200;
+// Slack on top of the warm-up's own duration before a 1x roll that never reaches
+// the brake frame is declared stuck. Failure-only, like every timeout here.
+export const WARM_UP_TIMEOUT_SLACK_MS = 3000;
+// How long the cursor must sit on one frame, after the brake, to count as having
+// slowed down when the speed telemetry cannot confirm it. At 1x a frame lasts
+// 16.7 ms, so 40 ms unchanged is more than two missed frame changes — slower
+// than real time unless the sim hitched. It has to sit well UNDER the slowest
+// divisor's frame: at 1/4 a frame lasts 67 ms, and through a 16 ms poll the
+// longest dwell observable inside one is ~48 ms. Only consulted for divisors of
+// 4 and up — at 1/2 (33 ms) the two cannot be told apart at all.
+export const WARM_UP_STILL_MS = 40;
+const WARM_UP_STILL_MIN_DIVISOR = 4;
 
 // The replay-related telemetry we read. Everything is nullable because a variable
 // can be absent when the sim is not sending telemetry at all.
@@ -171,6 +184,25 @@ export interface ReplayControlDeps {
 export interface SeekResult {
 	landed: boolean;
 	frame: number | null;
+	elapsedMs: number;
+}
+
+export interface WarmUpResult {
+	// True when the replay is rolling at the capture speed, short of the window
+	// start, with the warm-up behind it. Only then may the window be accumulated.
+	ready: boolean;
+	// The brake was too late: the cursor reached the window start before the
+	// slowdown was confirmed. Nothing was accumulated — the gate is the caller's and
+	// was never opened — so the pass can simply be retried with a wider brake.
+	overshot: boolean;
+	// Frame the cursor was on when this returned, or the last one seen.
+	frame: number | null;
+	// Replay frames actually played at 1x between landing and the brake — what the
+	// effects had to rebuild in, as opposed to what was asked for.
+	warmUpFrames: number;
+	// How the slowdown was confirmed: the speed telemetry, or the cursor dwelling
+	// on a frame longer than 1x allows. Null when it was not.
+	confirmedBy: 'telemetry' | 'dwell' | null;
 	elapsedMs: number;
 }
 
@@ -308,6 +340,205 @@ export class ReplayController {
 			ditherMs: dither,
 		});
 		return result;
+	}
+
+	// Whether the speed telemetry reports exactly the transport `setCaptureSpeed`
+	// requests: (1, false) for real time, (divisor, true) for slow motion. The same
+	// reading of ReplayPlaySpeed that `capturePlaybackSnapshot` restores from.
+	private atCaptureSpeed(state: ReplayState, divisor: number): boolean {
+		if (state.replayPlaySpeed === null) {
+			return false;
+		}
+		if (divisor <= 1) {
+			return state.replayPlaySpeed === 1 && !state.replayPlaySlowMotion;
+		}
+		return (
+			state.replayPlaySlowMotion &&
+			state.replayPlaySpeed === Math.round(divisor)
+		);
+	}
+
+	// Position the replay for a window AND let the effects a seek wipes rebuild
+	// first (exposure-math, "Effects warm-up"). The alternative to
+	// `seekToWindowStart`, used whenever the plan has any warm-up at all:
+	//
+	//   SEEK     pause; jump to startFrame − brake − warm-up; settle
+	//   WARM     play at 1x until the brake frame — dirt, smoke, flames, wheel blur
+	//            simulate back in, at a cost of one second per second
+	//   BRAKE    drop to the capture speed, with NO pause and NO seek, which is what
+	//            keeps the effects (a speed change does not reset them)
+	//   CONFIRM  wait for the slowdown to be visible before the window start
+	//
+	// Returns with the replay ROLLING at the capture speed, short of the window,
+	// so the caller must not issue its own speed change — and must open its gate
+	// only on the frame-indexed condition it always has. This never touches the
+	// gate. If the slowdown is not confirmed before the window start it reports an
+	// overshoot rather than letting 1x frames anywhere near an exposure; the
+	// caller retries with a wider brake or falls back to the plain pre-roll.
+	//
+	// `extraSettleMs` is the multi-pass phase dither, applied where the plain path
+	// applies it: after the paused settle, before playback starts.
+	async warmUpIntoWindow(
+		startFrame: number,
+		opts: {
+			warmUpFrames: number;
+			brakeFrames: number;
+			captureDivisor: number;
+			signal?: { aborted: boolean };
+			extraSettleMs?: number;
+		}
+	): Promise<WarmUpResult> {
+		const started = this.deps.now();
+		const { signal, captureDivisor } = opts;
+		const brakeFrame = Math.round(startFrame - opts.brakeFrames);
+		const target = Math.max(0, brakeFrame - Math.round(opts.warmUpFrames));
+		const outcome = (fields: Partial<WarmUpResult>): WarmUpResult => ({
+			ready: false,
+			overshot: false,
+			frame: null,
+			warmUpFrames: 0,
+			confirmedBy: null,
+			elapsedMs: this.deps.now() - started,
+			...fields,
+		});
+
+		// No room to roll before the brake: the tape starts too close. Not ready and
+		// not an overshoot, so the caller falls back to the plain pre-roll.
+		if (brakeFrame <= target) {
+			return outcome({});
+		}
+
+		// --- SEEK ---------------------------------------------------------------
+		this.pause();
+		this.seekAbsolute(target);
+		// The cursor starts on the anchor, past the brake, so this only passes once
+		// the seek has landed.
+		const landing = await this.waitForFrame((frame) => frame < brakeFrame, {
+			signal,
+		});
+		if (!landing.landed || landing.frame === null) {
+			log.info('Long-exposure warm-up seek did not land', {
+				startFrame,
+				target,
+				frame: landing.frame,
+				elapsedMs: landing.elapsedMs,
+			});
+			return outcome({ frame: landing.frame });
+		}
+		const landedFrame = landing.frame;
+		const dither =
+			Number.isFinite(opts.extraSettleMs) &&
+			(opts.extraSettleMs as number) > 0
+				? Math.round(opts.extraSettleMs as number)
+				: 0;
+		await this.deps.delay(SEEK_SETTLE_MS + dither);
+		if (signal?.aborted) {
+			return outcome({ frame: landedFrame });
+		}
+
+		// --- WARM ---------------------------------------------------------------
+		this.deps.setPlaySpeed(1, false);
+		const braked = await this.waitForFrame((frame) => frame >= brakeFrame, {
+			signal,
+			timeoutMs:
+				(brakeFrame - landedFrame) * replayFrameWallMs(1) +
+				WARM_UP_TIMEOUT_SLACK_MS,
+		});
+		if (!braked.landed || braked.frame === null) {
+			this.pause();
+			log.warn('Long-exposure warm-up never reached the brake frame', {
+				startFrame,
+				brakeFrame,
+				landedFrame,
+				frame: braked.frame,
+				aborted: signal?.aborted === true,
+			});
+			return outcome({ frame: braked.frame });
+		}
+		const warmUpFrames = Math.max(0, braked.frame - landedFrame);
+
+		// --- BRAKE --------------------------------------------------------------
+		this.setCaptureSpeed(captureDivisor);
+		if (captureDivisor <= 1) {
+			// Already rolling at the capture speed: there is no slowdown to confirm.
+			return outcome({
+				ready: true,
+				frame: braked.frame,
+				warmUpFrames,
+				confirmedBy: 'telemetry',
+			});
+		}
+
+		// --- CONFIRM ------------------------------------------------------------
+		// The speed telemetry is the primary evidence. The dwell test backs it up for
+		// the slow divisors, so a transport that has plainly slowed is not refused
+		// over how the sim happens to report its speed. Whichever confirms first.
+		let lastFrame = braked.frame;
+		let frameSince = this.deps.now();
+		const confirmTimeoutMs =
+			(startFrame - braked.frame + 1) * replayFrameWallMs(captureDivisor) +
+			WARM_UP_TIMEOUT_SLACK_MS;
+		for (;;) {
+			if (signal?.aborted) {
+				return outcome({ frame: lastFrame, warmUpFrames });
+			}
+			const state = this.state();
+			const now = this.deps.now();
+			if (state) {
+				const frame = state.replayFrameNum;
+				if (frame >= startFrame) {
+					// Too late: playback crossed into the window before it was seen to
+					// slow. Pause so the cursor stops running away from the retry seek.
+					this.pause();
+					log.warn('Long-exposure warm-up brake overshot the window', {
+						startFrame,
+						brakeFrames: opts.brakeFrames,
+						brakeFrame: braked.frame,
+						frame,
+						replayPlaySpeed: state.replayPlaySpeed,
+						replayPlaySlowMotion: state.replayPlaySlowMotion,
+					});
+					return outcome({ overshot: true, frame, warmUpFrames });
+				}
+				if (frame !== lastFrame) {
+					lastFrame = frame;
+					frameSince = now;
+				}
+				const confirmedBy = this.atCaptureSpeed(state, captureDivisor)
+					? 'telemetry'
+					: captureDivisor >= WARM_UP_STILL_MIN_DIVISOR &&
+						  now - frameSince >= WARM_UP_STILL_MS
+						? 'dwell'
+						: null;
+				if (confirmedBy) {
+					log.info('Long-exposure warm-up complete', {
+						startFrame,
+						landedFrame,
+						warmUpFrames,
+						brakeFrames: opts.brakeFrames,
+						frame,
+						confirmedBy,
+						// Logged so a hardware run settles how the sim reports slow
+						// motion, which is what decides whether 'telemetry' ever fires.
+						replayPlaySpeed: state.replayPlaySpeed,
+						replayPlaySlowMotion: state.replayPlaySlowMotion,
+						elapsedMs: now - started,
+					});
+					return outcome({
+						ready: true,
+						frame,
+						warmUpFrames,
+						confirmedBy,
+					});
+				}
+			}
+			if (now - frameSince >= confirmTimeoutMs) {
+				// Nothing moved and nothing confirmed: the transport is stuck.
+				this.pause();
+				return outcome({ frame: lastFrame, warmUpFrames });
+			}
+			await this.deps.delay(POLL_INTERVAL_MS);
+		}
 	}
 
 	// GUARANTEED CLEANUP PATH. Returns the cursor to the anchor and restores the

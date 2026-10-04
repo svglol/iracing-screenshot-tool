@@ -27,6 +27,11 @@ import {
 	weightAt,
 	windowFramesForExposure,
 	windowPosition,
+	availableWarmUpFrames,
+	predictWarmUpSeconds,
+	warmUpFramesForSeconds,
+	MAX_WARM_UP_SECONDS,
+	WARM_UP_BRAKE_FRAMES,
 } from './exposure-math';
 
 describe('SHUTTER_LADDER', () => {
@@ -695,5 +700,56 @@ describe('startBoundaryCoverage', () => {
 				})
 			).toBe(0);
 		}
+	});
+});
+
+describe('effects warm-up', () => {
+	it('converts seconds to replay frames, capped and floored at zero', () => {
+		expect(warmUpFramesForSeconds(3)).toBe(180);
+		expect(warmUpFramesForSeconds(0.5)).toBe(30);
+		expect(warmUpFramesForSeconds(0)).toBe(0);
+		expect(warmUpFramesForSeconds(-1)).toBe(0);
+		expect(warmUpFramesForSeconds(Number.NaN)).toBe(0);
+		expect(warmUpFramesForSeconds(60)).toBe(MAX_WARM_UP_SECONDS * 60);
+	});
+
+	it('gives the whole request when the tape has room for it', () => {
+		expect(
+			availableWarmUpFrames({ startFrame: 5000, requestedFrames: 180 })
+		).toBe(180);
+	});
+
+	// The brake comes off first: it is what keeps the window out of the 1x roll.
+	it('cuts the request short at the start of the tape, brake first', () => {
+		expect(
+			availableWarmUpFrames({ startFrame: 100, requestedFrames: 180 })
+		).toBe(100 - WARM_UP_BRAKE_FRAMES);
+		expect(
+			availableWarmUpFrames({
+				startFrame: WARM_UP_BRAKE_FRAMES,
+				requestedFrames: 180,
+			})
+		).toBe(0);
+		expect(
+			availableWarmUpFrames({ startFrame: 2, requestedFrames: 180 })
+		).toBe(0);
+	});
+
+	it('plans nothing when nothing was requested', () => {
+		expect(
+			availableWarmUpFrames({ startFrame: 5000, requestedFrames: 0 })
+		).toBe(0);
+	});
+
+	it('charges the warm-up at 1x and the brake at the capture speed', () => {
+		expect(
+			predictWarmUpSeconds({ warmUpFrames: 180, playbackDivisor: 16 })
+		).toBeCloseTo(3 + (WARM_UP_BRAKE_FRAMES * 16) / 60);
+		expect(
+			predictWarmUpSeconds({ warmUpFrames: 180, playbackDivisor: 1 })
+		).toBeCloseTo(3 + WARM_UP_BRAKE_FRAMES / 60);
+		expect(
+			predictWarmUpSeconds({ warmUpFrames: 0, playbackDivisor: 16 })
+		).toBe(0);
 	});
 });

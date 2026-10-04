@@ -11,6 +11,11 @@ import {
 	MAX_HIGHLIGHT_RECOVERY_STOPS,
 	type LongExposureRecipe,
 } from './shot-recipe';
+import {
+	DEFAULT_WARM_UP_SECONDS,
+	MAX_WARM_UP_SECONDS,
+	WARM_UP_BRAKE_FRAMES,
+} from './exposure-math';
 
 const base = (): LongExposureRecipe =>
 	createDefaultRecipe({
@@ -331,13 +336,17 @@ describe('resolvePlan', () => {
 	// the per-pass figures: `predictedSamples` is the affordability gate for one
 	// visit, and `predictedWallClockSeconds` sets the capture loop's per-pass timeout.
 	it('multiplies the totals by passes and leaves the per-pass figures alone', () => {
+		// Warm-up off: it adds its own per-pass term, tested on its own below.
 		const single = resolvePlan(
-			normalizeRecipe({ shutter: '1', playbackSpeed: 16 }, base()),
+			normalizeRecipe(
+				{ shutter: '1', playbackSpeed: 16, warmUpSeconds: 0 },
+				base()
+			),
 			{ renderFps: 60 }
 		);
 		const quad = resolvePlan(
 			normalizeRecipe(
-				{ shutter: '1', playbackSpeed: 16, passes: 4 },
+				{ shutter: '1', playbackSpeed: 16, passes: 4, warmUpSeconds: 0 },
 				base()
 			),
 			{ renderFps: 60 }
@@ -355,7 +364,9 @@ describe('resolvePlan', () => {
 	});
 
 	it('reports totals equal to the per-pass figures on a single pass', () => {
-		const plan = resolvePlan(normalizeRecipe({}, base()), { renderFps: 60 });
+		const plan = resolvePlan(normalizeRecipe({ warmUpSeconds: 0 }, base()), {
+			renderFps: 60,
+		});
 		expect(plan.passes).toBe(1);
 		expect(plan.predictedTotalSamples).toBe(plan.predictedSamples);
 		expect(plan.predictedTotalWallClockSeconds).toBeCloseTo(
@@ -669,9 +680,11 @@ describe('validatePlan', () => {
 	// like a hang, the warning has to say what to do about it. 16 s is where that
 	// line sits: it was the ceiling of the whole feature before 2"/5"/10" landed.
 	it('escalates the warning past the old ceiling', () => {
-		const mild = validate({ shutter: '1', playbackSpeed: 16 }).warnings.join(
-			' '
-		);
+		const mild = validate({
+			shutter: '1',
+			playbackSpeed: 16,
+			warmUpSeconds: 0,
+		}).warnings.join(' ');
 		expect(mild).not.toMatch(/cannot be hurried/);
 
 		const loud = validate({ shutter: '5', playbackSpeed: 16 }).warnings.join(
@@ -684,11 +697,19 @@ describe('validatePlan', () => {
 	// "about 160 seconds" is a number the reader has to convert themselves.
 	it('reports minutes once the wait passes a minute and a half', () => {
 		expect(
-			validate({ shutter: '10', playbackSpeed: 16 }).warnings.join(' ')
+			validate({
+				shutter: '10',
+				playbackSpeed: 16,
+				warmUpSeconds: 0,
+			}).warnings.join(' ')
 		).toMatch(/2 min 40 s/);
 		// ...and stays in seconds below that.
 		expect(
-			validate({ shutter: '1', playbackSpeed: 16 }).warnings.join(' ')
+			validate({
+				shutter: '1',
+				playbackSpeed: 16,
+				warmUpSeconds: 0,
+			}).warnings.join(' ')
 		).toMatch(/16 seconds/);
 	});
 
@@ -826,5 +847,111 @@ describe('variantSuffix (Spotter Pack seam)', () => {
 		expect(variantSuffix({ ...base(), variantId: 'gt3-blue' })).toBe(
 			'--gt3-blue'
 		);
+	});
+});
+
+describe('effects warm-up', () => {
+	const plan = (overrides: Partial<LongExposureRecipe>) =>
+		resolvePlan(normalizeRecipe(overrides, base()), { renderFps: 60 });
+	const validate = (overrides: Partial<LongExposureRecipe>) => {
+		const recipe = normalizeRecipe(overrides, base());
+		return validatePlan({
+			plan: resolvePlan(recipe, { renderFps: 60 }),
+			recipe,
+			replayEndFrame: 100000,
+			currentSessionNum: 2,
+		});
+	};
+
+	// On by default, unlike the other recipe additions: it changes what the scene
+	// looks like when the window opens, never what the exposure is.
+	it('defaults to the recommended warm-up', () => {
+		expect(base().warmUpSeconds).toBe(DEFAULT_WARM_UP_SECONDS);
+	});
+
+	it('keeps an explicit 0 and clamps out-of-range values', () => {
+		expect(normalizeRecipe({ warmUpSeconds: 0 }, base()).warmUpSeconds).toBe(
+			0
+		);
+		expect(normalizeRecipe({ warmUpSeconds: -2 }, base()).warmUpSeconds).toBe(
+			0
+		);
+		expect(normalizeRecipe({ warmUpSeconds: 99 }, base()).warmUpSeconds).toBe(
+			MAX_WARM_UP_SECONDS
+		);
+	});
+
+	// A sidecar written before warm-up existed takes the default rather than
+	// reproducing the frozen start it recorded.
+	it('reads an absent or unusable value as the default', () => {
+		const legacy = base() as Partial<LongExposureRecipe>;
+		delete legacy.warmUpSeconds;
+		expect(normalizeRecipe(legacy, base()).warmUpSeconds).toBe(
+			DEFAULT_WARM_UP_SECONDS
+		);
+		expect(
+			normalizeRecipe({ warmUpSeconds: 'soon' as unknown as number }, base())
+				.warmUpSeconds
+		).toBe(DEFAULT_WARM_UP_SECONDS);
+	});
+
+	it('plans the warm-up in replay frames and charges it to every pass', () => {
+		const p = plan({
+			shutter: '1/8',
+			playbackSpeed: 16,
+			passes: 2,
+			warmUpSeconds: 3,
+		});
+		expect(p.warmUpRequestedFrames).toBe(180);
+		expect(p.warmUpFrames).toBe(180);
+		// 3 s at 1x, then the brake frames at 1/16.
+		expect(p.predictedWarmUpSeconds).toBeCloseTo(
+			3 + (WARM_UP_BRAKE_FRAMES * 16) / 60
+		);
+		// ...which the per-pass accumulation estimate does NOT include, because it
+		// sets the capture loop's timeout.
+		// (1/8 quantises to 8 replay frames.)
+		expect(p.predictedWallClockSeconds).toBeCloseTo((8 / 60) * 16);
+		expect(p.predictedTotalWallClockSeconds).toBeCloseTo(
+			(p.predictedWallClockSeconds + p.predictedWarmUpSeconds) * 2
+		);
+	});
+
+	it('plans nothing extra with the warm-up off', () => {
+		const p = plan({ warmUpSeconds: 0 });
+		expect(p.warmUpFrames).toBe(0);
+		expect(p.warmUpRequestedFrames).toBe(0);
+		expect(p.predictedWarmUpSeconds).toBe(0);
+		expect(validate({ warmUpSeconds: 0 }).warnings.join(' ')).not.toMatch(
+			/warm-up/
+		);
+	});
+
+	it('shortens the warm-up near the start of the tape, and says so', () => {
+		// 1/8 is 8 frames, so the window starts on 92; the brake takes 6 more.
+		const p = plan({ anchorFrame: 100, shutter: '1/8', warmUpSeconds: 3 });
+		expect(p.startFrame).toBe(92);
+		expect(p.warmUpFrames).toBe(92 - WARM_UP_BRAKE_FRAMES);
+		const result = validate({
+			anchorFrame: 100,
+			shutter: '1/8',
+			warmUpSeconds: 3,
+		});
+		expect(result.errors).toEqual([]);
+		expect(result.warnings.join(' ')).toMatch(/cut to 1\.4 s/);
+	});
+
+	it('plans no warm-up when the brake alone reaches the tape start', () => {
+		const p = plan({ anchorFrame: 10, shutter: '1/8', warmUpSeconds: 3 });
+		expect(p.warmUpFrames).toBe(0);
+		expect(p.predictedWarmUpSeconds).toBe(0);
+	});
+
+	// The window not fitting is already a refusal; a warm-up note on top of it
+	// would only bury the reason.
+	it('stays silent when the window itself does not fit', () => {
+		const result = validate({ anchorFrame: 4, shutter: '1/8' });
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.warnings.join(' ')).not.toMatch(/warm-up/);
 	});
 });

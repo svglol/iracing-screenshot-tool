@@ -21,6 +21,8 @@ import {
 	REPLAY_FRAMES_PER_SECOND,
 	replayFrameWallMs,
 	subFramePosition,
+	WARM_UP_BRAKE_FRAMES,
+	WARM_UP_RETRY_BRAKE_FRAMES,
 } from '../../utilities/long-exposure/exposure-math';
 import {
 	earliestStartFrame,
@@ -151,6 +153,23 @@ export interface LongExposureInterpolationReport {
 	achievedRatio: number | null;
 }
 
+// What the effects warm-up actually did (exposure-math, "Effects warm-up"). Null on
+// failures that never reached it; present on every resolved capture, including
+// those with the warm-up turned off.
+export interface LongExposureWarmUpReport {
+	// Replay frames the recipe asked for, and what the tape left room for.
+	requestedFrames: number;
+	plannedFrames: number;
+	// The SHORTEST warm-up any completed pass actually played at 1x — the pass
+	// whose start was most likely to lack effects. 0 when any pass ran without one.
+	achievedFrames: number;
+	// Overshoots retried with a wider brake, across every pass.
+	brakeRetries: number;
+	// True when the warm-up gave up and the plain pre-roll took over, from the
+	// pass where that happened onwards.
+	fellBack: boolean;
+}
+
 export interface LongExposureOutcome {
 	ok: boolean;
 	failure: LongExposureFailure | null;
@@ -164,6 +183,8 @@ export interface LongExposureOutcome {
 	stats: SampleStats | null;
 	backend: string | null;
 	interpolation: LongExposureInterpolationReport | null;
+	// Optional so failure paths and older callers need not invent one.
+	warmUp?: LongExposureWarmUpReport | null;
 	// How anchor restoration went. Populated on EVERY outcome, including failures —
 	// the user needs to know where their cursor ended up regardless.
 	restore: {
@@ -296,7 +317,10 @@ export interface CaptureSessionDeps {
 	// finally as any other exit, so the anchor is still restored.
 	signal?: { aborted: boolean };
 	onProgress?(update: {
-		phase: 'seeking' | 'accumulating' | 'resolving' | 'restoring';
+		// 'warming' replaces 'seeking' when the pass has an effects warm-up: the seek
+		// is the same, but the seconds of 1x playback after it would otherwise read
+		// as a seek that hangs.
+		phase: 'seeking' | 'warming' | 'accumulating' | 'resolving' | 'restoring';
 		accepted?: number;
 		rejected?: number;
 		progress?: number;
@@ -630,6 +654,8 @@ export async function executeRecipe(
 		predictedSamples: plan.predictedSamples,
 		render: { width: plan.renderWidth, height: plan.renderHeight },
 		weighting: recipe.weighting,
+		warmUpFrames: plan.warmUpFrames,
+		warmUpRequestedFrames: plan.warmUpRequestedFrames,
 	});
 
 	let nativeSession: number | null = null;
@@ -850,61 +876,17 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	// samples are already summed in, over-weighting the window positions they reached.
 	let partialPass = false;
 
+	// The warm-up's running record, across passes. `fellBack` is sticky: a brake
+	// that missed twice will miss again on the next pass, and retrying it there
+	// would only spend seconds to arrive at the same plain pre-roll.
+	const warmUp: WarmUpProgress = {
+		fellBack: false,
+		brakeRetries: 0,
+		minFrames: null,
+	};
+
 	for (let pass = 0; pass < passes; pass += 1) {
-		// --- 2. Seek to the window start and let it settle -------------------
-		deps.onProgress?.({ phase: 'seeking', pass, passes });
-		const seek = await deps.replay.seekToWindowStart(
-			earliestStartFrame(sinks),
-			{
-				signal: deps.signal,
-				// Spread the passes across one replay frame of wall clock, so they land on
-				// different presentation instants instead of possibly re-sampling the same
-				// ones. At 1/16 that is 267 ms / passes — 33 ms steps at 8 passes, against
-				// a ~23 ms present interval, so they interleave rather than stack. Pass 0
-				// gets no dither, so a single-pass capture is unchanged.
-				extraSettleMs:
-					passes > 1
-						? (pass * replayFrameWallMs(plan.playbackDivisor)) / passes
-						: 0,
-			}
-		);
-		if (aborted()) {
-			// Between passes: nothing partial to declare.
-			if (completedPasses > 0) {
-				cutShort = true;
-				break;
-			}
-			return {
-				...base(),
-				failure: 'aborted',
-				message: 'Capture cancelled.',
-			};
-		}
-		if (!seek.landed) {
-			return {
-				...base(),
-				failure: 'seek-failed',
-				message: t('longExposureCapture.seekTimeout', {
-					frame: sink.startFrame,
-				}),
-			};
-		}
-
-		// Re-anchor the frame->session-time map on a reading taken AFTER the seek, so
-		// the sink's window bounds and the live sample stream share one origin. This is
-		// also why the sink stores a window LENGTH rather than an absolute start time —
-		// the origin does not exist until here.
-		//
-		// Re-derived per pass, and it has to be: the origin is established by the seek.
-		// The same replay frame yields the same ReplaySessionTime every pass, so sample
-		// times stay comparable ACROSS passes — which is what lets the merged sample log
-		// mean anything.
-		const settled = deps.replay.state() ?? live;
-		const startFrameTime = frameToSessionTime(sink.startFrame, settled);
-		const frameTimeOf = (frame: number) =>
-			startFrameTime + (frame - sink.startFrame) / REPLAY_FRAMES_PER_SECOND;
-
-		// --- 3. Open the GPU session (gate closed) -----------------------------
+		// --- 2. Open the GPU session (gate closed) -----------------------------
 		// ONCE, on the first pass — the accumulator has to outlive every pass.
 		// The interpolation factor is a REQUEST. The native side sets it up from the
 		// first real frame and reports back what it could actually negotiate; hardware
@@ -912,6 +894,13 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		// Highlight recovery, unlike interpolation, is not a request — it is a shader
 		// constant that behaves identically on every GPU, so what is asked for is always
 		// what happens.
+		//
+		// BEFORE the seek, since the effects warm-up: that path hands over with the
+		// replay already rolling toward the window, so there is no paused moment
+		// left to arm in, and WGC session start-up must not eat the brake margin.
+		// Safe to do early because a closed gate drops frames outright (the native
+		// frame handler returns before touching any state), so nothing the seek or
+		// the warm-up presents can reach the accumulator or the retained frame.
 		if (session === null) {
 			session = native.longExposureBegin(
 				hwnd,
@@ -931,8 +920,69 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		// Declared on EVERY pass including the first, so every sample carries a correct
 		// pass index whether or not multi-pass was used. On passes after the first this
 		// is also what discards the retained frame: without it the pass's first
-		// in-betweens warp from the END of the window to its start.
+		// in-betweens warp from the END of the window to its start. The reset is
+		// consumed on the next GATED-IN frame, so declaring it before the seek is
+		// the same as declaring it after.
 		native.longExposureBeginPass?.(session, pass);
+
+		// --- 3. Position for the window, warming the effects up first ----------
+		deps.onProgress?.({
+			phase:
+				plan.warmUpFrames > 0 && !warmUp.fellBack ? 'warming' : 'seeking',
+			pass,
+			passes,
+		});
+		const positioned = await positionForWindow({
+			deps,
+			plan,
+			startFrame: earliestStartFrame(sinks),
+			// Spread the passes across one replay frame of wall clock, so they land on
+			// different presentation instants instead of possibly re-sampling the same
+			// ones. At 1/16 that is 267 ms / passes — 33 ms steps at 8 passes, against
+			// a ~23 ms present interval, so they interleave rather than stack. Pass 0
+			// gets no dither, so a single-pass capture is unchanged.
+			extraSettleMs:
+				passes > 1
+					? (pass * replayFrameWallMs(plan.playbackDivisor)) / passes
+					: 0,
+			warmUp,
+		});
+		if (aborted()) {
+			// Between passes: nothing partial to declare.
+			if (completedPasses > 0) {
+				cutShort = true;
+				break;
+			}
+			return {
+				...base(),
+				failure: 'aborted',
+				message: 'Capture cancelled.',
+			};
+		}
+		if (!positioned.landed) {
+			return {
+				...base(),
+				failure: 'seek-failed',
+				message: t('longExposureCapture.seekTimeout', {
+					frame: sink.startFrame,
+				}),
+			};
+		}
+
+		// Re-anchor the frame->session-time map on a reading taken AFTER the seek, so
+		// the sink's window bounds and the live sample stream share one origin. This is
+		// also why the sink stores a window LENGTH rather than an absolute start time —
+		// the origin does not exist until here.
+		//
+		// Re-derived per pass, and it has to be: the origin is established by the seek.
+		// The same replay frame yields the same ReplaySessionTime every pass, so sample
+		// times stay comparable ACROSS passes — which is what lets the merged sample log
+		// mean anything. After a warm-up the reading is taken while ROLLING, which is
+		// fine: frame and session time come from the same telemetry sample.
+		const settled = deps.replay.state() ?? live;
+		const startFrameTime = frameToSessionTime(sink.startFrame, settled);
+		const frameTimeOf = (frame: number) =>
+			startFrameTime + (frame - sink.startFrame) / REPLAY_FRAMES_PER_SECOND;
 
 		// --- 4. Roll, and accumulate until the anchor --------------------------
 		// Snapshotted so an abort can say whether this pass actually contributed,
@@ -948,6 +998,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			pass,
 			passes,
 			startFrameNum: settled.replayFrameNum,
+			alreadyRolling: positioned.rolling,
 			frameTimeOf,
 			base,
 		});
@@ -991,8 +1042,21 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		);
 	}
 
+	// Said once however many passes it affected: the remedy is the same either way,
+	// and the log carries the per-attempt detail.
+	if (plan.warmUpFrames > 0 && warmUp.fellBack) {
+		passWarnings.push(t('longExposureCapture.warmUpFellBack'));
+	}
+	const warmUpReport: LongExposureWarmUpReport = {
+		requestedFrames: plan.warmUpRequestedFrames,
+		plannedFrames: plan.warmUpFrames,
+		achievedFrames: warmUp.minFrames ?? 0,
+		brakeRetries: warmUp.brakeRetries,
+		fellBack: warmUp.fellBack,
+	};
+
 	// --- 6. Resolve ----------------------------------------------------------
-	return await resolveCapture({
+	const resolved = await resolveCapture({
 		recipe,
 		plan,
 		sink,
@@ -1011,6 +1075,80 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		base,
 		releaseSession,
 	});
+	return { ...resolved, warmUp: warmUpReport };
+}
+
+interface WarmUpProgress {
+	fellBack: boolean;
+	brakeRetries: number;
+	// Shortest warm-up any pass actually played; null until a pass has positioned.
+	minFrames: number | null;
+}
+
+// Put the replay where a pass can roll into its window: with the effects warm-up
+// when the plan has one, otherwise — or once the warm-up has given up — the plain
+// three-frame pre-roll that preceded it.
+//
+// The warm-up only ever hands over a replay that is ready, so every way it can go
+// wrong lands here and degrades to the plain pre-roll: an overshoot is retried
+// once with a wider brake, and a second overshoot, a seek that did not land or a
+// roll that stalled all fall back. The fallback is a shot exactly as correct as
+// every shot before warm-up existed — just with a frozen start — and the outcome
+// says so. Only the plain pre-roll's own failure fails the pass.
+async function positionForWindow(args: {
+	deps: CaptureSessionDeps;
+	plan: ResolvedPlan;
+	startFrame: number;
+	extraSettleMs: number;
+	warmUp: WarmUpProgress;
+}): Promise<{ landed: boolean; rolling: boolean }> {
+	const { deps, plan, startFrame, extraSettleMs, warmUp } = args;
+	const aborted = () => deps.signal?.aborted === true;
+
+	if (plan.warmUpFrames > 0 && !warmUp.fellBack) {
+		for (const brakeFrames of [
+			WARM_UP_BRAKE_FRAMES,
+			WARM_UP_RETRY_BRAKE_FRAMES,
+		]) {
+			const result = await deps.replay.warmUpIntoWindow(startFrame, {
+				warmUpFrames: plan.warmUpFrames,
+				brakeFrames,
+				captureDivisor: plan.playbackDivisor,
+				signal: deps.signal,
+				extraSettleMs,
+			});
+			if (result.ready) {
+				warmUp.minFrames =
+					warmUp.minFrames === null
+						? result.warmUpFrames
+						: Math.min(warmUp.minFrames, result.warmUpFrames);
+				return { landed: true, rolling: true };
+			}
+			if (aborted()) {
+				return { landed: false, rolling: false };
+			}
+			if (!result.overshot) {
+				break;
+			}
+			warmUp.brakeRetries += 1;
+		}
+		warmUp.fellBack = true;
+		log.warn('Long-exposure warm-up gave up; using the plain pre-roll', {
+			startFrame,
+			warmUpFrames: plan.warmUpFrames,
+			brakeRetries: warmUp.brakeRetries,
+		});
+	}
+
+	const seek = await deps.replay.seekToWindowStart(startFrame, {
+		signal: deps.signal,
+		extraSettleMs,
+	});
+	if (seek.landed) {
+		// A pass without a warm-up is the floor every other pass is measured by.
+		warmUp.minFrames = 0;
+	}
+	return { landed: seek.landed, rolling: false };
 }
 
 interface AccumulateWindowArgs {
@@ -1028,6 +1166,10 @@ interface AccumulateWindowArgs {
 	passes: number;
 	// The replay frame the pre-roll seek actually landed on.
 	startFrameNum: number;
+	// True when the warm-up handed over with the replay already rolling at the
+	// capture speed. The roll must then not be re-issued: it would be harmless to
+	// the effects, but it is a second command racing a transport already in motion.
+	alreadyRolling: boolean;
 	frameTimeOf(frame: number): number;
 	base(): LongExposureOutcome;
 }
@@ -1060,16 +1202,26 @@ async function accumulateWindow(
 		pass,
 		passes,
 		startFrameNum,
+		alreadyRolling,
 		frameTimeOf,
 		base,
 	} = args;
 	const aborted = () => deps.signal?.aborted === true;
 
-	deps.replay.setCaptureSpeed(plan.playbackDivisor);
+	if (!alreadyRolling) {
+		deps.replay.setCaptureSpeed(plan.playbackDivisor);
+	}
 
+	// After a warm-up the loop starts up to a retry brake's worth of frames short
+	// of the window, all of them at the capture speed, so they count against the
+	// same budget the window does.
+	const leadMs = alreadyRolling
+		? WARM_UP_RETRY_BRAKE_FRAMES * replayFrameWallMs(plan.playbackDivisor)
+		: 0;
 	const timeoutMs = Math.max(
 		CAPTURE_TIMEOUT_FLOOR_MS,
-		plan.predictedWallClockSeconds * 1000 * CAPTURE_TIMEOUT_MULTIPLIER
+		(plan.predictedWallClockSeconds * 1000 + leadMs) *
+			CAPTURE_TIMEOUT_MULTIPLIER
 	);
 	const started = deps.now();
 	let rolling = false;

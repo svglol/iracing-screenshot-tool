@@ -168,6 +168,12 @@ const el: Catalog = {
 		passes4: '4× — τετραπλάσια αναμονή',
 		passes8: '8× — οκταπλάσια αναμονή',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Μπρακετάρισμα ταχυτήτων κλείστρου',
 		highlightRecovery: 'Ανάκτηση φώτων (στάσεις)',
 
@@ -188,11 +194,14 @@ const el: Catalog = {
 				other: '{count} περάσματα',
 			},
 			bracketed: 'μπρακετάρισμα',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: 'ανάκτηση {stops} στάσεων',
 		},
 
 		progress: {
 			working: 'Επεξεργασία…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Αναζήτηση…{pass}',
 			accumulating: 'Έκθεση… {count} δείγματα{pass}',
 			resolving: 'Εμφάνιση…',
@@ -300,6 +309,10 @@ const el: Catalog = {
 				'Αυτό που πράγματι κοστίζει είναι η μνήμη. Κάθε στάση χρειάζεται τον δικό της συσσωρευτή πλήρους ανάλυσης, οπότε έντεκα στάσεις χρειάζονται έντεκα φορές τη VRAM μίας μόνο, κάτι που στα 8K είναι περισσότερο από όσο διαθέτουν οι περισσότερες κάρτες γραφικών. Η λήψη το ελέγχει πριν ξεκινήσει και αρνείται αντί να καταρρεύσει το iRacing, οπότε αν ένα μπρακετάρισμα απορριφθεί, μειώστε την ανάλυση ή επιλέξτε ταχύτερη ταχύτητα κλείστρου — που είναι επίσης μια πιο κοντή κλίμακα.',
 			bracketNamingBody:
 				'Η στάση που επιλέξατε αποθηκεύεται με το συνηθισμένο όνομα και είναι αυτή που εμφανίζεται στη συλλογή· οι υπόλοιπες βρίσκονται δίπλα της με την ταχύτητα κλείστρου τους στο όνομα του αρχείου.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Ανάκτηση φώτων',
 			highlightsBody:
@@ -569,6 +582,8 @@ const el: Catalog = {
 		cancelled: 'Η λήψη ακυρώθηκε.',
 		seekTimeout:
 			'Το replay δεν έφτασε στο καρέ {frame} έγκαιρα. Ίσως εξακολουθεί να φορτώνει.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Μια λήψη πρέπει να εκτελέσει τουλάχιστον ένα πέρασμα.',
 		playbackStalled:
 			'Το replay δεν ξεκίνησε να αναπαράγεται. Ελέγξτε ότι το iRacing δεν είναι σε παύση από άλλο εργαλείο.',
@@ -604,6 +619,8 @@ const el: Catalog = {
 			'Το replay έχει μεταβεί σε διαφορετική συνεδρία από τότε που ρυθμίστηκε αυτό το στιγμιότυπο. Επιλέξτε ξανά τη στιγμή.',
 		singleSampleMultiPass:
 			'Αυτή η ταχύτητα κλείστρου είναι αρκετά σύντομη ώστε μόνο περίπου ένα καρέ να πέφτει μέσα της ανά πέρασμα, οπότε {passes} περάσματα συλλέγουν περίπου {passes} δείγματα. Μια πιο αργή ταχύτητα αναπαραγωγής ή μια πιο αργή ταχύτητα κλείστρου αποφέρει πολύ περισσότερα.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Αυτή η ταχύτητα κλείστρου είναι αρκετά σύντομη ώστε μόνο ένα καρέ να πέσει μέσα της, οπότε το αποτέλεσμα δεν έχει θόλωμα κίνησης. Μια πιο αργή ταχύτητα αναπαραγωγής ή μια πιο αργή ταχύτητα κλείστρου αποφέρει δείγματα.',
 		bracketVsInterpolation:

@@ -163,6 +163,12 @@ const tr: Catalog = {
 		passes4: '4× — dört kat bekleme',
 		passes8: '8× — sekiz kat bekleme',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: 'Enstantane Bracketleme',
 		highlightRecovery: 'Vurgu Kurtarma (stop)',
 
@@ -179,11 +185,14 @@ const tr: Catalog = {
 				other: '{count} geçiş',
 			},
 			bracketed: 'bracketleme',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '{stops} stop kurtarma',
 		},
 
 		progress: {
 			working: 'Çalışılıyor…',
+			warming: 'Warming up effects…{pass}',
 			seeking: 'Aranıyor…{pass}',
 			accumulating: 'Pozlanıyor… {count} örnek{pass}',
 			resolving: 'Banyo ediliyor…',
@@ -290,6 +299,10 @@ const tr: Catalog = {
 				"Asıl maliyeti bellektir. Her kademe kendi tam çözünürlüklü toplayıcısına ihtiyaç duyar, bu yüzden on bir kademe tek bir kademenin on bir katı video belleği gerektirir; bu da 8K'da çoğu kartın sahip olduğundan fazladır. Yakalama işlemi bunu başlamadan önce kontrol eder ve iRacing'i çökertmek yerine reddeder; bu yüzden bir bracket reddedilirse çözünürlüğü düşürün veya daha hızlı bir enstantane seçin — ki bu da zaten daha kısa bir merdiven demektir.",
 			bracketNamingBody:
 				'Seçtiğiniz kademe her zamanki adla kaydedilir ve galeride görünen odur; diğerleri, dosya adlarında kendi enstantaneleriyle birlikte onun yanında durur.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: 'Vurgu Kurtarma',
 			highlightsBody:
@@ -537,6 +550,8 @@ const tr: Catalog = {
 		cancelled: 'Yakalama iptal edildi.',
 		seekTimeout:
 			'Replay, {frame} karesine zamanında ulaşamadı. Hâlâ yükleniyor olabilir.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: 'Bir yakalama en az bir geçiş çalıştırmalıdır.',
 		playbackStalled:
 			"Replay oynatılmaya başlamadı. iRacing'in başka bir araç tarafından duraklatılmadığını kontrol edin.",
@@ -566,6 +581,8 @@ const tr: Catalog = {
 			'Bu çekim ayarlandığından beri replay farklı bir oturuma geçti. Anı yeniden seçin.',
 		singleSampleMultiPass:
 			'Bu enstantane o kadar kısa ki geçiş başına yalnızca yaklaşık bir kare düşüyor, bu yüzden {passes} geçiş yaklaşık {passes} örnek toplar. Daha yavaş bir oynatma hızı veya daha yavaş bir enstantane çok daha fazlasını sağlar.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Bu enstantane o kadar kısa ki içine yalnızca bir kare düşecek, bu yüzden sonuçta hareket bulanıklığı olmayacak. Daha yavaş bir oynatma hızı veya daha yavaş bir enstantane örnek sağlar.',
 		bracketVsInterpolation:

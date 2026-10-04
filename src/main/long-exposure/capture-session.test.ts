@@ -11,6 +11,10 @@ import {
 } from '../../utilities/long-exposure/frame-content';
 import { ReplayController, type ReplayState } from './replay-control';
 import {
+	WARM_UP_BRAKE_FRAMES,
+	WARM_UP_RETRY_BRAKE_FRAMES,
+} from '../../utilities/long-exposure/exposure-math';
+import {
 	buildInterpolationReport,
 	diagnoseInterpolationShortfall,
 	executeRecipe,
@@ -34,8 +38,10 @@ const ANCHOR = 5000;
 function recipe(
 	overrides: Partial<LongExposureRecipe> = {}
 ): LongExposureRecipe {
+	// Warm-up OFF unless a test asks for it: everything outside the warm-up suite
+	// is about the plain pre-roll, and pins it rather than inheriting the default.
 	return normalizeRecipe(
-		{ shutter: '1/8', playbackSpeed: 4, ...overrides },
+		{ shutter: '1/8', playbackSpeed: 4, warmUpSeconds: 0, ...overrides },
 		createDefaultRecipe({
 			anchorFrame: ANCHOR,
 			sessionNum: 1,
@@ -67,6 +73,15 @@ interface HarnessOptions {
 	// proceed. Undefined leaves the dep off entirely, which is the shape a caller
 	// that never supplies it produces.
 	fullscreenRefusal?: string | null;
+	// Warm-up realism, all opt-in so the rest of the suite runs on the transport
+	// it always has. `realTimeFramesPerPoll` is the advance rate at (1, false) —
+	// one replay frame per 16 ms poll is real time — with `framesPerPoll` kept
+	// for every other speed. `reportSpeed` makes ReplayPlaySpeed /
+	// ReplayPlaySlowMotion follow the commands. `speedLatencyPolls` holds each
+	// speed change back that many polls, the way the sim's broadcast latency does.
+	realTimeFramesPerPoll?: number;
+	reportSpeed?: boolean;
+	speedLatencyPolls?: number;
 }
 
 function makeHarness(options: HarnessOptions = {}) {
@@ -81,6 +96,18 @@ function makeHarness(options: HarnessOptions = {}) {
 	let clock = 0;
 	let playing = false;
 	const events: string[] = [];
+	// The transport's EFFECTIVE speed, and a change still in flight.
+	let realTime = false;
+	let pending: { speed: number; slowMotion: boolean; polls: number } | null =
+		null;
+	const applySpeed = (speed: number, slowMotion: boolean) => {
+		playing = speed !== 0;
+		realTime = speed === 1 && !slowMotion;
+		if (options.reportSpeed) {
+			state.replayPlaySpeed = speed;
+			state.replayPlaySlowMotion = slowMotion;
+		}
+	};
 
 	const state: ReplayState = {
 		replayFrameNum: startFrame,
@@ -101,17 +128,34 @@ function makeHarness(options: HarnessOptions = {}) {
 	// which is how the accumulation loop makes progress.
 	const replay = new ReplayController({
 		readState: () => {
+			if (pending) {
+				pending.polls -= 1;
+				if (pending.polls <= 0) {
+					applySpeed(pending.speed, pending.slowMotion);
+					pending = null;
+				}
+			}
 			if (playing) {
-				framePosition += framesPerPoll;
+				const rate =
+					realTime && options.realTimeFramesPerPoll !== undefined
+						? options.realTimeFramesPerPoll
+						: framesPerPoll;
+				framePosition += rate;
 				state.replayFrameNum = Math.floor(framePosition);
 				state.replaySessionTime =
-					(state.replaySessionTime as number) + framesPerPoll / 60;
+					(state.replaySessionTime as number) + rate / 60;
 			}
 			return { ...state };
 		},
-		setPlaySpeed: (speed) => {
+		setPlaySpeed: (speed, slowMotion) => {
 			events.push(`speed:${speed}`);
-			playing = speed !== 0;
+			// Pausing is immediate — the tests that need latency are about the brake.
+			if (options.speedLatencyPolls && speed !== 0) {
+				pending = { speed, slowMotion, polls: options.speedLatencyPolls };
+			} else {
+				pending = null;
+				applySpeed(speed, slowMotion);
+			}
 		},
 		setPlayPosition: (mode, frame) => {
 			events.push(`seek:${mode}:${frame}`);
@@ -1708,5 +1752,219 @@ describe('executeRecipe — blank and frozen captures', () => {
 		const outcome = await executeRecipe(recipe(), harness.deps);
 		expect(outcome.ok).toBe(true);
 		expect(outcome.failure).toBeNull();
+	});
+});
+
+describe('executeRecipe — effects warm-up', () => {
+	// 1/8 is 8 replay frames, so the window starts on ANCHOR - 8.
+	const WINDOW_START = ANCHOR - 8;
+	const WARM_UP_FRAMES = 180;
+	// A transport that behaves like the sim: one frame per poll at 1x, one frame
+	// per four polls at 1/4, and speed telemetry that follows the commands.
+	const realistic = (extra: HarnessOptions = {}) =>
+		makeHarness({
+			framesPerPoll: 0.25,
+			realTimeFramesPerPoll: 1,
+			reportSpeed: true,
+			...extra,
+		});
+	const warm = (overrides: Partial<LongExposureRecipe> = {}) =>
+		recipe({ warmUpSeconds: 3, ...overrides });
+	const seeks = (events: string[]) =>
+		events
+			.filter((e) => e.startsWith('seek:0:'))
+			.map((e) => Number(e.slice(7)));
+
+	it('rewinds past the window by the warm-up and the brake', async () => {
+		const harness = realistic();
+		const outcome = await executeRecipe(warm(), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(seeks(harness.events)[0]).toBe(
+			WINDOW_START - WARM_UP_BRAKE_FRAMES - WARM_UP_FRAMES
+		);
+	});
+
+	// The whole fix: effects survive a speed change but not a pause-and-seek, so
+	// between the warm-up's 1x roll and the capture speed there must be neither.
+	it('plays the warm-up at 1x and slows down with no pause or seek between', async () => {
+		const harness = realistic();
+		await executeRecipe(warm({ playbackSpeed: 4 }), harness.deps);
+
+		const roll = harness.events.indexOf('speed:1');
+		const brake = harness.events.indexOf('speed:4');
+		expect(roll).toBeGreaterThan(0);
+		expect(brake).toBeGreaterThan(roll);
+		const between = harness.events.slice(roll + 1, brake);
+		expect(
+			between.filter((e) => e === 'speed:0' || e.startsWith('seek:'))
+		).toEqual([]);
+		// ...and the accumulation loop does not re-issue the roll on top of it.
+		const untilRestore = harness.events.slice(
+			0,
+			harness.events.lastIndexOf(`seek:0:${ANCHOR}`)
+		);
+		expect(untilRestore.filter((e) => e === 'speed:4')).toHaveLength(1);
+	});
+
+	it('never accumulates a warm-up frame', async () => {
+		const harness = realistic();
+		await executeRecipe(warm(), harness.deps);
+
+		expect(harness.pushes.length).toBeGreaterThan(0);
+		for (const push of harness.pushes) {
+			expect(push.frameNum).toBeGreaterThanOrEqual(WINDOW_START);
+			expect(push.frameNum).toBeLessThanOrEqual(ANCHOR);
+		}
+	});
+
+	it('reports what the warm-up actually did', async () => {
+		const harness = realistic();
+		const outcome = await executeRecipe(warm(), harness.deps);
+
+		expect(outcome.warmUp).toEqual({
+			requestedFrames: WARM_UP_FRAMES,
+			plannedFrames: WARM_UP_FRAMES,
+			achievedFrames: WARM_UP_FRAMES,
+			brakeRetries: 0,
+			fellBack: false,
+		});
+		expect(outcome.warnings.join(' ')).not.toMatch(/warm-up/);
+	});
+
+	// WGC start-up must not eat the brake margin, so the session is armed while the
+	// replay is still parked — before the warm-up seek, not after the hand-over.
+	it('arms the GPU session before the warm-up starts', async () => {
+		const harness = realistic();
+		const original = harness.replay.warmUpIntoWindow.bind(harness.replay);
+		const nativeCallsAtWarmUp: string[][] = [];
+		vi.spyOn(harness.replay, 'warmUpIntoWindow').mockImplementation(
+			async (...args) => {
+				nativeCallsAtWarmUp.push([...harness.nativeCalls]);
+				return original(...args);
+			}
+		);
+		await executeRecipe(warm(), harness.deps);
+
+		expect(nativeCallsAtWarmUp[0]).toEqual(['begin', 'beginPass:0']);
+	});
+
+	it('warms up again on every pass', async () => {
+		const harness = realistic();
+		const outcome = await executeRecipe(warm({ passes: 3 }), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		const warmUpTarget = WINDOW_START - WARM_UP_BRAKE_FRAMES - WARM_UP_FRAMES;
+		expect(
+			seeks(harness.events).filter((f) => f === warmUpTarget)
+		).toHaveLength(3);
+		expect(outcome.warmUp?.achievedFrames).toBe(WARM_UP_FRAMES);
+	});
+
+	it('says it is warming up rather than seeking', async () => {
+		const harness = realistic();
+		const phases: string[] = [];
+		harness.deps.onProgress = (update) => phases.push(update.phase);
+		await executeRecipe(warm(), harness.deps);
+
+		expect(phases).toContain('warming');
+		expect(phases).not.toContain('seeking');
+	});
+
+	// The sim may not report slow motion the way we read it. A transport that has
+	// plainly slowed — sitting on one frame far longer than 1x allows — still counts.
+	it('confirms the slowdown from the cursor when telemetry cannot', async () => {
+		const harness = realistic({ reportSpeed: false });
+		const outcome = await executeRecipe(warm(), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warmUp?.fellBack).toBe(false);
+		expect(outcome.warmUp?.brakeRetries).toBe(0);
+	});
+
+	it('retries an overshooting brake with a wider margin', async () => {
+		// Sixteen polls of latency at one frame per poll: past the first brake,
+		// inside the retry's.
+		const harness = realistic({ speedLatencyPolls: 16 });
+		const outcome = await executeRecipe(warm(), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(seeks(harness.events).slice(0, 2)).toEqual([
+			WINDOW_START - WARM_UP_BRAKE_FRAMES - WARM_UP_FRAMES,
+			WINDOW_START - WARM_UP_RETRY_BRAKE_FRAMES - WARM_UP_FRAMES,
+		]);
+		expect(outcome.warmUp?.brakeRetries).toBe(1);
+		expect(outcome.warmUp?.fellBack).toBe(false);
+		// The overshoot played INTO the window at 1x, and none of it may count.
+		for (const push of harness.pushes) {
+			expect(push.frameNum).toBeGreaterThanOrEqual(WINDOW_START);
+		}
+	});
+
+	it('falls back to the plain pre-roll when the brake misses twice, and says so', async () => {
+		const harness = realistic({ speedLatencyPolls: 40 });
+		const outcome = await executeRecipe(warm({ passes: 2 }), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warmUp?.fellBack).toBe(true);
+		expect(outcome.warmUp?.achievedFrames).toBe(0);
+		expect(outcome.warnings.join(' ')).toMatch(
+			/could not be slowed down in time/
+		);
+		// Two warm-up attempts, then the plain pre-roll — and the second pass goes
+		// straight to it rather than missing twice more.
+		expect(seeks(harness.events).filter((f) => f !== ANCHOR)).toEqual([
+			WINDOW_START - WARM_UP_BRAKE_FRAMES - WARM_UP_FRAMES,
+			WINDOW_START - WARM_UP_RETRY_BRAKE_FRAMES - WARM_UP_FRAMES,
+			WINDOW_START - 3,
+			WINDOW_START - 3,
+		]);
+		expectAnchorRestored(harness.events);
+	});
+
+	it('restores the anchor when cancelled during the warm-up', async () => {
+		const signal = { aborted: false };
+		const harness = realistic({ signal });
+		const original = harness.replay.warmUpIntoWindow.bind(harness.replay);
+		vi.spyOn(harness.replay, 'warmUpIntoWindow').mockImplementation(
+			async (...args) => {
+				signal.aborted = true;
+				return original(...args);
+			}
+		);
+		const outcome = await executeRecipe(warm(), harness.deps);
+
+		expect(outcome.ok).toBe(false);
+		expect(outcome.failure).toBe('aborted');
+		expect(harness.pushes).toHaveLength(0);
+		expectAnchorRestored(harness.events);
+	});
+
+	// At 1x there is no slowdown to wait for: the warm-up roll IS the capture roll.
+	it('hands straight over on a real-time capture', async () => {
+		const harness = realistic();
+		const outcome = await executeRecipe(
+			warm({ playbackSpeed: 1 }),
+			harness.deps
+		);
+
+		expect(outcome.ok).toBe(true);
+		expect(outcome.warmUp?.fellBack).toBe(false);
+		expect(outcome.warmUp?.brakeRetries).toBe(0);
+	});
+
+	it('runs the plain pre-roll with the warm-up off', async () => {
+		const harness = realistic();
+		const outcome = await executeRecipe(recipe(), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(seeks(harness.events)[0]).toBe(WINDOW_START - 3);
+		expect(outcome.warmUp).toEqual({
+			requestedFrames: 0,
+			plannedFrames: 0,
+			achievedFrames: 0,
+			brakeRetries: 0,
+			fellBack: false,
+		});
 	});
 });

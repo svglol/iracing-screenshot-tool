@@ -183,6 +183,10 @@
 				<p>{{ $t('help.longExposure.passesTradeBody') }}</p>
 			</section>
 			<section class="help-block">
+				<span class="heading">{{ $t('help.longExposure.warmUp') }}</span>
+				<p>{{ $t('help.longExposure.warmUpBody') }}</p>
+			</section>
+			<section class="help-block">
 				<span class="heading">{{ $t('help.longExposure.bracket') }}</span>
 				<p>{{ $t('help.longExposure.bracketBody') }}</p>
 				<p>{{ $t('help.longExposure.bracketCostBody') }}</p>

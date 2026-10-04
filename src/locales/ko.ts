@@ -156,6 +156,12 @@ const ko: Catalog = {
 		passes4: '4× — 대기 시간 4배',
 		passes8: '8× — 대기 시간 8배',
 
+		warmUp: 'Effects warm-up',
+		warmUpOff: 'Off',
+		warmUp1: '1 s',
+		warmUp3: '3 s (recommended)',
+		warmUp5: '5 s — for lingering smoke',
+
 		bracket: '셔터 브라케팅',
 		highlightRecovery: '하이라이트 복구 (스톱)',
 
@@ -172,11 +178,14 @@ const ko: Catalog = {
 				other: '{count} 패스',
 			},
 			bracketed: '브라케팅',
+			warmUp: '{seconds} s warm-up',
+			warmUpOff: 'no warm-up',
 			recovery: '{stops} 스톱 복구',
 		},
 
 		progress: {
 			working: '작업 중…',
+			warming: 'Warming up effects…{pass}',
 			seeking: '탐색 중…{pass}',
 			accumulating: '노출 중… 샘플 {count}개{pass}',
 			resolving: '현상 중…',
@@ -281,6 +290,10 @@ const ko: Catalog = {
 				'대신 메모리를 씁니다. 스톱마다 전체 해상도의 누적 버퍼가 따로 필요하므로 11스톱은 1스톱의 11배에 달하는 비디오 메모리를 쓰며, 8K에서는 대부분의 카드가 감당하지 못합니다. 캡처는 시작하기 전에 이를 확인하고, iRacing을 충돌시키는 대신 거부합니다. 브라케팅이 거부되면 해상도를 낮추거나 더 빠른 셔터를 고르세요. 더 빠른 셔터는 사다리도 짧아집니다.',
 			bracketNamingBody:
 				'선택한 스톱은 평소와 같은 이름으로 저장되며 갤러리에 나타나는 것도 이 사진입니다. 나머지는 파일 이름에 셔터 값이 붙은 채로 그 옆에 놓입니다.',
+
+			warmUp: 'Effects warm-up',
+			warmUpBody:
+				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
 
 			highlights: '하이라이트 복구',
 			highlightsBody:
@@ -526,6 +539,8 @@ const ko: Catalog = {
 		cancelled: '캡처를 취소했습니다.',
 		seekTimeout:
 			'리플레이가 제때 {frame} 프레임에 도달하지 못했습니다. 아직 불러오는 중일 수 있습니다.',
+		warmUpFellBack:
+			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		noPasses: '캡처는 최소 한 번의 패스를 실행해야 합니다.',
 		playbackStalled:
 			'리플레이가 재생되지 않았습니다. 다른 도구가 iRacing을 일시 정지시키지 않았는지 확인하세요.',
@@ -556,6 +571,8 @@ const ko: Catalog = {
 			'이 사진을 준비한 뒤로 리플레이가 다른 세션으로 넘어갔습니다. 순간을 다시 선택하세요.',
 		singleSampleMultiPass:
 			'이 셔터는 한 패스당 약 한 프레임만 들어갈 만큼 짧아서, {passes}번의 패스로 대략 {passes}개의 샘플만 모입니다. 재생 속도를 낮추거나 더 느린 셔터를 쓰면 훨씬 많이 얻을 수 있습니다.',
+		warmUpShortened:
+			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'이 셔터는 프레임이 한 장만 들어갈 만큼 짧아서 결과에 모션 블러가 생기지 않습니다. 재생 속도를 낮추거나 더 느린 셔터를 쓰면 샘플을 모을 수 있습니다.',
 		bracketVsInterpolation:

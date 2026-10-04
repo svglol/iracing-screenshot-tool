@@ -18,16 +18,22 @@
 // Pure — no Node, Electron, GPU or SDK deps.
 
 import {
+	availableWarmUpFrames,
+	DEFAULT_WARM_UP_SECONDS,
 	findShutterStop,
 	isSubFrameExposure,
 	isWeightingCurve,
 	MAX_EXPOSURE_MS,
+	MAX_WARM_UP_SECONDS,
 	nearestPlaybackDivisor,
 	predictSampleCount,
 	predictWallClockSeconds,
+	predictWarmUpSeconds,
+	REPLAY_FRAMES_PER_SECOND,
 	resolveExposureSeconds,
 	solvePlaybackDivisor,
 	scaleRenderFpsForResize,
+	warmUpFramesForSeconds,
 	windowFramesForExposure,
 	type PlaybackDivisor,
 	type WeightingCurve,
@@ -199,6 +205,13 @@ export interface LongExposureRecipe {
 	// weight, so more passes means a less noisy image, never a brighter one.
 	passes: number;
 
+	// Seconds of replay played at 1x, gate closed, before each pass's window, so
+	// the effects a seek wipes — dirt, smoke, exhaust flames, wheel-spin blur — are
+	// back by the time the exposure opens. 0 is the plain three-frame pre-roll.
+	// Moves no window boundary and changes no weight: it only decides what the
+	// scene looks like when the window opens. See exposure-math, "Effects warm-up".
+	warmUpSeconds: number;
+
 	weighting: WeightingCurve;
 	tonemap: Tonemapper;
 	// Exposure compensation in stops (EV), applied in linear space before tonemap.
@@ -285,6 +298,14 @@ export function createDefaultRecipe(opts: {
 		// written before multi-pass existed has no such field, and must not silently
 		// reproduce as something else.
 		passes: 1,
+		// ON by default, and deliberately unlike the three above. Those change what
+		// the exposure IS, so an old sidecar must not silently reproduce as something
+		// else. This changes nothing about the exposure — not the window, not the
+		// weights, not the sample count — only whether the scene inside it has its
+		// particles yet. A sidecar written before it existed recorded a frozen start
+		// nobody asked for; re-shooting it with the effects present is the fix, not
+		// a drift.
+		warmUpSeconds: DEFAULT_WARM_UP_SECONDS,
 		weighting: 'box',
 		tonemap: 'none',
 		exposureCompensation: 0,
@@ -432,6 +453,12 @@ export function normalizeRecipe(
 			MAX_PASSES,
 			defaults.passes ?? 1
 		),
+		warmUpSeconds: Number.isFinite(Number(input.warmUpSeconds))
+			? Math.min(
+					MAX_WARM_UP_SECONDS,
+					Math.max(0, Number(input.warmUpSeconds))
+				)
+			: (defaults.warmUpSeconds ?? DEFAULT_WARM_UP_SECONDS),
 		weighting: isWeightingCurve(input.weighting)
 			? input.weighting
 			: defaults.weighting,
@@ -487,6 +514,16 @@ export interface ResolvedPlan {
 	renderFps: number;
 	// How many times the window is visited. 1 is an ordinary capture.
 	passes: number;
+	// Effects warm-up per pass, in replay frames. `warmUpFrames` is what will be
+	// played — the request cut short by the start of the tape — and 0 means the
+	// plain pre-roll. `warmUpRequestedFrames` is what the recipe asked for, kept so
+	// a shortened warm-up can be told apart from one that was turned off.
+	warmUpFrames: number;
+	warmUpRequestedFrames: number;
+	// Wall-clock seconds the warm-up adds to EACH pass: the warm-up at 1x plus the
+	// brake frames at the capture speed. Not part of `predictedWallClockSeconds`,
+	// which is the accumulation alone and sets the capture loop's timeout.
+	predictedWarmUpSeconds: number;
 	// Predictions — the achieved count is always measured separately.
 	//
 	// PER PASS, both of them, and they must stay that way: `predictedSamples` is the
@@ -568,22 +605,40 @@ export function resolvePlan(
 		playbackDivisor,
 	});
 
+	const startFrame = recipe.anchorFrame - windowFrames;
+	const warmUpRequestedFrames = warmUpFramesForSeconds(
+		recipe.warmUpSeconds ?? 0
+	);
+	const warmUpFrames = availableWarmUpFrames({
+		startFrame,
+		requestedFrames: warmUpRequestedFrames,
+	});
+	const predictedWarmUpSeconds = predictWarmUpSeconds({
+		warmUpFrames,
+		playbackDivisor,
+	});
+
 	return {
 		windowFrames,
 		effectiveExposureSeconds,
 		isSubFrameWindow: isSubFrameExposure(effectiveExposureSeconds),
-		startFrame: recipe.anchorFrame - windowFrames,
+		startFrame,
 		anchorFrame: recipe.anchorFrame,
 		playbackDivisor,
 		renderFps,
 		passes,
+		warmUpFrames,
+		warmUpRequestedFrames,
+		predictedWarmUpSeconds,
 		predictedSamples,
 		predictedWallClockSeconds,
 		predictedTotalSamples: predictedSamples * passes,
-		// Excludes the per-pass seek and settle, which the single-pass estimate has
-		// always excluded too. It understates by roughly SEEK_SETTLE_MS per extra pass
-		// — sub-second against a warning threshold measured in seconds.
-		predictedTotalWallClockSeconds: predictedWallClockSeconds * passes,
+		// Includes the warm-up, which every pass replays and which is seconds rather
+		// than milliseconds. Still excludes the per-pass seek and settle, which the
+		// single-pass estimate has always excluded too — roughly SEEK_SETTLE_MS per
+		// pass, sub-second against a warning threshold measured in seconds.
+		predictedTotalWallClockSeconds:
+			(predictedWallClockSeconds + predictedWarmUpSeconds) * passes,
 		renderWidth,
 		renderHeight,
 		// The SAME helper the still path's sidebar hint and its capture call use, so
@@ -683,6 +738,23 @@ export function validatePlan(opts: {
 		currentSessionNum !== recipe.sessionNum
 	) {
 		errors.push(t('validation.sessionChanged'));
+	}
+
+	// The anchor sits too close to the start of the tape for the whole warm-up.
+	// Not an error — the shot is exactly as correct as it was before warm-up
+	// existed — but the start of the streak may open with the effects missing, and
+	// the user should know that is why. Silent when the window itself does not fit,
+	// which is already refused above.
+	if (
+		plan.startFrame >= 0 &&
+		plan.warmUpRequestedFrames > 0 &&
+		plan.warmUpFrames < plan.warmUpRequestedFrames
+	) {
+		warnings.push(
+			t('validation.warmUpShortened', {
+				seconds: (plan.warmUpFrames / REPLAY_FRAMES_PER_SECOND).toFixed(1),
+			})
+		);
 	}
 
 	if (plan.isSingleSample) {

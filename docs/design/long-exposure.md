@@ -463,6 +463,103 @@ Step 6 already terminates on the anchor, but overshoot is expected — telemetry
 sampled at 60 Hz and the pause command has latency. **Step 10 is an unconditional
 absolute seek regardless of where we stopped.**
 
+### Effects warm-up — steps 2–5 when the recipe has one
+
+**IMPLEMENTED 2026-10-04.** Field report: when the replay is rewound, dirt being
+kicked up, smoke, exhaust flames and the spinning-wheel blur disappear and the
+picture is "frozen"; they come back as the capture plays, but the frozen start is
+already in the exposure. Cause: iRacing does not store particles in the replay. It
+simulates them live during playback, and **a seek discards them**. Steps 2–5 above
+seek three frames (`SEEK_LEAD_FRAMES`, 0.05 s) before the window and roll straight
+in, so every exposure opened on a scene with no effects, and every pass of a
+multi-pass shot added its own frozen start.
+
+**A playback SPEED change does not reset them** — confirmed by hand on a live
+replay before any of this was built. So when `recipe.warmUpSeconds > 0` steps 2–5
+become:
+
+```
+2.  ARM          open the native session + beginPass   (gate closed, cursor parked)
+3.  SEEK         pause; seek to startFrame − B − W;  settle  (+ multi-pass dither)
+4.  WARM         changeReplaySpeed(1, false) until ReplayFrameNum >= startFrame − B
+5.  BRAKE        changeReplaySpeed(P, true)  — NO pause, NO seek: the effects survive
+6.  CONFIRM      the slowdown must be visible BEFORE startFrame, else "overshoot"
+7.  ACCUMULATE   as before — the loop does not re-issue the roll
+```
+
+`W` is the warm-up (default 3 s = 180 frames, options 0/1/3/5, cap 10) and `B` is
+`WARM_UP_BRAKE_FRAMES` = 10. Played at 1x, 3 s of warm-up costs 3 s; at 1/16 it
+would cost 48. The brake frames do play at the capture speed — 10 × 267 ms = 2.7 s
+per pass at 1/16 — and both terms are in `predictedTotalWallClockSeconds`.
+
+`B` was 6 when this landed. **Measured 2026-10-04 (RTX 4090):** the slowdown took
+2–4 frames at 2560×1440 and on most 8K passes, but the first pass of an 8K shot
+took more than 6 and overshot (the sim applies the command on its next sim frame,
+which at 8K comes slowly). The retry caught it for ~3.5 s; widening `B` to 10 costs
+~1.1 s per pass at 1/16 instead, and the retry went from 18 to 24.
+
+Why each piece is the way it is:
+
+- **ARM moved before the seek.** The warm-up hands over with the replay already
+  rolling, so there is no paused moment left to open the WGC session in, and its
+  start-up must not eat the brake margin. It is safe because a closed gate makes the
+  native frame handler return before touching any state, and `beginPass`'s reset is
+  consumed on the next *gated-in* frame. Done on the plain path too, for one order.
+- **CONFIRM, and the overshoot rule.** If the slowdown lands late, 1x frames would
+  cross the window start — sparse, unevenly spaced samples in the exposure. So the
+  warm-up only hands over once the slowdown is *seen*: `ReplayPlaySpeed == P &&
+  ReplayPlaySlowMotion` (the reading `capturePlaybackSnapshot` already restores
+  from), or, for P ≥ 4, the cursor dwelling on one frame ≥ 40 ms, which 1x cannot
+  do without a hitch. The dwell test exists because how the sim reports slow motion
+  in telemetry has not been verified on hardware — the log line "warm-up complete"
+  records `confirmedBy` and the raw readings, so the first field run settles it.
+- **Fail soft, never wrong.** The warm-up never opens the gate; the accumulation
+  loop does, on the same frame-indexed condition as always. An overshoot is retried
+  once with `B` = 24; a second overshoot, a seek that did not land or a 1x roll that
+  stalled all fall back to the plain pre-roll — a shot exactly as correct as every
+  one before this existed, just with a frozen start — and the outcome says so
+  (`longExposureCapture.warmUpFellBack`). The fallback is sticky for the rest of the
+  shot: a brake that missed twice will miss again.
+- **The window does not move.** No boundary, weight or termination changes; the
+  warm-up only decides what the scene looks like when the window opens. That is why
+  it defaults ON while `passes`, `highlightRecovery` and `crop` default to the value
+  an old sidecar implies: re-shooting a v1–v5 sidecar with the effects present fixes
+  a defect rather than drifting from the recorded exposure (sidecar v6).
+- **Near the tape start** the warm-up is cut short (`availableWarmUpFrames`, brake
+  first) and `validation.warmUpShortened` says so; below one frame it is skipped.
+
+**Hardware session 2026-10-04 (RTX 4090, Adelaide replay, shots 32–41)** — run on
+the 6-frame build; the 10-frame margin above came out of it:
+
+- **Effects come back.** Particles absent from the plain pre-roll shot are present
+  in the warm-up shot of the same moment, and the user judged the result correct.
+- **Confirmation is telemetry.** Every hand-over logged `confirmedBy: telemetry`
+  with `ReplayPlaySpeed` 16 and `ReplayPlaySlowMotion` true; the dwell test never
+  had to fire. That also settles how the sim reports slow motion.
+- **A direct 1x → 1/16 switch still interpolates.** 1440p, 1/60, 8 passes: 86–93
+  distinct samples (~11 per pass, against 64 predicted), blur correct.
+- **Interleaving is unaffected.** Same anchor, 1/60, 8 passes, 1440p — merged
+  `maxGapSeconds` 1.250 ms off, 1.312 ms at 1 s, 1.375 ms at 5 s. The randomised
+  phase costs at most ~10% against the dither it replaces, so the worry below was
+  not borne out.
+- **8K is sample-starved regardless of warm-up.** ~1 frame per pass (9 for a
+  predicted 64), identical on the pre-warm-up build — so a 1/60 at 8K looks static.
+  A resolution ceiling, not a warm-up defect. The one overshoot of the session was
+  an 8K first pass, which is why `B` went 6 → 10.
+
+Still open:
+
+1. Whether 3 s is the right default for lingering tyre smoke. Shots at 0/1/5 s were
+   taken (39–41) and the user is happy with the result, but no smoke-heavy scene has
+   been compared side by side.
+2. The 10-frame margin itself has not been on hardware yet; at 1440p the 6-frame
+   build confirmed with 1–4 frames to spare, so 10 is expected to remove retries.
+3. A warm-up that crosses a session boundary on the tape gets its effects reset at
+   the transition — equivalent to a shortened warm-up, and not detected.
+4. The phase dither is now mostly decorative on the warm-up path (the brake's 1x
+   jitter dwarfs the 1.4 ms slow-motion sample spacing). Measured harmless above;
+   removing it is a tidy-up, not a fix.
+
 ### How anchor restoration is guaranteed on *every* exit path
 
 `restoreAnchor()` is not a happy-path step. It is a `finally` on the session:

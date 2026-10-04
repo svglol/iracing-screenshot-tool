@@ -43,7 +43,10 @@ import {
 	windowFramesForExposure,
 } from '../../utilities/long-exposure/exposure-math';
 import type { SampleStats } from '../../utilities/long-exposure/sample-stats';
-import type { LongExposureInterpolationReport } from './capture-session';
+import type {
+	LongExposureInterpolationReport,
+	LongExposureWarmUpReport,
+} from './capture-session';
 import { createLogger } from '../../utilities/logger';
 
 const log = createLogger('long-exposure/output');
@@ -269,6 +272,9 @@ export interface WriteLongExposureOptions {
 	// Optional so callers that do not have it (older tests, non-capture writers) keep
 	// working; the sidecar simply records null.
 	interpolation?: LongExposureInterpolationReport | null;
+	// What the effects warm-up did, straight from the capture. Optional for the
+	// same reason as `interpolation`; the sidecar records null without it.
+	warmUp?: LongExposureWarmUpReport | null;
 	screenshotDir: string;
 	cacheDir: string;
 	// Where the .json sidecars go. Deliberately NOT the screenshot folder: a sidecar
@@ -624,6 +630,7 @@ export async function writeLongExposure(
 		// the one place these diagnostics are actually read — reported none of them.
 		interpolation,
 		synthesizedSamples: interpolation?.syntheticSamples ?? 0,
+		warmUp: options.warmUp ?? null,
 		imageWidth: image.width,
 		imageHeight: image.height,
 		toolName: options.toolName,
@@ -693,6 +700,8 @@ export async function writeLongExposure(
 						backend,
 						interpolation,
 						synthesizedSamples: interpolation?.syntheticSamples ?? 0,
+						// Every stop rode the same passes, so the same warm-up.
+						warmUp: options.warmUp ?? null,
 						imageWidth: stop.width,
 						imageHeight: stop.height,
 						toolName: options.toolName,

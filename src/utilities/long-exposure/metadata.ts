@@ -15,6 +15,7 @@
 import type { LongExposureRecipe } from './shot-recipe';
 import type { ResolvedPlan } from './shot-recipe';
 import type { SampleStats } from './sample-stats';
+import { REPLAY_FRAMES_PER_SECOND } from './exposure-math';
 
 // Bumped only when the sidecar shape changes incompatibly, so a future reader can
 // tell what it is looking at.
@@ -54,7 +55,15 @@ import type { SampleStats } from './sample-stats';
 //     Unlike v4 this changes nothing about older sidecars: v1-v4 have no `crop`
 //     field, which reads as `false`, and false is exactly what those captures did —
 //     the same shape as the v3 `passes` note. Re-executing one still reproduces it.
-export const SIDECAR_VERSION = 5;
+//
+// 6 — effects warm-up. `recipe.warmUpSeconds` and `exposure.warmUp` record the 1x
+//     playback before each pass's window that lets particles a seek wiped rebuild.
+//     The exposure itself — window, weights, samples — means exactly what it did in
+//     v5. A v1-v5 sidecar has no `warmUpSeconds`, and unlike `passes` or `crop` it
+//     does NOT read as off: it takes the current default, because what those shots
+//     recorded was a frozen start nobody asked for (see createDefaultRecipe). So a
+//     re-shoot of one differs in the first moments of the streak, deliberately.
+export const SIDECAR_VERSION = 6;
 
 export interface LongExposureSidecar {
 	sidecarVersion: number;
@@ -85,6 +94,15 @@ export interface LongExposureSidecar {
 		// which is exactly identity — so a sidecar reading 0 describes the same
 		// pipeline that existed before highlight recovery did.
 		highlightRecoveryStops: number;
+		// The effects warm-up, in seconds of replay time. `requested` is the recipe's;
+		// `achieved` is the SHORTEST any pass actually played, so 0 means at least one
+		// pass opened on a frozen scene. Null when the capture did not report it.
+		warmUp: {
+			requestedSeconds: number;
+			achievedSeconds: number;
+			brakeRetries: number;
+			fellBack: boolean;
+		} | null;
 	};
 
 	sampling: {
@@ -233,6 +251,13 @@ export function buildSidecar(opts: {
 	// can differ: a frame whose flow estimation failed contributes its real sample
 	// and no synthetic ones, and the sidecar should record what happened.
 	synthesizedSamples?: number;
+	// What the effects warm-up did, from the capture outcome. Optional so writers
+	// without a capture behind them keep working; the sidecar then records null.
+	warmUp?: {
+		achievedFrames: number;
+		brakeRetries: number;
+		fellBack: boolean;
+	} | null;
 	imageWidth: number;
 	imageHeight: number;
 	toolName: string;
@@ -263,6 +288,18 @@ export function buildSidecar(opts: {
 			tonemap: recipe.tonemap,
 			exposureCompensationEv: recipe.exposureCompensation,
 			highlightRecoveryStops: recipe.highlightRecovery,
+			warmUp: opts.warmUp
+				? {
+						requestedSeconds: recipe.warmUpSeconds ?? 0,
+						achievedSeconds: Number(
+							(
+								opts.warmUp.achievedFrames / REPLAY_FRAMES_PER_SECOND
+							).toFixed(3)
+						),
+						brakeRetries: opts.warmUp.brakeRetries,
+						fellBack: opts.warmUp.fellBack,
+					}
+				: null,
 		},
 		sampling: {
 			// The TOTAL across every pass, because `achieved` below is cumulative too.
