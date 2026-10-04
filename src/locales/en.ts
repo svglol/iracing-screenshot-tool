@@ -158,6 +158,11 @@ export default {
 		weightingBox: 'Box (even)',
 		weightingLinear: 'Linear (sharp at the end)',
 		weightingEase: 'Ease (sharper head, long tail)',
+		// The segmented control's button text. The full labels above become each
+		// button's tooltip — three of them side by side do not fit the sidebar.
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Passes',
 		passes1: '1 (single pass)',
@@ -166,10 +171,13 @@ export default {
 		passes8: '8× — eight times the wait',
 
 		warmUp: 'Effects warm-up',
+		// The slider's readout and spoken value. warmUpValue covers the stops with
+		// no note of their own (2 s, 4 s); warmUp1/3/5 are spoken where they exist.
 		warmUpOff: 'Off',
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracket shutters',
 		highlightRecovery: 'Highlight recovery (stops)',

@@ -100,18 +100,37 @@
 				</button>
 
 				<div v-show="advancedOpen" id="long-exposure-advanced">
+					<!-- A segmented control rather than a dropdown: three options that are
+					     SHAPES, so each button draws its curve and the choice is visible
+					     without opening anything. -->
 					<o-field :label="$t('longExposure.weighting')">
-						<o-select v-model="weighting" expanded :disabled="busy">
-							<option value="box">
-								{{ $t('longExposure.weightingBox') }}
-							</option>
-							<option value="linear">
-								{{ $t('longExposure.weightingLinear') }}
-							</option>
-							<option value="ease">
-								{{ $t('longExposure.weightingEase') }}
-							</option>
-						</o-select>
+						<SegmentedControl
+							v-model="weighting"
+							name="long-exposure-weighting"
+							:options="weightingOptions"
+							:aria-label="$t('longExposure.weighting')"
+							:disabled="busy"
+						>
+							<template #glyph="{ option }">
+								<svg
+									class="weighting-glyph"
+									viewBox="0 0 28 18"
+									aria-hidden="true"
+								>
+									<line
+										class="weighting-glyph__axis"
+										x1="2"
+										y1="16"
+										x2="26"
+										y2="16"
+									/>
+									<polyline
+										class="weighting-glyph__curve"
+										:points="option.points"
+									/>
+								</svg>
+							</template>
+						</SegmentedControl>
 					</o-field>
 
 					<!-- The 2x Supersample switch was REMOVED 2026-08-03. It was 4x the
@@ -125,44 +144,59 @@
 
 					<!-- Passes buy sample density with wall clock: each visit to the
 			     window catches a different share of iRacing's presents. Needs no
-			     particular hardware, so it is always offered. -->
+			     particular hardware, so it is always offered. Segmented so the
+			     multiplier is in view the whole time — the wait it costs is the
+			     tooltip, and the folded summary names anything above 1×. -->
 					<o-field :label="$t('longExposure.passes')">
-						<o-select v-model="passes" expanded :disabled="busy">
-							<option :value="1">
-								{{ $t('longExposure.passes1') }}
-							</option>
-							<option :value="2">
-								{{ $t('longExposure.passes2') }}
-							</option>
-							<option :value="4">
-								{{ $t('longExposure.passes4') }}
-							</option>
-							<option :value="8">
-								{{ $t('longExposure.passes8') }}
-							</option>
-						</o-select>
+						<SegmentedControl
+							v-model="passes"
+							name="long-exposure-passes"
+							:options="passOptions"
+							:aria-label="$t('longExposure.passes')"
+							:disabled="busy"
+						/>
 					</o-field>
 
 					<!-- After Passes because it is the other control that spends wall clock
 			     once per pass. It does not touch the exposure at all: it only decides
 			     whether the dirt, smoke and wheel blur a seek wipes have rebuilt by
-			     the time the window opens. -->
-					<o-field :label="$t('longExposure.warmUp')">
-						<o-select v-model="warmUpSeconds" expanded :disabled="busy">
-							<option :value="0">
-								{{ $t('longExposure.warmUpOff') }}
-							</option>
-							<option :value="1">
-								{{ $t('longExposure.warmUp1') }}
-							</option>
-							<option :value="3">
-								{{ $t('longExposure.warmUp3') }}
-							</option>
-							<option :value="5">
-								{{ $t('longExposure.warmUp5') }}
-							</option>
-						</o-select>
-					</o-field>
+			     the time the window opens.
+
+			     A slider in whole seconds: the cost is linear in the value (each
+			     second is a second per pass), which a continuous control shows
+			     better than four unevenly spaced presets did. A plain range input
+			     rather than an Oruga slider — that plugin is not registered, and
+			     the native control brings arrow keys and a spoken value with it. -->
+					<div class="field">
+						<div class="warm-up__head">
+							<label for="long-exposure-warm-up" class="label">{{
+								$t('longExposure.warmUp')
+							}}</label>
+							<output
+								for="long-exposure-warm-up"
+								class="warm-up__value"
+								>{{ warmUpReadout }}</output
+							>
+						</div>
+						<input
+							id="long-exposure-warm-up"
+							v-model.number="warmUpSeconds"
+							type="range"
+							class="warm-up__slider"
+							min="0"
+							:max="warmUpMax"
+							step="1"
+							:disabled="busy"
+							:aria-valuetext="warmUpSpoken"
+							:title="warmUpSpoken"
+							:style="{ '--frac': warmUpSeconds / warmUpMax }"
+						/>
+						<div class="warm-up__ticks" aria-hidden="true">
+							<span v-for="n in warmUpMax + 1" :key="n">{{
+								n - 1
+							}}</span>
+						</div>
+					</div>
 
 					<!-- Bracketing sits with Passes because both change what ONE capture
 			     yields — but in opposite directions: passes spend more wall clock on
@@ -264,18 +298,64 @@ import { defineComponent } from 'vue';
 import config from '../../utilities/config';
 import {
 	DEFAULT_WARM_UP_SECONDS,
+	PANEL_MAX_WARM_UP_SECONDS,
+	panelWarmUpSeconds,
 	PLAYBACK_DIVISORS,
 	SHUTTER_LADDER,
+	WEIGHTING_CURVES,
+	weightAt,
 } from '../../utilities/long-exposure/exposure-math';
 import { dedupeNotices } from '../../utilities/long-exposure/notices';
 import { useOruga } from '@oruga-ui/oruga-next';
 import NoticeCard, { type Notice } from './NoticeCard.vue';
+import SegmentedControl from './SegmentedControl.vue';
 const { ipcRenderer } = require('electron');
 
 // How often to re-poll backend availability and the live replay cursor. The
 // cursor is what the anchor is read from, so this also keeps the window preview
 // honest as the user scrubs.
 const AVAILABILITY_POLL_MS = 1000;
+
+// i18n key stems for each weighting curve: `<stem>` is the full label (now the
+// tooltip), `<stem>Short` the button text.
+const WEIGHTING_LABEL_KEYS = {
+	box: 'longExposure.weightingBox',
+	linear: 'longExposure.weightingLinear',
+	ease: 'longExposure.weightingEase',
+} as const;
+
+// Each segment's glyph, sampled from weightAt itself rather than drawn by hand, so
+// the picture on the button cannot drift from what the accumulator does. Plotted
+// in the glyph's 28x18 viewBox: oldest sample on the left, anchor on the right,
+// weight 1 at the top.
+const GLYPH_STEPS = 12;
+function weightingGlyphPoints(curve: (typeof WEIGHTING_CURVES)[number]) {
+	const points: string[] = [];
+	for (let i = 0; i <= GLYPH_STEPS; i++) {
+		const u = i / GLYPH_STEPS;
+		const x = 2 + 24 * u;
+		const y = 14 - 11 * weightAt(curve, u);
+		points.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+	}
+	return points.join(' ');
+}
+
+// The pass counts the panel offers, each paired with the full label that names
+// its cost ("4× — four times the wait"), which becomes the segment's tooltip.
+const PASS_CHOICES = [
+	{ passes: 1, titleKey: 'longExposure.passes1' },
+	{ passes: 2, titleKey: 'longExposure.passes2' },
+	{ passes: 4, titleKey: 'longExposure.passes4' },
+	{ passes: 8, titleKey: 'longExposure.passes8' },
+] as const;
+
+// Warm-up stops that already have a label with a note in it ("3 s (recommended)").
+// Spoken and shown on hover in preference to the bare "{seconds} s".
+const WARM_UP_NOTE_KEYS: Record<number, string> = {
+	1: 'longExposure.warmUp1',
+	3: 'longExposure.warmUp3',
+	5: 'longExposure.warmUp5',
+};
 
 interface CaptureResult {
 	ok: boolean;
@@ -290,7 +370,7 @@ interface CaptureResult {
 
 export default defineComponent({
 	name: 'LongExposurePanel',
-	components: { NoticeCard },
+	components: { NoticeCard, SegmentedControl },
 	props: {
 		// Whether the still-capture path is set to ReShade. Used ONLY to explain
 		// that long exposure ignores it — never to gate the feature.
@@ -320,7 +400,11 @@ export default defineComponent({
 			playbackSpeed: config.get('longExposurePlaybackSpeed'),
 			targetSamples: String(config.get('longExposureTargetSamples')),
 			passes: config.get('longExposurePasses'),
-			warmUpSeconds: config.get('longExposureWarmUpSeconds'),
+			// Normalised to what the slider can show, so what is on screen is what
+			// the recipe sends.
+			warmUpSeconds: panelWarmUpSeconds(
+				config.get('longExposureWarmUpSeconds')
+			),
 			bracket: config.get('longExposureBracket') === true,
 			weighting: config.get('longExposureWeighting'),
 			highlightRecovery: String(config.get('longExposureHighlightRecovery')),
@@ -360,6 +444,42 @@ export default defineComponent({
 		},
 		playbackDivisors() {
 			return PLAYBACK_DIVISORS;
+		},
+		weightingOptions(): {
+			value: string;
+			label: string;
+			title: string;
+			points: string;
+		}[] {
+			return WEIGHTING_CURVES.map((curve) => ({
+				value: curve,
+				label: this.$t(`${WEIGHTING_LABEL_KEYS[curve]}Short`),
+				title: this.$t(WEIGHTING_LABEL_KEYS[curve]),
+				points: weightingGlyphPoints(curve),
+			}));
+		},
+		passOptions(): { value: number; label: string; title: string }[] {
+			return PASS_CHOICES.map((choice) => ({
+				value: choice.passes,
+				label: `${choice.passes}×`,
+				title: this.$t(choice.titleKey),
+			}));
+		},
+		warmUpMax(): number {
+			return PANEL_MAX_WARM_UP_SECONDS;
+		},
+		// The short value beside the label: "Off" or "3 s".
+		warmUpReadout(): string {
+			const seconds = Number(this.warmUpSeconds);
+			return seconds === 0
+				? this.$t('longExposure.warmUpOff')
+				: this.$t('longExposure.warmUpValue', { seconds });
+		},
+		// What a screen reader announces and the hover shows: the readout, or the
+		// noted label where that stop has one.
+		warmUpSpoken(): string {
+			const key = WARM_UP_NOTE_KEYS[Number(this.warmUpSeconds)];
+			return key ? this.$t(key) : this.warmUpReadout;
 		},
 		busy(): boolean {
 			return this.capturing;
@@ -904,5 +1024,133 @@ export default defineComponent({
    scanning past, not bright enough to look like a warning. */
 .long-exposure__summary.is-modified {
 	color: rgba(255, 255, 255, 0.75);
+}
+
+/* Each Weighting segment's curve, drawn in the segment's text colour so it follows
+   the selected state. Slot content, so these scoped rules still reach it. */
+.weighting-glyph {
+	width: 28px;
+	height: 18px;
+	overflow: visible;
+}
+
+.weighting-glyph__axis {
+	stroke: currentColor;
+	stroke-width: 1;
+	opacity: 0.3;
+}
+
+.weighting-glyph__curve {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* Effects warm-up slider: the label and its value on one line, the track, then
+   the whole-second ticks. The track and thumb take the light field colours and
+   the primary fill, matching the switches and the segmented controls. */
+.warm-up__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin-bottom: 0.35rem;
+}
+
+.warm-up__head .label {
+	margin-bottom: 0;
+}
+
+.warm-up__value {
+	font-size: 0.8rem;
+	color: rgba(255, 255, 255, 0.85);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.warm-up__slider {
+	--thumb: 16px;
+	display: block;
+	width: 100%;
+	height: 24px;
+	margin: 0;
+	background: transparent;
+	-webkit-appearance: none;
+	appearance: none;
+	cursor: pointer;
+}
+
+/* No box around the whole track — main.scss's global `:focus` outline would draw
+   one on every mouse drag. Keyboard focus rings the thumb instead (below). */
+.warm-up__slider:focus {
+	outline: none;
+}
+
+/* The fill ends under the thumb's CENTRE, which travels from half a thumb in to
+   half a thumb short of the end — not across the full track width. */
+.warm-up__slider::-webkit-slider-runnable-track {
+	height: 4px;
+	border-radius: 2px;
+	background: linear-gradient(
+		to right,
+		var(--bulma-primary, #ec202a)
+			calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--frac, 0)),
+		hsl(0, 0%, 86%)
+			calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--frac, 0))
+	);
+}
+
+.warm-up__slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: var(--thumb);
+	height: var(--thumb);
+	margin-top: calc((4px - var(--thumb)) / 2);
+	border: 2px solid var(--bulma-primary, #ec202a);
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+	transition: transform 0.1s ease;
+}
+
+.warm-up__slider:hover::-webkit-slider-thumb {
+	transform: scale(1.12);
+}
+
+.warm-up__slider:focus-visible::-webkit-slider-thumb {
+	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.55);
+}
+
+.warm-up__slider:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+.warm-up__slider:disabled::-webkit-slider-thumb {
+	transform: none;
+}
+
+/* Padded by half a thumb and zero-width per label, so each number sits centred
+   under the thumb position it names. */
+.warm-up__ticks {
+	display: flex;
+	justify-content: space-between;
+	padding: 0 calc(16px / 2);
+	font-size: 0.68rem;
+	color: rgba(255, 255, 255, 0.45);
+	font-variant-numeric: tabular-nums;
+}
+
+.warm-up__ticks span {
+	display: flex;
+	justify-content: center;
+	width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.warm-up__slider::-webkit-slider-thumb {
+		transition: none;
+	}
 }
 </style>

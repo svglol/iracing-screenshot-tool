@@ -146,6 +146,9 @@ const pl: Catalog = {
 		weightingBox: 'Box (równomierne)',
 		weightingLinear: 'Liniowe (ostre na końcu)',
 		weightingEase: 'Ease (ostrzejszy początek, długi ogon)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Liniowe',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Przebiegi',
 		passes1: '1 (pojedynczy przebieg)',
@@ -158,6 +161,7 @@ const pl: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracketing czasów migawki',
 		highlightRecovery: 'Odzyskiwanie świateł (EV)',

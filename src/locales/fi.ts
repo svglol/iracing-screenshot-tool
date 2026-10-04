@@ -142,6 +142,9 @@ const fi: Catalog = {
 		weightingBox: 'Box (tasainen)',
 		weightingLinear: 'Lineaarinen (terävä lopussa)',
 		weightingEase: 'Ease (terävämpi alku, pitkä häntä)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineaarinen',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Ajokerrat',
 		passes1: '1 (yksi ajokerta)',
@@ -154,6 +157,7 @@ const fi: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Suljinaikahaarukointi',
 		highlightRecovery: 'Huippuvalojen palautus (aukkoa)',

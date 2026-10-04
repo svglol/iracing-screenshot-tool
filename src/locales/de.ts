@@ -140,6 +140,9 @@ const de: Catalog = {
 		weightingBox: 'Box (gleichmäßig)',
 		weightingLinear: 'Linear (scharf am Ende)',
 		weightingEase: 'Ease (schärferer Kopf, langer Schweif)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Durchgänge',
 		passes1: '1 (ein Durchgang)',
@@ -152,6 +155,7 @@ const de: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Verschlusszeiten-Reihe',
 		highlightRecovery: 'Lichterrettung (Blendenstufen)',

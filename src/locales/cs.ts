@@ -146,6 +146,9 @@ const cs: Catalog = {
 		weightingBox: 'Box (rovnoměrné)',
 		weightingLinear: 'Lineární (ostré na konci)',
 		weightingEase: 'Ease (ostřejší začátek, dlouhý ohon)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineární',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Průchody',
 		passes1: '1 (jediný průchod)',
@@ -158,6 +161,7 @@ const cs: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Braketing závěrek',
 		highlightRecovery: 'Obnova světel (EV)',

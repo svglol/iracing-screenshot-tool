@@ -150,6 +150,9 @@ const ru: Catalog = {
 		weightingBox: 'Box (равномерное)',
 		weightingLinear: 'Линейное (резкость в конце)',
 		weightingEase: 'Ease (более резкое начало, длинный шлейф)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Линейное',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Проходы',
 		passes1: '1 (один проход)',
@@ -162,6 +165,7 @@ const ru: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Брекетинг выдержек',
 		highlightRecovery: 'Восстановление светов (EV)',

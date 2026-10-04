@@ -145,6 +145,9 @@ const ja: Catalog = {
 		weightingBox: 'Box（均等）',
 		weightingLinear: 'Linear（終わりがシャープ）',
 		weightingEase: 'Ease（先頭がよりシャープ、長い尾）',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: 'パス数',
 		passes1: '1（シングルパス）',
@@ -157,6 +160,7 @@ const ja: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'シャッターのブラケット撮影',
 		highlightRecovery: 'ハイライト復元（段）',

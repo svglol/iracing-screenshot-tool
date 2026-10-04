@@ -143,6 +143,9 @@ const zhTW: Catalog = {
 		weightingBox: 'Box（均勻）',
 		weightingLinear: 'Linear（結尾銳利）',
 		weightingEase: 'Ease（開頭較銳利、拖尾較長）',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: '重複遍數',
 		passes1: '1（單遍）',
@@ -155,6 +158,7 @@ const zhTW: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: '快門包圍曝光',
 		highlightRecovery: '亮部細節復原（級數）',

@@ -84,3 +84,123 @@ describe('LongExposurePanel notices', () => {
 		expect(without).not.toContain('longExposure.notices.passes');
 	});
 });
+
+// The Weighting segmented control. Each button's glyph is sampled from weightAt,
+// so these pin the shapes the user picks between rather than any pixel layout.
+describe('LongExposurePanel weighting options', () => {
+	const weightingOptions = (
+		LongExposurePanel as unknown as {
+			computed: {
+				weightingOptions(this: unknown): {
+					value: string;
+					label: string;
+					title: string;
+					points: string;
+				}[];
+			};
+		}
+	).computed.weightingOptions;
+	const options = weightingOptions.call({ $t: (key: string) => key });
+	// SVG y grows downward, so a heavier weight is a SMALLER y.
+	const ys = (points: string) =>
+		points.split(' ').map((p) => Number(p.split(',')[1]));
+	const byValue = (value: string) => options.find((o) => o.value === value)!;
+
+	test('offers box, linear and ease in that order', () => {
+		expect(options.map((o) => o.value)).toEqual(['box', 'linear', 'ease']);
+	});
+
+	test('labels the button short and keeps the full name as its tooltip', () => {
+		expect(byValue('linear').label).toBe('longExposure.weightingLinearShort');
+		expect(byValue('linear').title).toBe('longExposure.weightingLinear');
+	});
+
+	test('box is a flat line', () => {
+		expect(new Set(ys(byValue('box').points)).size).toBe(1);
+	});
+
+	test('linear and ease both rise to full weight at the anchor', () => {
+		for (const value of ['linear', 'ease']) {
+			const y = ys(byValue(value).points);
+			expect(y[y.length - 1]).toBe(ys(byValue('box').points)[0]);
+			expect(y[0]).toBeGreaterThan(y[y.length - 1]);
+		}
+	});
+
+	test('ease sits under linear mid-window, i.e. it curves', () => {
+		const lin = ys(byValue('linear').points);
+		const ease = ys(byValue('ease').points);
+		const mid = Math.floor(lin.length / 2);
+		expect(ease[mid]).toBeGreaterThan(lin[mid]);
+	});
+});
+
+describe('LongExposurePanel passes options', () => {
+	const passOptions = (
+		LongExposurePanel as unknown as {
+			computed: {
+				passOptions(this: unknown): {
+					value: number;
+					label: string;
+					title: string;
+				}[];
+			};
+		}
+	).computed.passOptions;
+	const options = passOptions.call({ $t: (key: string) => key });
+
+	test('offers 1×, 2×, 4× and 8× as numbers', () => {
+		expect(options.map((o) => o.value)).toEqual([1, 2, 4, 8]);
+		expect(options.map((o) => o.label)).toEqual(['1×', '2×', '4×', '8×']);
+	});
+
+	// The wait each choice costs must stay discoverable now the button only
+	// carries the multiplier.
+	test('keeps the full label, which names the wait, as the tooltip', () => {
+		expect(options.map((o) => o.title)).toEqual([
+			'longExposure.passes1',
+			'longExposure.passes2',
+			'longExposure.passes4',
+			'longExposure.passes8',
+		]);
+	});
+});
+
+describe('LongExposurePanel warm-up readout', () => {
+	const computed = (
+		LongExposurePanel as unknown as {
+			computed: {
+				warmUpReadout(this: unknown): string;
+				warmUpSpoken(this: unknown): string;
+			};
+		}
+	).computed;
+	const $t = (key: string, params?: Record<string, unknown>) =>
+		params ? `${key}:${JSON.stringify(params)}` : key;
+	const at = (warmUpSeconds: number) => {
+		const self = { warmUpSeconds, $t } as Record<string, unknown>;
+		self.warmUpReadout = computed.warmUpReadout.call(self);
+		return {
+			readout: self.warmUpReadout as string,
+			spoken: computed.warmUpSpoken.call(self),
+		};
+	};
+
+	test('reads Off at zero', () => {
+		expect(at(0)).toEqual({
+			readout: 'longExposure.warmUpOff',
+			spoken: 'longExposure.warmUpOff',
+		});
+	});
+
+	test('shows bare seconds, and speaks the noted label where one exists', () => {
+		expect(at(3).readout).toBe('longExposure.warmUpValue:{"seconds":3}');
+		expect(at(3).spoken).toBe('longExposure.warmUp3');
+		expect(at(5).spoken).toBe('longExposure.warmUp5');
+	});
+
+	test('speaks the bare seconds for the stops the old presets skipped', () => {
+		expect(at(2).spoken).toBe('longExposure.warmUpValue:{"seconds":2}');
+		expect(at(4).spoken).toBe('longExposure.warmUpValue:{"seconds":4}');
+	});
+});

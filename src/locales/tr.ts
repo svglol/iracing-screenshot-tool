@@ -150,6 +150,9 @@ const tr: Catalog = {
 		weightingBox: 'Box (eşit)',
 		weightingLinear: 'Doğrusal (sonda keskin)',
 		weightingEase: 'Ease (başta daha keskin, uzun kuyruk)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Doğrusal',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Geçişler',
 		passes1: '1 (tek geçiş)',
@@ -162,6 +165,7 @@ const tr: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Enstantane Bracketleme',
 		highlightRecovery: 'Vurgu Kurtarma (stop)',

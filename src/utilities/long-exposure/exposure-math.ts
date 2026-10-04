@@ -304,13 +304,26 @@ export function predictWallClockSeconds(opts: {
 // the capture speed a few frames before the window, without pausing or seeking.
 // ---------------------------------------------------------------------------
 
-// The warm-up choices the panel offers, in seconds of replay time. 0 is off: the
-// pre-roll is the old three-frame lead and nothing else.
-export const WARM_UP_SECONDS_OPTIONS = [0, 1, 3, 5] as const;
+// The panel's warm-up slider runs 0..PANEL_MAX_WARM_UP_SECONDS in whole seconds of
+// replay time. 0 is off: the pre-roll is the old three-frame lead and nothing else.
+// 5 s already covers lingering smoke; anything longer is a long wait per pass.
+export const PANEL_MAX_WARM_UP_SECONDS = 5;
 export const DEFAULT_WARM_UP_SECONDS = 3;
 // Ceiling for a recipe from IPC or a sidecar. A patience bound, not a technical
 // one — the warm-up plays at 1x, so 10 s of it is 10 s per pass.
 export const MAX_WARM_UP_SECONDS = 10;
+
+// A stored warm-up as the slider can show it: whole seconds within its range. The
+// config schema allows up to MAX_WARM_UP_SECONDS and any fraction, and a range
+// input silently pins an out-of-range value to its end — so without this the
+// slider would show 5 while the recipe sent 8.
+export function panelWarmUpSeconds(value: unknown): number {
+	const n = Number(value);
+	if (value === null || value === '' || !isFiniteNumber(n)) {
+		return DEFAULT_WARM_UP_SECONDS;
+	}
+	return Math.min(PANEL_MAX_WARM_UP_SECONDS, Math.max(0, Math.round(n)));
+}
 
 // Replay frames between dropping to the capture speed and the window start. At 1x
 // one frame is 16.7 ms, so ten frames give the speed command ~167 ms to take effect.
