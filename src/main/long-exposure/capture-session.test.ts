@@ -1883,9 +1883,9 @@ describe('executeRecipe — effects warm-up', () => {
 	});
 
 	it('retries an overshooting brake with a wider margin', async () => {
-		// Ten polls of latency at one frame per poll: past the 6-frame brake,
-		// inside the 18-frame one.
-		const harness = realistic({ speedLatencyPolls: 10 });
+		// Sixteen polls of latency at one frame per poll: past the first brake,
+		// inside the retry's.
+		const harness = realistic({ speedLatencyPolls: 16 });
 		const outcome = await executeRecipe(warm(), harness.deps);
 
 		expect(outcome.ok).toBe(true);

@@ -488,9 +488,15 @@ become:
 ```
 
 `W` is the warm-up (default 3 s = 180 frames, options 0/1/3/5, cap 10) and `B` is
-`WARM_UP_BRAKE_FRAMES` = 6. Played at 1x, 3 s of warm-up costs 3 s; at 1/16 it
-would cost 48. The brake frames do play at the capture speed — 6 × 267 ms = 1.6 s
+`WARM_UP_BRAKE_FRAMES` = 10. Played at 1x, 3 s of warm-up costs 3 s; at 1/16 it
+would cost 48. The brake frames do play at the capture speed — 10 × 267 ms = 2.7 s
 per pass at 1/16 — and both terms are in `predictedTotalWallClockSeconds`.
+
+`B` was 6 when this landed. **Measured 2026-10-04 (RTX 4090):** the slowdown took
+2–4 frames at 2560×1440 and on most 8K passes, but the first pass of an 8K shot
+took more than 6 and overshot (the sim applies the command on its next sim frame,
+which at 8K comes slowly). The retry caught it for ~3.5 s; widening `B` to 10 costs
+~1.1 s per pass at 1/16 instead, and the retry went from 18 to 24.
 
 Why each piece is the way it is:
 
@@ -509,7 +515,7 @@ Why each piece is the way it is:
   records `confirmedBy` and the raw readings, so the first field run settles it.
 - **Fail soft, never wrong.** The warm-up never opens the gate; the accumulation
   loop does, on the same frame-indexed condition as always. An overshoot is retried
-  once with `B` = 18; a second overshoot, a seek that did not land or a 1x roll that
+  once with `B` = 24; a second overshoot, a seek that did not land or a 1x roll that
   stalled all fall back to the plain pre-roll — a shot exactly as correct as every
   one before this existed, just with a frozen start — and the outcome says so
   (`longExposureCapture.warmUpFellBack`). The fallback is sticky for the rest of the

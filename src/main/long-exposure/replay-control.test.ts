@@ -11,6 +11,7 @@ import {
 	type ReplayControlDeps,
 	type ReplayState,
 } from './replay-control';
+import { WARM_UP_BRAKE_FRAMES } from '../../utilities/long-exposure/exposure-math';
 
 // The logger writes through electron's app paths; stub it so these stay pure.
 vi.mock('../../utilities/logger', () => ({
@@ -469,7 +470,7 @@ describe('ReplayController.warmUpIntoWindow', () => {
 		const harness = makeHarness();
 		const result = await harness.controller.warmUpIntoWindow(5, {
 			warmUpFrames: 180,
-			brakeFrames: 6,
+			brakeFrames: WARM_UP_BRAKE_FRAMES,
 			captureDivisor: 16,
 		});
 		expect(result.ready).toBe(false);
@@ -482,7 +483,7 @@ describe('ReplayController.warmUpIntoWindow', () => {
 		transport(harness, { realTimeRate: 0 });
 		const result = await harness.controller.warmUpIntoWindow(4992, {
 			warmUpFrames: 180,
-			brakeFrames: 6,
+			brakeFrames: WARM_UP_BRAKE_FRAMES,
 			captureDivisor: 16,
 		});
 		expect(result.ready).toBe(false);
@@ -501,7 +502,7 @@ describe('ReplayController.warmUpIntoWindow', () => {
 		transport(harness, { slowRate: 0 });
 		const result = await harness.controller.warmUpIntoWindow(4992, {
 			warmUpFrames: 180,
-			brakeFrames: 6,
+			brakeFrames: WARM_UP_BRAKE_FRAMES,
 			captureDivisor: 2,
 		});
 		expect(result.ready).toBe(false);
@@ -520,7 +521,7 @@ describe('ReplayController.warmUpIntoWindow', () => {
 		transport(harness, { slowRate: 1 });
 		const result = await harness.controller.warmUpIntoWindow(4992, {
 			warmUpFrames: 180,
-			brakeFrames: 6,
+			brakeFrames: WARM_UP_BRAKE_FRAMES,
 			captureDivisor: 2,
 		});
 		expect(result.ready).toBe(false);
@@ -538,7 +539,7 @@ describe('ReplayController.warmUpIntoWindow', () => {
 		transport(harness, { slowRate: 0.0625 });
 		const result = await harness.controller.warmUpIntoWindow(4992, {
 			warmUpFrames: 180,
-			brakeFrames: 6,
+			brakeFrames: WARM_UP_BRAKE_FRAMES,
 			captureDivisor: 16,
 		});
 		expect(result.ready).toBe(true);
@@ -548,7 +549,11 @@ describe('ReplayController.warmUpIntoWindow', () => {
 		// Seek, roll at 1x, brake to 1/16 — and NO pause after the brake.
 		expect(harness.broadcasts).toEqual([
 			{ kind: 'speed', a: 0, b: false },
-			{ kind: 'position', a: RPY_POS_BEGIN, b: 4992 - 6 - 180 },
+			{
+				kind: 'position',
+				a: RPY_POS_BEGIN,
+				b: 4992 - WARM_UP_BRAKE_FRAMES - 180,
+			},
 			{ kind: 'speed', a: 1, b: false },
 			{ kind: 'speed', a: 16, b: true },
 		]);

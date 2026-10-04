@@ -313,13 +313,20 @@ export const DEFAULT_WARM_UP_SECONDS = 3;
 export const MAX_WARM_UP_SECONDS = 10;
 
 // Replay frames between dropping to the capture speed and the window start. At 1x
-// one frame is 16.7 ms, so six frames give the speed command ~100 ms to take effect
-// — several times the SDK's broadcast latency plus one telemetry poll. Played at
-// the capture speed, so they cost `6 x divisor / 60` s: 1.6 s per pass at 1/16.
-export const WARM_UP_BRAKE_FRAMES = 6;
-// The brake margin for the one retry after an overshoot. A brake that misses twice
-// falls back to the plain pre-roll rather than escalating further.
-export const WARM_UP_RETRY_BRAKE_FRAMES = 18;
+// one frame is 16.7 ms, so ten frames give the speed command ~167 ms to take effect.
+//
+// MEASURED, not guessed (RTX 4090, 2026-10-04): the slowdown landed 2-4 frames after
+// the command at 2560x1440 and at 7680x4320, but at 8K the first pass of a shot took
+// longer than 6 frames and overshot — the sim applies the command on its next sim
+// frame, and at 8K those come slowly. The retry caught it at a cost of ~3.5 s. Ten
+// frames covers that first-pass case with room left over. Played at the capture
+// speed, so they cost `10 x divisor / 60` s: 2.7 s per pass at 1/16.
+export const WARM_UP_BRAKE_FRAMES = 10;
+// The brake margin for the one retry after an overshoot: 400 ms at 1x, more than
+// double the first attempt, so a retry is a real step rather than a re-roll of the
+// same dice. A brake that misses twice falls back to the plain pre-roll rather
+// than escalating further.
+export const WARM_UP_RETRY_BRAKE_FRAMES = 24;
 
 export function warmUpFramesForSeconds(seconds: number): number {
 	if (!isFiniteNumber(seconds) || seconds <= 0) {
