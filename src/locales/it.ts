@@ -138,12 +138,9 @@ const it: Catalog = {
 		weightingBox: 'Box (uniforme)',
 		weightingLinear: 'Lineare (nitida alla fine)',
 		weightingEase: 'Ease (testa più nitida, coda lunga)',
-
-		interpolation: 'Interpolazione dei fotogrammi',
-		interpolationOff: 'Disattivata',
-		interpolation2: '2× (un fotogramma intermedio)',
-		interpolation4: '4× (tre fotogrammi intermedi)',
-		interpolation8: '8× (sette fotogrammi intermedi)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineare',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Passaggi',
 		passes1: '1 (passaggio singolo)',
@@ -156,9 +153,11 @@ const it: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracketing dei tempi',
 		highlightRecovery: 'Recupero delle alte luci (stop)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Annulla',
 		saved: 'Lunga esposizione salvata — {count} campioni',
@@ -167,7 +166,6 @@ const it: Catalog = {
 		modified: {
 			weighting_linear: 'lineare',
 			weighting_ease: 'ease',
-			interpolation: 'interpolazione {factor}×',
 			passes: {
 				one: '{count} passaggio',
 				other: '{count} passaggi',
@@ -195,15 +193,8 @@ const it: Catalog = {
 				'La lunga esposizione non è disponibile su questa macchina: {reason}',
 			unavailable:
 				'La lunga esposizione non è disponibile su questa macchina.',
-			interpolationCost:
-				'L’interpolazione inventa fotogrammi tra quelli reali per rendere più fluida la scia. Costa tempo GPU per fotogramma, quindi confronta il numero di campioni reali dello scatto salvato con lo stesso scatto senza interpolazione: se quel numero cala, sta acquistando campioni inventati con campioni reali.',
-			passesAndInterpolation:
-				'Passaggi e interpolazione competono per lo stesso budget per fotogramma. Con entrambi attivi ogni passaggio cattura meno fotogrammi reali — disattivare l’interpolazione di solito dà uno scatto migliore a parità di attesa.',
 			passes:
 				'Ogni passaggio ripete lo stesso istante e recupera fotogrammi che gli altri hanno perso, così la scia diventa più uniforme anziché più luminosa. Ideale con tempi di posa rapidi, dove un singolo passaggio raccoglie pochissimi campioni.',
-			interpolationUnsupported:
-				'L’interpolazione dei fotogrammi richiede una GPU NVIDIA Turing o più recente{adapter}. Tutto il resto della lunga esposizione funziona normalmente.',
-			interpolationAdapter: ' (questa cattura viene eseguita su {adapter})',
 			reshade:
 				'La lunga esposizione cattura in modo nativo e non usa ReShade, quindi gli effetti ReShade non compariranno nel risultato.',
 		},
@@ -265,17 +256,11 @@ const it: Catalog = {
 			weightingBody:
 				'Quanto ogni fotogramma catturato contribuisce al risultato. <b>Box</b> li pesa tutti allo stesso modo e dà una scia uniforme. <b>Lineare</b> cresce verso la fine della finestra, così il soggetto è più nitido dove ha terminato e sfuma lungo il suo percorso. <b>Ease</b> è la stessa idea con una testa più nitida e una coda più lunga.',
 
-			interpolation: 'Interpolazione dei fotogrammi',
-			interpolationBody:
-				'Inventa fotogrammi aggiuntivi tra quelli reali usando il motore di flusso ottico della GPU, colmando i vuoti lungo la scia. Richiede una scheda NVIDIA Turing o più recente ed è completamente nascosta sull’hardware che non può farlo.',
-			interpolationCostBody:
-				'Non è gratis: costa tempo GPU su ogni fotogramma catturato, e il budget è un fotogramma di iRacing. Se non tiene il passo comincia a perdere fotogrammi <i>reali</i> per fabbricarne di sintetici, il che è una perdita netta: la scia risulta più corta e più grossolana. Il costo cresce con i megapixel moltiplicati per il fattore, quindi ciò che è comodo a 2560×1440 non è praticabile in 8K. Per verificarlo, scatta due volte lo stesso istante, con e senza, e confronta il numero di campioni reali; l’app ti avvisa anche a posteriori se uno scatto è rimasto corto.',
-
 			passes: 'Passaggi',
 			passesBody:
 				'Visita più volte lo stesso istante, accumulando in un’unica immagine. Ogni passaggio recupera fotogrammi che gli altri hanno mancato, così la scia diventa più uniforme — non più luminosa, perché il risultato è normalizzato in base alla luce realmente arrivata su ciascun pixel.',
 			passesTradeBody:
-				'I passaggi comprano la stessa cosa dell’interpolazione, ma con un’altra moneta: tempo effettivo invece di tempo GPU. Otto passaggi richiedono circa otto volte il tempo, ma non possono mai costarti fotogrammi reali. Questo li rende la leva giusta alle alte risoluzioni, dove l’interpolazione non tiene il passo, e con tempi di posa rapidi, dove un singolo passaggio raccoglie pochissimi campioni. Usarli entrambi insieme è di solito il peggio dei due — competono per lo stesso budget per fotogramma.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Bracketing dei tempi',
 			bracketBody:
@@ -577,10 +562,6 @@ const it: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Questo tempo di posa è così breve che vi cadrà un solo fotogramma, quindi il risultato non avrà alcuna sfocatura di movimento. Una velocità di riproduzione o un tempo di posa più lenti portano campioni.',
-		bracketVsInterpolation:
-			'Il bracketing dei tempi e l’interpolazione dei fotogrammi {factor}x non possono funzionare insieme, quindi questo scatto sarà eseguito senza interpolazione. Disattiva il bracketing se i fotogrammi intermedi contano più dei tempi aggiuntivi.',
-		passesVsInterpolation:
-			'Sono attivi sia i passaggi multipli sia l’interpolazione {factor}x. Competono tra loro: l’interpolazione rallenta ogni passaggio al punto da fargli perdere fotogrammi reali, così la stessa attesa compra meno campioni reali di quanti ne comprerebbero i soli passaggi. Disattivare l’interpolazione di solito dà uno scatto migliore.',
 		shortOfTarget:
 			'Anche a velocità 1/{divisor} questa esposizione raggiunge circa {samples} campioni, meno dei {target} richiesti. Usa un tempo di posa più lungo per ottenerne di più.',
 		longCaptureEscalate:
@@ -593,8 +574,6 @@ const it: Catalog = {
 			'Una velocità di riproduzione più alta finisce prima, con meno campioni.',
 		pastLogCap:
 			'Si prevede che questa cattura raccolga circa {samples} campioni su {passes} passaggi, oltre i {cap} che il registro diagnostico può contenere. L’immagine non ne risente — solo i dati di uniformità e di intervallo descriveranno la prima parte della cattura.',
-		interpolationLossy:
-			'A queste dimensioni, l’interpolazione {factor}x è già costata campioni reali a questa macchina. Valuta un fattore più basso, una risoluzione inferiore o, in alternativa, più passaggi.',
 	},
 
 	duration: {

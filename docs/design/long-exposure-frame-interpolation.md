@@ -1,6 +1,11 @@
 # Long exposure — frame interpolation, and the "unnatural blending" problem
 
-Status: **implemented and hardware-verified, including on a live iRacing replay.**
+Status: **REMOVED 2026-10-04 — see §11.** Measured on a live replay, it never beat
+multi-pass, which buys real samples instead of synthetic ones. Everything below is
+kept as the record of what was built, measured and learned; §1, §7 and §8 remain live
+reading because they are about the pipeline, not the interpolation.
+
+Previous status: **implemented and hardware-verified, including on a live iRacing replay.**
 The §9 warp optimisation landed a measured **2.63× on per-frame consumption** at
 5120×2880 (§9.3) — real but **not sufficient**: 8× still reaches only ~47% of the
 interpolation-off sample count.
@@ -1168,5 +1173,71 @@ removes the cost §9 has been chipping at rather than reducing it. The merge sta
 worth doing — it makes each pass cheaper — but it is no longer the headline.
 
 Full design and implementation order: **`docs/design/long-exposure-multi-pass.md`**.
+
+---
+
+## 11. Removed, 2026-10-04 — the measurement that ended it
+
+User report: "using it instead of the multiple passes doesn't seem to get any better
+quality." Checked against matched pairs from the same session (Adelaide, tracking
+shot, BMW M4 GT3, 2560×1440, 1/16 playback, anchor 104534, sidecars v6):
+
+| shot | shutter | mode | real | synthetic | achieved window | wall clock |
+|---|---|---|---|---|---|---|
+| 39 | 1/60 | 8 passes, interpolation off | 82 | 0 | full | 30.6 s |
+| 40 | 1/60 | 1 pass, 8× | 11 | 70 | 13.5 of 16.7 ms (81%) | 5.1 s |
+| 42 | 1/250 | 8 passes, interpolation off | 35 | 0 | full | ~32 s |
+| 41 | 1/250 | 1 pass, 8× | 2 | 7 | 1.6 of 4.0 ms (41%) | 4.4 s |
+
+### 11.1 Why it could not win
+
+- **Parity was the ceiling.** At 1/60 both modes reached ~81 samples. A synthetic
+  sample can at best match the real one it stands in for, so "no better than
+  multi-pass" was the best case by construction.
+- **Its density is capped at factor × real.** Two real frames at 1/250 give nine
+  samples; eight passes gave 35 real ones. Passes scale with wall clock; the factor
+  stops at 8.
+- **A single pass cannot cover the window.** The warp only fills between a pass's
+  first and last real frame, so the 1/250 shot actually exposed ~1/615 s. Multi-pass
+  covers the edges because each pass lands on different instants.
+
+### 11.2 What it looked like
+
+Barrier signage at full resolution: the 8-pass shot streaks smoothly; the 8× shot
+shows a ladder of repeated letters. An edge profile across a sign is monotone in
+shot 39 and has plateaus and steps every ~15–20 px in shot 40, with ~70% more
+high-frequency energy along the streak.
+
+The step spacing matches the displacement across the run's longest real gap
+(4.8 ms, 3.2× the median; evenness 0.31). The likely mechanism is the fixed 2 px
+forward/backward consistency threshold: trust collapses on exactly the large motions
+interpolation was meant to bridge, and the fallback is a cross-dissolve of the two
+real frames, which is two copies. **Inferred, not instrumented** — the shader never
+reported trust.
+
+### 11.3 Why removal rather than repair
+
+The repairs were known (one real frame either side of the window to fix coverage;
+gap-proportional synthesis plus a flow-relative tolerance for the steps), but the
+repaired feature still tops out at parity with passes, still NVIDIA-only, and still
+costs real samples to GPU contention at 5K (§9.4). Its one advantage, ~6× faster
+wall clock, is mostly recovered by running fewer passes. Against that: ~950 lines of
+hand-written NVOFA FFI, two kernels, a learned guardrail, a bracketing exclusion and
+a pass-boundary reset.
+
+### 11.4 What went, and what stays
+
+Gone: `nvof.rs`, `CSLuma` / `CSWarpAccumulate` and their bindings, the
+`enable_interpolation` / `accumulate_sample` / `begin_pass` backend hooks, the
+`interpolation_factor` argument to `long_exposure_begin` (so `highlightRecoveryStops`
+is now its second argument), `long_exposure_interpolation_info`, the `synthesized`
+counter, the recipe's `interpolationFactor`, the sidecar's `interpolation` block
+(sidecar v7), the `longExposureInterpolation` and `longExposureLossyInterpolationLoad`
+settings, the panel control and its notices, and the `Win32_System_LibraryLoader`
+feature.
+
+Stays: `long_exposure_begin_pass`, which still tags samples with their pass and resets
+duplicate detection at the boundary; the per-frame timing, now logged on its own; and
+everything in §1, §7 and §8, which was never about interpolation.
 
 ---

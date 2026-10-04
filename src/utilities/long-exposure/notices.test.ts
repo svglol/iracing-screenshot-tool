@@ -51,23 +51,6 @@ describe('dedupeNotices', () => {
 		expect(notices).toHaveLength(3);
 	});
 
-	test('does not merge the two deliberately distinct interpolation messages', () => {
-		// The panel states the passes/interpolation trade in its own words next to
-		// the controls, and validatePlan states it as a verdict. Different
-		// sentences on purpose — collapsing them would lose one.
-		const notices = dedupeNotices([
-			{
-				level: 'warning',
-				text: 'Multi-pass and 4x interpolation are both on. They compete: …',
-			},
-			{
-				level: 'warning',
-				text: 'Passes and interpolation both add wall clock. …',
-			},
-		]);
-		expect(notices).toHaveLength(2);
-	});
-
 	test('preserves order and every field of the notices it keeps', () => {
 		const notices = dedupeNotices([
 			{ level: 'danger', text: 'a', extra: 1 },

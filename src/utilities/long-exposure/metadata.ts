@@ -63,7 +63,14 @@ import { REPLAY_FRAMES_PER_SECOND } from './exposure-math';
 //     does NOT read as off: it takes the current default, because what those shots
 //     recorded was a frozen start nobody asked for (see createDefaultRecipe). So a
 //     re-shoot of one differs in the first moments of the streak, deliberately.
-export const SIDECAR_VERSION = 6;
+//
+// 7 — optical-flow frame interpolation removed. `recipe.interpolationFactor`, the
+//     `interpolation` block and `sampling.synthesized` are gone. A v1-v6 sidecar
+//     carrying a factor above 1 recorded in-between samples this build cannot
+//     make; re-executing it captures real frames only, so the streak is coarser
+//     unless passes are added. `sampling.achieved` was always the REAL count, so
+//     it stays comparable across the boundary.
+export const SIDECAR_VERSION = 7;
 
 export interface LongExposureSidecar {
 	sidecarVersion: number;
@@ -107,12 +114,8 @@ export interface LongExposureSidecar {
 
 	sampling: {
 		predicted: number;
-		// REAL captured frames. `recipe.interpolationFactor` records what was asked
-		// for, `interpolation` below records what happened — so this number stays
-		// comparable across shots with interpolation on and off, which is the whole
-		// point of keeping it separate from `synthesized`.
+		// Captured frames accumulated, summed across every pass.
 		achieved: number;
-		synthesized: number;
 		duplicatesRejected: number;
 		stalledPresents: number;
 		dropouts: number;
@@ -140,31 +143,6 @@ export interface LongExposureSidecar {
 		// `achievedWindowSeconds` describe the logged prefix when this is set.
 		logTruncated: boolean;
 	};
-
-	// What optical-flow interpolation actually did. Null when the addon predates the
-	// feature; `enabled: false` with a reason on hardware that cannot do it.
-	interpolation: {
-		requestedFactor: number;
-		enabled: boolean;
-		achievedFactor: number;
-		reason: string | null;
-		gridSize: number;
-		bidirectional: boolean;
-		// CPU-side per-frame cost, EXCLUDING the first frame. Since the digest
-		// readback stopped blocking these no longer include waiting on the GPU, so a
-		// small value does NOT prove the capture kept up — `achievedRatio` is the
-		// number that answers that.
-		meanFrameMs: number | null;
-		maxFrameMs: number | null;
-		// The first frame alone: sink allocation plus NVOFA session creation.
-		setupFrameMs: number | null;
-		// Render megapixels x achieved factor — how much interpolation work this shot
-		// asked for, comparable across shots and machines.
-		load: number;
-		// achieved / predicted REAL samples. The ground truth for "did interpolation
-		// cost us real frames". Well below 1 means it did.
-		achievedRatio: number | null;
-	} | null;
 
 	image: {
 		// The SAVED file's dimensions, after any watermark crop.
@@ -246,11 +224,6 @@ export function buildSidecar(opts: {
 	plan: ResolvedPlan;
 	stats: SampleStats;
 	backend: string | null;
-	interpolation?: LongExposureSidecar['interpolation'];
-	// MEASURED count of synthesised in-betweens, not derived from the factor. They
-	// can differ: a frame whose flow estimation failed contributes its real sample
-	// and no synthetic ones, and the sidecar should record what happened.
-	synthesizedSamples?: number;
 	// What the effects warm-up did, from the capture outcome. Optional so writers
 	// without a capture behind them keep working; the sidecar then records null.
 	warmUp?: {
@@ -307,7 +280,6 @@ export function buildSidecar(opts: {
 			// 8-pass shot read as having beaten its prediction eightfold.
 			predicted: plan.predictedTotalSamples,
 			achieved: stats.accepted,
-			synthesized: Math.max(0, Math.round(opts.synthesizedSamples ?? 0)),
 			duplicatesRejected: stats.duplicatesRejected,
 			stalledPresents: stats.stalledPresents,
 			dropouts: stats.dropouts,
@@ -317,7 +289,6 @@ export function buildSidecar(opts: {
 			achievedWindowSeconds: Number(stats.windowSeconds.toFixed(6)),
 			logTruncated: stats.logTruncated === true,
 		},
-		interpolation: opts.interpolation ?? null,
 		image: {
 			width: opts.imageWidth,
 			height: opts.imageHeight,

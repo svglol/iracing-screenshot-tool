@@ -146,12 +146,9 @@ const pl: Catalog = {
 		weightingBox: 'Box (równomierne)',
 		weightingLinear: 'Liniowe (ostre na końcu)',
 		weightingEase: 'Ease (ostrzejszy początek, długi ogon)',
-
-		interpolation: 'Interpolacja klatek',
-		interpolationOff: 'Wyłączona',
-		interpolation2: '2× (jedna klatka pośrednia)',
-		interpolation4: '4× (trzy klatki pośrednie)',
-		interpolation8: '8× (siedem klatek pośrednich)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Liniowe',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Przebiegi',
 		passes1: '1 (pojedynczy przebieg)',
@@ -164,9 +161,11 @@ const pl: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracketing czasów migawki',
 		highlightRecovery: 'Odzyskiwanie świateł (EV)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Anuluj',
 		saved: 'Zapisano długie naświetlanie — próbek: {count}',
@@ -175,7 +174,6 @@ const pl: Catalog = {
 		modified: {
 			weighting_linear: 'liniowe',
 			weighting_ease: 'ease',
-			interpolation: 'interpolacja {factor}×',
 			passes: {
 				one: '{count} przebieg',
 				few: '{count} przebiegi',
@@ -204,15 +202,8 @@ const pl: Catalog = {
 			unavailableWithReason:
 				'Długie naświetlanie jest niedostępne na tym komputerze: {reason}',
 			unavailable: 'Długie naświetlanie jest niedostępne na tym komputerze.',
-			interpolationCost:
-				'Interpolacja wymyśla klatki pomiędzy prawdziwymi, aby wygładzić smugę. Kosztuje czas GPU na każdą klatkę, więc porównaj liczbę prawdziwych próbek zapisanego ujęcia z tym samym ujęciem bez interpolacji — jeśli ta liczba spada, kupuje ona wymyślone próbki za prawdziwe.',
-			passesAndInterpolation:
-				'Przebiegi i interpolacja rywalizują o ten sam budżet na klatkę. Gdy oba są włączone, każdy przebieg przechwytuje mniej prawdziwych klatek — wyłączenie interpolacji zwykle daje lepsze ujęcie przy tym samym czasie oczekiwania.',
 			passes:
 				'Każdy przebieg odtwarza ten sam moment i wyłapuje klatki pominięte przez pozostałe, dzięki czemu smuga staje się gładsza, a nie jaśniejsza. Najlepiej sprawdza się przy krótkich czasach migawki, gdzie pojedynczy przebieg zbiera zaledwie garść próbek.',
-			interpolationUnsupported:
-				'Interpolacja klatek wymaga karty NVIDIA Turing lub nowszej{adapter}. Cała reszta długiego naświetlania działa normalnie.',
-			interpolationAdapter: ' (to przechwytywanie działa na {adapter})',
 			reshade:
 				'Długie naświetlanie przechwytuje natywnie i nie korzysta z ReShade, więc efekty ReShade nie pojawią się w wyniku.',
 		},
@@ -274,17 +265,11 @@ const pl: Catalog = {
 			weightingBody:
 				'Jak bardzo każda przechwycona klatka wpływa na wynik. <b>Box</b> waży wszystkie jednakowo, dając równomierną smugę. <b>Liniowe</b> narasta ku końcowi okna, więc obiekt jest najostrzejszy tam, gdzie zakończył ruch, i zanika wzdłuż swojej drogi. <b>Ease</b> to ta sama idea z ostrzejszym początkiem i dłuższym ogonem.',
 
-			interpolation: 'Interpolacja klatek',
-			interpolationBody:
-				'Wymyśla dodatkowe klatki pomiędzy prawdziwymi, korzystając z układu przepływu optycznego GPU, i wypełnia luki w smudze. Wymaga karty NVIDIA Turing lub nowszej, a na sprzęcie, który tego nie obsługuje, jest całkowicie ukryta.',
-			interpolationCostBody:
-				'Nie jest darmowa: kosztuje czas GPU przy każdej przechwyconej klatce, a budżet to jedna klatka iRacing. Jeśli nie nadąża, zaczyna gubić <i>prawdziwe</i> klatki, by wytworzyć syntetyczne, co jest stratą netto — smuga wychodzi krótsza i bardziej poszarpana. Koszt rośnie z liczbą megapikseli pomnożoną przez współczynnik, więc to, co jest wygodne przy 2560×1440, nie sprawdzi się w 8K. Aby to sprawdzić, wykonaj to samo ujęcie dwa razy, z interpolacją i bez, i porównaj liczbę prawdziwych próbek; aplikacja ostrzeże Cię też po fakcie, jeśli ujęcie okaże się niepełne.',
-
 			passes: 'Przebiegi',
 			passesBody:
 				'Odwiedza ten sam moment wielokrotnie, sumując wszystko w jeden obraz. Każdy przebieg wyłapuje klatki, które inne przypadkiem pominęły, więc smuga staje się gładsza — nie jaśniejsza, ponieważ wynik jest normalizowany według ilości światła, które faktycznie padło na każdy piksel.',
 			passesTradeBody:
-				'Przebiegi kupują to samo co interpolacja, ale inną walutą: czasem rzeczywistym zamiast czasu GPU. Osiem przebiegów trwa mniej więcej osiem razy dłużej, ale nigdy nie może Cię kosztować prawdziwych klatek. To czyni je właściwą dźwignią przy wysokich rozdzielczościach, gdzie interpolacja nie nadąża, oraz przy krótkich czasach migawki, gdzie pojedynczy przebieg zbiera bardzo mało próbek. Używanie obu naraz to zwykle najgorsze z rozwiązań — rywalizują o ten sam budżet na klatkę.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Bracketing czasów migawki',
 			bracketBody:
@@ -591,10 +576,6 @@ const pl: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Ten czas migawki jest tak krótki, że zmieści się w nim tylko jedna klatka, więc wynik nie będzie miał rozmycia ruchu. Wolniejsza prędkość odtwarzania albo dłuższy czas migawki dostarczą próbek.',
-		bracketVsInterpolation:
-			'Bracketing czasów migawki i {factor}x interpolacja klatek nie mogą działać jednocześnie, więc to ujęcie zostanie wykonane bez interpolacji. Wyłącz bracketing, jeśli klatki pośrednie są dla Ciebie ważniejsze niż dodatkowe czasy.',
-		passesVsInterpolation:
-			'Włączone są zarówno wiele przebiegów, jak i {factor}x interpolacja. Rywalizują ze sobą: interpolacja spowalnia każdy przebieg na tyle, że kosztuje go prawdziwe klatki, więc ten sam czas oczekiwania kupuje mniej prawdziwych próbek niż same przebiegi. Wyłączenie interpolacji zwykle daje lepsze ujęcie.',
 		shortOfTarget:
 			'Nawet przy prędkości 1/{divisor} to naświetlanie osiąga około {samples} próbek, mniej niż żądane {target}. Użyj dłuższego czasu migawki, aby uzyskać więcej.',
 		longCaptureEscalate:
@@ -608,8 +589,6 @@ const pl: Catalog = {
 			'Wyższa prędkość odtwarzania kończy się wcześniej, przy mniejszej liczbie próbek.',
 		pastLogCap:
 			'Przewiduje się, że to przechwytywanie zbierze około {samples} próbek w {passes} przebiegach, powyżej {cap}, które mieści dziennik diagnostyczny. Nie ma to wpływu na obraz — jedynie wskaźniki równomierności i przerw opiszą pierwszą część przechwytywania.',
-		interpolationLossy:
-			'Przy tym rozmiarze {factor}x interpolacja już wcześniej kosztowała ten komputer prawdziwe próbki. Rozważ niższy współczynnik, niższą rozdzielczość albo zamiast tego więcej przebiegów.',
 	},
 
 	duration: {

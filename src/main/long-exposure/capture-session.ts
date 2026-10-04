@@ -118,41 +118,6 @@ export interface LongExposureSinkImage extends LongExposureImage {
 	accepted: number;
 }
 
-// What optical-flow interpolation actually did, as opposed to what was requested.
-//
-// Reported on every capture, including when it was never asked for, so the sidecar
-// records the truth about how a given image was made. `enabled: false` with a reason
-// is a normal outcome on non-NVIDIA hardware, not a failure.
-export interface LongExposureInterpolationReport {
-	requestedFactor: number;
-	enabled: boolean;
-	achievedFactor: number;
-	reason: string | null;
-	gridSize: number;
-	bidirectional: boolean;
-	// Real captured frames vs synthesised in-betweens. Kept apart deliberately: if
-	// interpolation's GPU cost slows frame consumption below iRacing's present rate,
-	// synthetic samples are being bought with real ones — and only these two numbers
-	// side by side make that visible.
-	realSamples: number;
-	syntheticSamples: number;
-	// CPU-side time in the frame handler, EXCLUDING the first frame. Since the digest
-	// readback stopped blocking, this no longer includes waiting for the GPU — so a
-	// small number here does NOT prove we kept up. `realSamples` against
-	// `plan.predictedSamples` is the ground truth; treat these as secondary.
-	meanFrameMs: number | null;
-	maxFrameMs: number | null;
-	// The first frame alone: sink allocation plus NVOFA session creation (~30 ms).
-	// One-time, and reported separately so it cannot distort the mean.
-	setupFrameMs: number | null;
-	// renderMegapixels x factor — one scalar for "how much interpolation work this
-	// configuration asks for". Used to learn THIS MACHINE's own limit rather than
-	// hard-coding a threshold measured on one particular GPU.
-	load: number;
-	// achieved / predicted real samples. Well below 1 means we could not keep up.
-	achievedRatio: number | null;
-}
-
 // What the effects warm-up actually did (exposure-math, "Effects warm-up"). Null on
 // failures that never reached it; present on every resolved capture, including
 // those with the warm-up turned off.
@@ -182,7 +147,6 @@ export interface LongExposureOutcome {
 	plan: ResolvedPlan | null;
 	stats: SampleStats | null;
 	backend: string | null;
-	interpolation: LongExposureInterpolationReport | null;
 	// Optional so failure paths and older callers need not invent one.
 	warmUp?: LongExposureWarmUpReport | null;
 	// How anchor restoration went. Populated on EVERY outcome, including failures —
@@ -195,20 +159,9 @@ export interface LongExposureOutcome {
 	};
 }
 
-// Shape the native addon reports interpolation in. Optional throughout so an addon
-// build predating the feature type-checks and behaves as interpolation-off.
-export interface NativeInterpolationStatus {
-	enabled: boolean;
-	factor: number;
-	reason: string | null;
-	gridSize: number;
-	bidirectional: boolean;
-}
-
 export interface NativeSessionApi {
 	longExposureBegin(
 		hwnd: number,
-		interpolationFactor?: number,
 		highlightRecoveryStops?: number,
 		sinkIds?: string[]
 	): number;
@@ -223,17 +176,15 @@ export interface NativeSessionApi {
 	longExposureSetGate(session: number, open: boolean): void;
 	// Declare a new visit to the exposure window. Does NOT clear the accumulator.
 	// Optional: an addon build predating multi-pass omits it, which is why the
-	// session refuses to run more than one pass without it rather than silently
-	// producing a whole-window smear.
+	// session refuses to run more than one pass without it rather than tagging every
+	// pass's samples as pass 0.
 	longExposureBeginPass?(session: number, passIndex: number): void;
 	longExposureStats(session: number): {
 		accepted: number;
-		synthesized?: number;
 		rejected: number;
 		sawFrame: boolean;
 		meanFrameMs?: number;
 		maxFrameMs?: number;
-		interpolation?: NativeInterpolationStatus | null;
 		frameWidth: number;
 		frameHeight: number;
 		error: string | null;
@@ -265,13 +216,11 @@ export interface NativeSessionApi {
 			accepted?: number;
 		}>;
 		accepted: number;
-		synthesized?: number;
 		rejected: number;
 		backend: string;
 		meanFrameMs?: number;
 		maxFrameMs?: number;
 		setupFrameMs?: number;
-		interpolation?: NativeInterpolationStatus | null;
 		samples: Array<{
 			u: number;
 			sessionTime: number;
@@ -306,10 +255,6 @@ export interface CaptureSessionDeps {
 	// Live VRAM measurement and iRacing's current window size, for the pre-flight.
 	vramInfo(): VramInfo | null;
 	baselineDims(): Dimensions | null;
-	// The smallest interpolation load this machine has been seen to choke on, or null
-	// when it has never choked. Injected so the pure planner stays pure and the
-	// persistence lives in the main process.
-	lossyInterpolationLoad?(): number | null;
 	delay(ms: number): Promise<void>;
 	// Wall clock. TIMEOUTS ONLY — never used to decide replay position.
 	now(): number;
@@ -368,7 +313,6 @@ function failure(
 		plan: null,
 		stats: null,
 		backend: null,
-		interpolation: null,
 		restore: {
 			attempted: false,
 			landedExactly: false,
@@ -377,114 +321,6 @@ function failure(
 		},
 		...extra,
 	};
-}
-
-// Fold the requested factor together with what the hardware actually delivered.
-// Exported for tests: the "requested 4, got 1 because AMD" path is exactly the one
-// that must not silently look like success.
-export function buildInterpolationReport(opts: {
-	requestedFactor: number;
-	status: NativeInterpolationStatus | null | undefined;
-	realSamples: number;
-	syntheticSamples: number;
-	meanFrameMs: number | null;
-	maxFrameMs: number | null;
-	setupFrameMs: number | null;
-	// Why WE declined interpolation, when the decision was ours rather than the
-	// hardware's — today, only "bracketing is on". Takes precedence over the native
-	// status's own reason, because the native side was never asked in that case and
-	// whatever it says about factor 1 describes a question nobody put to it.
-	disabledReason?: string | null;
-	renderWidth: number;
-	renderHeight: number;
-	// PER PASS, as the planner reports it.
-	predictedSamples: number;
-	// Multiplies the prediction, because `realSamples` is the cumulative count across
-	// every pass. Left at 1 an 8-pass capture reports achievedRatio ~8.0 and
-	// `diagnoseInterpolationShortfall` can never fire — the shortfall guardrail
-	// disabled by the very feature that makes shortfalls easier to hide.
-	passes?: number;
-}): LongExposureInterpolationReport {
-	const { requestedFactor, status } = opts;
-	const enabled = status?.enabled === true;
-	const achievedFactor = enabled ? (status?.factor ?? 1) : 1;
-	const renderMegapixels = (opts.renderWidth * opts.renderHeight) / 1e6;
-	const predictedTotal =
-		opts.predictedSamples * Math.max(1, Math.round(opts.passes ?? 1));
-	return {
-		requestedFactor,
-		enabled,
-		// Never claim the requested factor when the hardware declined it.
-		achievedFactor,
-		reason: (!enabled && opts.disabledReason) || status?.reason || null,
-		gridSize: status?.gridSize ?? 0,
-		bidirectional: status?.bidirectional === true,
-		realSamples: opts.realSamples,
-		syntheticSamples: opts.syntheticSamples,
-		meanFrameMs: opts.meanFrameMs,
-		maxFrameMs: opts.maxFrameMs,
-		setupFrameMs: opts.setupFrameMs,
-		load: Number((renderMegapixels * achievedFactor).toFixed(3)),
-		achievedRatio:
-			predictedTotal > 0
-				? Number((opts.realSamples / predictedTotal).toFixed(3))
-				: null,
-	};
-}
-
-// Below this share of the predicted real-sample count, a capture is treated as
-// having failed to keep up with the sim rather than merely having been unlucky.
-//
-// RAISED 0.6 -> 0.8 after the warp optimisation (frame-interpolation note §9). The
-// original value was fitted to a BIMODAL field sample — unaffected captures at ~1.08,
-// badly affected ones at ~0.27 — so anything in between was untested. §9.1 created
-// exactly that middle case: a shot landing at 0.636 while still losing half its real
-// samples against the interpolation-off baseline, which the old threshold passed in
-// silence. Silence there is the worst outcome, because the resulting image looks
-// merely under-blurred rather than obviously broken.
-//
-// Recalibrated against every 5120x2880 shot taken to date:
-//
-//   unaffected (interpolation off, or on and keeping up):  1.00, 1.08, 1.09, 1.30, 1.36
-//   affected   (real samples lost to interpolation):       0.27, 0.36, 0.46, 0.64
-//
-// The classes separate cleanly in (0.64, 1.00) and 0.8 sits in that gap, deliberately
-// nearer the affected side: 26% above the worst affected shot but 20% below the worst
-// unaffected one, so the bias stays toward missing a marginal case rather than crying
-// wolf. Five interpolation-off shots at identical settings varied by +/-13% in sample
-// count (13, 15, 13, 11, 12), which puts 0.8 about 2.4 standard deviations below the
-// unaffected mean.
-//
-// Note this is not only a warning threshold: `index.ts` uses it to decide when to LEARN
-// this machine's interpolation load limit, so the pre-shot guardrail and the post-shot
-// diagnosis fire on the same evidence. Import it; do not re-type the number.
-export const SAMPLE_SHORTFALL_RATIO = 0.8;
-
-// Whether a capture lost real samples to interpolation, and what to do about it.
-// Exported for tests: "requested 8x, got a third of the samples" is precisely the
-// case that must not pass silently, because the resulting image looks under-blurred
-// rather than obviously broken.
-export function diagnoseInterpolationShortfall(
-	report: LongExposureInterpolationReport
-): string | null {
-	if (!report.enabled || report.achievedRatio === null) {
-		return null;
-	}
-	if (report.achievedRatio >= SAMPLE_SHORTFALL_RATIO) {
-		return null;
-	}
-	const percent = Math.round(report.achievedRatio * 100);
-	// The "turn off supersampling" remedy went with the setting. What is left are the
-	// two levers that still exist, plus the one that did not before: passes buy real
-	// samples with wall clock rather than with GPU time, which is precisely the
-	// resource this warning says ran out.
-	return (
-		`Frame interpolation at ${report.achievedFactor}x could not keep up: this shot ` +
-		`captured ${report.realSamples} real frames, about ${percent}% of the ${'~'}` +
-		`predicted count, so synthetic samples were bought with real ones and the ` +
-		`streak will look shorter and coarser than it should. Lower the interpolation ` +
-		`factor, reduce the capture resolution, or turn interpolation off and add passes.`
-	);
 }
 
 export async function executeRecipe(
@@ -517,7 +353,6 @@ export async function executeRecipe(
 		recipe,
 		replayEndFrame: tapeEndFrame(live),
 		currentSessionNum: live.replaySessionNum,
-		lossyInterpolationLoad: deps.lossyInterpolationLoad?.() ?? null,
 	});
 	if (validation.errors.length > 0) {
 		// Log the readings the refusal was computed FROM, not just its wording. Every
@@ -582,39 +417,6 @@ export async function executeRecipe(
 		bracketSinks.length > 1 ? bracketSinks : [primarySink];
 	const sink = sinks[0];
 
-	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN, and this is the downgrade that
-	// makes that true rather than a preference.
-	//
-	// The native session keeps ONE retained-frame ping-pong and advances it inside
-	// `accumulate_sample` — which the frame handler calls once per OPEN SINK. So on
-	// the second and later stops of a captured frame both ping-pong slots already
-	// hold that same frame: the flow estimate runs between identical inputs and the
-	// warp deposits `factor - 1` zero-motion COPIES of the real frame rather than
-	// in-betweens. Every stop but the primary would be quietly wrong, and wrong in
-	// the way that reads as merely under-blurred rather than as broken. It also runs
-	// NVOFA once per sink per frame, against a design note that assumes once per
-	// frame.
-	//
-	// Interpolation gives way because it is the optional accelerator and bracketing
-	// is what the user asked for by name — the same "fail soft, never silently
-	// wrong" rule that governs interpolation on non-NVIDIA hardware. `validatePlan`
-	// has already told the user, so this stays silent and just does it.
-	//
-	// Fixing it properly is the N-UAV warp kernel in
-	// docs/design/long-exposure-bracketing.md §3.1.
-	const interpolationFactor =
-		sinks.length > 1 ? 1 : recipe.interpolationFactor;
-	const interpolationDisabledReason =
-		interpolationFactor !== recipe.interpolationFactor
-			? 'bracketing is on, and the two cannot share the retained-frame state'
-			: null;
-	if (interpolationDisabledReason) {
-		log.info('Long exposure dropped interpolation for a bracket', {
-			requestedFactor: recipe.interpolationFactor,
-			stops: sinks.length,
-		});
-	}
-
 	// Pre-flight our OWN allocation. Unlike iRacing's, it is deterministic and ours
 	// to be honest about, so this is the one place we hard-refuse.
 	const vram = assessLongExposureVram({
@@ -626,10 +428,6 @@ export async function executeRecipe(
 		// pre-flight that stops an 11-stop 8K shot from being attempted.
 		sinkCount: sinks.length,
 		baseline: deps.baselineDims(),
-		// The EFFECTIVE factor, not the requested one: a bracket does not allocate
-		// the interpolation surfaces, so reserving for them would refuse shots that
-		// would in fact have fit.
-		interpolationFactor,
 	});
 	if (vram.refuse) {
 		return failure('insufficient-vram', vram.refusalMessage as string, {
@@ -667,8 +465,6 @@ export async function executeRecipe(
 			plan,
 			sink,
 			sinks,
-			interpolationFactor,
-			interpolationDisabledReason,
 			live,
 			deps,
 			warnings: validation.warnings,
@@ -745,14 +541,6 @@ interface RunCaptureArgs {
 	// The chosen stop, and the full set it leads (itself alone, or the bracket).
 	sink: AccumulatorSink;
 	sinks: AccumulatorSink[];
-	// The interpolation factor actually handed to the native session, which is the
-	// recipe's EXCEPT on a bracket, where it is forced to 1. Separate from
-	// `recipe.interpolationFactor` on purpose: the recipe records what was asked for
-	// and the sidecar must keep saying so.
-	interpolationFactor: number;
-	// Why we declined it, when the decision was ours rather than the hardware's.
-	// null when the recipe's factor was honoured (including when it was already 1).
-	interpolationDisabledReason: string | null;
 	live: ReplayState;
 	deps: CaptureSessionDeps;
 	warnings: string[];
@@ -766,8 +554,6 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		plan,
 		sink,
 		sinks,
-		interpolationFactor,
-		interpolationDisabledReason,
 		live,
 		deps,
 		warnings,
@@ -777,11 +563,10 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	const native = deps.native as NativeSessionApi;
 	const aborted = () => deps.signal?.aborted === true;
 
-	// Multi-pass degrades to a single pass on an addon build that predates it, the
-	// same way interpolation degrades on a non-NVIDIA card: the shot is still correct,
-	// just sampled as sparsely as it always was. It must NOT proceed silently — without
-	// `longExposureBeginPass` the retained frame survives the seek, and every pass after
-	// the first would warp its first in-betweens across the whole window.
+	// Multi-pass degrades to a single pass on an addon build that predates it: the
+	// shot is still correct, just sampled as sparsely as it always was. It must NOT
+	// proceed silently — without `longExposureBeginPass` every sample is tagged pass 0,
+	// so the per-pass sampling stats would merge passes they must keep apart.
 	const passWarnings: string[] = [];
 	let passes = Math.max(1, Math.round(recipe.passes ?? 1));
 	if (passes > 1 && typeof native.longExposureBeginPass !== 'function') {
@@ -801,7 +586,6 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		plan,
 		stats: null,
 		backend: deps.backendName,
-		interpolation: null,
 		restore: {
 			attempted: false,
 			landedExactly: false,
@@ -888,26 +672,18 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 	for (let pass = 0; pass < passes; pass += 1) {
 		// --- 2. Open the GPU session (gate closed) -----------------------------
 		// ONCE, on the first pass — the accumulator has to outlive every pass.
-		// The interpolation factor is a REQUEST. The native side sets it up from the
-		// first real frame and reports back what it could actually negotiate; hardware
-		// that cannot do it captures exactly as it would have.
-		// Highlight recovery, unlike interpolation, is not a request — it is a shader
-		// constant that behaves identically on every GPU, so what is asked for is always
-		// what happens.
+		// Highlight recovery is a shader constant that behaves identically on every
+		// GPU, so what is asked for is always what happens.
 		//
 		// BEFORE the seek, since the effects warm-up: that path hands over with the
 		// replay already rolling toward the window, so there is no paused moment
 		// left to arm in, and WGC session start-up must not eat the brake margin.
 		// Safe to do early because a closed gate drops frames outright (the native
 		// frame handler returns before touching any state), so nothing the seek or
-		// the warm-up presents can reach the accumulator or the retained frame.
+		// the warm-up presents can reach the accumulator.
 		if (session === null) {
 			session = native.longExposureBegin(
 				hwnd,
-				// The EFFECTIVE factor, which a bracket forces to 1 — see the note on
-				// the downgrade in `executeRecipe`. `recipe.interpolationFactor` stays
-				// what was ASKED for and is what the sidecar reports.
-				interpolationFactor,
 				recipe.highlightRecovery,
 				// One accumulator per stop. An addon build predating bracketing
 				// ignores this and creates the single primary sink, which is why the
@@ -919,8 +695,8 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 
 		// Declared on EVERY pass including the first, so every sample carries a correct
 		// pass index whether or not multi-pass was used. On passes after the first this
-		// is also what discards the retained frame: without it the pass's first
-		// in-betweens warp from the END of the window to its start. The reset is
+		// also resets duplicate detection, since the pass's first frame and the previous
+		// pass's last are the two ENDS of the window. The reset is
 		// consumed on the next GATED-IN frame, so declaring it before the seek is
 		// the same as declaring it after.
 		native.longExposureBeginPass?.(session, pass);
@@ -1061,15 +837,10 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		plan,
 		sink,
 		sinks,
-		interpolationFactor,
-		interpolationDisabledReason,
 		deps,
 		native,
 		session,
-		// The denominator for `achievedRatio` is what actually RAN, not what was
-		// asked for. On any complete capture these are the same number; on a
-		// cancelled one, dividing by the requested count would manufacture a
-		// shortfall warning out of the user's own cancel.
+		// What actually RAN, not what was asked for.
 		passes: completedPasses,
 		warnings: [...warnings, ...passWarnings],
 		base,
@@ -1410,10 +1181,6 @@ interface ResolveCaptureArgs {
 	// labelled with the stop it actually is.
 	sink: AccumulatorSink;
 	sinks: AccumulatorSink[];
-	// The factor the session actually ran with, and why it differs from the recipe's
-	// when it does. See `RunCaptureArgs`.
-	interpolationFactor: number;
-	interpolationDisabledReason: string | null;
 	deps: CaptureSessionDeps;
 	native: NativeSessionApi;
 	session: number;
@@ -1433,8 +1200,6 @@ async function resolveCapture(
 		plan,
 		sink,
 		sinks,
-		interpolationFactor,
-		interpolationDisabledReason,
 		deps,
 		native,
 		session,
@@ -1458,7 +1223,6 @@ async function resolveCapture(
 			nativeError: preResolve.error,
 			accepted: preResolve.accepted,
 			rejected: preResolve.rejected,
-			synthesized: preResolve.synthesized ?? null,
 			frame: {
 				width: preResolve.frameWidth,
 				height: preResolve.frameHeight,
@@ -1551,26 +1315,6 @@ async function resolveCapture(
 		height: preResolve.frameHeight,
 	});
 
-	const interpolation = buildInterpolationReport({
-		// What was ASKED for, always — a bracket that dropped interpolation must still
-		// record that it was requested, or the sidecar reads as though the user never
-		// turned it on.
-		requestedFactor: recipe.interpolationFactor,
-		status: result.interpolation,
-		disabledReason: interpolationDisabledReason,
-		realSamples: result.accepted,
-		syntheticSamples: result.synthesized ?? 0,
-		meanFrameMs: result.meanFrameMs ?? null,
-		maxFrameMs: result.maxFrameMs ?? null,
-		setupFrameMs: result.setupFrameMs ?? null,
-		// The delivered size, not the requested one — DPI and client-area geometry
-		// mean WGC decides this.
-		renderWidth,
-		renderHeight,
-		predictedSamples: plan.predictedSamples,
-		passes,
-	});
-
 	if (!result.data || result.width < 1 || result.height < 1) {
 		return {
 			...base(),
@@ -1578,16 +1322,13 @@ async function resolveCapture(
 			message: result.error || t('longExposureCapture.resolveFailed'),
 			stats,
 			backend: result.backend || deps.backendName,
-			interpolation,
 		};
 	}
 
-	// Logged with real and synthetic side by side, and with the per-frame cost, so
-	// comparing two shots at identical settings answers the only question that
-	// matters about interpolation: did it cost us real samples?
+	// Logged with the per-frame cost, so comparing two shots at identical settings
+	// shows whether frame consumption kept up with the sim.
 	log.info('Long exposure resolved', {
 		accepted: result.accepted,
-		synthesized: result.synthesized ?? 0,
 		rejected: result.rejected,
 		// Logged on EVERY shot, healthy or not, because it is the one line that says
 		// which side of the boundary a bad image fell on: many distinct digests with a
@@ -1604,21 +1345,19 @@ async function resolveCapture(
 		evenness: Number(stats.evenness.toFixed(3)),
 		dimensions: { width: result.width, height: result.height },
 		backend: result.backend,
-		interpolation: {
-			requested: interpolation.requestedFactor,
-			enabled: interpolation.enabled,
-			achieved: interpolation.achievedFactor,
-			reason: interpolation.reason,
-		},
 		frameMs: {
 			mean:
-				interpolation.meanFrameMs === null
+				result.meanFrameMs === undefined
 					? null
-					: Number(interpolation.meanFrameMs.toFixed(2)),
+					: Number(result.meanFrameMs.toFixed(2)),
 			max:
-				interpolation.maxFrameMs === null
+				result.maxFrameMs === undefined
 					? null
-					: Number(interpolation.maxFrameMs.toFixed(2)),
+					: Number(result.maxFrameMs.toFixed(2)),
+			setup:
+				result.setupFrameMs === undefined
+					? null
+					: Number(result.setupFrameMs.toFixed(2)),
 		},
 	});
 
@@ -1640,7 +1379,6 @@ async function resolveCapture(
 			message: t('longExposureCapture.blankCapture'),
 			stats,
 			backend: result.backend || deps.backendName,
-			interpolation,
 		};
 	}
 
@@ -1652,27 +1390,6 @@ async function resolveCapture(
 		contentWarnings.push(
 			t('longExposureCapture.frozenCapture', { samples: content.digested })
 		);
-	}
-
-	const interpolationWarnings: string[] = [];
-	// Asked for it, did not get it. Say so — silently producing the un-interpolated
-	// image would leave the user thinking this is what interpolation looks like.
-	//
-	// Keyed on the EFFECTIVE factor, so a bracket that dropped interpolation by our
-	// own decision does not get blamed on the machine. `validatePlan` already told
-	// the user why, before the shot, and its message is the accurate one.
-	if (interpolationFactor > 1 && !interpolation.enabled) {
-		interpolationWarnings.push(
-			`Frame interpolation was requested but is not available on this machine, so the shot was taken without it${
-				interpolation.reason ? ` (${interpolation.reason})` : ''
-			}.`
-		);
-	}
-	// Got it, but it cost more than it gave. This is the failure that otherwise looks
-	// like "the blur just isn't very strong" rather than like a problem.
-	const shortfall = diagnoseInterpolationShortfall(interpolation);
-	if (shortfall) {
-		interpolationWarnings.push(shortfall);
 	}
 
 	// Every resolved stop, in sink order. An addon build predating bracketing
@@ -1724,13 +1441,11 @@ async function resolveCapture(
 		images: resolvedImages,
 		stats,
 		backend: result.backend || deps.backendName,
-		interpolation,
 		// A resolve-stage error that still produced an image is a warning, not a
 		// failure — the shot exists and the user should judge it.
 		warnings: [
 			...warnings,
 			...contentWarnings,
-			...interpolationWarnings,
 			...(result.error ? [result.error] : []),
 		],
 	};

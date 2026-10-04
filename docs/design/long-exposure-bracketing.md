@@ -191,7 +191,9 @@ Three consequences, and they are the ones that size this work:
 
 - **Highlight recovery** is a per-session shader constant, applied identically to
   every sink. Nothing to do.
-- **Interpolation** needs §3.1 handled, and until it is the two **cannot both run**.
+- **Interpolation** — moot: removed 2026-10-04 (`long-exposure-frame-interpolation.md`
+  §11), along with the exclusion described here. Kept for the record.
+  It needed §3.1 handled, and until it was the two **could not both run**.
   `executeRecipe` forces the factor to 1 whenever more than one sink is planned;
   `validatePlan` says so before the shot and the sidecar records `requestedFactor`
   alongside `enabled: false` with bracketing as the reason.

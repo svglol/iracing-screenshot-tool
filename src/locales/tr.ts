@@ -150,12 +150,9 @@ const tr: Catalog = {
 		weightingBox: 'Box (eşit)',
 		weightingLinear: 'Doğrusal (sonda keskin)',
 		weightingEase: 'Ease (başta daha keskin, uzun kuyruk)',
-
-		interpolation: 'Kare ara değerleme',
-		interpolationOff: 'Kapalı',
-		interpolation2: '2× (bir ara kare)',
-		interpolation4: '4× (üç ara kare)',
-		interpolation8: '8× (yedi ara kare)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Doğrusal',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Geçişler',
 		passes1: '1 (tek geçiş)',
@@ -168,9 +165,11 @@ const tr: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Enstantane Bracketleme',
 		highlightRecovery: 'Vurgu Kurtarma (stop)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'İptal',
 		saved: 'Uzun pozlama kaydedildi — {count} örnek',
@@ -179,7 +178,6 @@ const tr: Catalog = {
 		modified: {
 			weighting_linear: 'doğrusal',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× ara değerleme',
 			passes: {
 				one: '{count} geçiş',
 				other: '{count} geçiş',
@@ -206,15 +204,8 @@ const tr: Catalog = {
 			unavailableWithReason:
 				'Uzun pozlama bu bilgisayarda kullanılamıyor: {reason}',
 			unavailable: 'Uzun pozlama bu bilgisayarda kullanılamıyor.',
-			interpolationCost:
-				'Ara değerleme, akışı yumuşatmak için gerçek kareler arasına yeni kareler uydurur. Kare başına GPU süresi harcar, bu yüzden kaydedilen görüntünün gerçek örnek sayısını, aynı görüntünün ara değerleme kapalıyken çekilmiş hâliyle karşılaştırın — bu sayı düşüyorsa, uydurma örnekleri gerçek örnekler pahasına satın alıyor demektir.',
-			passesAndInterpolation:
-				'Geçişler ve ara değerleme aynı kare başı bütçe için yarışır. İkisi de açıkken, her geçiş daha az gerçek kare yakalar — ara değerlemeyi kapatmak genellikle aynı bekleme süresinde daha iyi bir görüntü verir.',
 			passes:
 				'Her geçiş aynı anı yeniden oynatır ve diğerlerinin kaçırdığı kareleri yakalar, böylece akış daha parlak değil daha pürüzsüz olur. En iyi sonucu, tek bir geçişin yalnızca bir avuç örnek topladığı hızlı enstantanelerde verir.',
-			interpolationUnsupported:
-				'Kare ara değerleme, NVIDIA Turing veya daha yeni bir GPU gerektirir{adapter}. Uzun pozlamanın geri kalan her şeyi normal şekilde çalışır.',
-			interpolationAdapter: ' (bu yakalama {adapter} üzerinde çalışıyor)',
 			reshade:
 				'Uzun pozlama görüntüyü doğrudan yakalar ve ReShade kullanmaz, bu yüzden ReShade efektleri sonuçta görünmez.',
 		},
@@ -278,17 +269,11 @@ const tr: Catalog = {
 			weightingBody:
 				'Yakalanan her karenin sonuca ne kadar katkıda bulunduğu. <b>Box</b> hepsini eşit ağırlıklandırır ve düzgün bir iz verir. <b>Doğrusal</b>, pencerenin sonuna doğru artar, böylece konu hareketini bitirdiği noktada en keskin olur ve yolu boyunca solar. <b>Ease</b> aynı fikrin daha keskin bir baş ve daha uzun bir kuyruğa sahip hâlidir.',
 
-			interpolation: 'Kare ara değerleme',
-			interpolationBody:
-				"GPU'nun optik akış motorunu kullanarak gerçek kareler arasına ek kareler uydurur ve izdeki boşlukları doldurur. NVIDIA Turing veya daha yeni bir kart gerektirir ve bunu yapamayan donanımlarda tamamen gizlenir.",
-			interpolationCostBody:
-				"Bu bedava değildir: yakalanan her karede GPU süresi harcar ve bütçe tam olarak bir iRacing karesidir. Yetişemezse, sentetik kareler üretmek için <i>gerçek</i> kareleri kaçırmaya başlar; bu da net bir kayıptır — iz daha kısa ve daha kaba çıkar. Maliyet, megapiksel sayısı ile çarpanın çarpımına göre ölçeklenir, bu yüzden 2560×1440'ta rahat olan şey 8K'da uygulanabilir değildir. Bunu kontrol etmek için aynı anı açık ve kapalıyken iki kez çekin ve gerçek örnek sayılarını karşılaştırın; bir çekim yetersiz kalırsa uygulama da sonradan sizi uyarır.",
-
 			passes: 'Geçişler',
 			passesBody:
 				'Aynı ana birkaç kez uğrayarak tek bir görüntüde biriktirir. Her geçiş, diğerlerinin kaçırdığı kareleri yakalar, bu yüzden iz daha parlak değil — daha pürüzsüz olur, çünkü sonuç her pikselin üzerine gerçekten düşen ışık miktarına göre normalize edilir.',
 			passesTradeBody:
-				'Geçişler, ara değerlemenin satın aldığı şeyi farklı bir para birimiyle satın alır: GPU süresi yerine gerçek zaman. Sekiz geçiş yaklaşık sekiz kat daha uzun sürer, ama size asla gerçek karelere mal olmaz. Bu da onları, ara değerlemenin yetişemediği yüksek çözünürlüklerde ve tek bir geçişin çok az örnek topladığı hızlı enstantanelerde doğru yöntem yapar. İkisini birden kullanmak genellikle bu değiş tokuşun en kötü hâlidir — aynı kare başı bütçe için yarışırlar.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Enstantane Bracketleme',
 			bracketBody:
@@ -585,10 +570,6 @@ const tr: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Bu enstantane o kadar kısa ki içine yalnızca bir kare düşecek, bu yüzden sonuçta hareket bulanıklığı olmayacak. Daha yavaş bir oynatma hızı veya daha yavaş bir enstantane örnek sağlar.',
-		bracketVsInterpolation:
-			'Enstantane Bracketleme ve {factor}x kare ara değerleme aynı anda çalışamaz, bu yüzden bu çekim ara değerleme olmadan yapılacak. Ara değerler sizin için ekstra kademelerden daha önemliyse bracketlemeyi kapatın.',
-		passesVsInterpolation:
-			'Hem çoklu geçiş hem de {factor}x ara değerleme açık. Bunlar birbiriyle yarışır: ara değerleme her geçişi, ona gerçek kareler kaybettirecek kadar yavaşlatır, bu yüzden aynı bekleme süresi tek başına geçişlerin sağlayacağından daha az gerçek örnek verir. Ara değerlemeyi kapatmak genellikle daha iyi bir çekim sağlar.',
 		shortOfTarget:
 			'1/{divisor} hızda bile bu pozlama yalnızca yaklaşık {samples} örneğe ulaşıyor, istenen {target} örneğin altında kalıyor. Daha fazlası için daha yavaş bir enstantane kullanın.',
 		longCaptureEscalate:
@@ -601,8 +582,6 @@ const tr: Catalog = {
 			'Daha hızlı bir oynatma hızı, daha az örnekle daha erken biter.',
 		pastLogCap:
 			'Bu yakalamanın {passes} geçiş boyunca yaklaşık {samples} örnek toplaması bekleniyor; bu, tanı günlüğünün tuttuğu {cap} sınırını aşıyor. Görüntü etkilenmez — yalnızca düzenlilik ve boşluk değerleri yakalamanın yalnızca ilk kısmını yansıtır.',
-		interpolationLossy:
-			'Bu boyutta, {factor}x ara değerleme bu bilgisayara daha önce gerçek örneklere mal olmuştu. Daha düşük bir çarpan, daha düşük bir Çözünürlük veya bunun yerine daha fazla geçiş düşünün.',
 	},
 
 	duration: {

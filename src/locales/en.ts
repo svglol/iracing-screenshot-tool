@@ -158,12 +158,11 @@ export default {
 		weightingBox: 'Box (even)',
 		weightingLinear: 'Linear (sharp at the end)',
 		weightingEase: 'Ease (sharper head, long tail)',
-
-		interpolation: 'Frame interpolation',
-		interpolationOff: 'Off',
-		interpolation2: '2× (one in-between)',
-		interpolation4: '4× (three in-betweens)',
-		interpolation8: '8× (seven in-betweens)',
+		// The segmented control's button text. The full labels above become each
+		// button's tooltip — three of them side by side do not fit the sidebar.
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Passes',
 		passes1: '1 (single pass)',
@@ -172,13 +171,17 @@ export default {
 		passes8: '8× — eight times the wait',
 
 		warmUp: 'Effects warm-up',
+		// The slider's readout and spoken value. warmUpValue covers the stops with
+		// no note of their own (2 s, 4 s); warmUp1/3/5 are spoken where they exist.
 		warmUpOff: 'Off',
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracket shutters',
 		highlightRecovery: 'Highlight recovery (stops)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Cancel',
 		saved: 'Long exposure saved — {count} samples',
@@ -191,7 +194,6 @@ export default {
 			// an ellipsis, so the full option labels do not fit.
 			weighting_linear: 'linear',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× interpolation',
 			passes: {
 				one: '{count} pass',
 				other: '{count} passes',
@@ -218,15 +220,8 @@ export default {
 			unavailableWithReason:
 				'Long exposure is unavailable on this machine: {reason}',
 			unavailable: 'Long exposure is unavailable on this machine.',
-			interpolationCost:
-				"Interpolation invents frames between the real ones to smooth the streak. It costs GPU time per frame, so check the saved shot's real sample count against the same shot with it off — if that number drops, it is buying invented samples with real ones.",
-			passesAndInterpolation:
-				'Passes and interpolation compete for the same per-frame budget. With both on, each pass captures fewer real frames — turning interpolation off usually makes the better shot for the same wait.',
 			passes:
 				'Each pass replays the same moment and catches frames the others missed, so the streak gets smoother rather than brighter. Best on fast shutters, where a single pass collects only a handful of samples.',
-			interpolationUnsupported:
-				'Frame interpolation needs an NVIDIA Turing or newer GPU{adapter}. Everything else about long exposure works as normal.',
-			interpolationAdapter: ' (this capture runs on {adapter})',
 			reshade:
 				'Long exposure captures natively and does not use ReShade, so ReShade effects will not appear in the result.',
 		},
@@ -288,17 +283,11 @@ export default {
 			weightingBody:
 				'How much each captured frame contributes to the result. <b>Box</b> weights them all equally, giving an even streak. <b>Linear</b> ramps toward the end of the window, so the subject is sharpest where it finished and fades back along its path. <b>Ease</b> is the same idea with a sharper head and a longer tail.',
 
-			interpolation: 'Frame interpolation',
-			interpolationBody:
-				"Invents extra frames between the real ones using the GPU's optical-flow engine, filling in the gaps along the streak. Requires an NVIDIA Turing or newer card and is hidden entirely on hardware that cannot do it.",
-			interpolationCostBody:
-				'It is not free: it costs GPU time on every captured frame, and the budget is one iRacing frame. If it cannot keep up it starts missing <i>real</i> frames in order to manufacture synthetic ones, which is a net loss — the streak comes out shorter and coarser. The cost scales with megapixels times the factor, so what is comfortable at 2560×1440 is not viable at 8K. To check it, shoot the same moment twice with it on and off and compare the real sample counts; the app also warns you afterwards if a shot fell short.',
-
 			passes: 'Passes',
 			passesBody:
 				'Visits the same moment several times, accumulating into one image. Each pass catches frames the others happened to miss, so the streak gets smoother — not brighter, because the result is normalised by how much light actually landed on each pixel.',
 			passesTradeBody:
-				'Passes buy the same thing interpolation does, with a different currency: wall clock instead of GPU time. Eight passes take roughly eight times as long, but they can never cost you real frames. That makes them the right lever at high resolutions, where interpolation cannot keep up, and on fast shutters, where a single pass collects very few samples. Using both at once is usually the worst of the trade — they compete for the same per-frame budget.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Bracket shutters',
 			bracketBody:
@@ -612,10 +601,6 @@ export default {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'This shutter is short enough that only one frame will land inside it, so the result has no motion blur. A slower playback speed or a slower shutter buys samples.',
-		bracketVsInterpolation:
-			'Bracket shutters and {factor}x frame interpolation cannot both run, so this shot will be taken without interpolation. Turn bracketing off if the in-betweens matter more to you than the extra stops.',
-		passesVsInterpolation:
-			'Multi-pass and {factor}x interpolation are both on. They compete: interpolation slows each pass enough to cost it real frames, so the same wait buys fewer real samples than passes alone would. Turning interpolation off is usually the better shot.',
 		shortOfTarget:
 			'Even at 1/{divisor} speed this exposure reaches about {samples} samples, short of the {target} requested. Use a longer shutter for more.',
 		longCaptureEscalate:
@@ -628,8 +613,6 @@ export default {
 			'A faster playback speed finishes sooner with fewer samples.',
 		pastLogCap:
 			'This capture is predicted to collect about {samples} samples across {passes} passes, past the {cap} the diagnostic log holds. The image is unaffected — only the evenness and gap figures will describe the first part of the capture.',
-		interpolationLossy:
-			'At this size, {factor}x interpolation has previously cost this machine real samples. Consider a lower factor, a lower Resolution, or more passes instead.',
 	},
 
 	duration: {

@@ -57,20 +57,6 @@ export interface NativeLongExposureSample {
 	pass?: number;
 }
 
-// What NVIDIA's hardware optical-flow accelerator did for a capture. Optional
-// throughout: an addon build predating interpolation omits it entirely, and a
-// non-NVIDIA machine reports `enabled: false` with a reason. Neither is an error.
-export interface NativeLongExposureInterpolation {
-	enabled: boolean;
-	factor: number;
-	reason: string | null;
-	// One flow vector per gridSize × gridSize pixels.
-	gridSize: number;
-	// Whether backward flow was available too, which is what enables the
-	// forward/backward consistency check and so occlusion handling.
-	bidirectional: boolean;
-}
-
 export interface NativeLongExposureResult {
 	// Tightly packed 16-bit RGBA, little-endian. null when the resolve produced
 	// nothing (no accumulated samples, or a GPU fault — see `error`).
@@ -90,12 +76,8 @@ export interface NativeLongExposureResult {
 		// for any bracket stop whose window opened later than the primary's.
 		accepted?: number;
 	}[];
-	// REAL captured frames. Never merged with `synthesized`: the risk of
-	// interpolation is that its GPU cost slows frame consumption below iRacing's
-	// present rate, buying synthetic samples with real ones. Comparing this number
-	// across interpolation on/off at identical settings is how that stays visible.
+	// Captured frames accumulated.
 	accepted: number;
-	synthesized?: number;
 	rejected: number;
 	backend: string;
 	// CPU-side time per consumed frame, EXCLUDING the first. Since the digest stopped
@@ -103,22 +85,19 @@ export interface NativeLongExposureResult {
 	// prove we kept up — compare accepted against the predicted count for that.
 	meanFrameMs?: number;
 	maxFrameMs?: number;
-	// The first frame alone: sink allocation plus NVOFA session creation.
+	// The first frame alone: sink allocation.
 	setupFrameMs?: number;
-	interpolation?: NativeLongExposureInterpolation | null;
 	samples: NativeLongExposureSample[];
 	error: string | null;
 }
 
 export interface NativeLongExposureStats {
 	accepted: number;
-	synthesized?: number;
 	rejected: number;
 	sawFrame: boolean;
 	meanFrameMs?: number;
 	maxFrameMs?: number;
 	setupFrameMs?: number;
-	interpolation?: NativeLongExposureInterpolation | null;
 	// Dimensions WGC is actually delivering, once the first frame has arrived (0
 	// before that). The caller resized the window, but DPI and client-area geometry
 	// mean the delivered size is WGC's to report, not ours to assume.
@@ -135,11 +114,10 @@ export interface WgcLongExposureAddon {
 	// run them. Cheap and side-effect-free — no device, no GPU work.
 	longExposureProbe(): string;
 	// Open a live capture of the window. The accumulation gate starts CLOSED.
-	// `interpolationFactor` (1 = off) and `highlightRecoveryStops` (0 = off) are both
-	// optional — an addon build predating them simply ignores the extra arguments.
+	// `highlightRecoveryStops` (0 = off) is optional — an addon build predating it
+	// simply ignores the extra argument.
 	longExposureBegin(
 		hwnd: number,
-		interpolationFactor?: number,
 		highlightRecoveryStops?: number,
 		// One accumulator per id, all the same size; `longExposureFinish` returns one
 		// image per id in `images`. Omitted means the single 'primary' sink, which is
@@ -161,8 +139,8 @@ export interface WgcLongExposureAddon {
 	longExposureSetGate(session: number, open: boolean): void;
 	// Declare that the exposure window is about to be visited again. Does NOT clear
 	// the accumulator — passes sum, and the resolve normalises per pixel by
-	// accumulated weight — but does discard retained inter-frame state, since the
-	// pass's first frame is not temporally adjacent to the previous pass's last.
+	// accumulated weight — but does reset duplicate detection, since the pass's
+	// first frame is not temporally adjacent to the previous pass's last.
 	// Optional: an addon build predating multi-pass simply has no passes to declare.
 	longExposureBeginPass?(session: number, passIndex: number): void;
 	longExposureStats(session: number): NativeLongExposureStats;
@@ -187,20 +165,6 @@ export interface WgcLongExposureAddon {
 		vendorId: number;
 		isNvidia: boolean;
 		dedicatedVideoMemory: number;
-	};
-	// Whether NVIDIA's optical-flow hardware can drive interpolation at this frame
-	// size, and what it negotiated. Optional for the same reason as the above: an
-	// older addon reports nothing and interpolation stays off.
-	longExposureInterpolationInfo?(
-		width: number,
-		height: number
-	): {
-		available: boolean;
-		reason: string | null;
-		gridSize: number;
-		bidirectional: boolean;
-		inputFormat: string;
-		apiVersion: string;
 	};
 }
 

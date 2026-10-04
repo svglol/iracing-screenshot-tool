@@ -61,10 +61,7 @@ import {
 	tapeEndFrame,
 	type ReplayState,
 } from './long-exposure/replay-control';
-import {
-	executeRecipe,
-	SAMPLE_SHORTFALL_RATIO,
-} from './long-exposure/capture-session';
+import { executeRecipe } from './long-exposure/capture-session';
 import { writeLongExposure } from './long-exposure/output';
 import {
 	createDefaultRecipe,
@@ -1425,8 +1422,6 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			},
 			vramInfo: () => getVramInfo(),
 			baselineDims: () => getIracingWindowSizeNative(),
-			lossyInterpolationLoad: () =>
-				config.get('longExposureLossyInterpolationLoad') || null,
 			delay,
 			now: () => Date.now(),
 			signal,
@@ -1457,7 +1452,6 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			plan: outcome.plan,
 			stats: outcome.stats,
 			backend: outcome.backend,
-			interpolation: outcome.interpolation,
 			warmUp: outcome.warmUp ?? null,
 			screenshotDir: path.resolve(config.get('screenshotFolder')),
 			cacheDir: path.join(app.getPath('userData'), 'Cache'),
@@ -1476,50 +1470,10 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			capturedAt: new Date().toISOString(),
 		});
 
-		// Learn this machine's own interpolation limit from what actually happened.
-		// Recording the SMALLEST load that has ever fallen short means the pre-flight
-		// warning tightens as evidence accumulates and never fires without any.
-		//
-		// Uses the SAME threshold the post-shot diagnosis does, and imports it rather
-		// than repeating the number: these two must agree, and this copy was a literal
-		// 0.6 that got left behind when the constant was retuned — so the machine would
-		// have learned its limit on different evidence than the user is warned about.
-		const interp = outcome.interpolation;
-		if (
-			interp?.enabled &&
-			interp.achievedRatio !== null &&
-			interp.achievedRatio < SAMPLE_SHORTFALL_RATIO
-		) {
-			const known = config.get('longExposureLossyInterpolationLoad') || 0;
-			if (known === 0 || interp.load < known) {
-				config.set('longExposureLossyInterpolationLoad', interp.load);
-				log.info(
-					'Recorded a new interpolation load limit for this machine',
-					{
-						load: interp.load,
-						achievedRatio: interp.achievedRatio,
-						previous: known || null,
-					}
-				);
-			}
-		}
-
 		log.info('Long exposure saved', {
 			file: written.masterPath,
 			sampling: describeSampleStats(outcome.stats),
 			backend: outcome.backend,
-			// Real vs synthetic side by side, plus per-frame cost. Two shots at
-			// identical settings — one with interpolation, one without — are all it
-			// takes to see whether the in-betweens cost real samples.
-			interpolation: outcome.interpolation
-				? {
-						requested: outcome.interpolation.requestedFactor,
-						achieved: outcome.interpolation.achievedFactor,
-						real: outcome.interpolation.realSamples,
-						synthetic: outcome.interpolation.syntheticSamples,
-						meanFrameMs: outcome.interpolation.meanFrameMs,
-					}
-				: null,
 			warmUp: outcome.warmUp ?? null,
 		});
 
@@ -1545,7 +1499,6 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			stats: outcome.stats,
 			plan: outcome.plan,
 			backend: outcome.backend,
-			interpolation: outcome.interpolation,
 			// Echo the recipe back with the resolved anchor so a re-shoot reuses the
 			// SAME moment rather than re-reading a cursor the user may have moved.
 			recipe,
@@ -1605,8 +1558,6 @@ ipcMain.handle('long-exposure:preview', (event, rawRecipe: unknown) => {
 			recipe,
 			replayEndFrame: live ? tapeEndFrame(live) : null,
 			currentSessionNum: live?.replaySessionNum ?? null,
-			lossyInterpolationLoad:
-				config.get('longExposureLossyInterpolationLoad') || null,
 		}),
 	};
 });

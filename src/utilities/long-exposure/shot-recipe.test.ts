@@ -6,9 +6,10 @@ import {
 	resolvePlan,
 	validatePlan,
 	variantSuffix,
-	interpolationLoad,
 	LONG_EXPOSURE_FORMATS,
 	MAX_HIGHLIGHT_RECOVERY_STOPS,
+	PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS,
+	panelHighlightRecoveryStops,
 	type LongExposureRecipe,
 } from './shot-recipe';
 import {
@@ -37,12 +38,6 @@ describe('createDefaultRecipe', () => {
 	it('defaults to a 16-bit master and no variant', () => {
 		expect(base().outputFormat).toBe('png16');
 		expect(base().variantId).toBeNull();
-	});
-
-	// Interpolation is hardware-specific and costs per-frame time that could
-	// otherwise buy real samples, so the base feature must not opt into it.
-	it('defaults frame interpolation to off', () => {
-		expect(base().interpolationFactor).toBe(1);
 	});
 
 	// A sidecar written before highlight recovery existed carries no such field, so a
@@ -89,6 +84,43 @@ describe('normalizeRecipe — highlight recovery', () => {
 		const old = { ...base() } as Record<string, unknown>;
 		delete old.highlightRecovery;
 		expect(normalizeRecipe(old as never, base()).highlightRecovery).toBe(0);
+	});
+});
+
+// The panel slider offers whole stops 0..PANEL_MAX; the recipe keeps accepting up
+// to MAX so older sidecars reproduce. A stored value the slider cannot show must be
+// normalised on load, or the slider would show one value while the recipe sent
+// another.
+describe('panelHighlightRecoveryStops', () => {
+	it('narrows the panel range without narrowing the recipe', () => {
+		expect(PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS).toBeLessThan(
+			MAX_HIGHLIGHT_RECOVERY_STOPS
+		);
+		expect(
+			normalizeRecipe({ highlightRecovery: 8 }, base()).highlightRecovery
+		).toBe(8);
+	});
+
+	it('keeps every whole stop the slider offers', () => {
+		for (let s = 0; s <= PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS; s++) {
+			expect(panelHighlightRecoveryStops(s)).toBe(s);
+		}
+	});
+
+	it('rounds half-stops and clamps to the slider range', () => {
+		expect(panelHighlightRecoveryStops(2.4)).toBe(2);
+		expect(panelHighlightRecoveryStops(4.5)).toBe(5);
+		expect(panelHighlightRecoveryStops(8)).toBe(
+			PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS
+		);
+		expect(panelHighlightRecoveryStops(-1)).toBe(0);
+		expect(panelHighlightRecoveryStops('3')).toBe(3);
+	});
+
+	it('treats anything unreadable as off', () => {
+		for (const bogus of [undefined, null, '', NaN, 'lots']) {
+			expect(panelHighlightRecoveryStops(bogus)).toBe(0);
+		}
 	});
 });
 
@@ -144,7 +176,6 @@ describe('normalizeRecipe — recovery does NOT touch the tonemap', () => {
 	it('leaves the tonemap off on the path the UI actually uses', () => {
 		const fromPanel: Partial<LongExposureRecipe> = {
 			shutter: '1/8',
-			interpolationFactor: 1,
 			weighting: 'box',
 			highlightRecovery: 3,
 		};
@@ -159,31 +190,18 @@ describe('normalizeRecipe — recovery does NOT touch the tonemap', () => {
 	});
 });
 
-describe('normalizeRecipe — frame interpolation', () => {
-	it('accepts every factor on the ladder', () => {
-		for (const factor of [1, 2, 4, 8] as const) {
+describe('normalizeRecipe — removed frame interpolation', () => {
+	// A v1-v6 sidecar may carry a factor. The feature is gone, so the request is
+	// dropped rather than carried into a recipe that would claim it.
+	it('drops a stored interpolation factor', () => {
+		for (const factor of [1, 2, 4, 8]) {
 			expect(
-				normalizeRecipe({ interpolationFactor: factor }, base())
-					.interpolationFactor
-			).toBe(factor);
+				normalizeRecipe(
+					{ interpolationFactor: factor } as Partial<LongExposureRecipe>,
+					base()
+				)
+			).not.toHaveProperty('interpolationFactor');
 		}
-	});
-
-	// A sidecar written by a future build, or a hand-edited recipe, must degrade to a
-	// valid value rather than reaching the GPU. Off is the safe direction: it is what
-	// the shot would have done before interpolation existed.
-	it('falls back to the default for a factor off the ladder', () => {
-		for (const bogus of [0, 3, 16, -2, NaN, 'four', null, undefined]) {
-			expect(
-				normalizeRecipe({ interpolationFactor: bogus as never }, base())
-					.interpolationFactor
-			).toBe(1);
-		}
-	});
-
-	it('inherits a non-default factor from the defaults when absent', () => {
-		const defaults = { ...base(), interpolationFactor: 4 as const };
-		expect(normalizeRecipe({}, defaults).interpolationFactor).toBe(4);
 	});
 });
 
@@ -503,67 +521,6 @@ describe('validatePlan', () => {
 		expect(validate({ shutter: '1/8' }).errors).toEqual([]);
 	});
 
-	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN. The native session keeps one
-	// retained-frame ping-pong and advances it once per OPEN SINK, so every stop
-	// after the primary would warp between two copies of the same frame and collect
-	// zero-motion duplicates in place of in-betweens. The capture drops interpolation;
-	// this is the warning that says so before the shot rather than after.
-	it('warns that a bracket will be taken without interpolation', () => {
-		const result = validate({
-			shutter: '1/30',
-			bracket: true,
-			interpolationFactor: 4,
-		});
-		expect(result.errors).toEqual([]);
-		expect(
-			result.warnings.some(
-				(w) => /bracket/i.test(w) && /interpolation/i.test(w)
-			)
-		).toBe(true);
-	});
-
-	// A warning about a cost the capture is not going to pay is worse than no
-	// warning: interpolation is already being dropped, so telling the user it
-	// competes with passes sends them hunting a setting that is inert.
-	it('drops the multi-pass interpolation warning on a bracketed shot', () => {
-		const competing = validate({
-			shutter: '1/30',
-			passes: 4,
-			interpolationFactor: 4,
-		});
-		expect(competing.warnings.some((w) => /compete/i.test(w))).toBe(true);
-
-		const bracketed = validate({
-			shutter: '1/30',
-			passes: 4,
-			interpolationFactor: 4,
-			bracket: true,
-		});
-		expect(bracketed.warnings.some((w) => /compete/i.test(w))).toBe(false);
-	});
-
-	// A bracket only exists when the ladder actually has an at-or-faster set to build
-	// from, so these must stay silent — the capture plans one sink in both cases.
-	it('does not warn about interpolation when the bracket resolves to one sink', () => {
-		// The fastest stop: the at-or-faster set is the chosen stop alone.
-		expect(
-			validate({
-				shutter: '1/1000',
-				bracket: true,
-				interpolationFactor: 4,
-			}).warnings.some((w) => /bracket/i.test(w))
-		).toBe(false);
-		// A free-form exposure has no ladder key to build a set from.
-		expect(
-			validate({
-				shutter: null,
-				exposureMs: 40,
-				bracket: true,
-				interpolationFactor: 4,
-			}).warnings.some((w) => /bracket/i.test(w))
-		).toBe(false);
-	});
-
 	// A trailing window means an anchor near the END is always safe — we never need
 	// frames after it. Only the START of the replay constrains us.
 	it('accepts an anchor at the very end of the replay', () => {
@@ -662,20 +619,6 @@ describe('validatePlan', () => {
 		).not.toMatch(/diagnostic log holds/);
 	});
 
-	// Both on is the worst of the trade: interpolation slows each pass enough to cost
-	// it real frames, so the same wait buys fewer real samples than passes alone.
-	it('warns when passes and interpolation are both on', () => {
-		expect(
-			validate({ passes: 4, interpolationFactor: 8 }).warnings.join(' ')
-		).toMatch(/compete/);
-		expect(
-			validate({ passes: 4, interpolationFactor: 1 }).warnings.join(' ')
-		).not.toMatch(/compete/);
-		expect(
-			validate({ passes: 1, interpolationFactor: 8 }).warnings.join(' ')
-		).not.toMatch(/compete/);
-	});
-
 	// Past the point where a capture stops looking like a pause and starts looking
 	// like a hang, the warning has to say what to do about it. 16 s is where that
 	// line sits: it was the ceiling of the whole feature before 2"/5"/10" landed.
@@ -728,113 +671,6 @@ describe('validatePlan', () => {
 		expect(
 			validate({}, { replayEndFrame: null, currentSessionNum: null }).errors
 		).toEqual([]);
-	});
-});
-
-// The pre-flight warning learns THIS machine's limit from measured captures rather
-// than hard-coding one, because where interpolation stops being free depends entirely
-// on the GPU. Until there is evidence it must say nothing at all.
-describe('validatePlan — interpolation load', () => {
-	const planFor = (over: Partial<LongExposureRecipe>) => {
-		const r = normalizeRecipe(over, base());
-		return { recipe: r, plan: resolvePlan(r) };
-	};
-
-	it('says nothing when the machine has never fallen behind', () => {
-		const { recipe, plan } = planFor({
-			interpolationFactor: 8,
-		});
-		for (const lossyInterpolationLoad of [null, undefined, 0]) {
-			const { warnings } = validatePlan({
-				plan,
-				recipe,
-				replayEndFrame: null,
-				currentSessionNum: null,
-				lossyInterpolationLoad,
-			});
-			expect(warnings.join(' ')).not.toMatch(/interpolation/i);
-		}
-	});
-
-	it('warns once the planned load reaches a known-lossy one', () => {
-		const { recipe, plan } = planFor({
-			interpolationFactor: 8,
-		});
-		const load = interpolationLoad({
-			renderWidth: plan.renderWidth,
-			renderHeight: plan.renderHeight,
-			interpolationFactor: recipe.interpolationFactor,
-		});
-		const { warnings } = validatePlan({
-			plan,
-			recipe,
-			replayEndFrame: null,
-			currentSessionNum: null,
-			lossyInterpolationLoad: load,
-		});
-		expect(warnings.join(' ')).toMatch(/cost this machine real samples/i);
-		// The remedies that still exist, now that supersampling is not one of them.
-		expect(warnings.join(' ')).toMatch(/passes/i);
-	});
-
-	it('stays quiet for a lighter configuration than the known limit', () => {
-		const { recipe, plan } = planFor({
-			interpolationFactor: 2,
-		});
-		const { warnings } = validatePlan({
-			plan,
-			recipe,
-			replayEndFrame: null,
-			currentSessionNum: null,
-			// A limit measured at a much heavier configuration.
-			lossyInterpolationLoad: 100,
-		});
-		expect(warnings.join(' ')).not.toMatch(/interpolation/i);
-	});
-
-	it('never warns when interpolation is off', () => {
-		const { recipe, plan } = planFor({
-			interpolationFactor: 1,
-		});
-		const { warnings } = validatePlan({
-			plan,
-			recipe,
-			replayEndFrame: null,
-			currentSessionNum: null,
-			lossyInterpolationLoad: 0.0001,
-		});
-		expect(warnings.join(' ')).not.toMatch(/interpolation/i);
-	});
-});
-
-describe('interpolationLoad', () => {
-	it('is render megapixels times the factor', () => {
-		expect(
-			interpolationLoad({
-				renderWidth: 5120,
-				renderHeight: 2880,
-				interpolationFactor: 8,
-			})
-		).toBeCloseTo(117.965, 2);
-		expect(
-			interpolationLoad({
-				renderWidth: 2560,
-				renderHeight: 1440,
-				interpolationFactor: 8,
-			})
-		).toBeCloseTo(29.491, 2);
-	});
-
-	// Both of these must compare as "no interpolation work", so a factor-1 shot can
-	// never teach the machine a limit.
-	it('treats factor 0 and 1 alike', () => {
-		const at = (interpolationFactor: number) =>
-			interpolationLoad({
-				renderWidth: 1920,
-				renderHeight: 1080,
-				interpolationFactor,
-			});
-		expect(at(0)).toBe(at(1));
 	});
 });
 

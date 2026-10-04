@@ -189,14 +189,10 @@ const schema = {
 	// roughly half the sample count — a losing trade on the moving subjects this
 	// feature exists for. A stored value is simply ignored; picking a higher
 	// Resolution is the replacement.
-	// Optical-flow frame interpolation factor. 1 = off. Needs NVIDIA Turing-or-newer
-	// hardware; on anything else the shot is simply taken without it, so persisting a
-	// value here is safe even if the user later changes GPU.
-	longExposureInterpolation: {
-		type: 'number',
-		default: 1,
-		enum: [1, 2, 4, 8],
-	},
+	// NOTE: longExposureInterpolation and longExposureLossyInterpolationLoad were
+	// REMOVED 2026-10-04 with optical-flow frame interpolation, which measured no
+	// better than multi-pass on a live replay and was NVIDIA-only. Stored values are
+	// simply ignored; longExposurePasses below is the replacement.
 	// How many times the exposure window is visited, accumulating into one buffer.
 	// 1 = an ordinary capture. Costs N times the wall clock and buys roughly N times
 	// the real samples, so it pays for short shutters and is unaffordable for long
@@ -239,17 +235,6 @@ const schema = {
 	// Highlight recovery in stops, applied to near-clipped values BEFORE
 	// accumulation. 0 = off (and exactly identity). Needs no particular hardware.
 	longExposureHighlightRecovery: {
-		type: 'number',
-		default: 0,
-	},
-	// Learned, not configured: the smallest interpolation load (render megapixels x
-	// factor) at which THIS machine has been observed to fall behind the sim and lose
-	// real samples. 0 = no evidence yet, and no warning is shown.
-	//
-	// Measured rather than hard-coded because where interpolation stops being free
-	// depends entirely on the GPU — a threshold calibrated on one card would be wrong
-	// on every other.
-	longExposureLossyInterpolationLoad: {
 		type: 'number',
 		default: 0,
 	},

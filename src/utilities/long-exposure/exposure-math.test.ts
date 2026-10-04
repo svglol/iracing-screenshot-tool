@@ -32,6 +32,9 @@ import {
 	warmUpFramesForSeconds,
 	MAX_WARM_UP_SECONDS,
 	WARM_UP_BRAKE_FRAMES,
+	DEFAULT_WARM_UP_SECONDS,
+	PANEL_MAX_WARM_UP_SECONDS,
+	panelWarmUpSeconds,
 } from './exposure-math';
 
 describe('SHUTTER_LADDER', () => {
@@ -268,8 +271,7 @@ describe('predictSampleCount', () => {
 		).toBe(1920);
 	});
 
-	// Past JRT's 512 ceiling with real interpolated geometry, not synthesised
-	// in-betweens.
+	// Past JRT's 512 ceiling, with every sample a frame iRacing actually rendered.
 	it('exceeds the reference tool ceiling at 1/16 speed', () => {
 		expect(
 			predictSampleCount({
@@ -711,6 +713,23 @@ describe('effects warm-up', () => {
 		expect(warmUpFramesForSeconds(-1)).toBe(0);
 		expect(warmUpFramesForSeconds(Number.NaN)).toBe(0);
 		expect(warmUpFramesForSeconds(60)).toBe(MAX_WARM_UP_SECONDS * 60);
+	});
+
+	// The panel slider shows whole seconds up to PANEL_MAX_WARM_UP_SECONDS. A stored
+	// value it cannot show must be normalised, not left for the range input to pin
+	// visually while the recipe sends the original.
+	it('normalises a stored warm-up to what the panel slider can show', () => {
+		for (let s = 0; s <= PANEL_MAX_WARM_UP_SECONDS; s++) {
+			expect(panelWarmUpSeconds(s)).toBe(s);
+		}
+		expect(panelWarmUpSeconds(2.4)).toBe(2);
+		expect(panelWarmUpSeconds(8)).toBe(PANEL_MAX_WARM_UP_SECONDS);
+		expect(panelWarmUpSeconds(-1)).toBe(0);
+		expect(panelWarmUpSeconds('4')).toBe(4);
+		expect(panelWarmUpSeconds(undefined)).toBe(DEFAULT_WARM_UP_SECONDS);
+		expect(panelWarmUpSeconds(null)).toBe(DEFAULT_WARM_UP_SECONDS);
+		expect(panelWarmUpSeconds('')).toBe(DEFAULT_WARM_UP_SECONDS);
+		expect(panelWarmUpSeconds(Number.NaN)).toBe(DEFAULT_WARM_UP_SECONDS);
 	});
 
 	it('gives the whole request when the tape has room for it', () => {

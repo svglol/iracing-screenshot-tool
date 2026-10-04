@@ -10,7 +10,7 @@ Created using Electron and Vue.
 # Features
 * A wide range of resolutions to choose from, from HD up to 8K, including custom resolutions
 * True-color native capture (Windows Graphics Capture), with automatic fallback on systems that don't support it
-* Long Exposure photo mode - blend hundreds of replay frames into one image, with photographic shutter speeds from 1/1000s to 10s, shutter bracketing, GPU frame interpolation (NVIDIA Turing or newer), multi-pass accumulation and 16-bit PNG masters
+* Long Exposure photo mode - blend hundreds of replay frames into one image, with photographic shutter speeds from 1/1000s to 10s, shutter bracketing, multi-pass accumulation and 16-bit PNG masters
 * Auto Crop the iRacing watermark - user must resize iRacing UI to smallest size
 * Global Screenshot Hotkey (Control+PrintScreen)
 * Track and Driver Names included in filename, so you can keep track of screenshots easier

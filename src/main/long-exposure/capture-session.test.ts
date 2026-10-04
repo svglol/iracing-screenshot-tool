@@ -15,12 +15,8 @@ import {
 	WARM_UP_RETRY_BRAKE_FRAMES,
 } from '../../utilities/long-exposure/exposure-math';
 import {
-	buildInterpolationReport,
-	diagnoseInterpolationShortfall,
 	executeRecipe,
-	SAMPLE_SHORTFALL_RATIO,
 	type CaptureSessionDeps,
-	type LongExposureInterpolationReport,
 	type NativeSessionApi,
 } from './capture-session';
 
@@ -188,9 +184,8 @@ function makeHarness(options: HarnessOptions = {}) {
 		sessionTime: number;
 	}> = [];
 
-	// What the recipe asked the native side for, so a test can assert the factor was
+	// What the recipe asked the native side for, so a test can assert the value was
 	// actually threaded rather than merely accepted by the type checker.
-	const begunWith: Array<number | undefined> = [];
 	const highlightBegunWith: Array<number | undefined> = [];
 
 	// Index into `pushes` at which each pass began, so a test can slice the samples
@@ -200,13 +195,8 @@ function makeHarness(options: HarnessOptions = {}) {
 	const passBoundaries: number[] = [];
 
 	const defaultNative: NativeSessionApi = {
-		longExposureBegin: (
-			_hwnd,
-			interpolationFactor,
-			highlightRecoveryStops
-		) => {
+		longExposureBegin: (_hwnd, highlightRecoveryStops) => {
 			nativeCalls.push('begin');
-			begunWith.push(interpolationFactor);
 			highlightBegunWith.push(highlightRecoveryStops);
 			return 7;
 		},
@@ -300,7 +290,6 @@ function makeHarness(options: HarnessOptions = {}) {
 		deps,
 		events,
 		nativeCalls,
-		begunWith,
 		highlightBegunWith,
 		pushes,
 		passBoundaries,
@@ -557,9 +546,9 @@ describe('executeRecipe — multi-pass accumulation', () => {
 	});
 
 	it('degrades to one pass, loudly, on an addon that cannot declare one', async () => {
-		// Without the declaration the retained frame survives the seek and every pass
-		// after the first would warp its in-betweens across the whole window. Refusing
-		// to run them is the only safe answer; saying so is the rest of it.
+		// Without the declaration every sample is tagged pass 0, so the per-pass
+		// sampling stats would merge passes they must keep apart. Running one pass is
+		// the safe answer; saying so is the rest of it.
 		const harness = makeHarness({
 			nativeOverrides: { longExposureBeginPass: undefined },
 		});
@@ -1015,249 +1004,8 @@ describe('executeRecipe — pre-flight refusals move nothing', () => {
 	});
 });
 
-// Frame interpolation is an OPTIONAL accelerator. The contract these tests pin down
-// is that it can only ever add in-betweens — it can never change whether a shot
-// works, silently claim it happened, or hide that it did not.
-describe('frame interpolation', () => {
-	function nativeWithInterpolation(
-		status: {
-			enabled: boolean;
-			factor: number;
-			reason: string | null;
-			gridSize: number;
-			bidirectional: boolean;
-		} | null,
-		synthesized = 0,
-		// Comfortably above any prediction the harness can produce, so the default
-		// fixture represents a capture that KEPT UP. Tests that want the fall-behind
-		// case pass a small number explicitly.
-		accepted = 500
-	): Partial<NativeSessionApi> {
-		return {
-			longExposureFinish: () => ({
-				data: Buffer.alloc(640 * 360 * 8),
-				width: 640,
-				height: 360,
-				accepted,
-				synthesized,
-				rejected: 0,
-				backend: 'd3d11-compute',
-				meanFrameMs: 4.5,
-				maxFrameMs: 9.25,
-				setupFrameMs: 33,
-				interpolation: status,
-				samples: [],
-				error: null,
-			}),
-		};
-	}
-
-	it('passes the recipe factor through to the native session', async () => {
-		const harness = makeHarness();
-		await executeRecipe(recipe({ interpolationFactor: 4 }), harness.deps);
-		expect(harness.begunWith).toEqual([4]);
-	});
-
-	it('defaults to off, so nothing changes for a recipe that never asked', async () => {
-		const harness = makeHarness();
-		await executeRecipe(recipe(), harness.deps);
-		expect(harness.begunWith).toEqual([1]);
-	});
-
-	// BRACKETING AND INTERPOLATION CANNOT BOTH RUN, and this is the guard that makes
-	// that true rather than a preference.
-	//
-	// The native session keeps ONE retained-frame ping-pong and advances it inside
-	// `accumulate_sample`, which the frame handler calls once per OPEN SINK. On the
-	// second and later stops of a captured frame both slots already hold that same
-	// frame, so the flow runs between identical inputs and the warp deposits
-	// `factor - 1` zero-motion COPIES of the real frame instead of in-betweens: every
-	// stop but the primary comes out quietly wrong, in the way that reads as merely
-	// under-blurred rather than as broken.
-	describe('with bracketing', () => {
-		it('forces the factor to 1 for the native session', async () => {
-			const harness = makeHarness();
-			await executeRecipe(
-				recipe({ bracket: true, interpolationFactor: 8 }),
-				harness.deps
-			);
-			expect(harness.begunWith).toEqual([1]);
-		});
-
-		it('leaves the factor alone when the bracket resolves to one sink', async () => {
-			const harness = makeHarness();
-			// The fastest stop: the at-or-faster set is the chosen stop alone, so
-			// there is only ever one accumulator and nothing to protect.
-			await executeRecipe(
-				recipe({
-					shutter: '1/1000',
-					bracket: true,
-					interpolationFactor: 8,
-				}),
-				harness.deps
-			);
-			expect(harness.begunWith).toEqual([8]);
-		});
-
-		// The decision was OURS, so the sidecar must not blame the machine for it —
-		// and the capture must not add a second, wrong-reasoned warning on top of the
-		// accurate one `validatePlan` already raised.
-		it('records our own reason and does not blame the hardware', async () => {
-			const harness = makeHarness({
-				nativeOverrides: nativeWithInterpolation(null),
-			});
-			const outcome = await executeRecipe(
-				recipe({ bracket: true, interpolationFactor: 4 }),
-				harness.deps
-			);
-			// What was ASKED for is still recorded — a sidecar that dropped it would
-			// read as though the user never turned interpolation on.
-			expect(outcome.interpolation?.requestedFactor).toBe(4);
-			expect(outcome.interpolation?.enabled).toBe(false);
-			expect(outcome.interpolation?.achievedFactor).toBe(1);
-			expect(outcome.interpolation?.reason).toMatch(/bracket/i);
-			expect(
-				outcome.warnings.some((w) =>
-					/not available on this machine/i.test(w)
-				)
-			).toBe(false);
-		});
-	});
-
-	it('reports what the hardware actually delivered', async () => {
-		const harness = makeHarness({
-			nativeOverrides: nativeWithInterpolation(
-				{
-					enabled: true,
-					factor: 4,
-					reason: null,
-					gridSize: 4,
-					bidirectional: true,
-				},
-				36
-			),
-		});
-		const outcome = await executeRecipe(
-			recipe({ interpolationFactor: 4 }),
-			harness.deps
-		);
-
-		expect(outcome.ok).toBe(true);
-		expect(outcome.interpolation).toMatchObject({
-			requestedFactor: 4,
-			enabled: true,
-			achievedFactor: 4,
-			bidirectional: true,
-			realSamples: 500,
-			syntheticSamples: 36,
-		});
-		// No warning when it worked.
-		expect(outcome.warnings.join(' ')).not.toMatch(/interpolation/i);
-	});
-
-	// The exact case seen in the field: interpolation ran, but consumption fell behind
-	// the sim, so real samples were traded for synthetic ones. The image looks merely
-	// under-blurred, which is why it has to be said out loud.
-	it('warns when interpolation ran but could not keep up', async () => {
-		const harness = makeHarness({
-			nativeOverrides: nativeWithInterpolation(
-				{
-					enabled: true,
-					factor: 8,
-					reason: null,
-					gridSize: 4,
-					bidirectional: true,
-				},
-				14,
-				3
-			),
-		});
-		const outcome = await executeRecipe(
-			recipe({ interpolationFactor: 8 }),
-			harness.deps
-		);
-
-		// The shot still succeeds — this is a quality warning, not a failure.
-		expect(outcome.ok).toBe(true);
-		expect(outcome.image).not.toBeNull();
-		expect(outcome.warnings.join(' ')).toMatch(/could not keep up/i);
-		expect(outcome.warnings.join(' ')).toMatch(/passes/i);
-		expect(outcome.interpolation?.achievedRatio).toBeLessThan(0.6);
-		expectAnchorRestored(harness.events);
-	});
-
-	// The case that must never look like success: asked for, hardware said no.
-	it('still captures, and warns, when the hardware cannot interpolate', async () => {
-		const harness = makeHarness({
-			nativeOverrides: nativeWithInterpolation({
-				enabled: false,
-				factor: 1,
-				reason: 'nvofapi64.dll could not be loaded (no NVIDIA driver?)',
-				gridSize: 0,
-				bidirectional: false,
-			}),
-		});
-		const outcome = await executeRecipe(
-			recipe({ interpolationFactor: 8 }),
-			harness.deps
-		);
-
-		// The shot succeeds. That is the whole point of failing soft.
-		expect(outcome.ok).toBe(true);
-		expect(outcome.image).not.toBeNull();
-		expect(outcome.interpolation).toMatchObject({
-			requestedFactor: 8,
-			enabled: false,
-			// Never claim the requested factor when it was declined.
-			achievedFactor: 1,
-			syntheticSamples: 0,
-		});
-		expect(outcome.warnings.join(' ')).toMatch(
-			/interpolation was requested but is not available/i
-		);
-		expect(outcome.warnings.join(' ')).toMatch(/nvofapi64/);
-		expectAnchorRestored(harness.events);
-	});
-
-	// An addon predating the feature reports nothing at all.
-	it('treats an addon that reports no interpolation as interpolation-off', async () => {
-		const harness = makeHarness({
-			nativeOverrides: nativeWithInterpolation(null),
-		});
-		const outcome = await executeRecipe(recipe(), harness.deps);
-		expect(outcome.ok).toBe(true);
-		expect(outcome.interpolation).toMatchObject({
-			enabled: false,
-			achievedFactor: 1,
-		});
-		// Nothing was requested, so nothing to warn about.
-		expect(outcome.warnings.join(' ')).not.toMatch(/interpolation/i);
-	});
-
-	it('carries the per-frame cost through, so a slowdown is visible', async () => {
-		const harness = makeHarness({
-			nativeOverrides: nativeWithInterpolation(
-				{
-					enabled: true,
-					factor: 2,
-					reason: null,
-					gridSize: 4,
-					bidirectional: true,
-				},
-				12
-			),
-		});
-		const outcome = await executeRecipe(
-			recipe({ interpolationFactor: 2 }),
-			harness.deps
-		);
-		expect(outcome.interpolation?.meanFrameMs).toBe(4.5);
-		expect(outcome.interpolation?.maxFrameMs).toBe(9.25);
-	});
-});
-
 // Highlight recovery is deliberately NOT hardware-conditional: it is a shader
-// constant, so unlike interpolation what is asked for is always what happens. These
+// constant, so what is asked for is always what happens. These
 // tests pin that it is threaded, and that off stays off.
 describe('highlight recovery', () => {
 	it('passes the recipe value through to the native session', async () => {
@@ -1272,7 +1020,7 @@ describe('highlight recovery', () => {
 		expect(harness.highlightBegunWith).toEqual([0]);
 	});
 
-	// It needs no particular GPU, so unlike interpolation it must never produce a
+	// It needs no particular GPU, so it must never produce a
 	// "not available on this machine" warning.
 	it('never warns about hardware support', async () => {
 		const harness = makeHarness();
@@ -1282,271 +1030,6 @@ describe('highlight recovery', () => {
 		);
 		expect(outcome.ok).toBe(true);
 		expect(outcome.warnings.join(' ')).not.toMatch(/highlight/i);
-	});
-});
-
-describe('buildInterpolationReport', () => {
-	it('never claims a factor the hardware declined', () => {
-		const report = buildInterpolationReport({
-			requestedFactor: 8,
-			status: {
-				enabled: false,
-				factor: 8,
-				reason: 'pre-Turing GPU',
-				gridSize: 0,
-				bidirectional: false,
-			},
-			realSamples: 100,
-			syntheticSamples: 0,
-			meanFrameMs: null,
-			maxFrameMs: null,
-			setupFrameMs: null,
-			renderWidth: 2560,
-			renderHeight: 1440,
-			predictedSamples: 100,
-		});
-		expect(report.requestedFactor).toBe(8);
-		expect(report.enabled).toBe(false);
-		expect(report.achievedFactor).toBe(1);
-		expect(report.reason).toBe('pre-Turing GPU');
-	});
-
-	it('treats a missing status as off rather than throwing', () => {
-		const report = buildInterpolationReport({
-			requestedFactor: 4,
-			status: undefined,
-			realSamples: 50,
-			syntheticSamples: 0,
-			meanFrameMs: null,
-			maxFrameMs: null,
-			setupFrameMs: null,
-			renderWidth: 2560,
-			renderHeight: 1440,
-			predictedSamples: 100,
-		});
-		expect(report.enabled).toBe(false);
-		expect(report.achievedFactor).toBe(1);
-		expect(report.reason).toBeNull();
-	});
-
-	it('keeps real and synthetic counts separate', () => {
-		const report = buildInterpolationReport({
-			requestedFactor: 4,
-			status: {
-				enabled: true,
-				factor: 4,
-				reason: null,
-				gridSize: 4,
-				bidirectional: true,
-			},
-			realSamples: 200,
-			syntheticSamples: 597,
-			meanFrameMs: 6.1,
-			maxFrameMs: 20,
-			setupFrameMs: 33,
-			renderWidth: 2560,
-			renderHeight: 1440,
-			predictedSamples: 200,
-		});
-		// The two must never be merged: comparing realSamples across interpolation
-		// on/off at the same settings is the only way to see whether synthetic
-		// samples were bought with real ones.
-		expect(report.realSamples).toBe(200);
-		expect(report.syntheticSamples).toBe(597);
-	});
-
-	it('computes load as render megapixels x achieved factor', () => {
-		const report = buildInterpolationReport({
-			requestedFactor: 8,
-			status: {
-				enabled: true,
-				factor: 8,
-				reason: null,
-				gridSize: 4,
-				bidirectional: true,
-			},
-			realSamples: 3,
-			syntheticSamples: 14,
-			meanFrameMs: 30.7,
-			maxFrameMs: 53,
-			setupFrameMs: 33,
-			renderWidth: 5120,
-			renderHeight: 2880,
-			predictedSamples: 11,
-		});
-		// 5120x2880 = 14.7456 Mpx, x8 = 117.965
-		expect(report.load).toBeCloseTo(117.965, 2);
-		expect(report.achievedRatio).toBeCloseTo(3 / 11, 3);
-	});
-
-	// A declined request has an achieved factor of 1, so its load must reflect what
-	// actually ran — otherwise the machine would "learn" a limit from work it never did.
-	it('bases load on the achieved factor, not the requested one', () => {
-		const report = buildInterpolationReport({
-			requestedFactor: 8,
-			status: {
-				enabled: false,
-				factor: 8,
-				reason: 'no NVIDIA driver',
-				gridSize: 0,
-				bidirectional: false,
-			},
-			realSamples: 100,
-			syntheticSamples: 0,
-			meanFrameMs: 2,
-			maxFrameMs: 5,
-			setupFrameMs: 1,
-			renderWidth: 2560,
-			renderHeight: 1440,
-			predictedSamples: 100,
-		});
-		expect(report.load).toBeCloseTo(3.6864, 3);
-	});
-
-	// `predictedSamples` is PER PASS while `realSamples` is cumulative, so a multi-pass
-	// capture that fell just as far behind as a single-pass one must report the same
-	// ratio. Get this wrong and an 8-pass shot reports ~8.0, which is above every
-	// threshold there is — the shortfall guardrail switched off by the feature that
-	// makes shortfalls easiest to miss.
-	it('measures the shortfall per pass, not against one pass of prediction', () => {
-		const common = {
-			requestedFactor: 8,
-			status: {
-				enabled: true,
-				factor: 8,
-				reason: null,
-				gridSize: 4,
-				bidirectional: true,
-			},
-			syntheticSamples: 0,
-			meanFrameMs: 30,
-			maxFrameMs: 50,
-			setupFrameMs: 30,
-			renderWidth: 2560,
-			renderHeight: 1440,
-			predictedSamples: 10,
-		};
-		const single = buildInterpolationReport({ ...common, realSamples: 4 });
-		const quad = buildInterpolationReport({
-			...common,
-			realSamples: 16,
-			passes: 4,
-		});
-		expect(quad.achievedRatio).toBeCloseTo(0.4, 3);
-		expect(quad.achievedRatio).toBe(single.achievedRatio);
-		// Both are shortfalls, and both must still say so.
-		expect(quad.achievedRatio).toBeLessThan(SAMPLE_SHORTFALL_RATIO);
-	});
-
-	it('treats an absent pass count as a single pass', () => {
-		const report = buildInterpolationReport({
-			requestedFactor: 1,
-			status: null,
-			realSamples: 50,
-			syntheticSamples: 0,
-			meanFrameMs: 2,
-			maxFrameMs: 5,
-			setupFrameMs: 1,
-			renderWidth: 2560,
-			renderHeight: 1440,
-			predictedSamples: 100,
-		});
-		expect(report.achievedRatio).toBeCloseTo(0.5, 3);
-	});
-});
-
-// The failure the user actually hit: interpolation ran, but consumption fell behind
-// the sim, so real samples were traded for synthetic ones and the image came out
-// under-blurred rather than obviously broken.
-describe('diagnoseInterpolationShortfall', () => {
-	const report = (over: Partial<LongExposureInterpolationReport> = {}) =>
-		({
-			requestedFactor: 8,
-			enabled: true,
-			achievedFactor: 8,
-			reason: null,
-			gridSize: 4,
-			bidirectional: true,
-			realSamples: 3,
-			syntheticSamples: 14,
-			meanFrameMs: 30.7,
-			maxFrameMs: 53,
-			setupFrameMs: 33,
-			load: 117.965,
-			achievedRatio: 3 / 11,
-			...over,
-		}) as LongExposureInterpolationReport;
-
-	it('flags a capture that fell well short of its predicted real samples', () => {
-		const message = diagnoseInterpolationShortfall(report());
-		expect(message).toMatch(/could not keep up/i);
-		expect(message).toMatch(/3 real frames/);
-	});
-
-	// The remedy used to be conditional on supersampling, which no longer exists.
-	// What is left are the two levers that still do, plus passes -- which buy real
-	// samples with wall clock rather than with the GPU time this warning says ran out.
-	it('offers only remedies that still exist', () => {
-		const message = diagnoseInterpolationShortfall(report());
-		expect(message).toMatch(/lower the interpolation factor/i);
-		expect(message).toMatch(/resolution/i);
-		expect(message).toMatch(/passes/i);
-		expect(message).not.toMatch(/supersampl/i);
-	});
-
-	it('stays silent when the capture kept up', () => {
-		expect(
-			diagnoseInterpolationShortfall(
-				report({ realSamples: 13, achievedRatio: 13 / 12 })
-			)
-		).toBeNull();
-	});
-
-	// Sample counts bounce run to run and the predictor is only good to ~6%, so a
-	// modest shortfall must not cry wolf. Five interpolation-off shots at identical
-	// 5120x2880 settings varied +/-13% in sample count, and the WORST unaffected shot
-	// landed at exactly 1.00 of prediction — so the tolerated band has to reach
-	// meaningfully below 1.0.
-	it('tolerates a modest shortfall', () => {
-		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: 0.9 }))
-		).toBeNull();
-	});
-
-	// THE REGRESSION THIS THRESHOLD EXISTS FOR. Shot 25 at 5120x2880 landed at 0.636
-	// of prediction — 7 real samples against an interpolation-off baseline of 15, so
-	// it lost more than half of them — and the original 0.6 threshold passed it in
-	// silence. That is the worst possible outcome here, because the image comes out
-	// looking merely under-blurred rather than obviously broken, so the user has no
-	// reason to suspect the setting rather than the scene.
-	it('flags the mid-range shortfall the original threshold let through', () => {
-		const message = diagnoseInterpolationShortfall(
-			report({ realSamples: 7, achievedRatio: 0.636 })
-		);
-		expect(message).toMatch(/could not keep up/i);
-		expect(message).toMatch(/7 real frames/);
-	});
-
-	// The two consumers of this constant — the post-shot warning here and the
-	// load-limit learning in index.ts — must fire on identical evidence. index.ts used
-	// to re-type the number and was left behind when it changed.
-	it('draws the line where SAMPLE_SHORTFALL_RATIO says, on both sides', () => {
-		const justUnder = SAMPLE_SHORTFALL_RATIO - 0.001;
-		const justOver = SAMPLE_SHORTFALL_RATIO + 0.001;
-		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: justUnder }))
-		).toMatch(/could not keep up/i);
-		expect(
-			diagnoseInterpolationShortfall(report({ achievedRatio: justOver }))
-		).toBeNull();
-	});
-
-	it('says nothing when interpolation never ran', () => {
-		expect(
-			diagnoseInterpolationShortfall(
-				report({ enabled: false, achievedFactor: 1, achievedRatio: 0.1 })
-			)
-		).toBeNull();
 	});
 });
 

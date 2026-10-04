@@ -140,12 +140,9 @@ const de: Catalog = {
 		weightingBox: 'Box (gleichmäßig)',
 		weightingLinear: 'Linear (scharf am Ende)',
 		weightingEase: 'Ease (schärferer Kopf, langer Schweif)',
-
-		interpolation: 'Bildinterpolation',
-		interpolationOff: 'Aus',
-		interpolation2: '2× (ein Zwischenbild)',
-		interpolation4: '4× (drei Zwischenbilder)',
-		interpolation8: '8× (sieben Zwischenbilder)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Durchgänge',
 		passes1: '1 (ein Durchgang)',
@@ -158,9 +155,11 @@ const de: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Verschlusszeiten-Reihe',
 		highlightRecovery: 'Lichterrettung (Blendenstufen)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Abbrechen',
 		saved: 'Langzeitbelichtung gespeichert — {count} Abtastungen',
@@ -169,7 +168,6 @@ const de: Catalog = {
 		modified: {
 			weighting_linear: 'linear',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× Interpolation',
 			passes: {
 				one: '{count} Durchgang',
 				other: '{count} Durchgänge',
@@ -197,15 +195,8 @@ const de: Catalog = {
 				'Langzeitbelichtung ist auf diesem Rechner nicht verfügbar: {reason}',
 			unavailable:
 				'Langzeitbelichtung ist auf diesem Rechner nicht verfügbar.',
-			interpolationCost:
-				'Interpolation erfindet Bilder zwischen den echten, um den Schweif zu glätten. Sie kostet GPU-Zeit pro Bild — vergleiche also die Zahl echter Abtastungen der gespeicherten Aufnahme mit derselben Aufnahme ohne Interpolation. Sinkt diese Zahl, erkauft sie erfundene Abtastungen mit echten.',
-			passesAndInterpolation:
-				'Durchgänge und Interpolation konkurrieren um dasselbe Budget pro Bild. Sind beide aktiv, nimmt jeder Durchgang weniger echte Bilder auf — die Interpolation auszuschalten ergibt bei gleicher Wartezeit meist die bessere Aufnahme.',
 			passes:
 				'Jeder Durchgang wiederholt denselben Moment und fängt Bilder ein, die die anderen verpasst haben; der Schweif wird dadurch gleichmäßiger, nicht heller. Am besten bei kurzen Verschlusszeiten, wo ein einzelner Durchgang nur wenige Abtastungen sammelt.',
-			interpolationUnsupported:
-				'Bildinterpolation benötigt eine NVIDIA-GPU ab Turing{adapter}. Alles andere an der Langzeitbelichtung funktioniert wie gewohnt.',
-			interpolationAdapter: ' (diese Aufnahme läuft auf {adapter})',
 			reshade:
 				'Die Langzeitbelichtung nimmt nativ auf und nutzt ReShade nicht, daher erscheinen ReShade-Effekte nicht im Ergebnis.',
 		},
@@ -267,17 +258,11 @@ const de: Catalog = {
 			weightingBody:
 				'Wie stark jedes aufgenommene Bild zum Ergebnis beiträgt. <b>Box</b> gewichtet alle gleich und ergibt eine gleichmäßige Schliere. <b>Linear</b> steigt zum Ende des Fensters an, sodass das Motiv dort am schärfsten ist, wo es endete, und entlang seines Weges verblasst. <b>Ease</b> ist dieselbe Idee mit schärferem Kopf und längerem Schweif.',
 
-			interpolation: 'Bildinterpolation',
-			interpolationBody:
-				'Erfindet mithilfe der Optical-Flow-Einheit der GPU zusätzliche Bilder zwischen den echten und füllt so die Lücken entlang der Schliere. Erfordert eine NVIDIA-Karte ab Turing und wird auf Hardware, die das nicht kann, vollständig ausgeblendet.',
-			interpolationCostBody:
-				'Sie ist nicht umsonst: Sie kostet GPU-Zeit bei jedem aufgenommenen Bild, und das Budget ist ein iRacing-Bild. Kommt sie nicht mit, verpasst sie <i>echte</i> Bilder, um synthetische zu erzeugen — unterm Strich ein Verlust: Die Schliere wird kürzer und gröber. Die Kosten skalieren mit Megapixeln mal Faktor, was bei 2560×1440 bequem ist, ist bei 8K nicht tragfähig. Zum Prüfen nimmst du denselben Moment zweimal auf, einmal mit und einmal ohne, und vergleichst die echten Abtastzahlen; die App warnt dich hinterher auch, wenn eine Aufnahme zu kurz kam.',
-
 			passes: 'Durchgänge',
 			passesBody:
 				'Besucht denselben Moment mehrfach und sammelt alles in einem Bild. Jeder Durchgang fängt Bilder ein, die die anderen zufällig verpasst haben, sodass die Schliere gleichmäßiger wird — nicht heller, denn das Ergebnis wird darauf normiert, wie viel Licht tatsächlich auf jedem Pixel gelandet ist.',
 			passesTradeBody:
-				'Durchgänge kaufen dasselbe wie Interpolation, nur in anderer Währung: tatsächliche Zeit statt GPU-Zeit. Acht Durchgänge dauern etwa achtmal so lange, können dich aber nie echte Bilder kosten. Damit sind sie der richtige Hebel bei hohen Auflösungen, wo die Interpolation nicht mitkommt, und bei kurzen Verschlusszeiten, wo ein einzelner Durchgang sehr wenige Abtastungen sammelt. Beides zugleich zu nutzen ist meist das Schlechteste aus beiden Welten — sie konkurrieren um dasselbe Budget pro Bild.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Verschlusszeiten-Reihe',
 			bracketBody:
@@ -580,10 +565,6 @@ const de: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Diese Verschlusszeit ist so kurz, dass nur ein Bild hineinfällt; das Ergebnis hat daher keine Bewegungsunschärfe. Eine langsamere Wiedergabegeschwindigkeit oder eine längere Verschlusszeit bringt Abtastungen.',
-		bracketVsInterpolation:
-			'Verschlusszeiten-Reihe und {factor}x Bildinterpolation können nicht beide laufen, daher wird diese Aufnahme ohne Interpolation gemacht. Schalte die Reihe aus, wenn dir die Zwischenbilder wichtiger sind als die zusätzlichen Stufen.',
-		passesVsInterpolation:
-			'Mehrere Durchgänge und {factor}x Interpolation sind beide aktiv. Sie konkurrieren: Die Interpolation bremst jeden Durchgang so weit, dass er echte Bilder verliert, sodass dieselbe Wartezeit weniger echte Abtastungen bringt als Durchgänge allein. Die Interpolation auszuschalten ergibt meist die bessere Aufnahme.',
 		shortOfTarget:
 			'Selbst bei 1/{divisor} Geschwindigkeit erreicht diese Belichtung nur etwa {samples} Abtastungen, weniger als die geforderten {target}. Nutze eine längere Verschlusszeit für mehr.',
 		longCaptureEscalate:
@@ -597,8 +578,6 @@ const de: Catalog = {
 			'Eine höhere Wiedergabegeschwindigkeit ist schneller fertig, mit weniger Abtastungen.',
 		pastLogCap:
 			'Diese Aufnahme wird voraussichtlich etwa {samples} Abtastungen über {passes} Durchgänge sammeln, mehr als die {cap}, die das Diagnoseprotokoll fasst. Das Bild ist davon unberührt — nur die Gleichmäßigkeits- und Lückenwerte beschreiben dann den ersten Teil der Aufnahme.',
-		interpolationLossy:
-			'In dieser Größe hat {factor}x Interpolation diesen Rechner schon einmal echte Abtastungen gekostet. Erwäge einen niedrigeren Faktor, eine niedrigere Auflösung oder stattdessen mehr Durchgänge.',
 	},
 
 	duration: {

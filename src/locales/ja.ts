@@ -145,12 +145,9 @@ const ja: Catalog = {
 		weightingBox: 'Box（均等）',
 		weightingLinear: 'Linear（終わりがシャープ）',
 		weightingEase: 'Ease（先頭がよりシャープ、長い尾）',
-
-		interpolation: 'フレーム補間',
-		interpolationOff: 'オフ',
-		interpolation2: '2×（中間フレーム 1 枚）',
-		interpolation4: '4×（中間フレーム 3 枚）',
-		interpolation8: '8×（中間フレーム 7 枚）',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Linear',
+		weightingEaseShort: 'Ease',
 
 		passes: 'パス数',
 		passes1: '1（シングルパス）',
@@ -163,9 +160,11 @@ const ja: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'シャッターのブラケット撮影',
 		highlightRecovery: 'ハイライト復元（段）',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'キャンセル',
 		saved: '長時間露光を保存しました — サンプル数 {count}',
@@ -176,7 +175,6 @@ const ja: Catalog = {
 		modified: {
 			weighting_linear: 'linear',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× 補間',
 			passes: {
 				other: '{count} パス',
 			},
@@ -202,16 +200,8 @@ const ja: Catalog = {
 			unavailableWithReason:
 				'このパソコンでは長時間露光を利用できません: {reason}',
 			unavailable: 'このパソコンでは長時間露光を利用できません。',
-			interpolationCost:
-				'補間は実際のフレームの間に新しいフレームを作り出し、軌跡を滑らかにします。1 フレームごとに GPU の時間を消費するため、保存した写真の実サンプル数を、補間をオフにした同じ写真と比べてください。その数が減っているなら、作り出したサンプルを実際のサンプルと引き換えに買っていることになります。',
-			passesAndInterpolation:
-				'パス数と補間は同じ 1 フレームあたりの処理時間を奪い合います。両方をオンにすると各パスで取り込める実フレームが減るため、同じ待ち時間なら補間をオフにしたほうが良い写真になるのが普通です。',
 			passes:
 				'各パスは同じ瞬間を再生し直し、他のパスが取りこぼしたフレームを拾います。そのため軌跡は明るくなるのではなく滑らかになります。1 回のパスではわずかなサンプルしか集まらない高速シャッターで特に効果的です。',
-			interpolationUnsupported:
-				'フレーム補間には NVIDIA Turing 以降の GPU が必要です{adapter}。長時間露光のそれ以外の動作は通常どおりです。',
-			interpolationAdapter:
-				'（このキャプチャは {adapter} で動作しています）',
 			reshade:
 				'長時間露光はネイティブにキャプチャし ReShade を経由しないため、ReShade のエフェクトは結果に現れません。',
 		},
@@ -273,17 +263,11 @@ const ja: Catalog = {
 			weightingBody:
 				'取り込んだ各フレームが結果にどれだけ寄与するかです。<b>Box</b> はすべてを均等に扱い、一様な軌跡になります。<b>Linear</b> は露光の終わりに向かって重みを増すため、被写体は動き終わった位置で最もシャープになり、通ってきた経路に沿って薄れていきます。<b>Ease</b> は同じ考え方で、先頭がよりシャープ、尾がより長くなります。',
 
-			interpolation: 'フレーム補間',
-			interpolationBody:
-				'GPU のオプティカルフローエンジンを使って実際のフレームの間に追加のフレームを作り出し、軌跡の隙間を埋めます。NVIDIA Turing 以降のカードが必要で、対応していないハードウェアでは項目自体が表示されません。',
-			interpolationCostBody:
-				'無料ではありません。取り込むフレームごとに GPU の時間を消費し、その予算は iRacing の 1 フレーム分です。処理が追いつかなくなると、合成フレームを作るために<i>実際の</i>フレームを取りこぼし始め、差し引きでは損になります。軌跡は短く粗くなります。コストはメガピクセル数と倍率の積に比例するため、2560×1440 で余裕があっても 8K では成り立ちません。確かめるには、同じ瞬間をオンとオフで 2 回撮影し、実サンプル数を比べてください。写真が目標に届かなかった場合は、アプリも撮影後に警告します。',
-
 			passes: 'パス数',
 			passesBody:
 				'同じ瞬間を複数回訪れ、1 枚の画像に累積します。各パスは他のパスがたまたま取りこぼしたフレームを拾うため、軌跡は明るくなるのではなく滑らかになります。結果は各ピクセルに実際に届いた光の量で正規化されるからです。',
 			passesTradeBody:
-				'パス数は補間と同じものを、別の通貨で買います。GPU の時間ではなく実時間です。8 パスはおよそ 8 倍の時間がかかりますが、実際のフレームを失うことは決してありません。そのため、補間が追いつかない高解像度や、1 パスではごくわずかなサンプルしか集まらない高速シャッターでは、こちらが正しいレバーになります。両方を同時に使うのはたいてい最悪の選択です。同じ 1 フレームあたりの予算を奪い合うからです。',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'シャッターのブラケット撮影',
 			bracketBody:
@@ -589,10 +573,6 @@ const ja: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'このシャッターは短く、収まるフレームは 1 枚だけです。そのため結果に被写体ブレは生じません。再生速度を遅くするか、シャッターを遅くするとサンプルが得られます。',
-		bracketVsInterpolation:
-			'シャッターのブラケット撮影と {factor}x のフレーム補間は同時に実行できないため、この撮影は補間なしで行われます。中間フレームのほうが追加の段数より重要な場合は、ブラケット撮影をオフにしてください。',
-		passesVsInterpolation:
-			'マルチパスと {factor}x の補間が両方オンになっています。両者は競合します。補間は各パスを遅くして実フレームを失わせるため、同じ待ち時間でもパス数だけの場合より実サンプルが少なくなります。補間をオフにしたほうが良い写真になるのが普通です。',
 		shortOfTarget:
 			'1/{divisor} の速度でも、この露光で得られるサンプルは約 {samples} で、要求された {target} に届きません。もっと多く得るには、より遅いシャッターを使ってください。',
 		longCaptureEscalate:
@@ -606,8 +586,6 @@ const ja: Catalog = {
 			'再生速度を上げると早く終わりますが、サンプルは少なくなります。',
 		pastLogCap:
 			'このキャプチャでは {passes} パスで約 {samples} サンプルが集まると予測され、診断ログが保持できる {cap} を超えます。画像に影響はありませんが、均等さと間隔の数値はキャプチャの前半部分だけを表すことになります。',
-		interpolationLossy:
-			'このサイズでは、{factor}x の補間はこのパソコンで実サンプルを犠牲にしたことがあります。より低い倍率、より低い解像度、あるいは代わりにパス数を増やすことを検討してください。',
 	},
 
 	duration: {

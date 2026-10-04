@@ -138,12 +138,9 @@ const da: Catalog = {
 		weightingBox: 'Box (jævn)',
 		weightingLinear: 'Lineær (skarp til sidst)',
 		weightingEase: 'Ease (skarpere start, lang hale)',
-
-		interpolation: 'Billedinterpolation',
-		interpolationOff: 'Fra',
-		interpolation2: '2× (ét mellembillede)',
-		interpolation4: '4× (tre mellembilleder)',
-		interpolation8: '8× (syv mellembilleder)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineær',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Gennemløb',
 		passes1: '1 (ét gennemløb)',
@@ -156,9 +153,11 @@ const da: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Lukkertidsbracketing',
 		highlightRecovery: 'Genskabelse af højlys (trin)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Annullér',
 		saved: 'Lang eksponering gemt — {count} prøver',
@@ -167,7 +166,6 @@ const da: Catalog = {
 		modified: {
 			weighting_linear: 'lineær',
 			weighting_ease: 'ease',
-			interpolation: '{factor}× interpolation',
 			passes: {
 				one: '{count} gennemløb',
 				other: '{count} gennemløb',
@@ -194,15 +192,8 @@ const da: Catalog = {
 			unavailableWithReason:
 				'Lang eksponering er ikke tilgængelig på denne maskine: {reason}',
 			unavailable: 'Lang eksponering er ikke tilgængelig på denne maskine.',
-			interpolationCost:
-				'Interpolation opfinder billeder mellem de virkelige for at gøre stribeneglattere. Det koster GPU-tid pr. billede, så sammenlign antallet af virkelige prøver i det gemte billede med det samme billede uden interpolation — falder det tal, køber den opfundne prøver med virkelige.',
-			passesAndInterpolation:
-				'Gennemløb og interpolation konkurrerer om det samme budget pr. billede. Med begge slået til fanger hvert gennemløb færre virkelige billeder — at slå interpolationen fra giver som regel et bedre resultat for den samme ventetid.',
 			passes:
 				'Hvert gennemløb afspiller det samme øjeblik igen og fanger billeder, som de andre missede, så striben bliver jævnere frem for lysere. Bedst ved korte lukkertider, hvor et enkelt gennemløb kun samler en håndfuld prøver.',
-			interpolationUnsupported:
-				'Billedinterpolation kræver en NVIDIA Turing-GPU eller nyere{adapter}. Alt andet ved lang eksponering fungerer som normalt.',
-			interpolationAdapter: ' (denne optagelse kører på {adapter})',
 			reshade:
 				'Lang eksponering optager nativt og bruger ikke ReShade, så ReShade-effekter vil ikke fremgå af resultatet.',
 		},
@@ -264,17 +255,11 @@ const da: Catalog = {
 			weightingBody:
 				'Hvor meget hvert optaget billede bidrager til resultatet. <b>Box</b> vægter dem alle lige og giver en jævn stribe. <b>Lineær</b> stiger mod slutningen af vinduet, så motivet er skarpest der, hvor det sluttede, og toner ud langs sin bane. <b>Ease</b> er den samme idé med en skarpere start og en længere hale.',
 
-			interpolation: 'Billedinterpolation',
-			interpolationBody:
-				'Opfinder ekstra billeder mellem de virkelige ved hjælp af GPU’ens optical flow-motor og udfylder hullerne langs striben. Kræver et NVIDIA Turing-kort eller nyere og skjules helt på hardware, der ikke kan klare det.',
-			interpolationCostBody:
-				'Det er ikke gratis: det koster GPU-tid på hvert optaget billede, og budgettet er ét iRacing-billede. Kan den ikke følge med, begynder den at misse <i>virkelige</i> billeder for at fremstille syntetiske, hvilket er et nettotab — striben bliver kortere og grovere. Omkostningen skalerer med megapixel gange faktoren, så det, der er behageligt ved 2560×1440, er ikke realistisk i 8K. For at tjekke det: tag det samme øjeblik to gange, med og uden, og sammenlign antallet af virkelige prøver; appen advarer dig også bagefter, hvis et billede kom til kort.',
-
 			passes: 'Gennemløb',
 			passesBody:
 				'Besøger det samme øjeblik flere gange og akkumulerer til ét billede. Hvert gennemløb fanger billeder, som de andre tilfældigvis missede, så striben bliver jævnere — ikke lysere, for resultatet normaliseres efter, hvor meget lys der faktisk landede på hver pixel.',
 			passesTradeBody:
-				'Gennemløb køber det samme som interpolation, men i en anden valuta: faktisk tid i stedet for GPU-tid. Otte gennemløb tager cirka otte gange så lang tid, men de kan aldrig koste dig virkelige billeder. Det gør dem til det rigtige greb ved høje opløsninger, hvor interpolationen ikke kan følge med, og ved korte lukkertider, hvor et enkelt gennemløb samler meget få prøver. At bruge begge dele på én gang er som regel det værste af to verdener — de konkurrerer om det samme budget pr. billede.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Lukkertidsbracketing',
 			bracketBody:
@@ -572,10 +557,6 @@ const da: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Denne lukkertid er så kort, at der kun lander ét billede inden for den, så resultatet får ingen bevægelsesuskarphed. En langsommere afspilningshastighed eller en længere lukkertid giver prøver.',
-		bracketVsInterpolation:
-			'Lukkertidsbracketing og {factor}x billedinterpolation kan ikke køre samtidig, så dette billede tages uden interpolation. Slå bracketingen fra, hvis mellembillederne betyder mere for dig end de ekstra trin.',
-		passesVsInterpolation:
-			'Både flere gennemløb og {factor}x interpolation er slået til. De konkurrerer: interpolationen bremser hvert gennemløb så meget, at det koster virkelige billeder, så den samme ventetid køber færre virkelige prøver, end gennemløb alene ville. At slå interpolationen fra giver som regel det bedre billede.',
 		shortOfTarget:
 			'Selv ved hastigheden 1/{divisor} når denne eksponering omkring {samples} prøver, færre end de {target}, der blev bedt om. Brug en længere lukkertid for at få flere.',
 		longCaptureEscalate:
@@ -589,8 +570,6 @@ const da: Catalog = {
 			'En hurtigere afspilningshastighed bliver færdig før, med færre prøver.',
 		pastLogCap:
 			'Denne optagelse forventes at samle cirka {samples} prøver over {passes} gennemløb, mere end de {cap}, diagnostikloggen kan rumme. Billedet påvirkes ikke — kun tallene for jævnhed og huller vil beskrive den første del af optagelsen.',
-		interpolationLossy:
-			'I denne størrelse har {factor}x interpolation tidligere kostet denne maskine virkelige prøver. Overvej en lavere faktor, en lavere opløsning eller flere gennemløb i stedet.',
 	},
 
 	duration: {

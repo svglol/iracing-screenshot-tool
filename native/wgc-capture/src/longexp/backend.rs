@@ -15,9 +15,8 @@
 //! pass, which is memory-bandwidth-bound by roughly two orders of magnitude, and
 //! WGC already hands us a D3D11 texture on a device we own — so DirectCompute is
 //! simultaneously the more portable AND the simpler choice, with no interop layer,
-//! no fatbinary, no LUID adapter matching and no user-installed toolkit. A future
-//! CUDA backend (for optical-flow frame interpolation, which does have dedicated
-//! hardware) implements this same trait.
+//! no fatbinary, no LUID adapter matching and no user-installed toolkit. Any future
+//! backend implements this same trait.
 
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
 
@@ -59,32 +58,6 @@ pub struct ResolvedImage {
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
-}
-
-/// What one offered frame actually contributed to the exposure.
-///
-/// `real` and `synthetic` are counted separately and never merged, because the whole
-/// risk of frame interpolation is that manufacturing synthetic samples slows frame
-/// consumption below iRacing's present rate and thereby costs us REAL ones. A single
-/// blended total would hide exactly the regression worth watching for.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct SampleOutcome {
-    /// 1 when the captured frame itself was accumulated, 0 when it was rejected.
-    pub real: u32,
-    /// Interpolated in-between frames accumulated alongside it (0 when off).
-    pub synthetic: u32,
-}
-
-/// Whether hardware frame interpolation is live, and what it negotiated.
-#[derive(Clone, Debug, Default)]
-pub struct InterpolationStatus {
-    pub enabled: bool,
-    /// 1 = off. 2/4/8 emit factor-1 synthetic frames per captured frame.
-    pub factor: u32,
-    /// Why it is not enabled. `None` when it is, or when it was never asked for.
-    pub reason: Option<String>,
-    pub grid_size: u32,
-    pub bidirectional: bool,
 }
 
 #[derive(Debug)]
@@ -150,9 +123,9 @@ pub trait AccumulateBackend {
     ///
     /// This used to be a synchronous `digest()` that mapped the result back on the
     /// spot — a full GPU sync once per frame. Field data showed that sync dominating
-    /// the per-frame cost at large render sizes (12.1 ms/frame at 5120x2880), and
-    /// once frame interpolation was added on top it pushed consumption past iRacing's
-    /// present interval, so we started DROPPING REAL FRAMES. Losing real samples is a
+    /// the per-frame cost at large render sizes (12.1 ms/frame at 5120x2880), enough
+    /// to push consumption past iRacing's present interval, so we started DROPPING
+    /// REAL FRAMES. Losing real samples is a
     /// far worse defect than the duplicates this was guarding against — which have
     /// never once been observed in the field (`rejected: 0` on every shot to date).
     ///
@@ -193,65 +166,6 @@ pub trait AccumulateBackend {
     /// 0 stops must remain bit-for-bit identity: the one-sample-equals-still-capture
     /// equivalence depends on it.
     fn set_highlight_recovery(&mut self, _stops: f32) {}
-
-    /// Ask for hardware frame interpolation at `factor` (1 disables it).
-    ///
-    /// Returns the resulting status rather than an error, and NEVER fails the
-    /// session: interpolation is an optional accelerator layered on top of a feature
-    /// that must keep working without it. A backend with no such hardware — or a
-    /// machine whose GPU is not NVIDIA Turing-or-newer — reports `enabled: false`
-    /// with a reason and the capture proceeds exactly as before.
-    /// `source` is a real captured frame: the backend takes width, height AND pixel
-    /// format from it rather than being told, so the retained copy can never
-    /// disagree with what WGC is actually delivering.
-    fn enable_interpolation(
-        &mut self,
-        _factor: u32,
-        _source: &ID3D11Texture2D,
-    ) -> InterpolationStatus {
-        InterpolationStatus {
-            enabled: false,
-            factor: 1,
-            reason: Some("this backend has no frame interpolation".to_string()),
-            grid_size: 0,
-            bidirectional: false,
-        }
-    }
-
-    /// Offer one captured frame: accumulate it, plus any synthetic frames between it
-    /// and the previously accumulated one.
-    ///
-    /// The default is the honest no-interpolation behaviour, so a backend that does
-    /// not override this is automatically correct.
-    fn accumulate_sample(
-        &mut self,
-        sink_id: &str,
-        source: &ID3D11Texture2D,
-        weight: f32,
-    ) -> Result<SampleOutcome, BackendError> {
-        self.accumulate(sink_id, source, weight)?;
-        Ok(SampleOutcome {
-            real: 1,
-            synthetic: 0,
-        })
-    }
-
-    /// Called after a frame is REJECTED as a duplicate, so a backend retaining a
-    /// previous frame can decide what to do about it. Default: nothing.
-    fn note_rejected_frame(&mut self) {}
-
-    /// Discard retained INTER-FRAME state: the next frame offered is not temporally
-    /// adjacent to the last one. Accumulator contents are untouched.
-    ///
-    /// Multi-pass accumulation (see `docs/design/long-exposure-multi-pass.md`) visits
-    /// the same exposure window repeatedly WITHOUT clearing the accumulator, so at a
-    /// pass boundary the retained "previous frame" is the END of the window while the
-    /// next frame offered is its START. Interpolating across that pair would warp the
-    /// entire exposure into the first in-betweens of every pass after the first — and
-    /// it is not a subtle artifact.
-    ///
-    /// Default: nothing retained, nothing to discard.
-    fn begin_pass(&mut self) {}
 
     /// Normalise by accumulated weight, apply exposure, tonemap, box-downsample the
     /// supersample, encode to 16-bit sRGB and read back.

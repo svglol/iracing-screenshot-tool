@@ -138,12 +138,9 @@ const es: Catalog = {
 		weightingBox: 'Box (uniforme)',
 		weightingLinear: 'Lineal (nítida al final)',
 		weightingEase: 'Ease (cabeza más nítida, cola larga)',
-
-		interpolation: 'Interpolación de fotogramas',
-		interpolationOff: 'Desactivada',
-		interpolation2: '2× (un fotograma intermedio)',
-		interpolation4: '4× (tres fotogramas intermedios)',
-		interpolation8: '8× (siete fotogramas intermedios)',
+		weightingBoxShort: 'Box',
+		weightingLinearShort: 'Lineal',
+		weightingEaseShort: 'Ease',
 
 		passes: 'Pasadas',
 		passes1: '1 (una sola pasada)',
@@ -156,9 +153,11 @@ const es: Catalog = {
 		warmUp1: '1 s',
 		warmUp3: '3 s (recommended)',
 		warmUp5: '5 s — for lingering smoke',
+		warmUpValue: '{seconds} s',
 
 		bracket: 'Horquillado de obturación',
 		highlightRecovery: 'Recuperación de altas luces (pasos)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Cancelar',
 		saved: 'Exposición larga guardada — {count} muestras',
@@ -167,7 +166,6 @@ const es: Catalog = {
 		modified: {
 			weighting_linear: 'lineal',
 			weighting_ease: 'ease',
-			interpolation: 'interpolación {factor}×',
 			passes: {
 				one: '{count} pasada',
 				other: '{count} pasadas',
@@ -194,15 +192,8 @@ const es: Catalog = {
 			unavailableWithReason:
 				'La exposición larga no está disponible en este equipo: {reason}',
 			unavailable: 'La exposición larga no está disponible en este equipo.',
-			interpolationCost:
-				'La interpolación inventa fotogramas entre los reales para suavizar la estela. Cuesta tiempo de GPU por fotograma, así que compara el número de muestras reales de la toma guardada con la misma toma sin interpolación: si esa cifra baja, está comprando muestras inventadas con muestras reales.',
-			passesAndInterpolation:
-				'Las pasadas y la interpolación compiten por el mismo presupuesto por fotograma. Con ambas activadas, cada pasada captura menos fotogramas reales — desactivar la interpolación suele dar una toma mejor con la misma espera.',
 			passes:
 				'Cada pasada repite el mismo instante y recoge fotogramas que las demás perdieron, de modo que la estela queda más uniforme, no más brillante. Va especialmente bien en obturaciones rápidas, donde una sola pasada recoge pocas muestras.',
-			interpolationUnsupported:
-				'La interpolación de fotogramas requiere una GPU NVIDIA Turing o más reciente{adapter}. Todo lo demás de la exposición larga funciona con normalidad.',
-			interpolationAdapter: ' (esta captura se ejecuta en {adapter})',
 			reshade:
 				'La exposición larga captura de forma nativa y no usa ReShade, por lo que los efectos de ReShade no aparecerán en el resultado.',
 		},
@@ -265,17 +256,11 @@ const es: Catalog = {
 			weightingBody:
 				'Cuánto aporta cada fotograma capturado al resultado. <b>Box</b> los pondera todos por igual y da una estela uniforme. <b>Lineal</b> aumenta hacia el final de la ventana, de modo que el sujeto queda más nítido donde terminó y se desvanece a lo largo de su trayectoria. <b>Ease</b> es la misma idea con una cabeza más nítida y una cola más larga.',
 
-			interpolation: 'Interpolación de fotogramas',
-			interpolationBody:
-				'Inventa fotogramas adicionales entre los reales usando el motor de flujo óptico de la GPU, rellenando los huecos de la estela. Requiere una tarjeta NVIDIA Turing o más reciente y se oculta por completo en hardware que no puede hacerlo.',
-			interpolationCostBody:
-				'No sale gratis: cuesta tiempo de GPU en cada fotograma capturado, y el presupuesto es un fotograma de iRacing. Si no da abasto, empieza a perder fotogramas <i>reales</i> para fabricar otros sintéticos, lo que supone una pérdida neta: la estela sale más corta y más basta. El coste escala con los megapíxeles multiplicados por el factor, así que lo que resulta cómodo a 2560×1440 no es viable en 8K. Para comprobarlo, fotografía el mismo instante dos veces, con y sin, y compara el número de muestras reales; la aplicación también te avisa después si una toma se ha quedado corta.',
-
 			passes: 'Pasadas',
 			passesBody:
 				'Visita el mismo instante varias veces, acumulando en una sola imagen. Cada pasada recoge fotogramas que las demás no llegaron a captar, así que la estela queda más uniforme, no más brillante, porque el resultado se normaliza según la luz que realmente llegó a cada píxel.',
 			passesTradeBody:
-				'Las pasadas compran lo mismo que la interpolación, pero con otra moneda: tiempo real en lugar de tiempo de GPU. Ocho pasadas tardan unas ocho veces más, pero nunca pueden costarte fotogramas reales. Eso las convierte en la palanca adecuada en resoluciones altas, donde la interpolación no da abasto, y en obturaciones rápidas, donde una sola pasada recoge muy pocas muestras. Usar ambas a la vez suele ser lo peor de las dos: compiten por el mismo presupuesto por fotograma.',
+				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
 
 			bracket: 'Horquillado de obturación',
 			bracketBody:
@@ -575,10 +560,6 @@ const es: Catalog = {
 			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
 		singleSample:
 			'Esta obturación es tan corta que solo caerá un fotograma dentro de ella, así que el resultado no tendrá desenfoque de movimiento. Una velocidad de reproducción o una obturación más lentas aportan muestras.',
-		bracketVsInterpolation:
-			'El horquillado de obturación y la interpolación de fotogramas {factor}x no pueden funcionar a la vez, así que esta toma se hará sin interpolación. Desactiva el horquillado si los fotogramas intermedios te importan más que los pasos adicionales.',
-		passesVsInterpolation:
-			'Están activadas tanto las pasadas múltiples como la interpolación {factor}x. Compiten entre sí: la interpolación ralentiza cada pasada lo suficiente como para costarle fotogramas reales, de modo que la misma espera compra menos muestras reales que las pasadas por sí solas. Desactivar la interpolación suele dar una toma mejor.',
 		shortOfTarget:
 			'Incluso a velocidad 1/{divisor}, esta exposición alcanza unas {samples} muestras, por debajo de las {target} solicitadas. Usa una obturación más lenta para obtener más.',
 		longCaptureEscalate:
@@ -591,8 +572,6 @@ const es: Catalog = {
 			'Una velocidad de reproducción más rápida termina antes, con menos muestras.',
 		pastLogCap:
 			'Se prevé que esta captura recoja unas {samples} muestras en {passes} pasadas, más de las {cap} que admite el registro de diagnóstico. La imagen no se ve afectada — solo las cifras de uniformidad y de huecos describirán la primera parte de la captura.',
-		interpolationLossy:
-			'A este tamaño, la interpolación {factor}x ya le ha costado muestras reales a este equipo. Considera un factor menor, una resolución más baja o más pasadas en su lugar.',
 	},
 
 	duration: {
