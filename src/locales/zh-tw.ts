@@ -162,6 +162,7 @@ const zhTW: Catalog = {
 
 		bracket: '快門包圍曝光',
 		highlightRecovery: '亮部細節復原（級數）',
+		highlightRecoveryOff: 'Off',
 
 		cancel: '取消',
 		saved: '已儲存長時間曝光，共 {count} 個取樣',

@@ -8,6 +8,8 @@ import {
 	variantSuffix,
 	LONG_EXPOSURE_FORMATS,
 	MAX_HIGHLIGHT_RECOVERY_STOPS,
+	PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS,
+	panelHighlightRecoveryStops,
 	type LongExposureRecipe,
 } from './shot-recipe';
 import {
@@ -82,6 +84,43 @@ describe('normalizeRecipe — highlight recovery', () => {
 		const old = { ...base() } as Record<string, unknown>;
 		delete old.highlightRecovery;
 		expect(normalizeRecipe(old as never, base()).highlightRecovery).toBe(0);
+	});
+});
+
+// The panel slider offers whole stops 0..PANEL_MAX; the recipe keeps accepting up
+// to MAX so older sidecars reproduce. A stored value the slider cannot show must be
+// normalised on load, or the slider would show one value while the recipe sent
+// another.
+describe('panelHighlightRecoveryStops', () => {
+	it('narrows the panel range without narrowing the recipe', () => {
+		expect(PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS).toBeLessThan(
+			MAX_HIGHLIGHT_RECOVERY_STOPS
+		);
+		expect(
+			normalizeRecipe({ highlightRecovery: 8 }, base()).highlightRecovery
+		).toBe(8);
+	});
+
+	it('keeps every whole stop the slider offers', () => {
+		for (let s = 0; s <= PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS; s++) {
+			expect(panelHighlightRecoveryStops(s)).toBe(s);
+		}
+	});
+
+	it('rounds half-stops and clamps to the slider range', () => {
+		expect(panelHighlightRecoveryStops(2.4)).toBe(2);
+		expect(panelHighlightRecoveryStops(4.5)).toBe(5);
+		expect(panelHighlightRecoveryStops(8)).toBe(
+			PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS
+		);
+		expect(panelHighlightRecoveryStops(-1)).toBe(0);
+		expect(panelHighlightRecoveryStops('3')).toBe(3);
+	});
+
+	it('treats anything unreadable as off', () => {
+		for (const bogus of [undefined, null, '', NaN, 'lots']) {
+			expect(panelHighlightRecoveryStops(bogus)).toBe(0);
+		}
 	});
 });
 

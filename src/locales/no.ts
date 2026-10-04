@@ -162,6 +162,7 @@ const no: Catalog = {
 
 		bracket: 'Lukkertidsbracketing',
 		highlightRecovery: 'Gjenoppretting av høylys (trinn)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Avbryt',
 		saved: 'Lang eksponering lagret — {count} prøver',

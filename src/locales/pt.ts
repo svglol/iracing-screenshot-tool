@@ -159,6 +159,7 @@ const pt: Catalog = {
 
 		bracket: 'Bracketing de obturador',
 		highlightRecovery: 'Recuperação de altas luzes (stops)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Cancelar',
 		saved: 'Longa exposição guardada — {count} amostras',

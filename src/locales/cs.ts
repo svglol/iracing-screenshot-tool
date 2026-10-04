@@ -165,6 +165,7 @@ const cs: Catalog = {
 
 		bracket: 'Braketing závěrek',
 		highlightRecovery: 'Obnova světel (EV)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Zrušit',
 		saved: 'Dlouhá expozice uložena — vzorků: {count}',

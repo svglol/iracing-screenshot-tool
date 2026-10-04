@@ -159,6 +159,7 @@ const de: Catalog = {
 
 		bracket: 'Verschlusszeiten-Reihe',
 		highlightRecovery: 'Lichterrettung (Blendenstufen)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Abbrechen',
 		saved: 'Langzeitbelichtung gespeichert — {count} Abtastungen',

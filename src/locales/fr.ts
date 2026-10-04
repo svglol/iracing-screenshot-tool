@@ -159,6 +159,7 @@ const fr: Catalog = {
 
 		bracket: 'Bracketing des vitesses',
 		highlightRecovery: 'Récupération des hautes lumières (IL)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Annuler',
 		saved: 'Pose longue enregistrée — {count} échantillons',

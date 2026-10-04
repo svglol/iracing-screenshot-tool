@@ -157,6 +157,7 @@ const it: Catalog = {
 
 		bracket: 'Bracketing dei tempi',
 		highlightRecovery: 'Recupero delle alte luci (stop)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Annulla',
 		saved: 'Lunga esposizione salvata — {count} campioni',

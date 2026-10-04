@@ -165,6 +165,7 @@ const pl: Catalog = {
 
 		bracket: 'Bracketing czasów migawki',
 		highlightRecovery: 'Odzyskiwanie świateł (EV)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Anuluj',
 		saved: 'Zapisano długie naświetlanie — próbek: {count}',

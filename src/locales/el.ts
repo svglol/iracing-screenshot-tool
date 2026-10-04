@@ -174,6 +174,7 @@ const el: Catalog = {
 
 		bracket: 'Μπρακετάρισμα ταχυτήτων κλείστρου',
 		highlightRecovery: 'Ανάκτηση φώτων (στάσεις)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Ακύρωση',
 		saved: 'Η μεγάλη έκθεση αποθηκεύτηκε — {count} δείγματα',

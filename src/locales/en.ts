@@ -181,6 +181,7 @@ export default {
 
 		bracket: 'Bracket shutters',
 		highlightRecovery: 'Highlight recovery (stops)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Cancel',
 		saved: 'Long exposure saved — {count} samples',

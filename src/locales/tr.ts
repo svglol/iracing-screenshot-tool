@@ -169,6 +169,7 @@ const tr: Catalog = {
 
 		bracket: 'Enstantane Bracketleme',
 		highlightRecovery: 'Vurgu Kurtarma (stop)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'İptal',
 		saved: 'Uzun pozlama kaydedildi — {count} örnek',

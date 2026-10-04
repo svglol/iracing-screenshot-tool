@@ -161,6 +161,7 @@ const fi: Catalog = {
 
 		bracket: 'Suljinaikahaarukointi',
 		highlightRecovery: 'Huippuvalojen palautus (aukkoa)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Peruuta',
 		saved: 'Pitkä valotus tallennettu — {count} näytettä',

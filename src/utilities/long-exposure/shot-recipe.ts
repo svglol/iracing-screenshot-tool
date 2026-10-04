@@ -78,6 +78,27 @@ export type Tonemapper = (typeof TONEMAPPERS)[number];
 // as a photographic control rather than an arbitrary multiplier. 0 is off; 8 stops is
 // a 256x gain at full clip, past anything useful.
 export const MAX_HIGHLIGHT_RECOVERY_STOPS = 8;
+// The panel's slider runs 0..6 in whole stops. N stops fully restores a clipped
+// light that sits on a pixel for at least 0.75 / 2^N of the exposure (the knee over
+// the gain): 9% at 3 stops, 1.2% at 6 — a 10 px headlight on a 1000 px streak.
+// Beyond that only ever-briefer glints brighten, and each light goes from dim to
+// fully restored within about one stop, so half-stops buy nothing. The recipe
+// ceiling above stays at 8 so sidecars written with 7 or 8 still reproduce.
+export const PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS = 6;
+
+// A stored recovery as the slider can show it: whole stops within its range. Same
+// reason as panelWarmUpSeconds — a range input pins an out-of-range value visually
+// while the recipe would still send the original.
+export function panelHighlightRecoveryStops(value: unknown): number {
+	const n = Number(value);
+	if (value === null || value === '' || !Number.isFinite(n)) {
+		return 0;
+	}
+	return Math.min(
+		PANEL_MAX_HIGHLIGHT_RECOVERY_STOPS,
+		Math.max(0, Math.round(n))
+	);
+}
 
 // Ceiling on multi-pass captures. Wall clock is passes x window x divisor, so this
 // is a patience bound rather than a technical one: 16 passes of a sub-frame window

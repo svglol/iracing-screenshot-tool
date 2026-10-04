@@ -169,6 +169,7 @@ const ru: Catalog = {
 
 		bracket: 'Брекетинг выдержек',
 		highlightRecovery: 'Восстановление светов (EV)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Отмена',
 		saved: 'Длинная выдержка сохранена — выборок: {count}',

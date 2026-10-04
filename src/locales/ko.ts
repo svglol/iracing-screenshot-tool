@@ -162,6 +162,7 @@ const ko: Catalog = {
 
 		bracket: '셔터 브라케팅',
 		highlightRecovery: '하이라이트 복구 (스톱)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: '취소',
 		saved: '장노출을 저장했습니다 — 샘플 {count}개',

@@ -157,6 +157,7 @@ const sv: Catalog = {
 
 		bracket: 'Slutartidsgaffling',
 		highlightRecovery: 'Högdageråterhämtning (steg)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Avbryt',
 		saved: 'Långtidsexponering sparad — {count} sampel',

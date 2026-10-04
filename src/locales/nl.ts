@@ -157,6 +157,7 @@ const nl: Catalog = {
 
 		bracket: 'Sluitertijdenreeks',
 		highlightRecovery: 'Hoge lichten herstellen (stops)',
+		highlightRecoveryOff: 'Off',
 
 		cancel: 'Annuleren',
 		saved: 'Lange sluitertijd opgeslagen — {count} samples',
