@@ -153,16 +153,16 @@ const ko: Catalog = {
 		passes4: '4× — 대기 시간 4배',
 		passes8: '8× — 대기 시간 8배',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
-		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
-		warmUpValue: '{seconds} s',
+		warmUp: '이펙트 워밍업',
+		warmUpOff: '끔',
+		warmUp1: '1초',
+		warmUp3: '3초 (권장)',
+		warmUp5: '5초 — 오래 남는 연기용',
+		warmUpValue: '{seconds}초',
 
 		bracket: '셔터 브라케팅',
 		highlightRecovery: '하이라이트 복구 (스톱)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: '끔',
 
 		cancel: '취소',
 		saved: '장노출을 저장했습니다 — 샘플 {count}개',
@@ -176,14 +176,14 @@ const ko: Catalog = {
 				other: '{count} 패스',
 			},
 			bracketed: '브라케팅',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '워밍업 {seconds}초',
+			warmUpOff: '워밍업 없음',
 			recovery: '{stops} 스톱 복구',
 		},
 
 		progress: {
 			working: '작업 중…',
-			warming: 'Warming up effects…{pass}',
+			warming: '이펙트 워밍업 중…{pass}',
 			seeking: '탐색 중…{pass}',
 			accumulating: '노출 중… 샘플 {count}개{pass}',
 			resolving: '현상 중…',
@@ -264,7 +264,7 @@ const ko: Catalog = {
 			passesBody:
 				'같은 순간을 여러 번 훑으며 하나의 이미지에 누적합니다. 각 패스는 다른 패스가 놓친 프레임을 잡아내므로 궤적이 매끄러워집니다. 밝아지지는 않습니다. 결과가 각 픽셀에 실제로 도달한 빛의 양으로 정규화되기 때문입니다.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'패스는 대기 시간을 샘플과 맞바꿉니다. 8번의 패스는 대략 8배의 시간이 걸리고, 이때 늘어나는 샘플은 모두 실제 프레임입니다. 그래서 단일 패스로는 샘플이 거의 모이지 않는 빠른 셔터에서, 그리고 패스당 iRacing이 내보내는 프레임 수가 적어지는 높은 해상도에서 가장 알맞은 수단입니다.',
 
 			bracket: '셔터 브라케팅',
 			bracketBody:
@@ -276,9 +276,9 @@ const ko: Catalog = {
 			bracketNamingBody:
 				'선택한 스톱은 평소와 같은 이름으로 저장되며 갤러리에 나타나는 것도 이 사진입니다. 나머지는 파일 이름에 셔터 값이 붙은 채로 그 옆에 놓입니다.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: '이펙트 워밍업',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'튀어 오르는 흙먼지, 타이어 연기, 배기 불꽃, 회전하는 휠의 블러는 리플레이에 저장되어 있지 않습니다. iRacing이 재생하면서 실시간으로 시뮬레이션하며, 리플레이가 건너뛸 때마다 사라집니다. 그래서 각 패스 전에 리플레이를 조금 더 되감아 이 시간만큼 일반 속도로 재생한 뒤, 노출이 시작되기 직전에 속도를 늦춥니다. 노출이 열릴 때 이펙트가 이미 갖춰져 있게 하기 위해서입니다. 패스마다 대략 이 초 수만큼 더 걸립니다. 궤적의 시작 부분에서 타이어 연기가 여전히 옅게 보인다면 값을 높이고, 예전 동작을 원할 때만 끄세요.',
 
 			highlights: '하이라이트 복구',
 			highlightsBody:
@@ -525,7 +525,7 @@ const ko: Catalog = {
 		seekTimeout:
 			'리플레이가 제때 {frame} 프레임에 도달하지 못했습니다. 아직 불러오는 중일 수 있습니다.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'이펙트 워밍업 후 리플레이를 제때 느리게 하지 못해 이번 샷은 워밍업 없이 촬영되었습니다. 궤적의 시작 부분에 연기, 흙먼지, 휠 회전이 빠져 있을 수 있습니다.',
 		noPasses: '캡처는 최소 한 번의 패스를 실행해야 합니다.',
 		playbackStalled:
 			'리플레이가 재생되지 않았습니다. 다른 도구가 iRacing을 일시 정지시키지 않았는지 확인하세요.',
@@ -557,7 +557,7 @@ const ko: Catalog = {
 		singleSampleMultiPass:
 			'이 셔터는 한 패스당 약 한 프레임만 들어갈 만큼 짧아서, {passes}번의 패스로 대략 {passes}개의 샘플만 모입니다. 재생 속도를 낮추거나 더 느린 셔터를 쓰면 훨씬 많이 얻을 수 있습니다.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'이 순간은 리플레이 시작에 가까워서 이펙트 워밍업이 {seconds}초로 줄어듭니다. 궤적의 시작 부분에 연기, 흙먼지, 휠 회전이 빠져 있을 수 있습니다.',
 		singleSample:
 			'이 셔터는 프레임이 한 장만 들어갈 만큼 짧아서 결과에 모션 블러가 생기지 않습니다. 재생 속도를 낮추거나 더 느린 셔터를 쓰면 샘플을 모을 수 있습니다.',
 		shortOfTarget:

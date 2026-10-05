@@ -155,16 +155,16 @@ const ja: Catalog = {
 		passes4: '4× — 待ち時間は 4 倍',
 		passes8: '8× — 待ち時間は 8 倍',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
-		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
-		warmUpValue: '{seconds} s',
+		warmUp: 'エフェクトのウォームアップ',
+		warmUpOff: 'オフ',
+		warmUp1: '1 秒',
+		warmUp3: '3 秒（推奨）',
+		warmUp5: '5 秒 — 残りやすいスモーク向け',
+		warmUpValue: '{seconds} 秒',
 
 		bracket: 'シャッターのブラケット撮影',
 		highlightRecovery: 'ハイライト復元（段）',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'オフ',
 
 		cancel: 'キャンセル',
 		saved: '長時間露光を保存しました — サンプル数 {count}',
@@ -179,14 +179,14 @@ const ja: Catalog = {
 				other: '{count} パス',
 			},
 			bracketed: 'ブラケット撮影',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: 'ウォームアップ {seconds} 秒',
+			warmUpOff: 'ウォームアップなし',
 			recovery: '復元 {stops} 段',
 		},
 
 		progress: {
 			working: '処理中…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'エフェクトをウォームアップ中…{pass}',
 			seeking: 'シーク中…{pass}',
 			accumulating: '露光中… サンプル数 {count}{pass}',
 			resolving: '現像中…',
@@ -267,7 +267,7 @@ const ja: Catalog = {
 			passesBody:
 				'同じ瞬間を複数回訪れ、1 枚の画像に累積します。各パスは他のパスがたまたま取りこぼしたフレームを拾うため、軌跡は明るくなるのではなく滑らかになります。結果は各ピクセルに実際に届いた光の量で正規化されるからです。',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'パスは待ち時間とサンプル数を交換します。8 パスならおよそ 8 倍の時間がかかり、増えるサンプルはすべて実際のフレームです。1 回のパスではごくわずかなサンプルしか集まらない高速シャッターや、1 パスあたりに iRacing が出力するフレーム数が減る高解像度で、最も頼れる手段です。',
 
 			bracket: 'シャッターのブラケット撮影',
 			bracketBody:
@@ -279,9 +279,9 @@ const ja: Catalog = {
 			bracketNamingBody:
 				'選んだ段は通常のファイル名で保存され、ギャラリーに表示されるのもこれです。他の段はその隣に、ファイル名にシャッター速度を付けて並びます。',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'エフェクトのウォームアップ',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'巻き上がる土煙、タイヤスモーク、マフラーの炎、回転するホイールのブレはリプレイには保存されていません。iRacing が再生しながらシミュレートしており、リプレイがジャンプするたびに消えてしまいます。そこで各パスの前にリプレイをさらに少し巻き戻し、この時間だけ通常速度で再生してから、露光が始まる直前にスローにします。こうして露光が開く時点で、エフェクトがすでに出そろっています。1 パスごとにこの秒数ほど余分にかかります。軌跡の始まりでタイヤスモークがまだ薄く見える場合は値を上げてください。従来の動作にしたい場合のみオフにします。',
 
 			highlights: 'ハイライト復元',
 			highlightsBody:
@@ -538,7 +538,7 @@ const ja: Catalog = {
 		seekTimeout:
 			'リプレイが時間内にフレーム {frame} へ到達しませんでした。まだ読み込み中の可能性があります。',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'エフェクトのウォームアップ後、リプレイを時間内にスローにできなかったため、このショットはウォームアップなしで撮影されました。軌跡の始まりにスモーク、土煙、ホイールの回転が写っていない場合があります。',
 		noPasses: 'キャプチャには少なくとも 1 パスが必要です。',
 		playbackStalled:
 			'リプレイの再生が始まりませんでした。iRacing が他のツールによって一時停止されていないか確認してください。',
@@ -570,7 +570,7 @@ const ja: Catalog = {
 		singleSampleMultiPass:
 			'このシャッターは短く、1 パスあたり約 1 枚しかフレームが収まりません。そのため {passes} パスでもおよそ {passes} サンプルにしかなりません。再生速度を遅くするか、シャッターを遅くするほうがはるかに多く得られます。',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'この瞬間はリプレイの先頭に近いため、エフェクトのウォームアップは {seconds} 秒に短縮されます。軌跡の始まりにスモーク、土煙、ホイールの回転が写っていない場合があります。',
 		singleSample:
 			'このシャッターは短く、収まるフレームは 1 枚だけです。そのため結果に被写体ブレは生じません。再生速度を遅くするか、シャッターを遅くするとサンプルが得られます。',
 		shortOfTarget:

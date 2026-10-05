@@ -156,16 +156,16 @@ const pl: Catalog = {
 		passes4: '4× — czterokrotnie dłuższe oczekiwanie',
 		passes8: '8× — ośmiokrotnie dłuższe oczekiwanie',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Rozgrzewka efektów',
+		warmUpOff: 'Wył.',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (zalecane)',
+		warmUp5: '5 s — dla długo utrzymującego się dymu',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracketing czasów migawki',
 		highlightRecovery: 'Odzyskiwanie świateł (EV)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Wył.',
 
 		cancel: 'Anuluj',
 		saved: 'Zapisano długie naświetlanie — próbek: {count}',
@@ -181,14 +181,14 @@ const pl: Catalog = {
 				other: '{count} przebiegów',
 			},
 			bracketed: 'bracketing',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: 'rozgrzewka {seconds} s',
+			warmUpOff: 'bez rozgrzewki',
 			recovery: 'odzyskiwanie {stops} EV',
 		},
 
 		progress: {
 			working: 'Pracuję…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Rozgrzewanie efektów…{pass}',
 			seeking: 'Wyszukiwanie…{pass}',
 			accumulating: 'Naświetlanie… próbek: {count}{pass}',
 			resolving: 'Wywoływanie…',
@@ -269,7 +269,7 @@ const pl: Catalog = {
 			passesBody:
 				'Odwiedza ten sam moment wielokrotnie, sumując wszystko w jeden obraz. Każdy przebieg wyłapuje klatki, które inne przypadkiem pominęły, więc smuga staje się gładsza — nie jaśniejsza, ponieważ wynik jest normalizowany według ilości światła, które faktycznie padło na każdy piksel.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'Przebiegi wymieniają czas oczekiwania na próbki: osiem przebiegów trwa mniej więcej osiem razy dłużej, a każda dodana przez nie próbka jest prawdziwą klatką. To czyni je właściwą dźwignią przy krótkich czasach migawki, gdzie pojedynczy przebieg zbiera bardzo mało próbek, oraz przy wysokich rozdzielczościach, gdzie iRacing prezentuje mniej klatek na przebieg.',
 
 			bracket: 'Bracketing czasów migawki',
 			bracketBody:
@@ -281,9 +281,9 @@ const pl: Catalog = {
 			bracketNamingBody:
 				'Wybrany przez Ciebie czas jest zapisywany pod zwykłą nazwą i to on pojawia się w galerii; pozostałe leżą obok, z czasem migawki w nazwie pliku.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Rozgrzewka efektów',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Wyrzucany w powietrze brud, dym z opon, płomienie z wydechu i rozmycie kręcących się kół nie są zapisywane w powtórce — iRacing symuluje je w trakcie odtwarzania i znikają one za każdym razem, gdy powtórka przeskakuje. Dlatego przed każdym przebiegiem powtórka jest cofana nieco dalej i odtwarzana z normalną prędkością przez tyle czasu, a tuż przed rozpoczęciem naświetlania zwalniana, dzięki czemu efekty są już obecne, gdy naświetlanie się zaczyna. Kosztuje to mniej więcej tyle sekund na przebieg. Zwiększ wartość, jeśli utrzymujący się dym z opon nadal jest zbyt rzadki na początku smugi; wyłącz ją tylko wtedy, gdy chcesz dawnego zachowania.',
 
 			highlights: 'Odzyskiwanie świateł',
 			highlightsBody:
@@ -540,7 +540,7 @@ const pl: Catalog = {
 		seekTimeout:
 			'Powtórka nie dotarła na czas do klatki {frame}. Może się jeszcze wczytywać.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Po rozgrzewce efektów nie udało się na czas zwolnić powtórki, więc to ujęcie wykonano bez niej. Na początku smugi może brakować dymu, brudu i obrotu kół.',
 		noPasses: 'Przechwytywanie musi wykonać co najmniej jeden przebieg.',
 		playbackStalled:
 			'Powtórka nie ruszyła. Sprawdź, czy iRacing nie został wstrzymany przez inne narzędzie.',
@@ -573,7 +573,7 @@ const pl: Catalog = {
 		singleSampleMultiPass:
 			'Ten czas migawki jest tak krótki, że mieści się w nim około jednej klatki na przebieg, więc {passes} przebiegów zbierze mniej więcej {passes} próbek. Wolniejsza prędkość odtwarzania albo dłuższy czas migawki dadzą znacznie więcej.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Ten moment jest blisko początku powtórki, więc rozgrzewka efektów została skrócona do {seconds} s. Na początku smugi może brakować dymu, brudu i obrotu kół.',
 		singleSample:
 			'Ten czas migawki jest tak krótki, że zmieści się w nim tylko jedna klatka, więc wynik nie będzie miał rozmycia ruchu. Wolniejsza prędkość odtwarzania albo dłuższy czas migawki dostarczą próbek.',
 		shortOfTarget:

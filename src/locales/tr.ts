@@ -160,16 +160,16 @@ const tr: Catalog = {
 		passes4: '4× — dört kat bekleme',
 		passes8: '8× — sekiz kat bekleme',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Efekt ısınması',
+		warmUpOff: 'Kapalı',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (önerilen)',
+		warmUp5: '5 s — kalıcı duman için',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Enstantane Bracketleme',
 		highlightRecovery: 'Vurgu Kurtarma (stop)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Kapalı',
 
 		cancel: 'İptal',
 		saved: 'Uzun pozlama kaydedildi — {count} örnek',
@@ -183,14 +183,14 @@ const tr: Catalog = {
 				other: '{count} geçiş',
 			},
 			bracketed: 'bracketleme',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '{seconds} s ısınma',
+			warmUpOff: 'ısınma yok',
 			recovery: '{stops} stop kurtarma',
 		},
 
 		progress: {
 			working: 'Çalışılıyor…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Efektler ısıtılıyor…{pass}',
 			seeking: 'Aranıyor…{pass}',
 			accumulating: 'Pozlanıyor… {count} örnek{pass}',
 			resolving: 'Banyo ediliyor…',
@@ -273,7 +273,7 @@ const tr: Catalog = {
 			passesBody:
 				'Aynı ana birkaç kez uğrayarak tek bir görüntüde biriktirir. Her geçiş, diğerlerinin kaçırdığı kareleri yakalar, bu yüzden iz daha parlak değil — daha pürüzsüz olur, çünkü sonuç her pikselin üzerine gerçekten düşen ışık miktarına göre normalize edilir.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'Geçişler bekleme süresini örneklerle takas eder: sekiz geçiş yaklaşık sekiz kat uzun sürer ve ekledikleri her örnek gerçek bir karedir. Bu da onları, tek bir geçişin çok az örnek topladığı hızlı enstantanelerde ve iRacing geçiş başına daha az kare sunduğu yüksek çözünürlüklerde doğru kaldıraç yapar.',
 
 			bracket: 'Enstantane Bracketleme',
 			bracketBody:
@@ -285,9 +285,9 @@ const tr: Catalog = {
 			bracketNamingBody:
 				'Seçtiğiniz kademe her zamanki adla kaydedilir ve galeride görünen odur; diğerleri, dosya adlarında kendi enstantaneleriyle birlikte onun yanında durur.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Efekt ısınması',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Savrulan toprak, lastik dumanı, egzoz alevleri ve dönen tekerleklerin bulanıklığı replay içinde saklanmaz — iRacing bunları oynatırken simüle eder ve replay her atladığında kaybolurlar. Bu yüzden her geçişten önce replay biraz daha geriye sarılır ve bu süre boyunca normal hızda oynatılır, ardından pozlama başlamadan hemen önce yavaşlatılır; böylece efektler pozlama açıldığında zaten yerindedir. Geçiş başına yaklaşık bu kadar saniyeye mal olur. Lastik dumanı izin başında hâlâ seyreliyorsa artırın; yalnızca eski davranışı istiyorsanız kapatın.',
 
 			highlights: 'Vurgu Kurtarma',
 			highlightsBody:
@@ -536,7 +536,7 @@ const tr: Catalog = {
 		seekTimeout:
 			'Replay, {frame} karesine zamanında ulaşamadı. Hâlâ yükleniyor olabilir.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Efekt ısınmasından sonra replay zamanında yavaşlatılamadı, bu yüzden bu çekim ısınma olmadan alındı. Duman, toprak ve tekerlek dönüşü izin başında eksik olabilir.',
 		noPasses: 'Bir yakalama en az bir geçiş çalıştırmalıdır.',
 		playbackStalled:
 			"Replay oynatılmaya başlamadı. iRacing'in başka bir araç tarafından duraklatılmadığını kontrol edin.",
@@ -567,7 +567,7 @@ const tr: Catalog = {
 		singleSampleMultiPass:
 			'Bu enstantane o kadar kısa ki geçiş başına yalnızca yaklaşık bir kare düşüyor, bu yüzden {passes} geçiş yaklaşık {passes} örnek toplar. Daha yavaş bir oynatma hızı veya daha yavaş bir enstantane çok daha fazlasını sağlar.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Bu an replay başlangıcına yakın, bu yüzden efekt ısınması {seconds} saniyeye kısaltıldı. Duman, toprak ve tekerlek dönüşü izin başında eksik olabilir.',
 		singleSample:
 			'Bu enstantane o kadar kısa ki içine yalnızca bir kare düşecek, bu yüzden sonuçta hareket bulanıklığı olmayacak. Daha yavaş bir oynatma hızı veya daha yavaş bir enstantane örnek sağlar.',
 		shortOfTarget:

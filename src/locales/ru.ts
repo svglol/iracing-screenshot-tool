@@ -160,16 +160,16 @@ const ru: Catalog = {
 		passes4: '4× — вчетверо дольше ожидание',
 		passes8: '8× — в восемь раз дольше ожидание',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
-		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
-		warmUpValue: '{seconds} s',
+		warmUp: 'Прогрев эффектов',
+		warmUpOff: 'Выкл.',
+		warmUp1: '1 с',
+		warmUp3: '3 с (рекомендуется)',
+		warmUp5: '5 с — для долго держащегося дыма',
+		warmUpValue: '{seconds} с',
 
 		bracket: 'Брекетинг выдержек',
 		highlightRecovery: 'Восстановление светов (EV)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Выкл.',
 
 		cancel: 'Отмена',
 		saved: 'Длинная выдержка сохранена — выборок: {count}',
@@ -185,14 +185,14 @@ const ru: Catalog = {
 				other: '{count} прохода',
 			},
 			bracketed: 'брекетинг',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: 'прогрев {seconds} с',
+			warmUpOff: 'без прогрева',
 			recovery: 'восстановление {stops} EV',
 		},
 
 		progress: {
 			working: 'Обработка…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Прогрев эффектов…{pass}',
 			seeking: 'Перемотка…{pass}',
 			accumulating: 'Экспонирование… выборок: {count}{pass}',
 			resolving: 'Проявка…',
@@ -274,7 +274,7 @@ const ru: Catalog = {
 			passesBody:
 				'Посещает один и тот же момент несколько раз, накапливая всё в одно изображение. Каждый проход ловит кадры, которые остальные случайно пропустили, поэтому шлейф становится более гладким — но не более ярким, потому что результат нормализуется по количеству света, реально попавшего на каждый пиксель.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'Проходы обменивают время ожидания на выборки: восемь проходов занимают примерно в восемь раз больше времени, а каждая добавленная выборка — настоящий кадр. Поэтому это правильный рычаг на коротких выдержках, где один проход собирает очень мало выборок, и при высоких разрешениях, где iRacing выдаёт меньше кадров за проход.',
 
 			bracket: 'Брекетинг выдержек',
 			bracketBody:
@@ -286,9 +286,9 @@ const ru: Catalog = {
 			bracketNamingBody:
 				'Выбранная вами ступень сохраняется под обычным именем, и именно она появляется в галерее; остальные лежат рядом, с выдержкой в имени файла.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Прогрев эффектов',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Летящая грязь, дым от шин, пламя из выхлопа и размытие вращающихся колёс не сохраняются в повторе — iRacing рассчитывает их по ходу воспроизведения, и они пропадают при каждом скачке повтора. Поэтому перед каждым проходом повтор перематывается чуть дальше назад и воспроизводится с обычной скоростью в течение этого времени, а прямо перед началом экспозиции замедляется, так что эффекты уже есть к её началу. Это стоит примерно столько секунд на проход. Увеличьте значение, если дым от шин всё ещё редеет в начале шлейфа; выключайте, только если нужно прежнее поведение.',
 
 			highlights: 'Восстановление светов',
 			highlightsBody:
@@ -544,7 +544,7 @@ const ru: Catalog = {
 		seekTimeout:
 			'Повтор не дошёл до кадра {frame} вовремя. Возможно, он ещё загружается.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Повтор не удалось вовремя замедлить после прогрева эффектов, поэтому этот кадр снят без него. В начале шлейфа может не хватать дыма, грязи и вращения колёс.',
 		noPasses: 'Захват должен выполнить хотя бы один проход.',
 		playbackStalled:
 			'Повтор не начал воспроизводиться. Проверьте, что iRacing не поставлен на паузу другой программой.',
@@ -574,7 +574,7 @@ const ru: Catalog = {
 		singleSampleMultiPass:
 			'Эта выдержка настолько коротка, что в неё попадает примерно один кадр за проход, поэтому при {passes} проходах наберётся примерно столько же выборок — около {passes}. Более медленная скорость воспроизведения или более длинная выдержка дадут гораздо больше.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Этот момент близок к началу повтора, поэтому прогрев эффектов сокращён до {seconds} с. В начале шлейфа может не хватать дыма, грязи и вращения колёс.',
 		singleSample:
 			'Эта выдержка настолько коротка, что в неё попадёт только один кадр, поэтому в результате не будет смаза движения. Более медленная скорость воспроизведения или более длинная выдержка дадут выборки.',
 		shortOfTarget:
