@@ -148,16 +148,16 @@ const nl: Catalog = {
 		passes4: '4× — vier keer zo lang wachten',
 		passes8: '8× — acht keer zo lang wachten',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Effecten opwarmen',
+		warmUpOff: 'Uit',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (aanbevolen)',
+		warmUp5: '5 s — voor aanhoudende rook',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Sluitertijdenreeks',
 		highlightRecovery: 'Hoge lichten herstellen (stops)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Uit',
 
 		cancel: 'Annuleren',
 		saved: 'Lange sluitertijd opgeslagen — {count} samples',
@@ -171,14 +171,14 @@ const nl: Catalog = {
 				other: '{count} doorgangen',
 			},
 			bracketed: 'reeks',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '{seconds} s opwarmen',
+			warmUpOff: 'geen opwarming',
 			recovery: '{stops} stops herstel',
 		},
 
 		progress: {
 			working: 'Bezig…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Effecten opwarmen…{pass}',
 			seeking: 'Zoeken…{pass}',
 			accumulating: 'Belichten… {count} samples{pass}',
 			resolving: 'Ontwikkelen…',
@@ -259,7 +259,7 @@ const nl: Catalog = {
 			passesBody:
 				'Bezoekt hetzelfde moment meerdere keren en verzamelt alles in één afbeelding. Elke doorgang vangt beelden op die de andere toevallig misten, zodat de streep gelijkmatiger wordt — niet helderder, want het resultaat wordt genormaliseerd naar hoeveel licht er werkelijk op elke pixel viel.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'Doorgangen ruilen wachttijd in voor samples: acht doorgangen duren ruwweg acht keer zo lang, en elke sample die ze toevoegen is een echt beeld. Daarom zijn ze de juiste hefboom bij snelle sluitertijden, waar één doorgang maar zeer weinig samples verzamelt, en bij hoge resoluties, waar iRacing per doorgang minder beelden toont.',
 
 			bracket: 'Sluitertijdenreeks',
 			bracketBody:
@@ -271,9 +271,9 @@ const nl: Catalog = {
 			bracketNamingBody:
 				'De stand die je koos wordt onder de gebruikelijke naam opgeslagen en is degene die in de galerij verschijnt; de andere staan ernaast, met hun sluitertijd in de bestandsnaam.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Effecten opwarmen',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Opspattend vuil, bandenrook, uitlaatvlammen en de onscherpte van draaiende wielen worden niet in de replay opgeslagen — iRacing simuleert ze tijdens het afspelen, en ze verdwijnen zodra de replay springt. Daarom wordt de replay vóór elke doorgang iets verder teruggespoeld en zo lang op normale snelheid afgespeeld, en vlak voor het begin van de belichting vertraagd, zodat de effecten er al zijn wanneer die begint. Dit kost ongeveer zoveel seconden per doorgang. Verhoog de waarde als aanhoudende bandenrook aan het begin van de streep nog te ijl is; zet de functie alleen uit als je het oude gedrag wilt.',
 
 			highlights: 'Hoge lichten herstellen',
 			highlightsBody:
@@ -526,7 +526,7 @@ const nl: Catalog = {
 		seekTimeout:
 			'De replay bereikte beeld {frame} niet op tijd. Mogelijk wordt hij nog geladen.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'De replay kon na het opwarmen van de effecten niet op tijd worden vertraagd, dus deze opname is zonder opwarmen gemaakt. Rook, vuil en wielrotatie kunnen aan het begin van de streep ontbreken.',
 		noPasses: 'Een opname moet minstens één doorgang uitvoeren.',
 		playbackStalled:
 			'De replay begon niet af te spelen. Controleer of iRacing niet door een ander programma is gepauzeerd.',
@@ -558,7 +558,7 @@ const nl: Catalog = {
 		singleSampleMultiPass:
 			'Deze sluitertijd is zo kort dat er per doorgang maar ongeveer één beeld in valt, dus {passes} doorgangen verzamelen ruwweg {passes} samples. Een tragere afspeelsnelheid of een langere sluitertijd levert veel meer op.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Dit moment ligt dicht bij het begin van de replay, dus het opwarmen van de effecten is ingekort tot {seconds} s. Rook, vuil en wielrotatie kunnen aan het begin van de streep ontbreken.',
 		singleSample:
 			'Deze sluitertijd is zo kort dat er maar één beeld in valt, dus het resultaat heeft geen bewegingsonscherpte. Een tragere afspeelsnelheid of een langere sluitertijd levert samples op.',
 		shortOfTarget:

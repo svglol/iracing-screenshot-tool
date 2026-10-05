@@ -165,16 +165,16 @@ const el: Catalog = {
 		passes4: '4× — τετραπλάσια αναμονή',
 		passes8: '8× — οκταπλάσια αναμονή',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Προθέρμανση εφέ',
+		warmUpOff: 'Ανενεργό',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (προτείνεται)',
+		warmUp5: '5 s — για επίμονο καπνό',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Μπρακετάρισμα ταχυτήτων κλείστρου',
 		highlightRecovery: 'Ανάκτηση φώτων (στάσεις)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Ανενεργό',
 
 		cancel: 'Ακύρωση',
 		saved: 'Η μεγάλη έκθεση αποθηκεύτηκε — {count} δείγματα',
@@ -192,14 +192,14 @@ const el: Catalog = {
 				other: '{count} περάσματα',
 			},
 			bracketed: 'μπρακετάρισμα',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: 'προθέρμανση {seconds} s',
+			warmUpOff: 'χωρίς προθέρμανση',
 			recovery: 'ανάκτηση {stops} στάσεων',
 		},
 
 		progress: {
 			working: 'Επεξεργασία…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Προθέρμανση εφέ…{pass}',
 			seeking: 'Αναζήτηση…{pass}',
 			accumulating: 'Έκθεση… {count} δείγματα{pass}',
 			resolving: 'Εμφάνιση…',
@@ -283,7 +283,7 @@ const el: Catalog = {
 			passesBody:
 				'Επισκέπτεται την ίδια στιγμή πολλές φορές, συσσωρεύοντας σε μία εικόνα. Κάθε πέρασμα συλλαμβάνει καρέ που τα άλλα έτυχε να χάσουν, οπότε το ίχνος γίνεται πιο ομαλό — όχι πιο φωτεινό, επειδή το αποτέλεσμα κανονικοποιείται ανάλογα με το πόσο φως έπεσε πραγματικά σε κάθε pixel.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'Τα περάσματα ανταλλάσσουν χρόνο αναμονής με δείγματα: οκτώ περάσματα διαρκούν περίπου οκτώ φορές περισσότερο και κάθε δείγμα που προσθέτουν είναι πραγματικό καρέ. Έτσι αποτελούν τον σωστό μοχλό σε γρήγορες ταχύτητες κλείστρου, όπου ένα μόνο πέρασμα συλλέγει πολύ λίγα δείγματα, και σε υψηλές αναλύσεις, όπου το iRacing παρουσιάζει λιγότερα καρέ ανά πέρασμα.',
 
 			bracket: 'Μπρακετάρισμα ταχυτήτων κλείστρου',
 			bracketBody:
@@ -295,9 +295,9 @@ const el: Catalog = {
 			bracketNamingBody:
 				'Η στάση που επιλέξατε αποθηκεύεται με το συνηθισμένο όνομα και είναι αυτή που εμφανίζεται στη συλλογή· οι υπόλοιπες βρίσκονται δίπλα της με την ταχύτητα κλείστρου τους στο όνομα του αρχείου.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Προθέρμανση εφέ',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Η σκόνη που σηκώνεται, ο καπνός των ελαστικών, οι φλόγες της εξάτμισης και η θόλωση των περιστρεφόμενων τροχών δεν αποθηκεύονται στο replay — το iRacing τα προσομοιώνει καθώς παίζει και εξαφανίζονται κάθε φορά που το replay κάνει άλμα. Έτσι, πριν από κάθε πέρασμα το replay γυρίζει λίγο πιο πίσω και παίζει με κανονική ταχύτητα για τόση ώρα, και μετά επιβραδύνεται λίγο πριν ξεκινήσει η έκθεση, ώστε τα εφέ να υπάρχουν ήδη όταν αυτή ανοίξει. Κοστίζει περίπου τόσα δευτερόλεπτα ανά πέρασμα. Αυξήστε το αν ο καπνός των ελαστικών εξακολουθεί να αραιώνει στην αρχή του ίχνους· απενεργοποιήστε το μόνο αν θέλετε την παλιά συμπεριφορά.',
 
 			highlights: 'Ανάκτηση φώτων',
 			highlightsBody:
@@ -568,7 +568,7 @@ const el: Catalog = {
 		seekTimeout:
 			'Το replay δεν έφτασε στο καρέ {frame} έγκαιρα. Ίσως εξακολουθεί να φορτώνει.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Το replay δεν μπόρεσε να επιβραδυνθεί εγκαίρως μετά την προθέρμανση εφέ, οπότε αυτή η λήψη έγινε χωρίς αυτήν. Ο καπνός, η σκόνη και η περιστροφή των τροχών ενδέχεται να λείπουν από την αρχή του ίχνους.',
 		noPasses: 'Μια λήψη πρέπει να εκτελέσει τουλάχιστον ένα πέρασμα.',
 		playbackStalled:
 			'Το replay δεν ξεκίνησε να αναπαράγεται. Ελέγξτε ότι το iRacing δεν είναι σε παύση από άλλο εργαλείο.',
@@ -605,7 +605,7 @@ const el: Catalog = {
 		singleSampleMultiPass:
 			'Αυτή η ταχύτητα κλείστρου είναι αρκετά σύντομη ώστε μόνο περίπου ένα καρέ να πέφτει μέσα της ανά πέρασμα, οπότε {passes} περάσματα συλλέγουν περίπου {passes} δείγματα. Μια πιο αργή ταχύτητα αναπαραγωγής ή μια πιο αργή ταχύτητα κλείστρου αποφέρει πολύ περισσότερα.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Αυτή η στιγμή είναι κοντά στην αρχή του replay, οπότε η προθέρμανση εφέ μειώνεται στα {seconds} s. Ο καπνός, η σκόνη και η περιστροφή των τροχών ενδέχεται να λείπουν από την αρχή του ίχνους.',
 		singleSample:
 			'Αυτή η ταχύτητα κλείστρου είναι αρκετά σύντομη ώστε μόνο ένα καρέ να πέσει μέσα της, οπότε το αποτέλεσμα δεν έχει θόλωμα κίνησης. Μια πιο αργή ταχύτητα αναπαραγωγής ή μια πιο αργή ταχύτητα κλείστρου αποφέρει δείγματα.',
 		shortOfTarget:

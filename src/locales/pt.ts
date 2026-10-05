@@ -150,16 +150,16 @@ const pt: Catalog = {
 		passes4: '4× — quatro vezes a espera',
 		passes8: '8× — oito vezes a espera',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Aquecimento de efeitos',
+		warmUpOff: 'Desativado',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (recomendado)',
+		warmUp5: '5 s — para fumo persistente',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracketing de obturador',
 		highlightRecovery: 'Recuperação de altas luzes (stops)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Desativado',
 
 		cancel: 'Cancelar',
 		saved: 'Longa exposição guardada — {count} amostras',
@@ -173,14 +173,14 @@ const pt: Catalog = {
 				other: '{count} passagens',
 			},
 			bracketed: 'bracketing',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '{seconds} s de aquecimento',
+			warmUpOff: 'sem aquecimento',
 			recovery: 'recuperação de {stops} stops',
 		},
 
 		progress: {
 			working: 'A processar…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'A aquecer efeitos…{pass}',
 			seeking: 'A procurar…{pass}',
 			accumulating: 'A expor… {count} amostras{pass}',
 			resolving: 'A revelar…',
@@ -261,7 +261,7 @@ const pt: Catalog = {
 			passesBody:
 				'Visita o mesmo instante várias vezes, acumulando numa só imagem. Cada passagem apanha fotogramas que as outras falharam, pelo que o rasto fica mais uniforme — não mais claro, porque o resultado é normalizado pela luz que efetivamente chegou a cada píxel.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'As passagens trocam tempo de espera por amostras: oito passagens demoram cerca de oito vezes mais, e cada amostra que acrescentam é um fotograma real. Isso torna-as a alavanca certa com obturadores rápidos, onde uma única passagem recolhe muito poucas amostras, e em resoluções altas, onde o iRacing apresenta menos fotogramas por passagem.',
 
 			bracket: 'Bracketing de obturador',
 			bracketBody:
@@ -273,9 +273,9 @@ const pt: Catalog = {
 			bracketNamingBody:
 				'O passo que escolheste é guardado com o nome habitual e é o que aparece na galeria; os restantes ficam ao lado, com o respetivo obturador no nome do ficheiro.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Aquecimento de efeitos',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'A terra levantada, o fumo dos pneus, as chamas do escape e o desfoque das rodas a rodar não ficam guardados na repetição — o iRacing simula-os enquanto reproduz, e desaparecem sempre que a repetição salta. Por isso, antes de cada passagem a repetição é rebobinada um pouco mais atrás e reproduzida a velocidade normal durante este tempo, sendo depois abrandada mesmo antes de a exposição começar, para que os efeitos já lá estejam quando ela abrir. Custa cerca de tantos segundos por passagem. Aumenta-o se o fumo persistente dos pneus ainda rarear no início do rasto; desativa-o apenas se quiseres o comportamento anterior.',
 
 			highlights: 'Recuperação de altas luzes',
 			highlightsBody:
@@ -525,7 +525,7 @@ const pt: Catalog = {
 		seekTimeout:
 			'A repetição não chegou ao fotograma {frame} a tempo. Pode ainda estar a carregar.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Não foi possível abrandar a repetição a tempo após o aquecimento de efeitos, pelo que esta captura foi feita sem ele. Podem faltar fumo, terra e rotação das rodas no início do rasto.',
 		noPasses: 'Uma captura tem de executar pelo menos uma passagem.',
 		playbackStalled:
 			'A repetição não começou a reproduzir. Verifica se o iRacing não foi colocado em pausa por outra ferramenta.',
@@ -558,7 +558,7 @@ const pt: Catalog = {
 		singleSampleMultiPass:
 			'Este obturador é tão curto que só cai nele cerca de um fotograma por passagem, pelo que {passes} passagens recolhem aproximadamente {passes} amostras. Uma velocidade de reprodução ou um obturador mais lentos rendem muito mais.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Este momento está perto do início da repetição, pelo que o aquecimento de efeitos é reduzido para {seconds} s. Podem faltar fumo, terra e rotação das rodas no início do rasto.',
 		singleSample:
 			'Este obturador é tão curto que só um fotograma cairá dentro dele, pelo que o resultado não terá desfoque de movimento. Uma velocidade de reprodução ou um obturador mais lentos rendem amostras.',
 		shortOfTarget:

@@ -153,16 +153,16 @@ const zhTW: Catalog = {
 		passes4: '4×（等待時間四倍）',
 		passes8: '8×（等待時間八倍）',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
-		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
-		warmUpValue: '{seconds} s',
+		warmUp: '特效預熱',
+		warmUpOff: '關閉',
+		warmUp1: '1 秒',
+		warmUp3: '3 秒（建議）',
+		warmUp5: '5 秒（適合久久不散的煙霧）',
+		warmUpValue: '{seconds} 秒',
 
 		bracket: '快門包圍曝光',
 		highlightRecovery: '亮部細節復原（級數）',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: '關閉',
 
 		cancel: '取消',
 		saved: '已儲存長時間曝光，共 {count} 個取樣',
@@ -177,14 +177,14 @@ const zhTW: Catalog = {
 				other: '{count} 遍',
 			},
 			bracketed: '包圍曝光',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '預熱 {seconds} 秒',
+			warmUpOff: '無預熱',
 			recovery: '復原 {stops} 級',
 		},
 
 		progress: {
 			working: '處理中…',
-			warming: 'Warming up effects…{pass}',
+			warming: '特效預熱中…{pass}',
 			seeking: '尋找中…{pass}',
 			accumulating: '曝光中… 已取樣 {count} 次{pass}',
 			resolving: '沖洗中…',
@@ -264,7 +264,7 @@ const zhTW: Catalog = {
 			passesBody:
 				'重複造訪同一個瞬間，累積成一張影像。每一遍都會補上其他遍剛好漏掉的影格，所以軌跡會更平滑，而不是更亮，因為結果會依實際落在每個像素上的光量做正規化。',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'重複遍數是用等待時間換取取樣：八遍大約要花八倍的時間，而多出來的每一個取樣都是真實的影格。因此在快門很快、單遍只能收集到極少取樣時，以及解析度很高、iRacing 每一遍送出的影格較少時，它都是最合適的調整方式。',
 
 			bracket: '快門包圍曝光',
 			bracketBody:
@@ -276,9 +276,9 @@ const zhTW: Catalog = {
 			bracketNamingBody:
 				'您選擇的那一級會以平常的檔名儲存，也是出現在圖庫中的那一張；其他各級就放在它旁邊，檔名中帶有各自的快門。',
 
-			warmUp: 'Effects warm-up',
+			warmUp: '特效預熱',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'揚起的塵土、輪胎煙霧、排氣火焰，以及高速旋轉車輪的模糊，並不會儲存在重播中，而是 iRacing 在播放時即時模擬出來的，只要重播跳轉就會消失。因此每一遍開始前，重播會多倒轉一小段，並以正常速度播放這麼久，再於曝光開始前一刻放慢，讓曝光一開啟時特效就已經就位。每一遍大約會多花這麼多秒。如果軌跡起頭的輪胎煙霧仍然偏淡，請調高這個值；只有想要沿用舊行為時才需要關閉。',
 
 			highlights: '亮部細節復原',
 			highlightsBody:
@@ -518,7 +518,7 @@ const zhTW: Catalog = {
 		cancelled: '已取消擷取。',
 		seekTimeout: '重播沒能及時到達第 {frame} 格，它可能還在載入。',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'特效預熱之後，重播沒能及時放慢，因此這張照片是在沒有預熱的情況下拍攝的。軌跡起頭可能缺少煙霧、塵土和車輪旋轉的效果。',
 		noPasses: '一次擷取至少要跑一遍。',
 		playbackStalled: '重播沒有開始播放。請確認 iRacing 沒有被其他工具暫停。',
 		exposureTimeout: '曝光沒能在 {seconds} 秒內到達第 {frame} 格。',
@@ -546,7 +546,7 @@ const zhTW: Catalog = {
 		singleSampleMultiPass:
 			'這個快門短到每一遍大約只有一格畫面落在其中，因此 {passes} 遍大約只能收集到 {passes} 個取樣。放慢播放速度或改用較慢的快門，能換到的取樣多得多。',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'這個瞬間很靠近重播的開頭，因此特效預熱縮短為 {seconds} 秒。軌跡起頭可能缺少煙霧、塵土和車輪旋轉的效果。',
 		singleSample:
 			'這個快門短到只會有一格畫面落在其中，因此結果不會有動態模糊。放慢播放速度或改用較慢的快門才能換到取樣。',
 		shortOfTarget:

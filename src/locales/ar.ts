@@ -170,16 +170,16 @@ const ar: Catalog = {
 		passes4: '4× — أربعة أضعاف مدة الانتظار',
 		passes8: '8× — ثمانية أضعاف مدة الانتظار',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
-		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
-		warmUpValue: '{seconds} s',
+		warmUp: 'إحماء المؤثرات',
+		warmUpOff: 'إيقاف',
+		warmUp1: '1 ث',
+		warmUp3: '3 ث (موصى به)',
+		warmUp5: '5 ث — للدخان المتبقي',
+		warmUpValue: '{seconds} ث',
 
 		bracket: 'مضاهاة سرعات الغالق',
 		highlightRecovery: 'استرجاع الإضاءات العالية (EV)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'إيقاف',
 
 		cancel: 'إلغاء',
 		saved: 'تم حفظ التعريض الطويل — عدد العينات: {count}',
@@ -199,14 +199,14 @@ const ar: Catalog = {
 				other: '{count} تمريرة',
 			},
 			bracketed: 'مع مضاهاة',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: 'إحماء {seconds} ث',
+			warmUpOff: 'بلا إحماء',
 			recovery: 'استرجاع {stops} EV',
 		},
 
 		progress: {
 			working: 'جارٍ العمل…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'جارٍ إحماء المؤثرات…{pass}',
 			seeking: 'جارٍ التموضع…{pass}',
 			accumulating: 'جارٍ التعريض… عدد العينات: {count}{pass}',
 			resolving: 'جارٍ التحميض…',
@@ -288,7 +288,7 @@ const ar: Catalog = {
 			passesBody:
 				'تزور اللحظة نفسها عدة مرات وتراكم ذلك كله في صورة واحدة. تلتقط كل تمريرة إطارات فاتت غيرها مصادفةً، فيصبح الأثر أنعم — لا أكثر سطوعًا، لأن النتيجة تُسوّى بحسب كمية الضوء التي سقطت فعليًا على كل بكسل.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'تقايض التمريرات زمن الانتظار بالعينات: تستغرق ثماني تمريرات نحو ثمانية أضعاف الوقت، وكل عينة تضيفها هي إطار حقيقي. ولذلك فهي الأداة المناسبة مع سرعات الغالق العالية، حيث تجمع التمريرة الواحدة عينات قليلة جدًا، ومع الدقة العالية، حيث يعرض iRacing إطارات أقل في كل تمريرة.',
 
 			bracket: 'مضاهاة سرعات الغالق',
 			bracketBody:
@@ -300,9 +300,9 @@ const ar: Catalog = {
 			bracketNamingBody:
 				'تُحفظ الدرجة التي اخترتها بالاسم المعتاد وهي التي تظهر في المعرض؛ أما البقية فتوضع بجانبها مع سرعة الغالق في اسم الملف.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'إحماء المؤثرات',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'لا تُخزَّن في الإعادة الأتربة المتطايرة ودخان الإطارات ولهب العادم وضبابية العجلات الدوّارة — فـ iRacing يحاكيها أثناء التشغيل، وتختفي كلما قفزت الإعادة. لذلك تُرجَع الإعادة قبل كل تمريرة إلى الخلف قليلًا وتُشغَّل بالسرعة العادية طوال هذه المدة، ثم تُبطَّأ قبيل بدء التعريض مباشرة، فتكون المؤثرات موجودة أصلًا عند بدئه. وتكلّف نحو هذا العدد من الثواني لكل تمريرة. ارفعها إذا كان دخان الإطارات ما يزال يخفّ في بداية الأثر؛ وأوقفها فقط إن أردت السلوك القديم.',
 
 			highlights: 'استرجاع الإضاءات العالية',
 			highlightsBody:
@@ -556,7 +556,7 @@ const ar: Catalog = {
 		seekTimeout:
 			'لم تصل الإعادة إلى الإطار {frame} في الوقت المحدد. وقد تكون ما تزال قيد التحميل.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'تعذّر إبطاء الإعادة في الوقت المناسب بعد إحماء المؤثرات، فالتُقطت هذه اللقطة من دونه. قد يغيب الدخان والأتربة ودوران العجلات عن بداية الأثر.',
 		noPasses: 'يجب أن ينفّذ الالتقاط تمريرة واحدة على الأقل.',
 		playbackStalled:
 			'لم تبدأ الإعادة بالتشغيل. تأكد من أن iRacing ليس موقوفًا مؤقتًا بواسطة أداة أخرى.',
@@ -587,7 +587,7 @@ const ar: Catalog = {
 		singleSampleMultiPass:
 			'زمن الغالق هذا قصير بما يكفي ليقع داخله إطار واحد تقريبًا في كل تمريرة، لذا ستجمع {passes} تمريرة نحو {passes} عينة. وسرعة تشغيل أبطأ أو غالق أبطأ يمنحان أكثر من ذلك بكثير.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'هذه اللحظة قريبة من بداية الإعادة، لذا قُصِّر إحماء المؤثرات إلى {seconds} ث. قد يغيب الدخان والأتربة ودوران العجلات عن بداية الأثر.',
 		singleSample:
 			'زمن الغالق هذا قصير بما يكفي ليقع داخله إطار واحد فقط، لذا لن يكون في النتيجة أي ضبابية حركة. وسرعة تشغيل أبطأ أو غالق أبطأ يمنحان عينات أكثر.',
 		shortOfTarget:

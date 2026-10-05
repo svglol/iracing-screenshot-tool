@@ -148,16 +148,16 @@ const it: Catalog = {
 		passes4: '4× — attesa quadrupla',
 		passes8: '8× — attesa ottupla',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Riscaldamento degli effetti',
+		warmUpOff: 'Disattivato',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (consigliato)',
+		warmUp5: '5 s — per il fumo persistente',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Bracketing dei tempi',
 		highlightRecovery: 'Recupero delle alte luci (stop)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Disattivato',
 
 		cancel: 'Annulla',
 		saved: 'Lunga esposizione salvata — {count} campioni',
@@ -171,14 +171,14 @@ const it: Catalog = {
 				other: '{count} passaggi',
 			},
 			bracketed: 'bracketing',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '{seconds} s di riscaldamento',
+			warmUpOff: 'nessun riscaldamento',
 			recovery: 'recupero di {stops} stop',
 		},
 
 		progress: {
 			working: 'Elaborazione…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Riscaldamento degli effetti…{pass}',
 			seeking: 'Ricerca…{pass}',
 			accumulating: 'Esposizione… {count} campioni{pass}',
 			resolving: 'Sviluppo…',
@@ -260,7 +260,7 @@ const it: Catalog = {
 			passesBody:
 				'Visita più volte lo stesso istante, accumulando in un’unica immagine. Ogni passaggio recupera fotogrammi che gli altri hanno mancato, così la scia diventa più uniforme — non più luminosa, perché il risultato è normalizzato in base alla luce realmente arrivata su ciascun pixel.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'I passaggi scambiano tempo di attesa con campioni: otto passaggi richiedono circa otto volte più tempo e ogni campione che aggiungono è un fotogramma reale. Sono quindi la leva giusta con tempi di posa rapidi, dove un singolo passaggio raccoglie pochissimi campioni, e ad alte risoluzioni, dove iRacing presenta meno fotogrammi per passaggio.',
 
 			bracket: 'Bracketing dei tempi',
 			bracketBody:
@@ -272,9 +272,9 @@ const it: Catalog = {
 			bracketNamingBody:
 				'Il tempo che hai scelto viene salvato con il nome consueto ed è quello che compare nella galleria; gli altri restano accanto, con il loro tempo di posa nel nome del file.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Riscaldamento degli effetti',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Terra sollevata, fumo delle gomme, fiamme di scarico e sfocatura delle ruote in rotazione non sono memorizzati nel replay — iRacing li simula durante la riproduzione e svaniscono ogni volta che il replay salta. Per questo, prima di ogni passaggio il replay viene riavvolto un po’ più indietro e riprodotto a velocità normale per questa durata, poi rallentato appena prima dell’inizio dell’esposizione, così gli effetti sono già presenti quando questa si apre. Costa circa altrettanti secondi per passaggio. Aumentalo se il fumo persistente delle gomme si dirada ancora all’inizio della scia; disattivalo solo se vuoi il comportamento precedente.',
 
 			highlights: 'Recupero delle alte luci',
 			highlightsBody:
@@ -526,7 +526,7 @@ const it: Catalog = {
 		seekTimeout:
 			'Il replay non ha raggiunto il fotogramma {frame} in tempo. Potrebbe essere ancora in caricamento.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Non è stato possibile rallentare il replay in tempo dopo il riscaldamento degli effetti, quindi questo scatto è stato eseguito senza. Fumo, terra e rotazione delle ruote potrebbero mancare all’inizio della scia.',
 		noPasses: 'Una cattura deve eseguire almeno un passaggio.',
 		playbackStalled:
 			'Il replay non è partito. Verifica che iRacing non sia stato messo in pausa da un altro strumento.',
@@ -559,7 +559,7 @@ const it: Catalog = {
 		singleSampleMultiPass:
 			'Questo tempo di posa è così breve che vi cade circa un solo fotogramma per passaggio, quindi {passes} passaggi raccolgono all’incirca {passes} campioni. Una velocità di riproduzione o un tempo di posa più lenti ne portano molti di più.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Questo momento è vicino all’inizio del replay, quindi il riscaldamento degli effetti è ridotto a {seconds} s. Fumo, terra e rotazione delle ruote potrebbero mancare all’inizio della scia.',
 		singleSample:
 			'Questo tempo di posa è così breve che vi cadrà un solo fotogramma, quindi il risultato non avrà alcuna sfocatura di movimento. Una velocità di riproduzione o un tempo di posa più lenti portano campioni.',
 		shortOfTarget:

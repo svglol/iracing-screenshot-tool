@@ -148,16 +148,16 @@ const sv: Catalog = {
 		passes4: '4× — fyra gånger så lång väntan',
 		passes8: '8× — åtta gånger så lång väntan',
 
-		warmUp: 'Effects warm-up',
-		warmUpOff: 'Off',
+		warmUp: 'Effektuppvärmning',
+		warmUpOff: 'Av',
 		warmUp1: '1 s',
-		warmUp3: '3 s (recommended)',
-		warmUp5: '5 s — for lingering smoke',
+		warmUp3: '3 s (rekommenderas)',
+		warmUp5: '5 s — för kvardröjande rök',
 		warmUpValue: '{seconds} s',
 
 		bracket: 'Slutartidsgaffling',
 		highlightRecovery: 'Högdageråterhämtning (steg)',
-		highlightRecoveryOff: 'Off',
+		highlightRecoveryOff: 'Av',
 
 		cancel: 'Avbryt',
 		saved: 'Långtidsexponering sparad — {count} sampel',
@@ -171,14 +171,14 @@ const sv: Catalog = {
 				other: '{count} pass',
 			},
 			bracketed: 'gafflad',
-			warmUp: '{seconds} s warm-up',
-			warmUpOff: 'no warm-up',
+			warmUp: '{seconds} s uppvärmning',
+			warmUpOff: 'ingen uppvärmning',
 			recovery: '{stops} stegs återhämtning',
 		},
 
 		progress: {
 			working: 'Arbetar…',
-			warming: 'Warming up effects…{pass}',
+			warming: 'Värmer upp effekter…{pass}',
 			seeking: 'Söker…{pass}',
 			accumulating: 'Exponerar… {count} sampel{pass}',
 			resolving: 'Framkallar…',
@@ -260,7 +260,7 @@ const sv: Catalog = {
 			passesBody:
 				'Besöker samma ögonblick flera gånger och ackumulerar allt till en bild. Varje pass fångar bildrutor som de andra råkade missa, så strecket blir jämnare — inte ljusare, eftersom resultatet normaliseras efter hur mycket ljus som faktiskt landade på varje bildpunkt.',
 			passesTradeBody:
-				'Passes trade wall clock for samples: eight passes take roughly eight times as long, and every sample they add is a real frame. That makes them the right lever on fast shutters, where a single pass collects very few samples, and at high resolutions, where iRacing presents fewer frames per pass.',
+				'Pass byter väntetid mot sampel: åtta pass tar ungefär åtta gånger så lång tid, och varje sampel de lägger till är en riktig bildruta. Därför är de rätt verktyg vid snabba slutartider, där ett enda pass samlar mycket få sampel, och vid höga upplösningar, där iRacing visar färre bildrutor per pass.',
 
 			bracket: 'Slutartidsgaffling',
 			bracketBody:
@@ -272,9 +272,9 @@ const sv: Catalog = {
 			bracketNamingBody:
 				'Steget du valde sparas under det vanliga namnet och är det som visas i galleriet; de övriga ligger bredvid med sin slutartid i filnamnet.',
 
-			warmUp: 'Effects warm-up',
+			warmUp: 'Effektuppvärmning',
 			warmUpBody:
-				'Dirt being kicked up, tyre smoke, exhaust flames and the blur of spinning wheels are not stored in the replay — iRacing simulates them as it plays, and they vanish whenever the replay jumps. So before each pass the replay is rewound a little further and played at normal speed for this long, then slowed down just before the exposure starts, so the effects are already there when it opens. It costs about this many seconds per pass. Raise it if lingering tyre smoke still thins out at the start of the streak; turn it off only if you want the old behaviour.',
+				'Uppvirvlat damm, däckrök, avgasflammor och suddigheten från snurrande hjul lagras inte i replayen — iRacing simulerar dem medan den spelas, och de försvinner varje gång replayen hoppar. Därför spolas replayen tillbaka lite längre före varje pass och spelas i normal hastighet så här länge, och saktas sedan ner strax innan exponeringen börjar, så att effekterna redan finns där när den öppnar. Det kostar ungefär så många sekunder per pass. Höj värdet om kvardröjande däckrök fortfarande är för gles i början av strecket; stäng bara av det om du vill ha det gamla beteendet.',
 
 			highlights: 'Högdageråterhämtning',
 			highlightsBody:
@@ -523,7 +523,7 @@ const sv: Catalog = {
 		seekTimeout:
 			'Replayen nådde inte bildruta {frame} i tid. Den kanske fortfarande läses in.',
 		warmUpFellBack:
-			'The replay could not be slowed down in time after the effects warm-up, so this shot was taken without it. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Replayen kunde inte saktas ner i tid efter effektuppvärmningen, så den här bilden togs utan den. Rök, damm och hjulspinn kan saknas i början av strecket.',
 		noPasses: 'En inspelning måste köra minst ett pass.',
 		playbackStalled:
 			'Replayen började inte spelas. Kontrollera att iRacing inte har pausats av ett annat verktyg.',
@@ -554,7 +554,7 @@ const sv: Catalog = {
 		singleSampleMultiPass:
 			'Den här slutartiden är så kort att bara ungefär en bildruta hamnar inom den per pass, så {passes} pass samlar ungefär {passes} sampel. En långsammare uppspelningshastighet eller en längre slutartid ger betydligt fler.',
 		warmUpShortened:
-			'This moment is close to the start of the replay, so the effects warm-up is cut to {seconds} s. Smoke, dirt and wheel spin may be missing from the start of the streak.',
+			'Det här ögonblicket ligger nära början av replayen, så effektuppvärmningen kortas till {seconds} s. Rök, damm och hjulspinn kan saknas i början av strecket.',
 		singleSample:
 			'Den här slutartiden är så kort att bara en bildruta hamnar inom den, så resultatet får ingen rörelseoskärpa. En långsammare uppspelningshastighet eller en längre slutartid ger sampel.',
 		shortOfTarget:
