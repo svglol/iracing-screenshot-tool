@@ -113,7 +113,7 @@
         "sass": "^1.26.3",
         "typescript": "~5.7.3",
         "typescript-eslint": "^8.59.0",
-        "vitest": "^4.1.5",
+        "vitest": "^4.1.11",
         "vue-eslint-parser": "^10.4.0",
         "vue-tsc": "^3.2.7"
     },
