@@ -66,6 +66,15 @@ nodeRequire.cache[electronId] = {
 const { default: SettingsModal } = await import('./SettingsModal.vue');
 const { i18n } = await import('../i18n');
 
+// The slice of the component instance these tests drive.
+interface SettingsVm {
+	bindScreenshotKeybind(): void;
+	screenshotKeybind: string;
+	bindingKey: boolean;
+	keybindNotice: string | null;
+}
+const vmOf = (wrapper: { vm: unknown }) => wrapper.vm as SettingsVm;
+
 function mountSettings() {
 	return mount(SettingsModal, {
 		global: {
@@ -113,7 +122,7 @@ describe('Settings listener hygiene', () => {
 	// shortcut typed anywhere (Ctrl+C on Home) became the global hotkey.
 	test('a key capture left running stops when the page unmounts', async () => {
 		const wrapper = mountSettings();
-		(wrapper.vm as any).bindScreenshotKeybind();
+		vmOf(wrapper).bindScreenshotKeybind();
 		wrapper.unmount();
 
 		key('keydown', { key: 'Control', code: 'ControlLeft', ctrlKey: true });
@@ -137,7 +146,7 @@ describe('Settings hotkey capture', () => {
 	test('asks main to bind the combination and shows what main registered', async () => {
 		invokeResult = { ok: true, accelerator: 'Control+Up' };
 		const wrapper = mountSettings();
-		const vm = wrapper.vm as any;
+		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
 
 		key('keydown', { key: 'Control', code: 'ControlLeft', ctrlKey: true });
@@ -163,7 +172,7 @@ describe('Settings hotkey capture', () => {
 	test('PrintScreen, which Windows reports only on release, completes the capture', async () => {
 		invokeResult = { ok: true, accelerator: 'Control+PrintScreen' };
 		const wrapper = mountSettings();
-		(wrapper.vm as any).bindScreenshotKeybind();
+		vmOf(wrapper).bindScreenshotKeybind();
 		key('keydown', { key: 'Control', code: 'ControlLeft', ctrlKey: true });
 		key('keyup', { key: 'PrintScreen', code: 'PrintScreen', ctrlKey: true });
 		await flushPromises();
@@ -180,7 +189,7 @@ describe('Settings hotkey capture', () => {
 			reason: 'already registered by another application',
 		};
 		const wrapper = mountSettings();
-		const vm = wrapper.vm as any;
+		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
 		key('keydown', { key: 'F12', code: 'F12' });
 		await flushPromises();
@@ -193,7 +202,7 @@ describe('Settings hotkey capture', () => {
 
 	test('Escape cancels without asking main for anything', async () => {
 		const wrapper = mountSettings();
-		const vm = wrapper.vm as any;
+		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
 		key('keydown', { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
 		key('keyup', { key: 'Shift', code: 'ShiftLeft' });
@@ -208,7 +217,7 @@ describe('Settings hotkey capture', () => {
 
 	test('a key no accelerator can name is refused locally', async () => {
 		const wrapper = mountSettings();
-		const vm = wrapper.vm as any;
+		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
 		key('keydown', { key: 'ContextMenu', code: 'ContextMenu' });
 		await flushPromises();
