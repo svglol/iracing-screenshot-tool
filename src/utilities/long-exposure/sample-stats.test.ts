@@ -115,6 +115,27 @@ describe('summarizeSamples', () => {
 		expect(stats.logTruncated).toBe(false);
 	});
 
+	// Regression: the native counter counts every frame CONSUMED, duplicates
+	// included (mod.rs folds it before the digest comes back), while a log entry's
+	// `accepted` turns false for a duplicate. Comparing the counter against the
+	// accepted entries therefore claimed truncation for any shot with a single
+	// duplicate, and the sidecar labelled its window and evenness "prefix only".
+	it('does not claim truncation when the full log holds a duplicate', () => {
+		const log = evenLog(30);
+		log[10].accepted = false;
+		log[10].digest = log[9].digest;
+		const stats = summarizeSamples(log, { acceptedTotal: 30 });
+		expect(stats.duplicatesRejected).toBe(1);
+		expect(stats.logTruncated).toBe(false);
+	});
+
+	it('still claims truncation when the counter outran a log holding duplicates', () => {
+		const log = evenLog(30);
+		log[10].accepted = false;
+		const stats = summarizeSamples(log, { acceptedTotal: 31 });
+		expect(stats.logTruncated).toBe(true);
+	});
+
 	it('falls back to counting the log when no counter is supplied', () => {
 		const stats = summarizeSamples(evenLog(30));
 		expect(stats.accepted).toBe(30);

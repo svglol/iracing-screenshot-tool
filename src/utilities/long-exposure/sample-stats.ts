@@ -139,7 +139,11 @@ export function summarizeSamples(
 			? Math.round(opts.acceptedTotal)
 			: null;
 	const acceptedCount = counterTotal ?? accepted.length;
-	const logTruncated = counterTotal !== null && counterTotal > accepted.length;
+	// Against EVERY log entry, not just the accepted ones: the native counter
+	// counts each frame consumed, duplicates included, and the log holds one entry
+	// per consumed frame until it is capped. Only a counter beyond that means the
+	// log stopped early.
+	const logTruncated = counterTotal !== null && counterTotal > entries.length;
 
 	// A rejected duplicate whose presentation timestamp differs from the frame it
 	// duplicates means iRacing presented again without rendering anything new —

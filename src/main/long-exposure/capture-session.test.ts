@@ -304,6 +304,77 @@ function expectAnchorRestored(events: string[]): void {
 	expect(events).toContain(`seek:0:${ANCHOR}`);
 }
 
+describe('executeRecipe — anchor restore guarantee', () => {
+	// Regression: the 'restoring' progress report ran unguarded immediately
+	// before restoreAnchor in the finally, so a throwing listener (a window torn
+	// down mid-broadcast) skipped the one step that is never supposed to be.
+	it('still returns the cursor to the anchor when the progress listener throws', async () => {
+		const harness = makeHarness();
+		harness.deps.onProgress = (update) => {
+			if (update.phase === 'restoring') {
+				throw new Error('Object has been destroyed');
+			}
+		};
+		const outcome = await executeRecipe(recipe(), harness.deps);
+
+		expectAnchorRestored(harness.events);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.restore.attempted).toBe(true);
+	});
+});
+
+describe('executeRecipe — memory', () => {
+	// The addon returns the primary twice: top-level `data` is a COPY of
+	// images[0] (mod.rs builds it with to_vec()). Keeping both alive through the
+	// file write held a second full-size buffer — 800 MB at 10000x10000.
+	it('hands back one buffer for the primary, not the addon’s duplicate', async () => {
+		let sinkIds: string[] = [];
+		const bytes = 640 * 360 * 8;
+		const harness = makeHarness({
+			nativeOverrides: {
+				longExposureBegin: (_hwnd, _highlight, ids) => {
+					sinkIds = ids ?? [];
+					return 7;
+				},
+				longExposureFinish: () => {
+					const primary = Buffer.alloc(bytes, 1);
+					return {
+						data: Buffer.from(primary),
+						width: 640,
+						height: 360,
+						images: sinkIds.map((sinkId, index) => ({
+							sinkId,
+							data: index === 0 ? primary : Buffer.alloc(bytes, 2),
+							width: 640,
+							height: 360,
+							accepted: 3,
+						})),
+						accepted: 3,
+						rejected: 0,
+						backend: 'd3d11-compute',
+						samples: [0, 1, 2].map((i) => ({
+							u: i / 2,
+							sessionTime: 500 + i / 60,
+							replayFrameNum: ANCHOR - 3 + i,
+							digest: `d${i}`,
+							presentedAt: String(i),
+							accepted: true,
+						})),
+						error: null,
+					};
+				},
+			},
+		});
+		const outcome = await executeRecipe(recipe(), harness.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(sinkIds.length).toBeGreaterThan(0);
+		// Identity, not equality — and asserted as a boolean so a failure does
+		// not make the runner diff two megabyte buffers.
+		expect(outcome.image?.data === outcome.images[0].data).toBe(true);
+	});
+});
+
 describe('executeRecipe — happy path', () => {
 	it('captures, resolves, and reports achieved sampling', async () => {
 		const harness = makeHarness();

@@ -510,7 +510,15 @@ export async function executeRecipe(
 		// 3. Return the cursor to the anchor. NOT abortable, and never skipped —
 		//    leaving the user somewhere they never chose is the one outcome this
 		//    feature must not produce.
-		deps.onProgress?.({ phase: 'restoring' });
+		//    That includes a throwing progress listener: the report is a courtesy,
+		//    the restore is the guarantee.
+		try {
+			deps.onProgress?.({ phase: 'restoring' });
+		} catch (error) {
+			log.warn('Long exposure progress report failed', {
+				error: (error as Error)?.message || String(error),
+			});
+		}
 		const restore = await deps.replay.restoreAnchor(snapshot);
 		if (outcome) {
 			outcome.restore = {
@@ -1434,10 +1442,18 @@ async function resolveCapture(
 		);
 	}
 
+	// The primary's pixels come from its own resolved stop. The addon returns the
+	// primary twice — top-level `data` is a COPY of images[0] — and holding both
+	// kept a second full-size buffer alive through the whole file write (800 MB at
+	// 10000x10000). Same bytes, so use the stop's and let the copy be collected.
+	const primary = resolvedImages.find((entry) => entry.sinkId === sink.id);
+
 	return {
 		...base(),
 		ok: true,
-		image: { data: result.data, width: result.width, height: result.height },
+		image: primary
+			? { data: primary.data, width: primary.width, height: primary.height }
+			: { data: result.data, width: result.width, height: result.height },
 		images: resolvedImages,
 		stats,
 		backend: result.backend || deps.backendName,
