@@ -2772,6 +2772,24 @@ ipcMain.handle('update:install', async () => {
 		};
 	}
 
+	// Asked again: the dialog is modal to our window but not to the global
+	// hotkey, so a capture can have started while it was open — and
+	// quitAndInstall() would kill it mid-shot.
+	const confirmed = canInstallNow({
+		phase: updateState.phase,
+		busy: updateBusy(),
+	});
+	if (!confirmed.allowed) {
+		log.info('Auto-update install refused after confirmation', {
+			reason: confirmed.reason,
+		});
+		return {
+			ok: false,
+			reason: confirmed.reason,
+			state: updateStatePayload(),
+		};
+	}
+
 	log.info('Auto-update installing', { version: updateState.version });
 	autoUpdater.quitAndInstall();
 	return { ok: true, reason: null, state: updateStatePayload() };
