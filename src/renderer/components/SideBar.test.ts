@@ -135,11 +135,18 @@ describe('SideBar projection warning', () => {
 		wrapper.unmount();
 	});
 
+	// Observed through the instance's own revision counter: the warning is a
+	// lazy computed, so after unmount nothing would re-read the ini even if the
+	// listener leaked — counting disk reads could never fail.
 	test('stops listening for ini changes once unmounted', () => {
 		const wrapper = mountSideBar();
-		wrapper.unmount();
-		const reads = iniState.reads;
+		const vm = wrapper.vm as unknown as { iniRevision: number };
 		window.dispatchEvent(new Event(INI_CHANGED_EVENT));
-		expect(iniState.reads).toBe(reads);
+		const revision = vm.iniRevision;
+		expect(revision).toBeGreaterThan(0);
+
+		wrapper.unmount();
+		window.dispatchEvent(new Event(INI_CHANGED_EVENT));
+		expect(vm.iniRevision).toBe(revision);
 	});
 });

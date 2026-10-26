@@ -80,7 +80,7 @@ nodeRequire.cache[electronId] = {
 
 // Imported AFTER the stub is planted — the worker captures ipcRenderer at module
 // scope, so a later install would be too late.
-const { default: Worker } = await import('./Worker.vue');
+const { default: Worker, saveImage } = await import('./Worker.vue');
 
 function emit(channel: string, payload: unknown): void {
 	const handler = listeners.get(channel);
@@ -210,5 +210,46 @@ describe('Worker ReShade save', () => {
 			'Thumbnail failed — screenshot still saved',
 			expect.anything()
 		);
+	});
+});
+
+// The getUserMedia path's save. Regression guard for the restore trigger: main
+// restores iRacing only for a screenshot-finished carrying the request's id, so
+// a payload without it (as before ids existed) would leave the sim resized until
+// the 35 s watchdog — for a shot that saved.
+describe('Worker getUserMedia save', () => {
+	const jpegLike = () => new Blob([Buffer.alloc(256, 7)]);
+
+	test('ends the capture with its own captureId, then announces the file', async () => {
+		await saveImage(11, jpegLike(), jpegLike());
+
+		expect(sentOn('screenshot-finished')).toEqual([{ captureId: 11 }]);
+		const [saved] = sentOn('screenshot-response') as string[];
+		expect(path.dirname(saved)).toBe(screenshotDir);
+		expect(fs.readFileSync(saved)).toHaveLength(256);
+		expect(sentOn('screenshot-error')).toEqual([]);
+		const finishedAt = send.mock.calls.findIndex(
+			(c) => c[0] === 'screenshot-finished'
+		);
+		const respondedAt = send.mock.calls.findIndex(
+			(c) => c[0] === 'screenshot-response'
+		);
+		expect(finishedAt).toBeLessThan(respondedAt);
+	});
+
+	test('a save that fails still ends the capture, and its error names it', async () => {
+		// The screenshot folder path is occupied by a file, so it cannot be created.
+		fs.writeFileSync(screenshotDir, 'not a folder');
+		try {
+			await saveImage(12, jpegLike(), jpegLike());
+		} finally {
+			fs.rmSync(screenshotDir, { force: true });
+		}
+
+		expect(sentOn('screenshot-finished')).toEqual([{ captureId: 12 }]);
+		expect(sentOn('screenshot-error')).toEqual([
+			expect.objectContaining({ captureId: 12, context: 'save-image' }),
+		]);
+		expect(sentOn('screenshot-response')).toEqual([]);
 	});
 });

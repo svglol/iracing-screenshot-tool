@@ -116,3 +116,15 @@ export class CaptureState {
 		}
 	}
 }
+
+// The capture id the worker echoed back on screenshot-finished / screenshot-error,
+// validated at the IPC boundary. Anything that is not a number — including the
+// '' those messages carried before ids existed — is "no id", which holds() never
+// matches: such a message can report, but it cannot restore a capture.
+export function workerCaptureId(payload: unknown): number | undefined {
+	const id =
+		payload && typeof payload === 'object'
+			? (payload as { captureId?: unknown }).captureId
+			: undefined;
+	return typeof id === 'number' ? id : undefined;
+}

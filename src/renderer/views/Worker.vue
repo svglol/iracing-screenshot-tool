@@ -432,7 +432,10 @@ async function saveReshadeImage(captureId, sourceFile) {
 	}
 }
 
-async function saveImage(captureId, blob, thumbBlob) {
+// Exported for Worker.test.ts: the capture that leads here cannot be driven
+// under happy-dom (no OffscreenCanvas or MediaStream), and this is where the
+// screenshot-finished that lets main restore iRacing is sent.
+export async function saveImage(captureId, blob, thumbBlob) {
 	// Late-abort guard: main already restored the window + reported the error, so
 	// writing the file here would emit screenshot-finished/response and surface a
 	// "ghost" screenshot in the gallery (cq-renderer-capture-views#1).

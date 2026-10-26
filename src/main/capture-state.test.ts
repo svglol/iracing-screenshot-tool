@@ -1,4 +1,4 @@
-import { CaptureState } from './capture-state';
+import { CaptureState, workerCaptureId } from './capture-state';
 
 function setup() {
 	const restoreSim = vi.fn();
@@ -164,5 +164,36 @@ describe('CaptureState', () => {
 			expect(() => state.end(longExposure)).toThrow('SetWindowPos failed');
 			expect(state.busy).toBe(false);
 		});
+	});
+});
+
+// The rule main's screenshot-finished / screenshot-error handlers apply:
+// `if (state.holds(workerCaptureId(payload))) restore`.
+describe('workerCaptureId', () => {
+	test('reads the id the worker echoed', () => {
+		expect(workerCaptureId({ captureId: 7 })).toBe(7);
+		expect(workerCaptureId({ captureId: 7, message: 'boom' })).toBe(7);
+	});
+
+	test.each([
+		'',
+		undefined,
+		null,
+		{},
+		{ captureId: '7' },
+		{ captureId: null },
+		[7],
+	])('treats %j as no id', (payload) => {
+		expect(workerCaptureId(payload)).toBeUndefined();
+	});
+
+	test('the worker’s echo restores its capture; the pre-id payload restores nothing', () => {
+		const state = new CaptureState(() => {});
+		const ticket = state.begin('still');
+		expect(state.holds(workerCaptureId(''))).toBe(false);
+		expect(state.holds(workerCaptureId({ captureId: ticket.id + 1 }))).toBe(
+			false
+		);
+		expect(state.holds(workerCaptureId({ captureId: ticket.id }))).toBe(true);
 	});
 });

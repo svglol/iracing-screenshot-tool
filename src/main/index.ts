@@ -43,7 +43,11 @@ import {
 	isRgbaBufferBlack,
 	type CaptureBlock,
 } from './capture-decisions';
-import { CaptureState, type CaptureTicket } from './capture-state';
+import {
+	CaptureState,
+	workerCaptureId,
+	type CaptureTicket,
+} from './capture-state';
 import { restoreWindowBounds } from './window-bounds';
 import {
 	RESHADE_WAIT_TIMEOUT_MS,
@@ -2899,16 +2903,6 @@ function dispatchWorkerCapture(
 		captureId: ticket.id,
 	});
 	armCaptureWatchdog(ticket);
-}
-
-// The capture id the worker echoed back, validated at the IPC boundary: anything
-// that is not a number is treated as "no id", which matches no capture.
-function workerCaptureId(payload: unknown): number | undefined {
-	const id =
-		payload && typeof payload === 'object'
-			? (payload as { captureId?: unknown }).captureId
-			: undefined;
-	return typeof id === 'number' ? id : undefined;
 }
 
 // Apply the user's output format to a sharp pipeline at max fidelity. JPEG uses
