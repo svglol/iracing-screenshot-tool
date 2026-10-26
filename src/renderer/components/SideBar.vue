@@ -129,6 +129,7 @@
 import { defineComponent, h } from 'vue';
 import config from '../../utilities/config';
 import { checkIracingConfig } from '../../utilities/iracing-config-checks';
+import { INI_CHANGED_EVENT } from '../ini-events';
 import { checkReshadeConfig } from '../../utilities/reshade-config';
 import {
 	assessVram,
@@ -234,10 +235,11 @@ export default {
 			// some unrelated change happened to re-evaluate.
 			outputFormat: config.get('outputFormat'),
 			cropTopLeft: config.get('cropTopLeft'),
-			// The folder override is read HERE and passed down: iracing-config-checks
-			// deliberately does not import config, so it stays unit-testable outside
-			// an Electron host.
-			configWarnings: checkIracingConfig(config.get('iracingFolder')),
+			// Bumped whenever rendererDX11Monitor.ini may have changed; the
+			// configWarnings computed re-reads the file when it moves.
+			iniRevision: 0,
+			// Hoisted so beforeUnmount can remove it.
+			onIniChanged: null as (() => void) | null,
 			// Live GPU VRAM from main (null until first poll / unavailable).
 			vramInfo: null,
 			vramTimer: null,
@@ -393,6 +395,21 @@ export default {
 			void this.$locale;
 			return checkReshadeConfig(this.reshade, this.reshadeFile);
 		},
+		// The projection warning, from rendererDX11Monitor.ini. It used to be read
+		// once in data(): the sidebar lives in the kept-alive Home and never
+		// remounts, so the warning outlived a graphics-profile apply, iRacing's
+		// own rewrite of the ini on exit and an iRacing-folder change — and, being
+		// a finished sentence, a language change too. Now a computed over those
+		// signals, so it is still one disk read per actual change.
+		//
+		// The folder override is read HERE and passed down: iracing-config-checks
+		// deliberately does not import config, so it stays unit-testable outside
+		// an Electron host.
+		configWarnings() {
+			void this.$locale;
+			void this.iniRevision;
+			return checkIracingConfig(config.get('iracingFolder'));
+		},
 		// Everything the sidebar has to say, as data for the single NoticeCard.
 		// NoticeCard sorts by severity, so the order here is only the order within
 		// a severity — safety signals are declared first anyway so they read in a
@@ -470,12 +487,7 @@ export default {
 				});
 			}
 
-			// checkIracingConfig phrases its warning through the core's module-level
-			// `t`, which Vue cannot see. Touching $locale is what makes this computed
-			// re-run — and re-read the warning in the new language — when the setting
-			// changes. Without it the banner would stay in the old language until
-			// something else happened to invalidate this computed.
-			void this.$locale;
+			// configWarnings re-phrases itself on a language change (see there).
 			this.configWarnings.forEach((warning) => {
 				notices.push({ level: 'warning', text: warning });
 			});
@@ -592,6 +604,8 @@ export default {
 			// Clear the fullscreen warning at once — iRacing is gone, so any
 			// "exclusive fullscreen" banner is now stale (don't wait for the poll).
 			this.exclusiveFullscreen = false;
+			// iRacing writes its renderer ini from memory as it exits.
+			this.iniRevision += 1;
 		});
 
 		ipcRenderer.on('screenshot-response', (event, arg) => {
@@ -658,6 +672,15 @@ export default {
 		config.onDidChange('outputFormat', (newValue) => {
 			this.outputFormat = newValue;
 		});
+
+		config.onDidChange('iracingFolder', () => {
+			this.iniRevision += 1;
+		});
+		// A graphics profile applied from this window (see ini-events.ts).
+		this.onIniChanged = () => {
+			this.iniRevision += 1;
+		};
+		window.addEventListener(INI_CHANGED_EVENT, this.onIniChanged);
 	},
 	mounted() {
 		this.crop = config.get('crop');
@@ -683,6 +706,10 @@ export default {
 			this.vramTimer = null;
 		}
 		this.stopIracingStatusPoll();
+		if (this.onIniChanged) {
+			window.removeEventListener(INI_CHANGED_EVENT, this.onIniChanged);
+			this.onIniChanged = null;
+		}
 	},
 	methods: {
 		// Mark iRacing connected and fire the one-time on-connect refreshes.
