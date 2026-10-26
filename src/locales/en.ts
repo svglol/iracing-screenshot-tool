@@ -100,6 +100,8 @@ export default {
 		editBind: 'Edit Bind',
 		keybindRejected:
 			"{keys} can't be used as the screenshot keybind — another app may already be using it. {previous} is still active.",
+		keybindRejectedNoneActive:
+			"{keys} can't be used as the screenshot keybind — another app may already be using it. No screenshot keybind is active.",
 
 		customFilenameFormat: 'Custom Filename Format',
 		customFilenameFormatDescription:

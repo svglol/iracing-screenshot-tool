@@ -64,6 +64,17 @@ function unregisterQuietly(
 	}
 }
 
+export type RebindResult =
+	| { ok: true }
+	| {
+			ok: false;
+			failure: ShortcutFailure;
+			reason: string;
+			// Whether `previous` is registered again. False when it cannot be —
+			// another app took it (often why it was not registered at launch).
+			restored: boolean;
+	  };
+
 // Move the hotkey from `previous` to `next`. The old one is released FIRST, so a
 // next that Electron treats as the same key ('Ctrl+P' vs 'Control+P') is not
 // refused as a conflict with ourselves; if `next` then fails, `previous` is
@@ -73,13 +84,14 @@ export function rebindShortcut(
 	previous: unknown,
 	next: unknown,
 	callback: () => void
-): ShortcutResult {
+): RebindResult {
 	unregisterQuietly(registry, previous);
 	const result = registerShortcut(registry, next, callback);
-	if (result.ok === false) {
-		registerShortcut(registry, previous, callback);
+	if (result.ok === true) {
+		return result;
 	}
-	return result;
+	const restored = registerShortcut(registry, previous, callback).ok;
+	return { ...result, restored };
 }
 
 export interface StartupShortcut {

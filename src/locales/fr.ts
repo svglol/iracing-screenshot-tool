@@ -82,6 +82,8 @@ const fr: Catalog = {
 		editBind: 'Modifier le raccourci',
 		keybindRejected:
 			'{keys} ne peut pas servir de raccourci de capture : une autre application l’utilise peut-être déjà. {previous} reste actif.',
+		keybindRejectedNoneActive:
+			'{keys} ne peut pas servir de raccourci de capture : une autre application l’utilise peut-être déjà. Aucun raccourci de capture n’est actif.',
 
 		customFilenameFormat: 'Format de nom de fichier personnalisé',
 		customFilenameFormatDescription:

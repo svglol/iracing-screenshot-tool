@@ -2518,13 +2518,16 @@ app.on('ready', async () => {
 			onScreenshotHotkey
 		);
 		if (result.ok === false) {
+			// Null when no screenshot hotkey is registered at all, so Settings
+			// does not claim the previous one "is still active".
+			const kept = result.restored ? previous : null;
 			log.warn('Screenshot hotkey rebind refused', {
 				requested: String(next),
-				kept: previous,
+				kept,
 				failure: result.failure,
 				reason: result.reason,
 			});
-			return { ok: false, accelerator: previous, reason: result.reason };
+			return { ok: false, accelerator: kept, reason: result.reason };
 		}
 		config.set('screenshotKeybind', next);
 		log.info('Screenshot hotkey changed', { from: previous, to: next });

@@ -89,6 +89,8 @@ const pl: Catalog = {
 		editBind: 'Zmień skrót',
 		keybindRejected:
 			'{keys} nie może być skrótem klawiszowym zrzutu — być może używa go już inna aplikacja. Nadal działa {previous}.',
+		keybindRejectedNoneActive:
+			'{keys} nie może być skrótem klawiszowym zrzutu — być może używa go już inna aplikacja. Obecnie nie działa żaden skrót klawiszowy zrzutu.',
 
 		customFilenameFormat: 'Własny format nazwy pliku',
 		customFilenameFormatDescription:

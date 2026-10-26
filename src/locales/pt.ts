@@ -82,6 +82,8 @@ const pt: Catalog = {
 		editBind: 'Editar atalho',
 		keybindRejected:
 			'{keys} não pode ser usado como atalho de captura; talvez outra aplicação já o esteja a usar. {previous} continua ativo.',
+		keybindRejectedNoneActive:
+			'{keys} não pode ser usado como atalho de captura; talvez outra aplicação já o esteja a usar. Nenhum atalho de captura está ativo.',
 
 		customFilenameFormat: 'Formato de nome de ficheiro personalizado',
 		customFilenameFormatDescription:

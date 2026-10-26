@@ -418,6 +418,9 @@ const { ipcRenderer, shell } = require('electron');
 // The payload types differ per channel; `never` lets each handler declare its own.
 type IpcHandler = (event: unknown, ...args: never[]) => void;
 
+// VK_SNAPSHOT: Windows takes PrintScreen's press itself, so a page sees only
+// its release.
+const PRINT_SCREEN_KEY_CODE = 44;
 // How long before a key release that completes the hotkey capture a modifier
 // may have been let go and still be part of the chord.
 const MODIFIER_RELEASE_GRACE_MS = 500;
@@ -442,6 +445,7 @@ export default {
 			keybindListeners: null as {
 				keydown: (e: KeyboardEvent) => void;
 				keyup: (e: KeyboardEvent) => void;
+				abandon: () => void;
 			} | null,
 			// ipcRenderer listeners registered in created(), hoisted so
 			// beforeUnmount can remove them (same pattern as TitleBar).
@@ -915,8 +919,9 @@ export default {
 				});
 		},
 		// Capture the next key combination as an Electron accelerator. Completes
-		// on the first non-modifier key (on keydown, or on keyup when the page
-		// never saw it go down — see below); Escape cancels. The old capture
+		// on the first non-modifier key (on keydown, or on keyup when a global
+		// hot key took the keydown — see below); Escape, a click anywhere or
+		// leaving the window cancels. The old capture
 		// joined raw KeyboardEvent.key values and waited for every key to be
 		// released, which could produce strings Electron cannot register ('Control'
 		// alone, 'Control+ArrowUp') or never finish (Shift released first).
@@ -935,6 +940,8 @@ export default {
 			// before it — Ctrl let go a beat before PrintScreen — but not one from
 			// long ago (an earlier Alt+Tab).
 			const releasedAt = new Map<string, number>();
+			// The modifiers whose press this capture saw.
+			const pressed = new Set<string>();
 			// The key that pressed Edit Bind, if a key did. Its release is still
 			// to come, and it is not a key press of this capture.
 			let triggerCode =
@@ -944,16 +951,17 @@ export default {
 					return;
 				}
 				e.preventDefault();
+				if (e.type === 'keydown') {
+					for (const modifier of modifiersOfKey(e.key)) {
+						pressed.add(modifier);
+					}
+				}
 				const released = e.type === 'keyup' ? modifiersOfKey(e.key) : [];
 				for (const modifier of released) {
 					releasedAt.set(modifier, Date.now());
 				}
-				// A non-modifier key goes up, yet its keydown would have completed
-				// the capture: something above the page took that keydown. Windows
-				// does for PrintScreen; RegisterHotKey does for a combination that
-				// another application — or this one — holds as a global hot key.
-				// The release is then the only sign of the press. Ignoring it left
-				// the capture armed, silently, for whatever was typed next.
+				// A non-modifier key goes up without the capture having seen it go
+				// down (its keydown would have completed the capture).
 				const releaseOnly = e.type === 'keyup' && released.length === 0;
 				if (releaseOnly && triggerCode !== null && e.code === triggerCode) {
 					triggerCode = null;
@@ -966,6 +974,33 @@ export default {
 					e,
 					releaseOnly ? recentlyReleased : []
 				);
+				// Such a release IS the press when a global hot key took the
+				// keydown: Windows' own for PrintScreen, or RegisterHotKey for a
+				// combination another application — or this one — holds. Ignoring
+				// those left the capture armed, silently, for whatever was typed
+				// next. But most releases of that kind are of a key pressed
+				// elsewhere: before the capture began (a Tab rolled into the Enter
+				// that pressed Edit Bind), in a native dialog, in another window
+				// before Alt+Tab. Binding those took Tab or Enter from every
+				// application. So a release completes the capture only for
+				// PrintScreen, for a chord with a modifier pressed during this
+				// capture (the keydowns of modifiers do reach the page), or for this
+				// app's own current hotkey.
+				if (releaseOnly) {
+					const isPrintScreen =
+						e.keyCode === PRINT_SCREEN_KEY_CODE ||
+						e.code === 'PrintScreen';
+					const modifierPressedHere = [
+						...modifiersOf(e),
+						...recentlyReleased,
+					].some((modifier) => pressed.has(modifier));
+					const isOwnHotkey =
+						result.kind === 'accelerator' &&
+						result.accelerator === config.get('screenshotKeybind');
+					if (!isPrintScreen && !modifierPressedHere && !isOwnHotkey) {
+						return;
+					}
+				}
 				if (result.kind === 'modifier') {
 					this.screenshotKeybind = result.modifiers.join('+');
 					return;
@@ -983,9 +1018,17 @@ export default {
 				}
 				void this.applyKeybind(result.accelerator);
 			};
-			this.keybindListeners = { keydown: onKey, keyup: onKey };
+			// Like Escape: nothing that follows a click or a trip to another
+			// window is an answer to "press the keys".
+			const abandon = () => {
+				this.stopKeybindCapture();
+				this.screenshotKeybind = config.get('screenshotKeybind');
+			};
+			this.keybindListeners = { keydown: onKey, keyup: onKey, abandon };
 			window.addEventListener('keydown', onKey);
 			window.addEventListener('keyup', onKey);
+			window.addEventListener('blur', abandon);
+			window.addEventListener('pointerdown', abandon, true);
 		},
 		stopKeybindCapture() {
 			if (this.keybindListeners) {
@@ -994,16 +1037,22 @@ export default {
 					this.keybindListeners.keydown
 				);
 				window.removeEventListener('keyup', this.keybindListeners.keyup);
+				window.removeEventListener('blur', this.keybindListeners.abandon);
+				window.removeEventListener(
+					'pointerdown',
+					this.keybindListeners.abandon,
+					true
+				);
 				this.keybindListeners = null;
 			}
 			this.bindingKey = false;
 		},
 		// Main registers it and, only if that worked, saves it. A refusal (a key
-		// another app owns, or one Electron cannot register) leaves the previous
-		// hotkey active, and says so.
+		// another app owns, or one Electron cannot register) puts the previous
+		// hotkey back, and says so.
 		async applyKeybind(accelerator: string) {
 			this.screenshotKeybind = accelerator;
-			let result: { ok: boolean; accelerator: string } | null = null;
+			let result: { ok: boolean; accelerator: string | null } | null = null;
 			try {
 				result = await ipcRenderer.invoke('screenshotKeybind-change', {
 					newValue: accelerator,
@@ -1015,15 +1064,26 @@ export default {
 				this.screenshotKeybind = result.accelerator;
 				return;
 			}
-			this.rejectKeybind(accelerator, result?.accelerator);
+			this.rejectKeybind(
+				accelerator,
+				result ? result.accelerator : undefined
+			);
 		},
-		rejectKeybind(attempted: string, kept?: string) {
+		// `kept`: the hotkey main reports still registered, null when it could
+		// not put the previous one back either (another app took it), undefined
+		// when main was not asked.
+		rejectKeybind(attempted: string, kept?: string | null) {
 			const previous = kept || config.get('screenshotKeybind');
 			this.screenshotKeybind = previous;
-			this.keybindNotice = this.$t('settings.keybindRejected', {
-				keys: attempted,
-				previous,
-			});
+			this.keybindNotice =
+				kept === null
+					? this.$t('settings.keybindRejectedNoneActive', {
+							keys: attempted,
+						})
+					: this.$t('settings.keybindRejected', {
+							keys: attempted,
+							previous,
+						});
 		},
 		insertField(token) {
 			this.filenameFormat = (this.filenameFormat || '') + token;

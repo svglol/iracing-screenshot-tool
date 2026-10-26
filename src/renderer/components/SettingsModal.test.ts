@@ -8,7 +8,7 @@
 // `require('electron')`, which vi.mock cannot reach, so the stub is planted in
 // Node's require cache (see TitleBar.test.ts).
 import { createRequire } from 'module';
-import { mount, flushPromises } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { initialUpdateState } from '../../utilities/update-decisions';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -75,8 +75,9 @@ interface SettingsVm {
 }
 const vmOf = (wrapper: { vm: unknown }) => wrapper.vm as SettingsVm;
 
+const mounted: VueWrapper[] = [];
 function mountSettings() {
-	return mount(SettingsModal, {
+	const wrapper = mount(SettingsModal, {
 		global: {
 			plugins: [i18n],
 			stubs: {
@@ -89,6 +90,8 @@ function mountSettings() {
 			},
 		},
 	});
+	mounted.push(wrapper);
+	return wrapper;
 }
 
 // keyCode is the Windows virtual key — what the capture maps to a token.
@@ -108,6 +111,16 @@ function key(
 
 const liveCount = () =>
 	[...live.values()].reduce((n, handlers) => n + handlers.size, 0);
+
+// A test that fails before its own unmount would leave its key capture
+// listening on window, and the tests after it would fail on its account.
+afterEach(() => {
+	for (const wrapper of mounted.splice(0)) {
+		if (!wrapper.vm.$.isUnmounted) {
+			wrapper.unmount();
+		}
+	}
+});
 
 beforeEach(() => {
 	live.clear();
@@ -183,6 +196,11 @@ describe('Settings hotkey capture', () => {
 		expect(vm.screenshotKeybind).toBe('Control+Up');
 		expect(vm.bindingKey).toBe(false);
 		expect(vm.keybindNotice).toBeNull();
+		// The finished capture stopped listening: a later click or blur does
+		// not abandon it after the fact.
+		window.dispatchEvent(new Event('pointerdown'));
+		window.dispatchEvent(new Event('blur'));
+		expect(vm.screenshotKeybind).toBe('Control+Up');
 		// Main persists it; the renderer no longer writes a value main may
 		// have refused.
 		expect(configSet).not.toHaveBeenCalledWith(
@@ -390,6 +408,109 @@ describe('Settings hotkey capture', () => {
 		expect(rebinds()).toEqual([
 			['screenshotKeybind-change', { newValue: 'Control+Alt+PrintScreen' }],
 		]);
+		wrapper.unmount();
+	});
+
+	// Regression: every release whose press the page never saw completed the
+	// capture, including a key pressed before it began. Tab still held as Enter
+	// pressed Edit Bind bound bare Tab, taking it from every application.
+	test('a key held when the capture began is not bound when let go', async () => {
+		invokeResult = { ok: true, accelerator: 'F9' };
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		key('keydown', { key: 'Tab', code: 'Tab', keyCode: 9 });
+		const activation = new KeyboardEvent('keydown', {
+			key: 'Enter',
+			code: 'Enter',
+			keyCode: 13,
+		});
+		vm.bindScreenshotKeybind(activation);
+		window.dispatchEvent(activation);
+		key('keyup', { key: 'Tab', code: 'Tab', keyCode: 9 });
+		key('keyup', { key: 'Enter', code: 'Enter', keyCode: 13 });
+		await flushPromises();
+		expect(rebinds()).toEqual([]);
+		expect(vm.bindingKey).toBe(true);
+
+		key('keydown', { key: 'F9', code: 'F9', keyCode: 120 });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'F9' }],
+		]);
+		wrapper.unmount();
+	});
+
+	// The Enter that closes a native folder dialog, or a Tab let go after
+	// Alt+Tab back into the app, arrives as a release alone.
+	test('a release whose press went to another window is not bound', async () => {
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		key('keyup', { key: 'Enter', code: 'Enter', keyCode: 13 });
+		key('keyup', { key: 'Alt', code: 'AltLeft', keyCode: 18 });
+		key('keyup', { key: 'Tab', code: 'Tab', keyCode: 9 });
+		key('keyup', { key: 'F4', code: 'F4', keyCode: 115, altKey: true });
+		key('keyup', { key: 'Escape', code: 'Escape', keyCode: 27 });
+		await flushPromises();
+		expect(rebinds()).toEqual([]);
+		expect(vm.bindingKey).toBe(true);
+		wrapper.unmount();
+	});
+
+	// Its registration takes the keydown of this app's own hotkey too.
+	test('pressing the current hotkey ends the capture by keeping it', async () => {
+		store.screenshotKeybind = 'F9';
+		invokeResult = { ok: true, accelerator: 'F9' };
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		key('keyup', { key: 'F9', code: 'F9', keyCode: 120 });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'F9' }],
+		]);
+		expect(vm.bindingKey).toBe(false);
+		wrapper.unmount();
+	});
+
+	test('a click anywhere, or leaving the window, abandons the capture', async () => {
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
+		expect(vm.screenshotKeybind).toBe('Control');
+		window.dispatchEvent(new Event('pointerdown'));
+		expect(vm.bindingKey).toBe(false);
+		expect(vm.screenshotKeybind).toBe('Control+PrintScreen');
+
+		vm.bindScreenshotKeybind();
+		window.dispatchEvent(new Event('blur'));
+		expect(vm.bindingKey).toBe(false);
+		key('keydown', { key: 'F12', code: 'F12', keyCode: 123 });
+		await flushPromises();
+		expect(rebinds()).toEqual([]);
+		wrapper.unmount();
+	});
+
+	test('a refusal that leaves no hotkey registered says so', async () => {
+		invokeResult = {
+			ok: false,
+			accelerator: null,
+			reason: 'already registered by another application',
+		};
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		key('keydown', { key: 'F12', code: 'F12', keyCode: 123 });
+		await flushPromises();
+		expect(vm.keybindNotice).toContain('F12');
+		expect(vm.keybindNotice).toContain('No screenshot keybind is active');
+		expect(vm.keybindNotice).not.toContain('still active');
 		wrapper.unmount();
 	});
 

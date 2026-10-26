@@ -101,6 +101,8 @@ const ar: Catalog = {
 		editBind: 'تعديل الاختصار',
 		keybindRejected:
 			'لا يمكن استخدام {keys} كاختصار للقطة الشاشة — ربما يستخدمه تطبيق آخر بالفعل. لا يزال {previous} مفعّلًا.',
+		keybindRejectedNoneActive:
+			'لا يمكن استخدام {keys} كاختصار للقطة الشاشة — ربما يستخدمه تطبيق آخر بالفعل. لا يوجد اختصار مفعّل للقطة الشاشة حاليًا.',
 
 		customFilenameFormat: 'تنسيق مخصص لاسم الملف',
 		// The tokens here are literal text the user types, not placeholders to be

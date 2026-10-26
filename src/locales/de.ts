@@ -83,6 +83,8 @@ const de: Catalog = {
 		editBind: 'Belegung ändern',
 		keybindRejected:
 			'{keys} kann nicht als Screenshot-Tastenkombination verwendet werden – möglicherweise nutzt eine andere App sie bereits. {previous} bleibt aktiv.',
+		keybindRejectedNoneActive:
+			'{keys} kann nicht als Screenshot-Tastenkombination verwendet werden – möglicherweise nutzt eine andere App sie bereits. Derzeit ist keine Screenshot-Tastenkombination aktiv.',
 
 		customFilenameFormat: 'Eigenes Dateinamensformat',
 		customFilenameFormatDescription:

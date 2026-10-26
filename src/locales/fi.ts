@@ -85,6 +85,8 @@ const fi: Catalog = {
 		editBind: 'Muokkaa pikanäppäintä',
 		keybindRejected:
 			'{keys} ei kelpaa kuvakaappauksen pikanäppäimeksi – jokin toinen sovellus saattaa jo käyttää sitä. {previous} on edelleen käytössä.',
+		keybindRejectedNoneActive:
+			'{keys} ei kelpaa kuvakaappauksen pikanäppäimeksi – jokin toinen sovellus saattaa jo käyttää sitä. Mikään kuvakaappauksen pikanäppäin ei ole nyt käytössä.',
 
 		customFilenameFormat: 'Mukautettu tiedostonimimuoto',
 		customFilenameFormatDescription:

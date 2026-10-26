@@ -81,6 +81,8 @@ const sv: Catalog = {
 		editBind: 'Ändra kortkommando',
 		keybindRejected:
 			'{keys} kan inte användas som kortkommando för skärmbild – ett annat program kanske redan använder det. {previous} gäller fortfarande.',
+		keybindRejectedNoneActive:
+			'{keys} kan inte användas som kortkommando för skärmbild – ett annat program kanske redan använder det. Inget kortkommando för skärmbild är aktivt.',
 
 		customFilenameFormat: 'Eget filnamnsformat',
 		customFilenameFormatDescription:

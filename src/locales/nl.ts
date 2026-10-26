@@ -81,6 +81,8 @@ const nl: Catalog = {
 		editBind: 'Sneltoets wijzigen',
 		keybindRejected:
 			'{keys} kan niet als sneltoets voor schermafbeeldingen worden gebruikt; mogelijk gebruikt een andere app deze al. {previous} blijft actief.',
+		keybindRejectedNoneActive:
+			'{keys} kan niet als sneltoets voor schermafbeeldingen worden gebruikt; mogelijk gebruikt een andere app deze al. Er is nu geen sneltoets voor schermafbeeldingen actief.',
 
 		customFilenameFormat: 'Aangepaste bestandsnaamindeling',
 		customFilenameFormatDescription:

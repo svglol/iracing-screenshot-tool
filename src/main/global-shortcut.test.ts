@@ -102,8 +102,25 @@ describe('rebindShortcut', () => {
 		registry.register('Control+PrintScreen', callback);
 		expect(
 			rebindShortcut(registry, 'Control+PrintScreen', 'F12', callback)
-		).toEqual(expect.objectContaining({ ok: false, failure: 'conflict' }));
+		).toEqual(
+			expect.objectContaining({
+				ok: false,
+				failure: 'conflict',
+				restored: true,
+			})
+		);
 		expect([...registered]).toEqual(['Control+PrintScreen']);
+	});
+
+	// Regression: main answered with the previous hotkey whether or not it came
+	// back, and Settings said it "is still active" — when another app held it
+	// since launch, nothing was registered at all.
+	test('reports when the previous hotkey cannot be put back either', () => {
+		const { registry, registered } = fakeRegistry(['Alt+F1']);
+		expect(rebindShortcut(registry, 'Alt+F1', 'Alt+F1', callback)).toEqual(
+			expect.objectContaining({ ok: false, restored: false })
+		);
+		expect([...registered]).toEqual([]);
 	});
 
 	// Regression: an invalid saved hotkey made unregister throw, so even a valid

@@ -89,6 +89,8 @@ const cs: Catalog = {
 		editBind: 'Upravit zkratku',
 		keybindRejected:
 			'{keys} nelze použít jako klávesovou zkratku snímku – možná ji už používá jiná aplikace. Nadále platí {previous}.',
+		keybindRejectedNoneActive:
+			'{keys} nelze použít jako klávesovou zkratku snímku – možná ji už používá jiná aplikace. Momentálně neplatí žádná klávesová zkratka snímku.',
 
 		customFilenameFormat: 'Vlastní formát názvu souboru',
 		customFilenameFormatDescription:

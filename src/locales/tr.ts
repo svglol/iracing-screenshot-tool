@@ -93,6 +93,8 @@ const tr: Catalog = {
 		editBind: 'Kısayolu Düzenle',
 		keybindRejected:
 			'{keys} ekran görüntüsü kısayolu olarak kullanılamıyor; başka bir uygulama zaten kullanıyor olabilir. {previous} hâlâ etkin.',
+		keybindRejectedNoneActive:
+			'{keys} ekran görüntüsü kısayolu olarak kullanılamıyor; başka bir uygulama zaten kullanıyor olabilir. Şu anda etkin bir ekran görüntüsü kısayolu yok.',
 
 		customFilenameFormat: 'Özel Dosya Adı Biçimi',
 		customFilenameFormatDescription:

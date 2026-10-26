@@ -87,6 +87,8 @@ const zhTW: Catalog = {
 		editBind: '變更快速鍵',
 		keybindRejected:
 			'{keys} 無法作為截圖快速鍵，可能已有其他應用程式在使用。{previous} 仍然有效。',
+		keybindRejectedNoneActive:
+			'{keys} 無法作為截圖快速鍵，可能已有其他應用程式在使用。目前沒有有效的截圖快速鍵。',
 
 		customFilenameFormat: '自訂檔名格式',
 		customFilenameFormatDescription:

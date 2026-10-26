@@ -81,6 +81,8 @@ const da: Catalog = {
 		editBind: 'Redigér genvej',
 		keybindRejected:
 			'{keys} kan ikke bruges som tastaturgenvej til skærmbillede – den bruges måske allerede af et andet program. {previous} er stadig aktiv.',
+		keybindRejectedNoneActive:
+			'{keys} kan ikke bruges som tastaturgenvej til skærmbillede – den bruges måske allerede af et andet program. Ingen tastaturgenvej til skærmbillede er aktiv.',
 
 		customFilenameFormat: 'Brugerdefineret filnavnsformat',
 		customFilenameFormatDescription:

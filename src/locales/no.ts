@@ -86,6 +86,8 @@ const no: Catalog = {
 		editBind: 'Endre hurtigtast',
 		keybindRejected:
 			'{keys} kan ikke brukes som hurtigtast for skjermbilde – den kan allerede være i bruk av et annet program. {previous} er fortsatt aktiv.',
+		keybindRejectedNoneActive:
+			'{keys} kan ikke brukes som hurtigtast for skjermbilde – den kan allerede være i bruk av et annet program. Ingen hurtigtast for skjermbilde er aktiv.',
 
 		customFilenameFormat: 'Egendefinert filnavnformat',
 		customFilenameFormatDescription:

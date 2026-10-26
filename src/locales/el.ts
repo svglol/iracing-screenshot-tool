@@ -95,6 +95,8 @@ const el: Catalog = {
 		editBind: 'Επεξεργασία συντόμευσης',
 		keybindRejected:
 			'Το {keys} δεν μπορεί να χρησιμοποιηθεί ως συντόμευση στιγμιότυπου — ίσως το χρησιμοποιεί ήδη άλλη εφαρμογή. Παραμένει ενεργό το {previous}.',
+		keybindRejectedNoneActive:
+			'Το {keys} δεν μπορεί να χρησιμοποιηθεί ως συντόμευση στιγμιότυπου — ίσως το χρησιμοποιεί ήδη άλλη εφαρμογή. Δεν είναι ενεργή καμία συντόμευση στιγμιότυπου.',
 
 		customFilenameFormat: 'Προσαρμοσμένη μορφή ονόματος αρχείου',
 		// The tokens here are literal text the user types, not placeholders to be

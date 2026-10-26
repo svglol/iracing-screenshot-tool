@@ -90,6 +90,8 @@ const ru: Catalog = {
 		editBind: 'Изменить сочетание',
 		keybindRejected:
 			'{keys} нельзя назначить сочетанием клавиш для снимка — возможно, оно уже занято другим приложением. По-прежнему действует {previous}.',
+		keybindRejectedNoneActive:
+			'{keys} нельзя назначить сочетанием клавиш для снимка — возможно, оно уже занято другим приложением. Сейчас не действует ни одно сочетание клавиш для снимка.',
 
 		customFilenameFormat: 'Свой формат имени файла',
 		// The tokens here are literal text the user types, not placeholders to be
