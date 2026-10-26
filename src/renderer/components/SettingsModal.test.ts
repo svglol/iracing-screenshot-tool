@@ -76,12 +76,14 @@ interface SettingsVm {
 const vmOf = (wrapper: { vm: unknown }) => wrapper.vm as SettingsVm;
 
 const mounted: VueWrapper[] = [];
-function mountSettings() {
+function mountSettings(options: { attachTo?: HTMLElement } = {}) {
 	const wrapper = mount(SettingsModal, {
+		...options,
 		global: {
 			plugins: [i18n],
 			stubs: {
-				'o-field': true,
+				// Renders its content: the Edit Bind control is inside one.
+				'o-field': { template: '<div><slot /></div>' },
 				'o-select': true,
 				'o-input': true,
 				'o-button': true,
@@ -330,12 +332,9 @@ describe('Settings hotkey capture', () => {
 	// the release. That release was dropped, so nothing was bound, nothing was
 	// said, and the capture stayed armed — the next key typed in Settings (a
 	// digit in the width field) became the system-wide hotkey.
+	// It is refused without asking main: it is taken (that is why its press
+	// never arrived), so registering it could only fail.
 	test('a combination another application holds is refused, not left armed', async () => {
-		invokeResult = {
-			ok: false,
-			accelerator: 'Control+PrintScreen',
-			reason: 'already registered by another application',
-		};
 		const wrapper = mountSettings();
 		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
@@ -348,23 +347,22 @@ describe('Settings hotkey capture', () => {
 		key('keyup', { key: 'F1', code: 'F1', keyCode: 112, altKey: true });
 		await flushPromises();
 
-		expect(rebinds()).toEqual([
-			['screenshotKeybind-change', { newValue: 'Alt+F1' }],
-		]);
+		expect(rebinds()).toEqual([]);
 		expect(vm.bindingKey).toBe(false);
 		expect(vm.keybindNotice).toContain('Alt+F1');
+		expect(vm.screenshotKeybind).toBe('Control+PrintScreen');
 
 		key('keydown', { key: '3', code: 'Digit3', keyCode: 51 });
 		await flushPromises();
-		expect(rebinds()).toHaveLength(1);
+		expect(rebinds()).toEqual([]);
 		wrapper.unmount();
 	});
 
 	// The same press with Alt let go before F1.
 	test('a held combination released modifier-first still names the modifier', async () => {
-		invokeResult = { ok: true, accelerator: 'Alt+F1' };
 		const wrapper = mountSettings();
-		vmOf(wrapper).bindScreenshotKeybind();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
 		key('keydown', {
 			key: 'Alt',
 			code: 'AltLeft',
@@ -374,9 +372,128 @@ describe('Settings hotkey capture', () => {
 		key('keyup', { key: 'Alt', code: 'AltLeft', keyCode: 18 });
 		key('keyup', { key: 'F1', code: 'F1', keyCode: 112 });
 		await flushPromises();
+		expect(rebinds()).toEqual([]);
+		expect(vm.keybindNotice).toContain('Alt+F1');
+		wrapper.unmount();
+	});
+
+	// Regression: with Shift let go more than 500 ms before S, the release named
+	// only Ctrl — and Control+S, which nobody holds, was registered, taking Save
+	// from every application.
+	test('a held chord is never registered from its release, even missing a modifier', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		try {
+			const wrapper = mountSettings();
+			const vm = vmOf(wrapper);
+			vm.bindScreenshotKeybind();
+			key('keydown', {
+				key: 'Control',
+				code: 'ControlLeft',
+				keyCode: 17,
+				ctrlKey: true,
+			});
+			key('keydown', {
+				key: 'Shift',
+				code: 'ShiftLeft',
+				keyCode: 16,
+				ctrlKey: true,
+				shiftKey: true,
+			});
+			key('keyup', {
+				key: 'Shift',
+				code: 'ShiftLeft',
+				keyCode: 16,
+				ctrlKey: true,
+			});
+			vi.setSystemTime(Date.now() + 600);
+			key('keyup', { key: 's', code: 'KeyS', keyCode: 83, ctrlKey: true });
+			await flushPromises();
+			expect(rebinds()).toEqual([]);
+			expect(vm.bindingKey).toBe(false);
+			expect(vm.keybindNotice).not.toBeNull();
+			wrapper.unmount();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	// The release of the key that pressed Edit Bind, with a modifier pressed
+	// since, is neither bound nor refused.
+	test('the release of the activating key does not end the capture', async () => {
+		invokeResult = { ok: true, accelerator: 'Control+F9' };
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		const activation = new KeyboardEvent('keydown', {
+			key: 'Enter',
+			code: 'Enter',
+			keyCode: 13,
+		});
+		vm.bindScreenshotKeybind(activation);
+		window.dispatchEvent(activation);
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
+		key('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, ctrlKey: true });
+		await flushPromises();
+		expect(vm.bindingKey).toBe(true);
+		expect(vm.keybindNotice).toBeNull();
+
+		key('keydown', { key: 'F9', code: 'F9', keyCode: 120, ctrlKey: true });
+		await flushPromises();
 		expect(rebinds()).toEqual([
-			['screenshotKeybind-change', { newValue: 'Alt+F1' }],
+			['screenshotKeybind-change', { newValue: 'Control+F9' }],
 		]);
+		wrapper.unmount();
+	});
+
+	// Regression: vue3-shortkey listens on document in the capture phase and
+	// stops the keys it maps — Delete reached Home's delete of the selected
+	// screenshot instead of the capture.
+	test('the capture gets its keys before any document-level shortcut', async () => {
+		invokeResult = { ok: true, accelerator: 'Delete' };
+		const shortcut = vi.fn((e: Event) => e.stopPropagation());
+		document.addEventListener('keydown', shortcut, true);
+		document.addEventListener('keyup', shortcut, true);
+		try {
+			const wrapper = mountSettings();
+			vmOf(wrapper).bindScreenshotKeybind();
+			const init = {
+				key: 'Delete',
+				code: 'Delete',
+				keyCode: 46,
+				bubbles: true,
+			};
+			document.body.dispatchEvent(new KeyboardEvent('keydown', init));
+			document.body.dispatchEvent(new KeyboardEvent('keyup', init));
+			await flushPromises();
+			expect(rebinds()).toEqual([
+				['screenshotKeybind-change', { newValue: 'Delete' }],
+			]);
+			expect(shortcut).toHaveBeenCalledTimes(1); // the keyup, after the capture ended
+			expect(shortcut.mock.calls[0][0].type).toBe('keyup');
+			wrapper.unmount();
+		} finally {
+			document.removeEventListener('keydown', shortcut, true);
+			document.removeEventListener('keyup', shortcut, true);
+		}
+	});
+
+	// Regression: the loading button takes no pointer events, so the second
+	// click of a double-click landed on its wrapper — and abandoned the capture
+	// the first click had just armed.
+	test('a second click on Edit Bind does not abandon the capture', () => {
+		const wrapper = mountSettings({ attachTo: document.body });
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		const control = wrapper.find({ ref: 'keybindControl' }).element;
+		control.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+		expect(vm.bindingKey).toBe(true);
+
+		document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+		expect(vm.bindingKey).toBe(false);
 		wrapper.unmount();
 	});
 

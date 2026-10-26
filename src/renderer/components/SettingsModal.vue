@@ -92,7 +92,7 @@
 							type="text"
 							:model-value="screenshotKeybind"
 						/>
-						<p class="control">
+						<p ref="keybindControl" class="control">
 							<o-button
 								class="button is-primary settings-action"
 								:loading="bindingKey"
@@ -445,7 +445,7 @@ export default {
 			keybindListeners: null as {
 				keydown: (e: KeyboardEvent) => void;
 				keyup: (e: KeyboardEvent) => void;
-				abandon: () => void;
+				abandon: (e: Event) => void;
 			} | null,
 			// ipcRenderer listeners registered in created(), hoisted so
 			// beforeUnmount can remove them (same pattern as TitleBar).
@@ -926,10 +926,10 @@ export default {
 		// released, which could produce strings Electron cannot register ('Control'
 		// alone, 'Control+ArrowUp') or never finish (Shift released first).
 		// `trigger` is the event that started the capture. Oruga's button emits
-		// its click during the Enter/Space KEYDOWN that activates it, and a window
-		// listener added there still receives that same keydown — which used to
-		// bind bare Enter (or Space) as the global hotkey, taking it from every
-		// application.
+		// its click during the Enter/Space KEYDOWN that activates it, and a
+		// (bubble-phase) window listener added there received that same keydown —
+		// which used to bind bare Enter (or Space) as the global hotkey, taking it
+		// from every application.
 		bindScreenshotKeybind(trigger?: Event) {
 			this.stopKeybindCapture();
 			this.keybindNotice = null;
@@ -947,10 +947,19 @@ export default {
 			let triggerCode =
 				trigger instanceof KeyboardEvent ? trigger.code : null;
 			const onKey = (e: KeyboardEvent) => {
-				if (e === trigger || e.repeat) {
+				if (e === trigger) {
 					return;
 				}
+				// The armed capture owns the keyboard. Its listeners run first (the
+				// window, capture phase) and stop each key there: vue3-shortkey's
+				// document listeners used to take Delete, F1 and Ctrl+C before the
+				// capture saw them — running Home's delete of the selected
+				// screenshot instead of binding Delete.
 				e.preventDefault();
+				e.stopPropagation();
+				if (e.repeat) {
+					return;
+				}
 				if (e.type === 'keydown') {
 					for (const modifier of modifiersOfKey(e.key)) {
 						pressed.add(modifier);
@@ -982,22 +991,32 @@ export default {
 				// elsewhere: before the capture began (a Tab rolled into the Enter
 				// that pressed Edit Bind), in a native dialog, in another window
 				// before Alt+Tab. Binding those took Tab or Enter from every
-				// application. So a release completes the capture only for
-				// PrintScreen, for a chord with a modifier pressed during this
-				// capture (the keydowns of modifiers do reach the page), or for this
-				// app's own current hotkey.
+				// application.
+				//
+				// So PrintScreen completes the capture, and so does this app's own
+				// hotkey (registered again, unchanged). A chord with a modifier
+				// pressed during this capture (the keydowns of modifiers do reach
+				// the page) is another application's hot key: it is refused here,
+				// never registered — registering it can only fail, or, when a
+				// modifier let go early is missing from it, succeed for a chord
+				// that was never pressed (Ctrl+S out of Ctrl+Shift+S). Any other
+				// release is ignored.
 				if (releaseOnly) {
 					const isPrintScreen =
 						e.keyCode === PRINT_SCREEN_KEY_CODE ||
 						e.code === 'PrintScreen';
-					const modifierPressedHere = [
-						...modifiersOf(e),
-						...recentlyReleased,
-					].some((modifier) => pressed.has(modifier));
 					const isOwnHotkey =
 						result.kind === 'accelerator' &&
 						result.accelerator === config.get('screenshotKeybind');
-					if (!isPrintScreen && !modifierPressedHere && !isOwnHotkey) {
+					if (!isPrintScreen && !isOwnHotkey) {
+						const modifierPressedHere = [
+							...modifiersOf(e),
+							...recentlyReleased,
+						].some((modifier) => pressed.has(modifier));
+						if (modifierPressedHere && result.kind === 'accelerator') {
+							this.stopKeybindCapture();
+							this.rejectKeybind(result.accelerator);
+						}
 						return;
 					}
 				}
@@ -1019,14 +1038,27 @@ export default {
 				void this.applyKeybind(result.accelerator);
 			};
 			// Like Escape: nothing that follows a click or a trip to another
-			// window is an answer to "press the keys".
-			const abandon = () => {
+			// window is an answer to "press the keys". A click on Edit Bind's own
+			// control is not abandoning it: the second click of a double-click
+			// lands there (the loading button takes no pointer events) and would
+			// otherwise switch off the capture the first click armed.
+			const abandon = (e: Event) => {
+				const control = this.$refs.keybindControl as
+					| HTMLElement
+					| undefined;
+				if (
+					e.type === 'pointerdown' &&
+					e.target instanceof Node &&
+					control?.contains(e.target)
+				) {
+					return;
+				}
 				this.stopKeybindCapture();
 				this.screenshotKeybind = config.get('screenshotKeybind');
 			};
 			this.keybindListeners = { keydown: onKey, keyup: onKey, abandon };
-			window.addEventListener('keydown', onKey);
-			window.addEventListener('keyup', onKey);
+			window.addEventListener('keydown', onKey, true);
+			window.addEventListener('keyup', onKey, true);
 			window.addEventListener('blur', abandon);
 			window.addEventListener('pointerdown', abandon, true);
 		},
@@ -1034,9 +1066,14 @@ export default {
 			if (this.keybindListeners) {
 				window.removeEventListener(
 					'keydown',
-					this.keybindListeners.keydown
+					this.keybindListeners.keydown,
+					true
 				);
-				window.removeEventListener('keyup', this.keybindListeners.keyup);
+				window.removeEventListener(
+					'keyup',
+					this.keybindListeners.keyup,
+					true
+				);
 				window.removeEventListener('blur', this.keybindListeners.abandon);
 				window.removeEventListener(
 					'pointerdown',
