@@ -61,9 +61,10 @@ if ((process as { type?: string }).type === 'renderer') {
 // Main-process Store construction, with recovery when electron-store refuses to
 // open config.json.
 //
-// conf already resets unparseable JSON by itself (clearInvalidConfig), so what
-// reaches the catch is a SCHEMA VIOLATION — one stored value of the wrong shape,
-// e.g. the null that a NaN write turns into — or an I/O error. This used to
+// Unparseable JSON is set aside before the store opens (see
+// setAsideUnparseableConfig), so what reaches the catch is a SCHEMA VIOLATION —
+// one stored value of the wrong shape, e.g. the null that a NaN write turns
+// into — or an I/O error. This used to
 // delete config.json on any of them, so one bad field cost the user every
 // setting. Now: drop only the invalid values (config-repair.ts) and reopen; and
 // if the file cannot be salvaged, set it aside rather than destroy it.
@@ -74,12 +75,14 @@ if ((process as { type?: string }).type === 'renderer') {
 // relative to out/main/ where no such file exists — so in a built app the throw
 // was swallowed and the reset this was meant to record was never logged.
 function openStoreWithRecovery(): ConfigShape {
+	const { app } = require('electron');
+	const configPath = path.join(app.getPath('userData'), 'config.json');
+	setAsideUnparseableConfig(configPath);
+
 	try {
 		return new Store({ schema });
 	} catch (openErr) {
 		const error = (openErr as Error)?.message || String(openErr);
-		const { app } = require('electron');
-		const configPath = path.join(app.getPath('userData'), 'config.json');
 
 		try {
 			const repair = repairConfigData(
@@ -113,19 +116,47 @@ function openStoreWithRecovery(): ConfigShape {
 			'config.json unusable; set aside as config.corrupt.json and reset to defaults',
 			{ error }
 		);
-		try {
-			fs.renameSync(
-				configPath,
-				path.join(path.dirname(configPath), 'config.corrupt.json')
-			);
-		} catch (moveErr: unknown) {
-			// ENOENT: nothing to move. Anything else (a locked file) would make the
-			// retry below fail the same way, so surface it.
-			if ((moveErr as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-				throw moveErr;
-			}
-		}
+		moveConfigAside(configPath);
 		return new Store({ schema });
+	}
+}
+
+// conf resets a config.json that is not valid JSON by itself
+// (clearInvalidConfig) — silently: no log line, and no copy of the user's
+// settings kept. So that case is caught here first, before the store opens, and
+// takes the same logged set-aside path as any other unusable file.
+function setAsideUnparseableConfig(configPath: string): void {
+	let text: string;
+	try {
+		text = fs.readFileSync(configPath, 'utf8');
+	} catch {
+		// Missing (first run) or unreadable: the store's own open decides.
+		return;
+	}
+	try {
+		JSON.parse(text);
+	} catch (parseErr) {
+		logConfigRecovery(
+			'error',
+			'config.json is not valid JSON; set aside as config.corrupt.json and reset to defaults',
+			{ error: (parseErr as Error)?.message || String(parseErr) }
+		);
+		moveConfigAside(configPath);
+	}
+}
+
+function moveConfigAside(configPath: string): void {
+	try {
+		fs.renameSync(
+			configPath,
+			path.join(path.dirname(configPath), 'config.corrupt.json')
+		);
+	} catch (moveErr: unknown) {
+		// ENOENT: nothing to move. Anything else (a locked file) would make the
+		// store's open fail the same way, so surface it.
+		if ((moveErr as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+			throw moveErr;
+		}
 	}
 }
 

@@ -11,14 +11,16 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+const logError = vi.hoisted(() => vi.fn());
 vi.mock('./logger', () => ({
 	createLogger: () => ({
 		info: vi.fn(),
 		debug: vi.fn(),
 		warn: vi.fn(),
-		error: vi.fn(),
+		error: logError,
 	}),
 }));
+const loggedErrors = () => logError.mock.calls.map((call) => call[0]);
 
 const nodeRequire = createRequire(import.meta.url);
 let userData = '';
@@ -42,6 +44,7 @@ async function openConfig() {
 
 beforeEach(() => {
 	userData = fs.mkdtempSync(path.join(os.tmpdir(), 'config-store-'));
+	logError.mockClear();
 });
 afterEach(() => {
 	fs.rmSync(userData, { recursive: true, force: true });
@@ -84,5 +87,20 @@ describe('settings store recovery', () => {
 				fs.readFileSync(path.join(userData, 'config.corrupt.json'), 'utf8')
 			)
 		).toEqual(['not', 'settings']);
+	});
+
+	// Regression: conf resets unparseable JSON by itself (clearInvalidConfig),
+	// silently — so the store's own recovery never saw it, nothing was logged and
+	// no copy of the user's settings was kept.
+	test('a file that is not valid JSON is set aside and logged, not silently replaced', async () => {
+		fs.writeFileSync(configPath(), '{"screenshotKeybind": "F12",');
+		const config = await openConfig();
+		expect(config.get('screenshotKeybind')).toBe('Control+PrintScreen');
+		expect(
+			fs.readFileSync(path.join(userData, 'config.corrupt.json'), 'utf8')
+		).toBe('{"screenshotKeybind": "F12",');
+		expect(loggedErrors()).toContain(
+			'config.json is not valid JSON; set aside as config.corrupt.json and reset to defaults'
+		);
 	});
 });
