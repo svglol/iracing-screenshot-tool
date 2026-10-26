@@ -525,6 +525,8 @@ const nl: Catalog = {
 			'Lange sluitertijd vereist replaytelemetrie van iRacing. Controleer of de sim draait en in een sessie zit.',
 		windowNotFound: 'iRacing-venster niet gevonden.',
 		cancelled: 'Opname geannuleerd.',
+		simExited:
+			'iRacing is tijdens de belichting afgesloten. Bij zeer hoge resoluties kan dat gebeuren als het videogeheugen (VRAM) opraakt.',
 		seekTimeout:
 			'De replay bereikte beeld {frame} niet op tijd. Mogelijk wordt hij nog geladen.',
 		warmUpFellBack:

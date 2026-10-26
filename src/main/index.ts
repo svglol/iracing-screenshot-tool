@@ -78,7 +78,10 @@ import {
 	tapeEndFrame,
 	type ReplayState,
 } from './long-exposure/replay-control';
-import { executeRecipe } from './long-exposure/capture-session';
+import {
+	executeRecipe,
+	type AbortReason,
+} from './long-exposure/capture-session';
 import { writeLongExposure } from './long-exposure/output';
 import {
 	createDefaultRecipe,
@@ -691,11 +694,17 @@ function enrichBlackFrameError(data: unknown): unknown {
 
 function reportScreenshotError(
 	errorLike: unknown,
-	defaults: {
+	{
+		notify = true,
+		...defaults
+	}: {
 		source?: string;
 		context?: string;
 		meta?: Record<string, unknown>;
 		diagnostics?: Record<string, unknown>;
+		// False: log it with full diagnostics, but send no toast — for a failure
+		// some other surface (the long-exposure panel) already reports.
+		notify?: boolean;
 	} = {}
 ) {
 	const payload = createScreenshotErrorPayload(errorLike, {
@@ -723,7 +732,7 @@ function reportScreenshotError(
 		console.error(rendererPayload.stack);
 	}
 
-	if (mainWindow && !mainWindow.isDestroyed()) {
+	if (notify && mainWindow && !mainWindow.isDestroyed()) {
 		mainWindow.webContents.send('screenshot-error', rendererPayload);
 	}
 
@@ -1228,7 +1237,8 @@ ipcMain.handle('profiles:revealFolder', async () => {
 // The live abort signal for the running capture, so the UI can cancel. Abort is
 // cooperative and unwinds through the same finally as any other exit, so the
 // anchor is still restored.
-let longExposureSignal: { aborted: boolean } | null = null;
+let longExposureSignal: { aborted: boolean; reason?: AbortReason } | null =
+	null;
 
 // Replay control bound to the live SDK bridge. Every position/speed change the
 // feature makes goes through here — broadcast messages only, never synthesised
@@ -1344,7 +1354,12 @@ ipcMain.handle('long-exposure:availability', () => {
 // unwind path as success.
 ipcMain.handle('long-exposure:abort', () => {
 	if (longExposureSignal) {
-		longExposureSignal.aborted = true;
+		// The first reason wins: a Cancel after iRacing already exited does not
+		// turn that failure into a cancel.
+		if (!longExposureSignal.aborted) {
+			longExposureSignal.reason = 'user';
+			longExposureSignal.aborted = true;
+		}
 		log.info('Long exposure abort requested');
 		return true;
 	}
@@ -3181,14 +3196,23 @@ function scheduleCaptureAbortOnDisconnect(): void {
 		}
 		// A long exposure has no worker to abort: stop it through its own signal,
 		// so it unwinds now instead of waiting out its multi-minute stall timeout
-		// still holding the sim (and the panel still reading "accumulating").
-		if (longExposureSignal) {
+		// still holding the sim (and the panel still reading "accumulating"). The
+		// reason makes it a 'sim-exited' failure, never a cancel or a salvage.
+		const longExposure = captureState.active?.kind === 'long-exposure';
+		if (longExposureSignal && !longExposureSignal.aborted) {
+			longExposureSignal.reason = 'sim-exited';
 			longExposureSignal.aborted = true;
 		}
 		restoreScreenshotState();
 		reportScreenshotError(
 			'iRacing exited during capture. At very high resolutions this can happen if it runs out of video memory (VRAM).',
-			{ context: 'resize-screenshot:iracing-disconnected' }
+			{
+				context: 'resize-screenshot:iracing-disconnected',
+				// The long-exposure panel reports its own outcome; the sidebar,
+				// which did not start this capture, stays quiet. Still logged with
+				// diagnostics: VRAM exhaustion is the usual cause.
+				notify: !longExposure,
+			}
 		);
 	}, CAPTURE_ABORT_DEBOUNCE_MS);
 }

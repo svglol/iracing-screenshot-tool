@@ -560,6 +560,8 @@ export default {
 			'Long exposure needs replay telemetry from iRacing. Check that the sim is running and in a session.',
 		windowNotFound: 'iRacing window not found.',
 		cancelled: 'Capture cancelled.',
+		simExited:
+			'iRacing exited during the exposure. At very high resolutions this can happen if it runs out of video memory (VRAM).',
 		seekTimeout:
 			'The replay did not reach frame {frame} in time. It may still be loading.',
 		warmUpFellBack:

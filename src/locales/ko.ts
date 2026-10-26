@@ -524,6 +524,8 @@ const ko: Catalog = {
 			'장노출에는 iRacing의 리플레이 텔레메트리가 필요합니다. 시뮬레이터가 실행 중이고 세션에 들어가 있는지 확인하세요.',
 		windowNotFound: 'iRacing 창을 찾을 수 없습니다.',
 		cancelled: '캡처를 취소했습니다.',
+		simExited:
+			'노출 도중 iRacing이 종료되었습니다. 매우 높은 해상도에서는 비디오 메모리(VRAM)가 부족하면 이런 일이 생길 수 있습니다.',
 		seekTimeout:
 			'리플레이가 제때 {frame} 프레임에 도달하지 못했습니다. 아직 불러오는 중일 수 있습니다.',
 		warmUpFellBack:

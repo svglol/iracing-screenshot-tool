@@ -525,6 +525,8 @@ const fi: Catalog = {
 			'Pitkä valotus vaatii uusintatelemetrian iRacingista. Tarkista, että simulaattori on käynnissä ja sessiossa.',
 		windowNotFound: 'iRacing-ikkunaa ei löytynyt.',
 		cancelled: 'Kaappaus peruutettiin.',
+		simExited:
+			'iRacing sulkeutui valotuksen aikana. Hyvin suurilla resoluutioilla näin voi käydä, jos näyttömuisti (VRAM) loppuu.',
 		seekTimeout:
 			'Uusinta ei ehtinyt ruutuun {frame} ajoissa. Se saattaa vielä latautua.',
 		warmUpFellBack:

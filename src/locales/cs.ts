@@ -530,6 +530,8 @@ const cs: Catalog = {
 			'Dlouhá expozice vyžaduje telemetrii záznamu z iRacingu. Zkontrolujte, že simulátor běží a je v relaci.',
 		windowNotFound: 'Okno iRacingu nebylo nalezeno.',
 		cancelled: 'Snímání zrušeno.',
+		simExited:
+			'iRacing se během expozice ukončil. Při velmi vysokých rozlišeních k tomu může dojít, když mu dojde videopaměť (VRAM).',
 		seekTimeout:
 			'Záznam nedosáhl snímku {frame} včas. Možná se ještě načítá.',
 		warmUpFellBack:

@@ -62,7 +62,7 @@ interface HarnessOptions {
 	// True simulates iRacing's window not being found (resizeWindow -> undefined).
 	// A flag rather than `windowHandle: undefined`, which a default would swallow.
 	windowMissing?: boolean;
-	signal?: { aborted: boolean };
+	signal?: { aborted: boolean; reason?: 'user' | 'sim-exited' };
 	// Force the restore seek to miss, to prove the outcome reports it honestly.
 	restoreLands?: boolean;
 	// What the post-raise #10 re-sample reports: a refusal message, or null to
@@ -751,6 +751,78 @@ describe('executeRecipe — multi-pass accumulation', () => {
 
 		expect(outcome.ok).toBe(false);
 		expect(outcome.failure).toBe('aborted');
+		expect(outcome.image).toBeNull();
+		expectAnchorRestored(harness.events);
+	});
+
+	// Regression: the disconnect path raises the same signal as Cancel. iRacing
+	// exiting was reported as "Capture cancelled." — or, after a whole pass, was
+	// salvaged into a "successful" shot beside a "Screenshot failed" toast.
+	it('reports iRacing exiting mid-pass as sim-exited, not as a cancel', async () => {
+		const signal: { aborted: boolean; reason?: 'user' | 'sim-exited' } = {
+			aborted: false,
+		};
+		const harness = makeHarness({ signal });
+		const native = harness.deps.native as NativeSessionApi;
+		const push = native.longExposureSetSample.bind(native);
+		native.longExposureSetSample = (s, w, u, f, t) => {
+			push(s, w, u, f, t);
+			if (harness.pushes.length >= 1) {
+				signal.reason = 'sim-exited';
+				signal.aborted = true;
+			}
+		};
+
+		// A long enough window that the abort lands mid-accumulation.
+		const outcome = await executeRecipe(
+			recipe({ shutter: '1/2' }),
+			harness.deps
+		);
+
+		expect(outcome.ok).toBe(false);
+		expect(outcome.failure).toBe('sim-exited');
+		expect(outcome.message).toMatch(/iRacing exited during the exposure/);
+		expect(outcome.image).toBeNull();
+		expectAnchorRestored(harness.events);
+	});
+
+	it('reports iRacing exiting right after the resize as sim-exited', async () => {
+		const signal: { aborted: boolean; reason?: 'user' | 'sim-exited' } = {
+			aborted: false,
+		};
+		const harness = makeHarness({ signal });
+		harness.deps.resizeWindow = async () => {
+			signal.reason = 'sim-exited';
+			signal.aborted = true;
+			return 4242;
+		};
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.failure).toBe('sim-exited');
+		expectAnchorRestored(harness.events);
+	});
+
+	it('does not salvage complete passes when iRacing exits', async () => {
+		const signal: { aborted: boolean; reason?: 'user' | 'sim-exited' } = {
+			aborted: false,
+		};
+		const harness = makeHarness({ signal });
+		const native = harness.deps.native as NativeSessionApi;
+		const declare = native.longExposureBeginPass as (
+			s: number,
+			p: number
+		) => void;
+		native.longExposureBeginPass = (s, p) => {
+			declare(s, p);
+			if (p === 1) {
+				signal.reason = 'sim-exited';
+				signal.aborted = true;
+			}
+		};
+
+		const outcome = await executeRecipe(recipe({ passes: 4 }), harness.deps);
+
+		expect(outcome.ok).toBe(false);
+		expect(outcome.failure).toBe('sim-exited');
 		expect(outcome.image).toBeNull();
 		expectAnchorRestored(harness.events);
 	});

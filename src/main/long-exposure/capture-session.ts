@@ -92,7 +92,13 @@ export type LongExposureFailure =
 	// worked and the INPUT was empty, which is a different thing to tell the user.
 	| 'blank-capture'
 	| 'resolve-failed'
-	| 'aborted';
+	| 'aborted'
+	// iRacing exited (crashed, often out of VRAM) part-way through. Not a cancel:
+	// nothing is salvaged, and the message says what happened.
+	| 'sim-exited';
+
+// Why the signal was raised. Absent means the user's Cancel.
+export type AbortReason = 'user' | 'sim-exited';
 
 export interface LongExposureImage {
 	// Tightly packed 16-bit RGBA, little-endian, straight from the GPU resolve.
@@ -260,7 +266,7 @@ export interface CaptureSessionDeps {
 	now(): number;
 	// Cooperative abort. Checked between every step; unwinds through the same
 	// finally as any other exit, so the anchor is still restored.
-	signal?: { aborted: boolean };
+	signal?: { aborted: boolean; reason?: AbortReason };
 	onProgress?(update: {
 		// 'warming' replaces 'seeking' when the pass has an effects warm-up: the seek
 		// is the same, but the seconds of 1x playback after it would otherwise read
@@ -296,6 +302,20 @@ function frameToSessionTime(
 		reference.replaySessionTime +
 		(frame - reference.replayFrameNum) / REPLAY_FRAMES_PER_SECOND
 	);
+}
+
+// What an abort ends as. The user's Cancel is 'aborted' — and a multi-pass shot
+// with complete passes behind it is resolved rather than thrown away. iRacing
+// exiting mid-exposure is NOT a cancel, though it arrives through the same
+// signal: it used to be reported as "Capture cancelled." for a cancel nobody
+// made, or salvaged into a "successful" shot beside a "Screenshot failed" toast.
+function abortOutcome(deps: CaptureSessionDeps): {
+	failure: LongExposureFailure;
+	message: string;
+} {
+	return deps.signal?.reason === 'sim-exited'
+		? { failure: 'sim-exited', message: t('longExposureCapture.simExited') }
+		: { failure: 'aborted', message: t('longExposureCapture.cancelled') };
 }
 
 function failure(
@@ -612,11 +632,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 		};
 	}
 	if (aborted()) {
-		return {
-			...base(),
-			failure: 'aborted',
-			message: t('longExposureCapture.cancelled'),
-		};
+		return { ...base(), ...abortOutcome(deps) };
 	}
 
 	// #10 AGAIN — and this is the sample that can actually fire.
@@ -732,16 +748,14 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			warmUp,
 		});
 		if (aborted()) {
-			// Between passes: nothing partial to declare.
-			if (completedPasses > 0) {
+			// Between passes: nothing partial to declare. Only the user's Cancel
+			// keeps the complete passes — see abortOutcome.
+			const outcome = abortOutcome(deps);
+			if (completedPasses > 0 && outcome.failure === 'aborted') {
 				cutShort = true;
 				break;
 			}
-			return {
-				...base(),
-				failure: 'aborted',
-				message: 'Capture cancelled.',
-			};
+			return { ...base(), ...outcome };
 		}
 		if (!positioned.landed) {
 			return {
@@ -1030,11 +1044,7 @@ async function accumulateWindow(
 	for (;;) {
 		if (aborted()) {
 			native.longExposureSetGate(session, false);
-			return {
-				...base(),
-				failure: 'aborted',
-				message: 'Capture cancelled.',
-			};
+			return { ...base(), ...abortOutcome(deps) };
 		}
 
 		const state = deps.replay.state();

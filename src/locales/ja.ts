@@ -537,6 +537,8 @@ const ja: Catalog = {
 			'長時間露光には iRacing のリプレイテレメトリが必要です。シムが起動していて、セッション中であることを確認してください。',
 		windowNotFound: 'iRacing のウィンドウが見つかりません。',
 		cancelled: 'キャプチャをキャンセルしました。',
+		simExited:
+			'露光中に iRacing が終了しました。非常に高い解像度では、ビデオメモリ (VRAM) が不足するとこの現象が起こることがあります。',
 		seekTimeout:
 			'リプレイが時間内にフレーム {frame} へ到達しませんでした。まだ読み込み中の可能性があります。',
 		warmUpFellBack:

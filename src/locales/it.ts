@@ -525,6 +525,8 @@ const it: Catalog = {
 			'La lunga esposizione richiede la telemetria di replay di iRacing. Verifica che il simulatore sia in esecuzione e all’interno di una sessione.',
 		windowNotFound: 'Finestra di iRacing non trovata.',
 		cancelled: 'Cattura annullata.',
+		simExited:
+			'iRacing si è chiuso durante l’esposizione. Alle risoluzioni molto alte può succedere se esaurisce la memoria video (VRAM).',
 		seekTimeout:
 			'Il replay non ha raggiunto il fotogramma {frame} in tempo. Potrebbe essere ancora in caricamento.',
 		warmUpFellBack:

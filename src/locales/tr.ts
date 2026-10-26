@@ -535,6 +535,8 @@ const tr: Catalog = {
 			"Uzun pozlama, iRacing'den replay telemetrisi gerektirir. Simülatörün çalıştığını ve bir oturumda olduğunu kontrol edin.",
 		windowNotFound: 'iRacing penceresi bulunamadı.',
 		cancelled: 'Yakalama iptal edildi.',
+		simExited:
+			'iRacing pozlama sırasında kapandı. Çok yüksek çözünürlüklerde video belleği (VRAM) yetmezse bu olabilir.',
 		seekTimeout:
 			'Replay, {frame} karesine zamanında ulaşamadı. Hâlâ yükleniyor olabilir.',
 		warmUpFellBack:

@@ -539,6 +539,8 @@ const pl: Catalog = {
 			'Długie naświetlanie wymaga telemetrii powtórki z iRacing. Sprawdź, czy symulator jest uruchomiony i znajduje się w sesji.',
 		windowNotFound: 'Nie znaleziono okna iRacing.',
 		cancelled: 'Przechwytywanie anulowane.',
+		simExited:
+			'iRacing zamknął się w trakcie naświetlania. Przy bardzo wysokich rozdzielczościach może się to zdarzyć, gdy zabraknie pamięci wideo (VRAM).',
 		seekTimeout:
 			'Powtórka nie dotarła na czas do klatki {frame}. Może się jeszcze wczytywać.',
 		warmUpFellBack:

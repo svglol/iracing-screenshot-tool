@@ -530,6 +530,8 @@ const fr: Catalog = {
 			'La pose longue nécessite la télémétrie de replay d’iRacing. Vérifiez que le simulateur est lancé et dans une session.',
 		windowNotFound: 'Fenêtre iRacing introuvable.',
 		cancelled: 'Capture annulée.',
+		simExited:
+			'iRacing s’est fermé pendant la pose. À très haute résolution, cela peut arriver s’il manque de mémoire vidéo (VRAM).',
 		seekTimeout:
 			'Le replay n’a pas atteint l’image {frame} à temps. Il est peut-être encore en cours de chargement.',
 		warmUpFellBack:

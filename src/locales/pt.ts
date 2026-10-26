@@ -524,6 +524,8 @@ const pt: Catalog = {
 			'A longa exposição precisa da telemetria de repetição do iRacing. Verifica se o simulador está a correr e dentro de uma sessão.',
 		windowNotFound: 'Janela do iRacing não encontrada.',
 		cancelled: 'Captura cancelada.',
+		simExited:
+			'O iRacing fechou durante a exposição. Em resoluções muito altas, isto pode acontecer se ficar sem memória de vídeo (VRAM).',
 		seekTimeout:
 			'A repetição não chegou ao fotograma {frame} a tempo. Pode ainda estar a carregar.',
 		warmUpFellBack:

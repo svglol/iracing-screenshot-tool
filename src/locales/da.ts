@@ -522,6 +522,8 @@ const da: Catalog = {
 			'Lang eksponering kræver replaytelemetri fra iRacing. Kontrollér, at simulatoren kører og er i en session.',
 		windowNotFound: 'iRacing-vinduet blev ikke fundet.',
 		cancelled: 'Optagelsen blev annulleret.',
+		simExited:
+			'iRacing lukkede under eksponeringen. Ved meget høje opløsninger kan det ske, hvis videohukommelsen (VRAM) slipper op.',
 		seekTimeout:
 			'Replayet nåede ikke billede {frame} i tide. Det er måske stadig ved at indlæse.',
 		warmUpFellBack:
