@@ -242,15 +242,44 @@ const MODIFIER_ALIASES: Record<string, string> = {
 	cmd: 'Super',
 };
 
+// The US characters Electron reads as their base key with Shift held:
+// 'Control+!' registers Ctrl+Shift+1. v3.5.0 saved Ctrl+Shift+1 that way.
+const SHIFTED_CHARACTERS: Record<string, string> = {
+	')': '0',
+	'!': '1',
+	'@': '2',
+	'#': '3',
+	$: '4',
+	'%': '5',
+	'^': '6',
+	'&': '7',
+	'*': '8',
+	'(': '9',
+	':': ';',
+	'<': ',',
+	_: '-',
+	'>': '.',
+	'?': '/',
+	'~': '`',
+	'{': '[',
+	'|': '\\',
+	'}': ']',
+	'"': "'",
+};
+
 function chordOf(accelerator: unknown): string | null {
 	if (typeof accelerator !== 'string' || accelerator.trim() === '') {
 		return null;
 	}
 	const tokens = accelerator.split('+').map((token) => token.trim());
-	const key = tokens.pop().toLowerCase();
+	let key = tokens.pop().toLowerCase();
 	const modifiers = new Set(
 		tokens.map((token) => MODIFIER_ALIASES[token.toLowerCase()] ?? token)
 	);
+	if (key in SHIFTED_CHARACTERS) {
+		key = SHIFTED_CHARACTERS[key];
+		modifiers.add('Shift');
+	}
 	return [
 		...MODIFIER_ORDER.filter((name) => modifiers.delete(name)),
 		...modifiers,

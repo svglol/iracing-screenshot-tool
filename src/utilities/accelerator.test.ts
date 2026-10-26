@@ -222,6 +222,14 @@ describe('sameAccelerator', () => {
 			true
 		);
 	});
+	// Electron reads a shifted character as its base key with Shift.
+	test('a shifted character is its key with Shift', () => {
+		expect(sameAccelerator('Control+Shift+1', 'Control+Shift+!')).toBe(true);
+		expect(sameAccelerator('Control+Shift+1', 'Control+!')).toBe(true);
+		expect(sameAccelerator('Control+Shift+/', 'Shift+Control+?')).toBe(true);
+		expect(sameAccelerator('Control+1', 'Control+!')).toBe(false);
+	});
+
 	test('a different chord is not the same', () => {
 		expect(sameAccelerator('Control+S', 'Control+Shift+S')).toBe(false);
 		expect(sameAccelerator('Control+S', 'Alt+S')).toBe(false);
