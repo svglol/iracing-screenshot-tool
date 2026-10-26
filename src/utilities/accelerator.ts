@@ -273,10 +273,14 @@ function chordOf(accelerator: unknown): string | null {
 	}
 	const tokens = accelerator.split('+').map((token) => token.trim());
 	let key = tokens.pop().toLowerCase();
+	// Electron has no 'AltGraph' token (v3.5.0 saved it for right Alt): the key
+	// after it replaces it, so 'Control+AltGraph+s' registers Ctrl+S.
 	const modifiers = new Set(
-		tokens.map((token) => MODIFIER_ALIASES[token.toLowerCase()] ?? token)
+		tokens
+			.filter((token) => token.toLowerCase() !== 'altgraph')
+			.map((token) => MODIFIER_ALIASES[token.toLowerCase()] ?? token)
 	);
-	if (key in SHIFTED_CHARACTERS) {
+	if (Object.hasOwn(SHIFTED_CHARACTERS, key)) {
 		key = SHIFTED_CHARACTERS[key];
 		modifiers.add('Shift');
 	}

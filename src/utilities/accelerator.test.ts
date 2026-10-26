@@ -230,6 +230,17 @@ describe('sameAccelerator', () => {
 		expect(sameAccelerator('Control+1', 'Control+!')).toBe(false);
 	});
 
+	// v3.5.0 saved right Alt as 'AltGraph', a token Electron ignores.
+	test('an AltGraph token is no modifier', () => {
+		expect(sameAccelerator('Control+S', 'Control+AltGraph+s')).toBe(true);
+		expect(sameAccelerator('Control+Shift+2', 'Control+AltGraph+@')).toBe(
+			true
+		);
+		expect(sameAccelerator('Control+Alt+S', 'Control+AltGraph+s')).toBe(
+			false
+		);
+	});
+
 	test('a different chord is not the same', () => {
 		expect(sameAccelerator('Control+S', 'Control+Shift+S')).toBe(false);
 		expect(sameAccelerator('Control+S', 'Alt+S')).toBe(false);
