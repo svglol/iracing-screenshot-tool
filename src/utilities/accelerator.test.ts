@@ -1,4 +1,8 @@
-import { acceleratorFromKeyPress, type KeyPress } from './accelerator';
+import {
+	acceleratorFromKeyPress,
+	modifiersOfKey,
+	type KeyPress,
+} from './accelerator';
 
 // A key press as Chromium reports it on Windows: `keyCode` is the virtual key the
 // active layout produced, `code` the US-position name, `key` the character.
@@ -190,5 +194,20 @@ describe('acceleratorFromKeyPress', () => {
 		test('a letter keeps its label even then', () => {
 			expect(accel(press('a', 'KeyQ', 0, ctrl))).toBe('Control+A');
 		});
+	});
+});
+
+describe('modifiersOfKey', () => {
+	test('names the modifier a released modifier key was', () => {
+		expect(modifiersOfKey('Control')).toEqual(['Control']);
+		expect(modifiersOfKey('Meta')).toEqual(['Super']);
+	});
+	// Windows matches a hot key pressed with AltGr as Ctrl+Alt.
+	test('AltGr stands for Ctrl+Alt', () => {
+		expect(modifiersOfKey('AltGraph')).toEqual(['Control', 'Alt']);
+	});
+	test('any other key is none', () => {
+		expect(modifiersOfKey('F1')).toEqual([]);
+		expect(modifiersOfKey('PrintScreen')).toEqual([]);
 	});
 });

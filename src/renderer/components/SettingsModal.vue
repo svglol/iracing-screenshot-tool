@@ -405,7 +405,7 @@ import {
 import { applyLocale } from '../i18n';
 import {
 	acceleratorFromKeyPress,
-	modifierOfKey,
+	modifiersOfKey,
 	modifiersOf,
 } from '../../utilities/accelerator';
 import {
@@ -418,10 +418,8 @@ const { ipcRenderer, shell } = require('electron');
 // The payload types differ per channel; `never` lets each handler declare its own.
 type IpcHandler = (event: unknown, ...args: never[]) => void;
 
-// VK_SNAPSHOT: the one key Windows reports to a page only on release.
-const PRINT_SCREEN_KEY_CODE = 44;
-// How long before that release a modifier may have been let go and still be
-// part of the chord.
+// How long before a key release that completes the hotkey capture a modifier
+// may have been let go and still be part of the chord.
 const MODIFIER_RELEASE_GRACE_MS = 500;
 const path = require('path');
 
@@ -917,8 +915,8 @@ export default {
 				});
 		},
 		// Capture the next key combination as an Electron accelerator. Completes
-		// on the first non-modifier key (on keydown, or keyup for PrintScreen,
-		// which Windows reports only on release); Escape cancels. The old capture
+		// on the first non-modifier key (on keydown, or on keyup when the page
+		// never saw it go down — see below); Escape cancels. The old capture
 		// joined raw KeyboardEvent.key values and waited for every key to be
 		// released, which could produce strings Electron cannot register ('Control'
 		// alone, 'Control+ArrowUp') or never finish (Shift released first).
@@ -933,25 +931,32 @@ export default {
 			this.bindingKey = true;
 
 			// When each modifier was last let go during this capture. A capture
-			// that completes on a key RELEASE (PrintScreen, which Windows reports
-			// only then) counts a modifier released just before it — Ctrl let go a
-			// beat before PrintScreen — but not one from long ago (an earlier
-			// Alt+Tab, AltGr's synthetic Ctrl+Alt).
+			// that completes on a key RELEASE counts a modifier released just
+			// before it — Ctrl let go a beat before PrintScreen — but not one from
+			// long ago (an earlier Alt+Tab).
 			const releasedAt = new Map<string, number>();
+			// The key that pressed Edit Bind, if a key did. Its release is still
+			// to come, and it is not a key press of this capture.
+			let triggerCode =
+				trigger instanceof KeyboardEvent ? trigger.code : null;
 			const onKey = (e: KeyboardEvent) => {
 				if (e === trigger || e.repeat) {
 					return;
 				}
 				e.preventDefault();
-				const released = e.type === 'keyup' ? modifierOfKey(e.key) : null;
-				if (released) {
-					releasedAt.set(released, Date.now());
+				const released = e.type === 'keyup' ? modifiersOfKey(e.key) : [];
+				for (const modifier of released) {
+					releasedAt.set(modifier, Date.now());
 				}
-				const completesOnRelease =
-					e.keyCode === PRINT_SCREEN_KEY_CODE || e.code === 'PrintScreen';
-				if (e.type === 'keyup' && !released && !completesOnRelease) {
-					// The release of a key whose press this capture never saw —
-					// pressed before the capture began.
+				// A non-modifier key goes up, yet its keydown would have completed
+				// the capture: something above the page took that keydown. Windows
+				// does for PrintScreen; RegisterHotKey does for a combination that
+				// another application — or this one — holds as a global hot key.
+				// The release is then the only sign of the press. Ignoring it left
+				// the capture armed, silently, for whatever was typed next.
+				const releaseOnly = e.type === 'keyup' && released.length === 0;
+				if (releaseOnly && triggerCode !== null && e.code === triggerCode) {
+					triggerCode = null;
 					return;
 				}
 				const recentlyReleased = [...releasedAt]
@@ -959,7 +964,7 @@ export default {
 					.map(([modifier]) => modifier);
 				const result = acceleratorFromKeyPress(
 					e,
-					completesOnRelease && e.type === 'keyup' ? recentlyReleased : []
+					releaseOnly ? recentlyReleased : []
 				);
 				if (result.kind === 'modifier') {
 					this.screenshotKeybind = result.modifiers.join('+');

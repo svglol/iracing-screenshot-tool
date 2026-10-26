@@ -801,7 +801,7 @@ describe('executeRecipe — multi-pass accumulation', () => {
 		expectAnchorRestored(harness.events);
 	});
 
-	it('does not salvage complete passes when iRacing exits', async () => {
+	it('does not salvage complete passes when iRacing exits between passes', async () => {
 		const signal: { aborted: boolean; reason?: 'user' | 'sim-exited' } = {
 			aborted: false,
 		};
@@ -814,6 +814,35 @@ describe('executeRecipe — multi-pass accumulation', () => {
 		native.longExposureBeginPass = (s, p) => {
 			declare(s, p);
 			if (p === 1) {
+				signal.reason = 'sim-exited';
+				signal.aborted = true;
+			}
+		};
+
+		const outcome = await executeRecipe(recipe({ passes: 4 }), harness.deps);
+
+		expect(outcome.ok).toBe(false);
+		expect(outcome.failure).toBe('sim-exited');
+		expect(outcome.image).toBeNull();
+		expectAnchorRestored(harness.events);
+	});
+
+	// The mid-pass check is a separate branch from the between-pass one above.
+	it('nor when iRacing exits partway through a later pass', async () => {
+		const signal: { aborted: boolean; reason?: 'user' | 'sim-exited' } = {
+			aborted: false,
+		};
+		const harness = makeHarness({ signal });
+		const native = harness.deps.native as NativeSessionApi;
+		const push = native.longExposureSetSample.bind(native);
+		native.longExposureSetSample = (s, w, u, f, t) => {
+			push(s, w, u, f, t);
+			const started =
+				harness.passBoundaries[harness.passBoundaries.length - 1];
+			if (
+				harness.passBoundaries.length > 1 &&
+				harness.pushes.length - started >= 1
+			) {
 				signal.reason = 'sim-exited';
 				signal.aborted = true;
 			}

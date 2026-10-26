@@ -99,6 +99,7 @@ function key(
 		code: string;
 		keyCode: number;
 		ctrlKey?: boolean;
+		altKey?: boolean;
 		shiftKey?: boolean;
 	}
 ) {
@@ -304,6 +305,92 @@ describe('Settings hotkey capture', () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	// Regression: RegisterHotKey keeps the keydown of a combination another
+	// application holds (Alt+F1 for a GPU overlay) from the page, which sees only
+	// the release. That release was dropped, so nothing was bound, nothing was
+	// said, and the capture stayed armed — the next key typed in Settings (a
+	// digit in the width field) became the system-wide hotkey.
+	test('a combination another application holds is refused, not left armed', async () => {
+		invokeResult = {
+			ok: false,
+			accelerator: 'Control+PrintScreen',
+			reason: 'already registered by another application',
+		};
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		key('keydown', {
+			key: 'Alt',
+			code: 'AltLeft',
+			keyCode: 18,
+			altKey: true,
+		});
+		key('keyup', { key: 'F1', code: 'F1', keyCode: 112, altKey: true });
+		await flushPromises();
+
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'Alt+F1' }],
+		]);
+		expect(vm.bindingKey).toBe(false);
+		expect(vm.keybindNotice).toContain('Alt+F1');
+
+		key('keydown', { key: '3', code: 'Digit3', keyCode: 51 });
+		await flushPromises();
+		expect(rebinds()).toHaveLength(1);
+		wrapper.unmount();
+	});
+
+	// The same press with Alt let go before F1.
+	test('a held combination released modifier-first still names the modifier', async () => {
+		invokeResult = { ok: true, accelerator: 'Alt+F1' };
+		const wrapper = mountSettings();
+		vmOf(wrapper).bindScreenshotKeybind();
+		key('keydown', {
+			key: 'Alt',
+			code: 'AltLeft',
+			keyCode: 18,
+			altKey: true,
+		});
+		key('keyup', { key: 'Alt', code: 'AltLeft', keyCode: 18 });
+		key('keyup', { key: 'F1', code: 'F1', keyCode: 112 });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'Alt+F1' }],
+		]);
+		wrapper.unmount();
+	});
+
+	// AltGr is a synthetic Control plus the right Alt reported as 'AltGraph', and
+	// Windows matches it as Ctrl+Alt. Only the Control release used to count, so
+	// AltGr let go before PrintScreen bound Control+PrintScreen, which AltGr
+	// never fires.
+	test('AltGr let go before PrintScreen binds Ctrl+Alt, as Windows matches it', async () => {
+		invokeResult = { ok: true, accelerator: 'Control+Alt+PrintScreen' };
+		const wrapper = mountSettings();
+		vmOf(wrapper).bindScreenshotKeybind();
+		const altGr = { ctrlKey: true, altKey: true };
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			...altGr,
+		});
+		key('keydown', {
+			key: 'AltGraph',
+			code: 'AltRight',
+			keyCode: 18,
+			...altGr,
+		});
+		key('keyup', { key: 'AltGraph', code: 'AltRight', keyCode: 18 });
+		key('keyup', { key: 'Control', code: 'ControlLeft', keyCode: 17 });
+		key('keyup', { key: 'PrintScreen', code: 'PrintScreen', keyCode: 44 });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'Control+Alt+PrintScreen' }],
+		]);
+		wrapper.unmount();
 	});
 
 	test('Escape cancels without asking main for anything', async () => {

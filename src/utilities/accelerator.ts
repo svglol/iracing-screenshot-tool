@@ -194,23 +194,26 @@ function mainKeyToken(press: KeyPress): string | null {
 	return tokenForCode(press);
 }
 
-// The accelerator modifier a modifier KEY is, from KeyboardEvent.key; null for
-// any other key. AltGraph is not one: Windows reports it as Ctrl+Alt, and those
-// arrive as their own events.
-export function modifierOfKey(key: string): string | null {
+// The accelerator modifiers a modifier KEY stands for, from KeyboardEvent.key;
+// empty for any other key. AltGr arrives as two keys, a synthetic 'Control' and
+// the right Alt reported as 'AltGraph' (never as 'Alt'). Windows matches a hot
+// key pressed with AltGr as Ctrl+Alt, so 'AltGraph' stands for both.
+export function modifiersOfKey(key: string): string[] {
 	switch (key) {
 		case 'Control':
-			return 'Control';
+			return ['Control'];
 		case 'Alt':
-			return 'Alt';
+			return ['Alt'];
+		case 'AltGraph':
+			return ['Control', 'Alt'];
 		case 'Shift':
-			return 'Shift';
+			return ['Shift'];
 		case 'Meta':
 		case 'OS':
 		case 'Super':
-			return 'Super';
+			return ['Super'];
 		default:
-			return null;
+			return [];
 	}
 }
 
@@ -224,9 +227,10 @@ export function modifiersOf(press: KeyPress): string[] {
 }
 
 // `alsoHeld`: modifiers known to be part of the chord though this event does not
-// report them. Windows delivers PrintScreen only on key RELEASE, by which time the
-// user may already have let go of Ctrl — so a capture completing on keyup passes
-// the modifiers it saw pressed earlier in the chord.
+// report them. A key whose press Windows keeps from the page (PrintScreen, or a
+// combination another application holds as a hot key) reaches it only on key
+// RELEASE, by which time the user may already have let go of Ctrl — so a capture
+// completing on keyup passes the modifiers it saw released just before.
 export function acceleratorFromKeyPress(
 	press: KeyPress,
 	alsoHeld: readonly string[] = []
