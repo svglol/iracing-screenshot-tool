@@ -181,13 +181,20 @@ describe('Home keyboard shortcuts', () => {
 
 	// Regression: the Graphics Profiles dialog opens over Home, which stays
 	// active behind it — Delete on a profile deleted the selected screenshot.
-	test('Delete in a dialog over Home deletes nothing', async () => {
+	// The dialog as Oruga renders an open modal.
+	function openDialog() {
 		const dialog = document.createElement('div');
 		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
 		dialog.tabIndex = -1;
 		const button = document.createElement('button');
 		dialog.appendChild(button);
 		document.body.appendChild(dialog);
+		return { dialog, button };
+	}
+
+	test('Delete in a dialog over Home deletes nothing', async () => {
+		const { dialog, button } = openDialog();
 		dialog.focus();
 		press(dialog, 'Delete');
 		button.focus();
@@ -195,6 +202,22 @@ describe('Home keyboard shortcuts', () => {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 		expect(shotCount()).toBe(3);
 		dialog.remove();
+	});
+
+	// Regression: clicking a profile's trash button replaces it with the
+	// confirm row, focus drops to <body> — and Delete then reached Home.
+	test('nor once focus has dropped out of the open dialog', async () => {
+		const { dialog, button } = openDialog();
+		button.focus();
+		button.remove();
+		expect(document.activeElement).toBe(document.body);
+		press(document.body, 'Delete');
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(shotCount()).toBe(3);
+
+		dialog.remove();
+		press(document.body, 'Delete');
+		await vi.waitFor(() => expect(shotCount()).toBe(2));
 	});
 
 	// Regression: Delete pressed in Settings deleted the screenshot Home had
