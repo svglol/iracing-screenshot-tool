@@ -158,6 +158,45 @@ describe('Home keyboard shortcuts', () => {
 		field.remove();
 	});
 
+	// Delete does nothing in these controls, so the shortcut keeps working there.
+	test('Delete with a select or a switch focused still deletes', async () => {
+		const select = document.createElement('select');
+		const toggle = document.createElement('input');
+		toggle.type = 'checkbox';
+		document.body.append(select, toggle);
+		select.focus();
+		press(select, 'Delete');
+		await vi.waitFor(() => expect(shotCount()).toBe(2));
+		// The file goes before Home moves its selection on; press again after.
+		const home = wrapper.findComponent(Home).vm as unknown as {
+			items: unknown[];
+		};
+		await vi.waitFor(() => expect(home.items).toHaveLength(2));
+		toggle.focus();
+		press(toggle, 'Delete');
+		await vi.waitFor(() => expect(shotCount()).toBe(1));
+		select.remove();
+		toggle.remove();
+	});
+
+	// Regression: the Graphics Profiles dialog opens over Home, which stays
+	// active behind it — Delete on a profile deleted the selected screenshot.
+	test('Delete in a dialog over Home deletes nothing', async () => {
+		const dialog = document.createElement('div');
+		dialog.setAttribute('role', 'dialog');
+		dialog.tabIndex = -1;
+		const button = document.createElement('button');
+		dialog.appendChild(button);
+		document.body.appendChild(dialog);
+		dialog.focus();
+		press(dialog, 'Delete');
+		button.focus();
+		press(button, 'Delete');
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(shotCount()).toBe(3);
+		dialog.remove();
+	});
+
 	// Regression: Delete pressed in Settings deleted the screenshot Home had
 	// selected behind it.
 	test('Delete on another page deletes nothing', async () => {
