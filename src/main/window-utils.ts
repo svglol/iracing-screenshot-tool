@@ -11,6 +11,8 @@ const IRACING_PROCESS_EXE = `${IRACING_PROCESS_NAME}.exe`;
 // capture's resize unresolved in the async one. A killed child exits non-zero,
 // which every caller already treats as "window not found".
 const POWERSHELL_TIMEOUT_MS = 15000;
+// How long after that the async variant stops waiting for its pipes to close.
+const POWERSHELL_CLOSE_GRACE_MS = 2000;
 
 export interface IRacingWindowDetails {
 	handle: string;
@@ -862,6 +864,17 @@ Write-Output ([int64]$window)
 			}
 		);
 
+		// 'close' waits for every holder of the stdio pipes, and Add-Type runs the
+		// C# compiler as a child of powershell.exe — which the timeout's kill does
+		// not reach. So 'close' alone could still never come: settle regardless,
+		// shortly after the kill.
+		const backstop = setTimeout(() => {
+			log.warn('PowerShell fallback did not finish — giving up', {
+				timeoutMs: POWERSHELL_TIMEOUT_MS,
+			});
+			resolve(undefined);
+		}, POWERSHELL_TIMEOUT_MS + POWERSHELL_CLOSE_GRACE_MS);
+
 		let stdout = '';
 		let stderr = '';
 		child.stdout.on('data', (data: Buffer | string) => {
@@ -875,12 +888,14 @@ Write-Output ([int64]$window)
 		// try/catch — a hard crash in the very safety net we fall back to. Treat
 		// it as "window not found" instead.
 		child.on('error', (error: Error) => {
+			clearTimeout(backstop);
 			log.error('PowerShell fallback spawn failed', {
 				error: error.message || String(error),
 			});
 			resolve(undefined);
 		});
 		child.on('close', (code: number | null) => {
+			clearTimeout(backstop);
 			if (code !== 0) {
 				if (stderr.trim()) {
 					log.warn('PowerShell fallback returned stderr', {
