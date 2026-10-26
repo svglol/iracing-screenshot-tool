@@ -5,6 +5,12 @@ const log = createLogger('window-utils');
 
 const IRACING_PROCESS_NAME = 'iRacingSim64DX11';
 const IRACING_PROCESS_EXE = `${IRACING_PROCESS_NAME}.exe`;
+// Upper bound on any PowerShell fallback. A normal run is ~1-3 s (CLR start plus
+// Add-Type); without a bound, a child that never exits (stuck on a policy or AV
+// prompt) blocked the main thread forever in the spawnSync variants, and left a
+// capture's resize unresolved in the async one. A killed child exits non-zero,
+// which every caller already treats as "window not found".
+const POWERSHELL_TIMEOUT_MS = 15000;
 
 export interface IRacingWindowDetails {
 	handle: string;
@@ -675,10 +681,17 @@ $rect = New-Object Win32Rect+RECT
 		{
 			encoding: 'utf8',
 			windowsHide: true,
+			timeout: POWERSHELL_TIMEOUT_MS,
 		}
 	);
 
 	if (result.status !== 0) {
+		if (result.error) {
+			// ETIMEDOUT when POWERSHELL_TIMEOUT_MS killed it.
+			log.warn('PowerShell window query failed', {
+				error: result.error.message,
+			});
+		}
 		if (result.stderr) {
 			log.warn('PowerShell window query returned stderr', {
 				stderr: result.stderr.trim(),
@@ -757,10 +770,17 @@ Write-Output ([int64]$window)
 		{
 			encoding: 'utf8',
 			windowsHide: true,
+			timeout: POWERSHELL_TIMEOUT_MS,
 		}
 	);
 
 	if (result.status !== 0) {
+		if (result.error) {
+			// ETIMEDOUT when POWERSHELL_TIMEOUT_MS killed it.
+			log.warn('PowerShell window query failed', {
+				error: result.error.message,
+			});
+		}
 		if (result.stderr) {
 			log.warn('PowerShell window query returned stderr', {
 				stderr: result.stderr.trim(),
@@ -838,6 +858,7 @@ Write-Output ([int64]$window)
 			['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
 			{
 				windowsHide: true,
+				timeout: POWERSHELL_TIMEOUT_MS,
 			}
 		);
 
