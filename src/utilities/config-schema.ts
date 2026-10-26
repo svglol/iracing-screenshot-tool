@@ -1,0 +1,242 @@
+// The settings schema, on its own so it can be imported without constructing the
+// store (config.ts builds an electron-store at import time). config-repair.ts and
+// the tests validate against exactly this object.
+const homedir: string = require('os').homedir();
+const dir = homedir + '\\Pictures\\Screenshots\\';
+
+export const schema = {
+	customHeight: {
+		type: 'number',
+		default: 1080,
+	},
+	customWidth: {
+		type: 'number',
+		default: 1920,
+	},
+	resolution: {
+		type: 'string',
+		default: '1080p',
+	},
+	crop: {
+		type: 'boolean',
+		default: true,
+	},
+	keepAspectRatio: {
+		type: 'boolean',
+		default: false,
+	},
+	cropTopLeft: {
+		type: 'boolean',
+		default: false,
+	},
+	winPosX: {
+		type: 'number',
+		default: 0,
+	},
+	winPosY: {
+		type: 'number',
+		default: 0,
+	},
+	winWidth: {
+		type: 'number',
+		default: 1100,
+	},
+	winHeight: {
+		type: 'number',
+		default: 655,
+	},
+	screenshotFolder: {
+		type: 'string',
+		default: dir,
+	},
+	screenshotKeybind: {
+		type: 'string',
+		default: 'Control+PrintScreen',
+	},
+	customFilenameFormat: {
+		type: 'boolean',
+		default: false,
+	},
+	filenameFormat: {
+		type: 'string',
+		default: '{track}-{driver}-{counter}',
+	},
+	outputFormat: {
+		type: 'string',
+		// The desktop-capture pipeline delivers chroma-subsampled (I420 4:2:0)
+		// frames, so no encode format is truly pixel-accurate. JPEG at max quality
+		// is the default (small files); PNG (lossless container) and WebP are
+		// options in Settings.
+		default: 'jpeg',
+		enum: ['jpeg', 'png', 'webp'],
+	},
+	disableTooltips: {
+		type: 'boolean',
+		default: false,
+	},
+	defaultScreenWidth: {
+		type: 'number',
+		default: 0,
+	},
+	defaultScreenHeight: {
+		type: 'number',
+		default: 0,
+	},
+	defaultScreenLeft: {
+		type: 'number',
+		default: 0,
+	},
+	defaultScreenTop: {
+		type: 'number',
+		default: 0,
+	},
+	manualWindowRestore: {
+		type: 'boolean',
+		default: false,
+	},
+	firstTime: {
+		type: 'boolean',
+		default: true,
+	},
+	// UI language. Empty means "never resolved" — the main process detects it from
+	// the Windows UI language on first run and writes the RESOLVED code back, so
+	// this is only ever blank once. Persisting the resolved code rather than the
+	// raw OS tag means a user who later switches Windows to a language we do not
+	// ship keeps the one they were already reading.
+	locale: {
+		type: 'string',
+		default: '',
+	},
+	version: {
+		type: 'string',
+		default: '',
+	},
+	reshade: {
+		type: 'boolean',
+		default: false,
+	},
+	reshadeFile: {
+		type: 'string',
+		default: 'C:\\Program Files (x86)\\iRacing\\ReShade.ini',
+	},
+	// Windows.Graphics.Capture path (#11): grabs true un-subsampled 8-bit RGBA
+	// via the native addon instead of the desktopCapturer/getUserMedia pipeline
+	// (which chroma-subsamples to I420 4:2:0). On by default (hardware-validated)
+	// — transparently falls back to getUserMedia when WGC is unavailable (missing
+	// addon / pre-1903 Windows) or on any capture fault, so enabling it by default
+	// never regresses a machine that can't use it.
+	nativeCapture: {
+		type: 'boolean',
+		default: true,
+	},
+	// --- iRacing configuration folder ------------------------------------
+	// Override for the folder holding rendererDX11Monitor.ini. Empty means
+	// "resolve it from the Windows Documents known folder", which is right for
+	// essentially everyone including OneDrive-redirected setups. This exists for
+	// the installs we cannot discover — Documents moved to another drive, or a
+	// relocated iRacing directory. Names the iRacing folder ITSELF, not its parent.
+	iracingFolder: {
+		type: 'string',
+		default: '',
+	},
+	// The graphics profile we last wrote over rendererDX11Monitor.ini. Empty means
+	// nothing has been applied yet.
+	//
+	// This is what lets a DRIFTED config still be named. iRacing rewrites the ini
+	// on exit, so the moment the user changes a graphics setting in-sim the live
+	// file stops matching the profile it came from. Without this record the app
+	// could only say "no profile active"; with it, it says "Screenshots, with
+	// changes" — which is the answer the user actually needs.
+	activeGraphicsProfile: {
+		type: 'string',
+		default: '',
+	},
+	// --- Long exposure (docs/design/long-exposure.md) ---------------------
+	// The last parameter set the user shot with, so re-opening the panel resumes
+	// where they left off. The anchor is deliberately NOT persisted: it belongs to
+	// a moment in a specific replay and is read fresh (or carried in the recipe for
+	// a re-shoot).
+	// Whether the long-exposure panel is folded away in the sidebar. Collapsed by
+	// default: it is a replay-only mode with a dozen parameters sitting under the
+	// everyday still-capture controls, so unfolded-by-default makes the sidebar read
+	// as cluttered to someone who only wants a screenshot.
+	longExposureCollapsed: {
+		type: 'boolean',
+		default: true,
+	},
+	// Whether the panel's Advanced group is unfolded. Separate from the panel fold
+	// so opening the panel does not drag seven tuning controls back onto the screen.
+	longExposureAdvancedOpen: {
+		type: 'boolean',
+		default: false,
+	},
+	longExposureShutter: {
+		type: 'string',
+		default: '1/8',
+	},
+	// 0 = derive the playback speed from the sample target. Any other value pins it.
+	longExposurePlaybackSpeed: {
+		type: 'number',
+		default: 0,
+	},
+	longExposureTargetSamples: {
+		type: 'number',
+		default: 240,
+	},
+	// NOTE: longExposureSupersample was REMOVED 2026-08-03. It rendered at 2x and
+	// box-downsampled at resolve, which bought antialiasing at 4x the VRAM and
+	// roughly half the sample count — a losing trade on the moving subjects this
+	// feature exists for. A stored value is simply ignored; picking a higher
+	// Resolution is the replacement.
+	// NOTE: longExposureInterpolation and longExposureLossyInterpolationLoad were
+	// REMOVED 2026-10-04 with optical-flow frame interpolation, which measured no
+	// better than multi-pass on a live replay and was NVIDIA-only. Stored values are
+	// simply ignored; longExposurePasses below is the replacement.
+	// How many times the exposure window is visited, accumulating into one buffer.
+	// 1 = an ordinary capture. Costs N times the wall clock and buys roughly N times
+	// the real samples, so it pays for short shutters and is unaffordable for long
+	// ones — which is why it persists but the panel keeps quoting the total wait.
+	longExposurePasses: {
+		type: 'number',
+		default: 1,
+		minimum: 1,
+		maximum: 16,
+	},
+	// Seconds of replay played at 1x before each pass's window so the effects a
+	// seek wipes (dirt, smoke, exhaust flames, wheel-spin blur) are back when the
+	// exposure opens. 0 = off. Costs about this many seconds per pass.
+	longExposureWarmUpSeconds: {
+		type: 'number',
+		default: 3,
+		minimum: 0,
+		maximum: 10,
+	},
+	// Emit one image per shutter stop at or faster than the chosen one, from the
+	// same captured frames. Nearly free in time, NOT free in VRAM — every stop owns
+	// a full-size accumulator — so it is off by default and pre-flighted.
+	longExposureBracket: {
+		type: 'boolean',
+		default: false,
+	},
+	longExposureWeighting: {
+		type: 'string',
+		default: 'box',
+		enum: ['box', 'linear', 'ease'],
+	},
+	// NOTE: there is deliberately no longExposureFormat,
+	// longExposureExposureCompensation or longExposureTonemap key. The output format
+	// comes from `outputFormat` above — one format setting for stills and long
+	// exposures both, with PNG there meaning the 16-bit master. Exposure
+	// compensation and tonemap are still recipe fields (an old sidecar carrying
+	// either still reproduces exactly), but nothing in the UI sets them, so
+	// persisting them would only preserve a value no control can change back.
+	//
+	// Highlight recovery in stops, applied to near-clipped values BEFORE
+	// accumulation. 0 = off (and exactly identity). Needs no particular hardware.
+	longExposureHighlightRecovery: {
+		type: 'number',
+		default: 0,
+	},
+};
+
+export type ConfigSchema = typeof schema;

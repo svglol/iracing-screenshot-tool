@@ -42,6 +42,13 @@ import {
 } from './capture-decisions';
 import { CaptureState, type CaptureTicket } from './capture-state';
 import {
+	RESTORE_GEOMETRY_KEYS,
+	isRestoreGeometryKey,
+	normalizeRestoreGeometry,
+	writeConfig,
+	type RestoreGeometryKey,
+} from './settings-guards';
+import {
 	captureIracingWindowNative,
 	getCaptureConsentStatus,
 	getCapturePermission,
@@ -910,29 +917,50 @@ function createWindow(): void {
 	});
 }
 
-ipcMain.on('config:get', (event, key: string) => {
-	event.returnValue = config.get(key);
+// Both config channels are SYNC: the renderer is blocked in sendSync until
+// returnValue is set, so neither handler may throw past that point.
+ipcMain.on('config:get', (event, key: unknown) => {
+	try {
+		event.returnValue = config.get(key);
+	} catch (error) {
+		log.warn('Config read failed', {
+			key: String(key),
+			error: (error as Error)?.message || String(error),
+		});
+		event.returnValue = undefined;
+	}
 });
 
-ipcMain.on('config:set', (event, payload: { key: string; value: unknown }) => {
-	const oldValue = config.get(payload.key);
-	config.set(payload.key, payload.value);
-	event.returnValue = true;
+ipcMain.on('config:set', (event, payload: unknown) => {
+	const result = writeConfig(config, payload);
+	event.returnValue = result.ok;
+	if (result.ok === false) {
+		log.warn('Config write refused', {
+			key: result.key,
+			reason: result.reason,
+		});
+		return;
+	}
 
-	if (oldValue !== payload.value) {
-		log.debug('Config changed', { key: payload.key });
+	const { key, value, oldValue } = result;
+	if (oldValue !== value) {
+		log.debug('Config changed', { key });
 		// Main phrases user-facing text of its own, so it has to re-language
 		// itself — not just tell the windows to. Done before the broadcast so a
 		// renderer that reacts by immediately asking main for something already
 		// gets the new language.
-		if (payload.key === 'locale') {
-			setLocale(payload.value);
+		if (key === 'locale') {
+			setLocale(value);
 		}
-		broadcastToWindows(
-			`config:changed:${payload.key}`,
-			payload.value,
-			oldValue
-		);
+		// Settings saves the restore geometry on every edit but only sends it
+		// live on "Restore Now", so main's copy used to stay stale until a
+		// restart — a capture restored iRacing to the OLD geometry while Settings
+		// showed the new one. Adopt it, without resizing (that stays on Restore
+		// Now, so typing does not move the sim window on every keystroke).
+		if (isRestoreGeometryKey(key)) {
+			adoptRestoreGeometry(key, value);
+		}
+		broadcastToWindows(`config:changed:${key}`, value, oldValue);
 	}
 });
 
@@ -2421,33 +2449,19 @@ app.on('ready', async () => {
 		mainWindow?.webContents.send('hotkey-screenshot', '');
 	});
 
-	ipcMain.on('defaultScreenHeight', (event, data: number) => {
-		height = data;
-		if (!captureState.simModified) {
-			resize(width, height, left, top);
-		}
-	});
-
-	ipcMain.on('defaultScreenWidth', (event, data: number) => {
-		width = data;
-		if (!captureState.simModified) {
-			resize(width, height, left, top);
-		}
-	});
-
-	ipcMain.on('defaultScreenLeft', (event, data: number) => {
-		left = data;
-		if (!captureState.simModified) {
-			resize(width, height, left, top);
-		}
-	});
-
-	ipcMain.on('defaultScreenTop', (event, data: number) => {
-		top = data;
-		if (!captureState.simModified) {
-			resize(width, height, left, top);
-		}
-	});
+	// "Restore Now": adopt the geometry and put iRacing there immediately. The
+	// values are parseInt results from Settings, so they are checked here first —
+	// NaN reached SetWindowPos as 0.
+	for (const key of RESTORE_GEOMETRY_KEYS) {
+		ipcMain.on(key, (event, data: unknown) => {
+			if (!adoptRestoreGeometry(key, data)) {
+				return;
+			}
+			if (!captureState.simModified) {
+				resize(width, height, left, top);
+			}
+		});
+	}
 });
 
 app.on('window-all-closed', () => {
@@ -3383,6 +3397,32 @@ async function waitForReshadeScreenshot(
 		cancelReshadeWait = cancel;
 		void scan();
 	});
+}
+
+// Take a manual-restore geometry value into main's copy (what restore and the
+// long-exposure aspect reference read). False, and nothing changed, when the
+// value is not usable.
+function adoptRestoreGeometry(key: RestoreGeometryKey, raw: unknown): boolean {
+	const value = normalizeRestoreGeometry(key, raw);
+	if (value === null) {
+		log.warn('Restore geometry ignored', { key, value: String(raw) });
+		return false;
+	}
+	switch (key) {
+		case 'defaultScreenWidth':
+			width = value;
+			break;
+		case 'defaultScreenHeight':
+			height = value;
+			break;
+		case 'defaultScreenLeft':
+			left = value;
+			break;
+		case 'defaultScreenTop':
+			top = value;
+			break;
+	}
+	return true;
 }
 
 function resize(

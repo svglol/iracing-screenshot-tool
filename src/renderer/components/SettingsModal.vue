@@ -723,14 +723,19 @@ export default {
 				config.set('defaultScreenHeight', value);
 			}
 		},
+		// Number.isFinite, not `!== ''`: a number input can hold text parseInt
+		// cannot read (".5", "-"), and the NaN that produced used to be saved —
+		// corrupting the settings file (see main/settings-guards.ts).
 		screenLeft() {
-			if (this.screenLeft !== '') {
-				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
+			const value = parseInt(this.screenLeft, 10);
+			if (Number.isFinite(value)) {
+				config.set('defaultScreenLeft', value);
 			}
 		},
 		screenTop() {
-			if (this.screenTop !== '') {
-				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
+			const value = parseInt(this.screenTop, 10);
+			if (Number.isFinite(value)) {
+				config.set('defaultScreenTop', value);
 			}
 		},
 	},
@@ -816,24 +821,27 @@ export default {
 		restoreNow() {
 			const w = parseInt(this.screenWidth, 10);
 			const h = parseInt(this.screenHeight, 10);
-			// Live-resize iRacing now (what the button is for)…
-			ipcRenderer.send('defaultScreenWidth', w);
-			ipcRenderer.send('defaultScreenHeight', h);
-			ipcRenderer.send('defaultScreenLeft', parseInt(this.screenLeft, 10));
-			ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop, 10));
-			// …and persist, so a value left untouched since load (no watcher fired)
-			// is still saved when Restore Now is clicked (cq-renderer-settings-ui#1).
-			if (w >= 1080 && w <= 10320) {
-				config.set('defaultScreenWidth', w);
-			}
-			if (h >= 720 && h <= 10320) {
-				config.set('defaultScreenHeight', h);
-			}
-			if (this.screenLeft !== '') {
-				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
-			}
-			if (this.screenTop !== '') {
-				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
+			const l = parseInt(this.screenLeft, 10);
+			const t = parseInt(this.screenTop, 10);
+			// Only values the watchers above would also save. Restore Now used to
+			// send every field unchecked, so an empty or half-typed one moved
+			// iRacing to a NaN (= 0) size or position for the rest of the session.
+			const geometry = {
+				defaultScreenWidth: w >= 1080 && w <= 10320 ? w : null,
+				defaultScreenHeight: h >= 720 && h <= 10320 ? h : null,
+				defaultScreenLeft: Number.isFinite(l) ? l : null,
+				defaultScreenTop: Number.isFinite(t) ? t : null,
+			};
+			for (const [key, value] of Object.entries(geometry)) {
+				if (value === null) {
+					continue;
+				}
+				// Live-resize iRacing now (what the button is for)…
+				ipcRenderer.send(key, value);
+				// …and persist, so a value left untouched since load (no watcher
+				// fired) is still saved when Restore Now is clicked
+				// (cq-renderer-settings-ui#1).
+				config.set(key, value);
 			}
 		},
 		openFolderDialog() {
