@@ -220,7 +220,12 @@ let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
 // restoreScreenshotState() clears this watchdog before the 35s mark. The extra 5s
 // still nets a truly hung resize on any path.
 const CAPTURE_WATCHDOG_MS = RESHADE_WAIT_TIMEOUT_MS + 5000;
-const CAPTURE_ABORT_DEBOUNCE_MS = 400;
+// How long a 'Disconnected' must last before a capture in flight is aborted.
+// It was 400 ms — shorter than the bridge's own re-check of a sim it found not
+// running, so a blip was aborted (and reported as iRacing exiting) before the
+// reconnect could ever arrive to cancel it. Three re-checks' worth outlasts one
+// slow probe; a real exit costs about a second more before recovery.
+const CAPTURE_ABORT_DEBOUNCE_MS = irsdk.SIM_RECHECK_INTERVAL_MS * 3;
 // #11 WGC native capture: settle delay after the resize so iRacing presents a
 // frame at the new size before the grab, and a hard cap on the (synchronous)
 // native grab. The dimension clamp and the black-frame detector live in

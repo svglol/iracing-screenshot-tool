@@ -9,6 +9,11 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// How long the bridge waits before asking again whether the sim is running, once
+// it is not. A Disconnected that is only a blip is followed by Connected no
+// sooner than this — which is what a consumer's debounce has to outlast.
+export const SIM_RECHECK_INTERVAL_MS = 500;
+
 type FlattenedTelemetry = { values: Record<string, unknown> };
 type SessionInfo = { data: unknown };
 
@@ -93,7 +98,7 @@ class IRacingBridge extends EventEmitter {
 						}
 
 						consecutiveErrors = 0;
-						await delay(500);
+						await delay(SIM_RECHECK_INTERVAL_MS);
 						continue;
 					}
 
@@ -209,5 +214,9 @@ export { IRacingBridge };
 // Preserve CommonJS interop for existing `const irsdk = require('./iracing-sdk');
 // irsdk.getInstance()` callers in index.ts. Dual-form is legal; ESM `export`
 // statements above coexist with this assignment under our tsconfig settings.
-module.exports = { getInstance, IRacingBridge };
-module.exports.default = { getInstance, IRacingBridge };
+module.exports = { getInstance, IRacingBridge, SIM_RECHECK_INTERVAL_MS };
+module.exports.default = {
+	getInstance,
+	IRacingBridge,
+	SIM_RECHECK_INTERVAL_MS,
+};
