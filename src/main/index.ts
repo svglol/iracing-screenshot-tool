@@ -40,6 +40,7 @@ import {
 	captureBlockMessage,
 	type CaptureBlock,
 } from './capture-decisions';
+import { CaptureState, type CaptureTicket } from './capture-state';
 import {
 	captureIracingWindowNative,
 	getCaptureConsentStatus,
@@ -154,7 +155,9 @@ let width: number;
 let height: number;
 let left: number;
 let top: number;
-let takingScreenshot = false;
+// Who owns the sim and whether it still needs putting back — for stills and long
+// exposures alike. See capture-state.ts for why this is a ticket and not a flag.
+const captureState = new CaptureState(restoreSimState);
 let originalWindowBounds: {
 	handle: string;
 	title: string;
@@ -185,7 +188,7 @@ let cancelReshadeWait: ((reason: string) => void) | null = null;
 let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
 let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
 // Kept strictly GREATER than waitForReshadeScreenshot's own 30000ms timeout: the
-// watchdog is armed the instant takingScreenshot flips (before the ReShade branch),
+// watchdog is armed the instant the capture begins (before the ReShade branch),
 // so on a genuine ReShade timeout its own wait must win the race and surface the
 // accurate "Timed out waiting for a ReShade screenshot" — not the watchdog's
 // worker-oriented "the capture worker did not respond". The reshade catch's
@@ -552,7 +555,8 @@ function buildMainScreenshotDiagnostics() {
 			all: displays,
 		},
 		screenshot: {
-			takingScreenshot,
+			takingScreenshot: captureState.simModified,
+			activeCapture: captureState.active,
 			workerReady,
 			activeCaptureArea: { width, height, left, top },
 			config: {
@@ -1165,10 +1169,10 @@ ipcMain.handle('profiles:revealFolder', async () => {
 // window/camera handling the still path uses, and write the result.
 // ---------------------------------------------------------------------------
 
-// Separate latch from `takingScreenshot` because a long exposure outlives the
-// window restore: the file write happens after iRacing is already back to normal,
-// and a second capture must not start in that gap.
-let longExposureActive = false;
+// A long exposure outlives its window restore: the file write happens after
+// iRacing is already back to normal, and a second capture must not start in that
+// gap. captureState holds its ticket until the write is done (see end() below).
+//
 // The live abort signal for the running capture, so the UI can cancel. Abort is
 // cooperative and unwinds through the same finally as any other exit, so the
 // anchor is still restored.
@@ -1279,7 +1283,7 @@ ipcMain.handle('long-exposure:availability', () => {
 		replayEndFrame: state ? tapeEndFrame(state) : null,
 		sessionNum: state?.replaySessionNum ?? null,
 		frameRate: state?.frameRate ?? null,
-		busy: longExposureActive || takingScreenshot,
+		busy: captureState.busy,
 	};
 });
 
@@ -1296,13 +1300,14 @@ ipcMain.handle('long-exposure:abort', () => {
 });
 
 ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
-	if (longExposureActive || takingScreenshot) {
-		return {
-			ok: false,
-			failure: 'busy',
-			message: t('longExposureCapture.busy'),
-			warnings: [],
-		};
+	const busyResult = () => ({
+		ok: false,
+		failure: 'busy',
+		message: t('longExposureCapture.busy'),
+		warnings: [],
+	});
+	if (captureState.busy) {
+		return busyResult();
 	}
 
 	// The same gate the renderer polls, re-checked here. The panel hides the button
@@ -1379,26 +1384,33 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		longExposureDefaults(live)
 	);
 
+	// Nothing above awaits, so the busy check at the top still holds and this
+	// cannot fail; the branch only keeps the types honest.
+	const ticket = captureState.begin('long-exposure');
+	if (!ticket) {
+		return busyResult();
+	}
 	const signal = { aborted: false };
 	longExposureSignal = signal;
-	longExposureActive = true;
-	takingScreenshot = true;
-	originalWindowBounds = getIracingWindowDetails() || null;
-	parseCameraState(
-		(iracing.telemetry?.values as { CamCameraState?: string[] })
-			?.CamCameraState
-	);
-	try {
-		iracing.camControls.setState(
-			cameraState | iracing.Consts.CameraState.UIHidden
-		);
-	} catch (error) {
-		log.debug('Could not hide the iRacing UI for long exposure', {
-			error: (error as Error)?.message || String(error),
-		});
-	}
 
+	// Everything from here on is inside the try, so the finally's end(ticket)
+	// runs on every exit — a throw before it would leave the app busy for good.
 	try {
+		originalWindowBounds = getIracingWindowDetails() || null;
+		parseCameraState(
+			(iracing.telemetry?.values as { CamCameraState?: string[] })
+				?.CamCameraState
+		);
+		try {
+			iracing.camControls.setState(
+				cameraState | iracing.Consts.CameraState.UIHidden
+			);
+		} catch (error) {
+			log.debug('Could not hide the iRacing UI for long exposure', {
+				error: (error as Error)?.message || String(error),
+			});
+		}
+
 		const outcome = await executeRecipe(recipe, {
 			replay: replayController,
 			native: getLongExposureApi(),
@@ -1407,8 +1419,14 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			resizeWindow: async (renderWidth, renderHeight) =>
 				resizeIracingWindowAsync(renderWidth, renderHeight, left, top),
 			// Reuse the still path's restore exactly, so a long exposure leaves
-			// iRacing in the same state a normal screenshot would.
-			restoreWindow: () => restoreScreenshotState(),
+			// iRacing in the same state a normal screenshot would. This puts the
+			// window back but does NOT release the sim: that waits for end()
+			// below, after the files are written.
+			restoreWindow: () => {
+				if (captureState.holds(ticket)) {
+					restoreScreenshotState();
+				}
+			},
 			// #10, re-sampled after the resize has raised iRacing — the only point on
 			// this path where GetForegroundWindow attribution can succeed. Same
 			// wording as the still path's early exit, deliberately: it is the same
@@ -1508,11 +1526,14 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		log.error('Long exposure failed', { error: message });
 		return { ok: false, failure: 'resolve-failed', message, warnings: [] };
 	} finally {
-		longExposureActive = false;
 		longExposureSignal = null;
 		// executeRecipe's own finally already restored the window and the cursor;
-		// this is the backstop for a throw before that could run.
-		restoreScreenshotState();
+		// this is the backstop for a throw before that could run. Then, and only
+		// then, the sim is free for the next capture.
+		if (captureState.holds(ticket)) {
+			restoreScreenshotState();
+		}
+		captureState.end(ticket);
 		// Hand the foreground back. A long exposure can run for minutes with
 		// iRacing raised in front, and every outcome it reports — the sample
 		// count, the warnings, the saved shot in the gallery — is in OUR window.
@@ -1826,8 +1847,17 @@ app.on('ready', async () => {
 		mainWindow?.webContents.send('screenshot-response', output);
 	});
 
-	ipcMain.on('screenshot-finished', () => {
-		restoreScreenshotState();
+	// The worker echoes the id main gave it, so a message from a capture that was
+	// already aborted (watchdog, disconnect) cannot restore the one after it.
+	ipcMain.on('screenshot-finished', (event, payload) => {
+		const captureId = workerCaptureId(payload);
+		if (captureState.holds(captureId)) {
+			restoreScreenshotState();
+		} else {
+			log.info('Ignoring screenshot-finished for an inactive capture', {
+				captureId,
+			});
+		}
 	});
 
 	ipcMain.on('request-iracing-status', (event) => {
@@ -1854,30 +1884,54 @@ app.on('ready', async () => {
 	iracing.on('Disconnected', () => {
 		// midCapture is the actionable field: a disconnect mid-capture is the
 		// VRAM-exhaustion signature this app cares about (obs-lifecycle-telemetry#1).
-		log.info('iRacing disconnected', { midCapture: takingScreenshot });
+		log.info('iRacing disconnected', {
+			midCapture: captureState.simModified,
+		});
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-disconnected', '');
 		}
 		// If iRacing vanishes mid-capture (e.g. a VRAM-exhaustion crash at high
 		// resolution), don't let the worker spin its full retry budget — schedule
 		// a debounced abort that recovers and reports a clear cause.
-		if (takingScreenshot) {
+		if (captureState.simModified) {
 			scheduleCaptureAbortOnDisconnect();
 		}
 	});
 
-	ipcMain.on('resize-screenshot', async (event, data: any) => {
+	ipcMain.on('resize-screenshot', async (event, request: unknown) => {
+		// Every field is re-validated below (the dimensions are clamped), but a
+		// non-object would throw on the first property read.
+		const data =
+			request && typeof request === 'object' ? (request as any) : {};
+		// Read ONCE for the whole capture. It used to be re-read after the awaits
+		// below, so toggling ReShade mode mid-capture sent a request whose
+		// pre-flight had resolved no ReShade folder into the ReShade branch,
+		// where it failed as "Cannot read properties of null".
+		const useReshade = config.get('reshade') === true;
 		log.info('Screenshot requested', {
 			width: data.width,
 			height: data.height,
-			reshade: config.get('reshade'),
+			reshade: useReshade,
 			crop: data.crop,
 		});
 
-		if (takingScreenshot) {
+		const holder = captureState.active;
+		if (captureState.busy) {
 			log.info('Screenshot rejected', {
 				reason: 'already-taking-screenshot',
+				holder: holder?.kind ?? null,
 			});
+			// A still in flight answers the sidebar itself when it completes, so
+			// its duplicate is dropped quietly. A long exposure does not: it never
+			// sends a still's completion (and on failure sends nothing at all),
+			// so a silent refusal left the sidebar's capture button stuck
+			// "loading" — and the hotkey dead — until the app was restarted.
+			if (holder?.kind === 'long-exposure') {
+				reportScreenshotError(t('longExposureCapture.busy'), {
+					context: 'resize-screenshot:busy-long-exposure',
+					meta: { request: data },
+				});
+			}
 			return;
 		}
 
@@ -1924,12 +1978,12 @@ app.on('ready', async () => {
 		// pre-flight entirely ONLY in ReShade mode. Sample HERE — before we raise
 		// iRacing / steal focus
 		// (so GetForegroundWindow attribution is trustworthy) and before
-		// takingScreenshot is set (so no restore is needed on the early exit). Skip
+		// the capture begins (so no restore is needed on the early exit). Skip
 		// the doomed attempt ONLY when confident (state 3 AND attributed);
 		// otherwise proceed and let the black-frame detector — enriched via the
 		// stashed state — be the backstop. Fails open: null (native off / iRacing
 		// closed) just proceeds.
-		if (!config.get('reshade')) {
+		if (!useReshade) {
 			// Capture-permission pre-flight: when Windows refuses this process
 			// (field case: the app set to "Run as administrator"), WGC and the
 			// getUserMedia fallback are both refused, so the capture would fail
@@ -1969,7 +2023,7 @@ app.on('ready', async () => {
 
 		// ReShade pre-flight (field case 2026-08: 14 identical reports from one
 		// user over a week). This read used to sit inside the ReShade branch below
-		// — after takingScreenshot had latched, after the watchdog was armed, after
+		// — after the capture had begun, after the watchdog was armed, after
 		// the sim's UI was hidden, and after the window had been resized to capture
 		// size. So a missing ini cost a full resize/restore cycle on every press,
 		// and on the reporting machine each of those cycles had iRacing allocate
@@ -1982,7 +2036,7 @@ app.on('ready', async () => {
 		// reads are two chances to disagree, and the branch would then be reporting
 		// a fault the pre-flight had already cleared.
 		let reshadeLocation: ReshadeScreenshotFolder | null = null;
-		if (config.get('reshade')) {
+		if (useReshade) {
 			const reshadeIniPath = config.get('reshadeFile');
 			try {
 				const reshadeIni = loadIniFile.sync(reshadeIniPath) as ReshadeIni;
@@ -2033,14 +2087,24 @@ app.on('ready', async () => {
 			);
 		}
 
-		takingScreenshot = true;
-		// Arm the recovery watchdog the instant the latch flips — before the
+		// Nothing since the busy check has awaited, so this cannot fail; the
+		// branch only keeps the types honest.
+		const ticket = captureState.begin('still');
+		if (!ticket) {
+			return;
+		}
+		// From here on, every await is followed by a captureState.holds(ticket)
+		// check: a watchdog or disconnect abort can restore and report while we
+		// are suspended, and a continuation that carried on regardless would
+		// resize, grab or report on behalf of a capture that is already over.
+		//
+		// Arm the recovery watchdog the instant the capture begins — before the
 		// branch split — so EVERY path is covered from here on, including a
 		// resizeIracingWindowAsync that HANGS (never resolves): a try/catch can
 		// only recover a rejection, so the watchdog is the sole net for a hang.
 		// The native-WGC and getUserMedia paths re-arm it (harmless clear+reset);
 		// restoreScreenshotState() clears it on success and on every error path.
-		armCaptureWatchdog();
+		armCaptureWatchdog(ticket);
 		// Snapshot VRAM now — before the window is resized and before iRacing can
 		// exit and free its VRAM — so an OOM-disconnect diagnostic reports the
 		// pre-exit usage, not the freed post-exit reading (obs-capture-diagnostics#3).
@@ -2062,9 +2126,19 @@ app.on('ready', async () => {
 			(iracing.telemetry?.values as { CamCameraState?: string[] })
 				?.CamCameraState
 		);
-		iracing.camControls.setState(
-			cameraState | iracing.Consts.CameraState.UIHidden
-		);
+		// Guarded like the long-exposure path's: broadcastUnsafe throws once the
+		// SDK is torn down (iRacing exiting right now), and an unguarded throw
+		// here left the capture to the 35 s watchdog with a misleading "worker
+		// did not respond". Carry on — the resize below reports a vanished window.
+		try {
+			iracing.camControls.setState(
+				cameraState | iracing.Consts.CameraState.UIHidden
+			);
+		} catch (error) {
+			log.debug('Could not hide the iRacing UI for capture', {
+				error: (error as Error)?.message || String(error),
+			});
+		}
 
 		// Wait for iRacing to confirm UIHidden before capturing
 		const uiHideTimeout = 500;
@@ -2087,8 +2161,12 @@ app.on('ready', async () => {
 					iracing.telemetry?.values as { CamCameraState?: string[] }
 				)?.CamCameraState?.includes('UIHidden') || false,
 		});
+		if (!captureState.holds(ticket)) {
+			log.info('Capture aborted during the UI hide wait');
+			return;
+		}
 
-		if (!config.get('reshade')) {
+		if (!useReshade) {
 			// #11: when High-Fidelity Capture (WGC) is enabled and loaded, grab the
 			// frame in-process (true RGBA, no chroma subsampling) — it needs no
 			// desktopCapturer source, so skip the enumeration for it. The default
@@ -2117,6 +2195,10 @@ app.on('ready', async () => {
 								fetchWindowIcons: false,
 							}),
 				]);
+				if (!captureState.holds(ticket)) {
+					log.info('Capture aborted during the resize');
+					return;
+				}
 
 				if (id === undefined) {
 					log.info('iRacing window not found');
@@ -2144,8 +2226,8 @@ app.on('ready', async () => {
 					// stuck at capture size with its UI hidden. A 'saved'/'aborted'
 					// outcome clears it via restoreScreenshotState; 'fallback' re-arms it
 					// in dispatchWorkerCapture.
-					armCaptureWatchdog();
-					const outcome = await captureAndSaveViaWgc(id, data);
+					armCaptureWatchdog(ticket);
+					const outcome = await captureAndSaveViaWgc(ticket, id, data);
 					if (outcome === 'saved') {
 						return;
 					}
@@ -2175,22 +2257,31 @@ app.on('ready', async () => {
 						thumbnailSize: { width: 0, height: 0 },
 						fetchWindowIcons: false,
 					});
-					dispatchWorkerCapture(id, data, fallbackSources);
+					dispatchWorkerCapture(ticket, id, data, fallbackSources);
 					return;
 				}
 
-				dispatchWorkerCapture(id, data, windowSources);
+				dispatchWorkerCapture(ticket, id, data, windowSources);
 			} catch (error) {
 				// Any rejection on the primary getUserMedia / native path (getSources,
 				// the resize, the WGC grab) must self-heal immediately — otherwise
-				// takingScreenshot latches true forever and every later capture is
-				// rejected 'already-taking-screenshot'. Mirrors the ReShade catch. The
+				// the capture holds the sim forever and every later one is rejected
+				// 'already-taking-screenshot'. Mirrors the ReShade catch: when the
+				// watchdog or disconnect abort already recovered and reported, this
+				// capture is no longer the holder and must neither restore (it would
+				// restore whatever capture came next) nor report a second time. The
 				// trailing return stops a caught error falling through into ReShade code.
-				restoreScreenshotState();
-				reportScreenshotError(error, {
-					context: 'resize-screenshot:capture',
-					meta: { request: data },
-				});
+				if (captureState.holds(ticket)) {
+					restoreScreenshotState();
+					reportScreenshotError(error, {
+						context: 'resize-screenshot:capture',
+						meta: { request: data },
+					});
+				} else {
+					log.info('Capture failed after it was already aborted', {
+						error: (error as Error)?.message || String(error),
+					});
+				}
 			}
 			return;
 		}
@@ -2206,13 +2297,17 @@ app.on('ready', async () => {
 		try {
 			// Raising pre-capture resize INSIDE the try so a rejection here recovers
 			// via the catch instead of wedging: it previously sat outside the ReShade
-			// try/catch, so a reject latched takingScreenshot true with no recovery.
+			// try/catch, so a reject left the capture holding the sim with no recovery.
 			const id = await resizeIracingWindowAsync(
 				data.width,
 				data.height,
 				left,
 				top
 			);
+			if (!captureState.holds(ticket)) {
+				log.info('Capture aborted during the resize');
+				return;
+			}
 
 			if (id === undefined) {
 				log.info('iRacing window not found');
@@ -2236,6 +2331,17 @@ app.on('ready', async () => {
 			const reshadeFile = await waitForReshadeScreenshot(
 				reshadeLocation.folder
 			);
+			if (!captureState.holds(ticket)) {
+				// The abort already restored and reported. Leave the file where
+				// ReShade put it rather than saving a shot the user was told failed.
+				log.info(
+					'ReShade screenshot arrived after the capture was aborted',
+					{
+						file: reshadeFile,
+					}
+				);
+				return;
+			}
 
 			log.info('ReShade screenshot received', { file: reshadeFile });
 			restoreScreenshotState();
@@ -2250,15 +2356,16 @@ app.on('ready', async () => {
 				file: reshadeFile,
 				targetWidth: data.targetWidth,
 				targetHeight: data.targetHeight,
+				captureId: ticket.id,
 			});
 		} catch (error) {
 			// Guard against a duplicate report: if the watchdog or disconnect-abort
-			// already recovered (flipping takingScreenshot false — e.g. it cancelled
-			// this ReShade wait via clearPendingReshadeWait), that path already
-			// surfaced the error, so restore silently instead of reporting twice.
-			const wasCapturing = takingScreenshot;
-			restoreScreenshotState();
-			if (wasCapturing) {
+			// already recovered (releasing this capture — e.g. it cancelled this
+			// ReShade wait via clearPendingReshadeWait), that path already surfaced
+			// the error and restored, so stay silent instead of reporting twice —
+			// and do not restore, which would act on whatever capture came next.
+			if (captureState.holds(ticket)) {
+				restoreScreenshotState();
 				reportScreenshotError(error, {
 					context: 'resize-screenshot:reshade',
 					meta: {
@@ -2276,7 +2383,7 @@ app.on('ready', async () => {
 	});
 
 	iracing.on('update', () => {
-		if (takingScreenshot && iracing.telemetry) {
+		if (captureState.simModified && iracing.telemetry) {
 			const currentState =
 				(iracing.telemetry.values as { CamCameraState?: string[] })
 					.CamCameraState || [];
@@ -2288,8 +2395,12 @@ app.on('ready', async () => {
 		}
 	});
 
+	// Always reported — a ReShade save fails after main has already restored, and
+	// that error is real — but only the capture it belongs to is restored.
 	ipcMain.on('screenshot-error', (event, data) => {
-		restoreScreenshotState();
+		if (captureState.holds(workerCaptureId(data))) {
+			restoreScreenshotState();
+		}
 		reportScreenshotError(enrichBlackFrameError(data), {
 			source: 'worker',
 			context: 'worker:screenshot-error',
@@ -2312,28 +2423,28 @@ app.on('ready', async () => {
 
 	ipcMain.on('defaultScreenHeight', (event, data: number) => {
 		height = data;
-		if (!takingScreenshot) {
+		if (!captureState.simModified) {
 			resize(width, height, left, top);
 		}
 	});
 
 	ipcMain.on('defaultScreenWidth', (event, data: number) => {
 		width = data;
-		if (!takingScreenshot) {
+		if (!captureState.simModified) {
 			resize(width, height, left, top);
 		}
 	});
 
 	ipcMain.on('defaultScreenLeft', (event, data: number) => {
 		left = data;
-		if (!takingScreenshot) {
+		if (!captureState.simModified) {
 			resize(width, height, left, top);
 		}
 	});
 
 	ipcMain.on('defaultScreenTop', (event, data: number) => {
 		top = data;
-		if (!takingScreenshot) {
+		if (!captureState.simModified) {
 			resize(width, height, left, top);
 		}
 	});
@@ -2371,7 +2482,7 @@ let updatePollTimer: ReturnType<typeof setInterval> | null = null;
 // fresh at every decision point rather than cached, because it flips without any
 // update event to hang a recompute off.
 function updateBusy(): boolean {
-	return longExposureActive || takingScreenshot;
+	return captureState.busy;
 }
 
 // The renderer's view of the state: the reduced state plus the busy flag it needs
@@ -2624,17 +2735,18 @@ function clearCaptureWatchdog(): void {
 // can name the file, send the capture request, and arm the recovery watchdog.
 // This is both the default (non-WGC) path and the WGC fallback.
 function dispatchWorkerCapture(
+	ticket: CaptureTicket,
 	id: number,
 	data: CaptureRequestData,
 	windowSources: Electron.DesktopCapturerSource[]
 ): void {
 	// The awaits upstream (resize/getSources, and the WGC settle+grab which can
 	// block for up to WGC_TIMEOUT_MS) give the disconnect/watchdog abort a window
-	// to fire: it runs restoreScreenshotState() (takingScreenshot=false) and
+	// to fire: it runs restoreScreenshotState() (releasing this capture) and
 	// reports the error. If that already happened, dispatching a fresh worker
 	// capture here would arm a stray watchdog and produce a spurious second
 	// (wrong-size) screenshot that contradicts the error just shown — so bail.
-	if (!takingScreenshot) {
+	if (!captureState.holds(ticket)) {
 		log.info('Capture already aborted — skipping worker dispatch');
 		return;
 	}
@@ -2671,8 +2783,21 @@ function dispatchWorkerCapture(
 			width: data.width,
 			height: data.height,
 		},
+		// Echoed back on screenshot-finished / screenshot-error, so main can tell
+		// this capture's messages from a previous, already-aborted one's.
+		captureId: ticket.id,
 	});
-	armCaptureWatchdog();
+	armCaptureWatchdog(ticket);
+}
+
+// The capture id the worker echoed back, validated at the IPC boundary: anything
+// that is not a number is treated as "no id", which matches no capture.
+function workerCaptureId(payload: unknown): number | undefined {
+	const id =
+		payload && typeof payload === 'object'
+			? (payload as { captureId?: unknown }).captureId
+			: undefined;
+	return typeof id === 'number' ? id : undefined;
 }
 
 // Cheap all-black guard for a raw RGBA frame: sample a coarse grid and call it
@@ -2732,6 +2857,7 @@ type WgcCaptureOutcome = 'saved' | 'fallback' | 'aborted';
 //   'aborted'  — capture was cancelled mid-flight (iRacing disconnected /
 //                already restored); caller must NOT fall back or restore again.
 async function captureAndSaveViaWgc(
+	ticket: CaptureTicket,
 	id: number,
 	data: CaptureRequestData
 ): Promise<WgcCaptureOutcome> {
@@ -2746,9 +2872,9 @@ async function captureAndSaveViaWgc(
 	await delay(WGC_SETTLE_MS);
 
 	// A disconnect/watchdog during the settle already ran restoreScreenshotState()
-	// (takingScreenshot=false) and reported. Don't grab a torn-down window or fall
+	// (releasing this capture) and reported. Don't grab a torn-down window or fall
 	// back — just bail.
-	if (!takingScreenshot) {
+	if (!captureState.holds(ticket)) {
 		lastWgcAttempt.outcome = 'aborted';
 		return 'aborted';
 	}
@@ -2899,7 +3025,12 @@ async function captureAndSaveViaWgc(
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('screenshot-response', savedPath);
 		}
-		restoreScreenshotState();
+		// The encode and write above are awaited, so a slow disk can outlast the
+		// watchdog; if it fired, this capture is over and the sim may already
+		// belong to the next one.
+		if (captureState.holds(ticket)) {
+			restoreScreenshotState();
+		}
 		lastWgcAttempt.outcome = 'saved';
 		return 'saved';
 	} catch (error) {
@@ -2910,7 +3041,9 @@ async function captureAndSaveViaWgc(
 				file: savedPath,
 				error: (error as Error).message || String(error),
 			});
-			restoreScreenshotState();
+			if (captureState.holds(ticket)) {
+				restoreScreenshotState();
+			}
 			lastWgcAttempt.outcome = 'saved';
 			return 'saved';
 		}
@@ -2930,11 +3063,11 @@ async function captureAndSaveViaWgc(
 	}
 }
 
-function armCaptureWatchdog(): void {
+function armCaptureWatchdog(ticket: CaptureTicket): void {
 	clearCaptureWatchdog();
 	captureWatchdog = setTimeout(() => {
 		captureWatchdog = null;
-		if (!takingScreenshot) {
+		if (!captureState.holds(ticket)) {
 			return;
 		}
 		log.info('Capture watchdog fired — recovering', {
@@ -2969,12 +3102,18 @@ function scheduleCaptureAbortOnDisconnect(): void {
 	// still mid-capture and iRacing is genuinely gone (telemetry stays null).
 	pendingCaptureAbort = setTimeout(() => {
 		pendingCaptureAbort = null;
-		if (!takingScreenshot || iracing.telemetry) {
+		if (!captureState.simModified || iracing.telemetry) {
 			return;
 		}
 		log.info('iRacing disconnected during capture — aborting');
 		if (workerWindow && !workerWindow.isDestroyed()) {
 			workerWindow.webContents.send('abort-capture', 'iracing-disconnected');
+		}
+		// A long exposure has no worker to abort: stop it through its own signal,
+		// so it unwinds now instead of waiting out its multi-minute stall timeout
+		// still holding the sim (and the panel still reading "accumulating").
+		if (longExposureSignal) {
+			longExposureSignal.aborted = true;
 		}
 		restoreScreenshotState();
 		reportScreenshotError(
@@ -2992,25 +3131,36 @@ function restoreScreenshotState(): void {
 	// can't later fire a second (now-stale) reportScreenshotError. No-op unless a
 	// ReShade capture is actually pending.
 	clearPendingReshadeWait('Screenshot recovery');
-	if (!takingScreenshot) {
-		return;
-	}
+	// Puts iRacing back via restoreSimState() if a capture modified it, and ends
+	// a still capture. A long exposure keeps the sim until its own end().
+	captureState.restore();
+}
 
-	if (config.get('manualWindowRestore')) {
-		resize(width, height, left, top);
-	} else if (
-		originalWindowBounds &&
-		originalWindowBounds.width > 0 &&
-		originalWindowBounds.height > 0
-	) {
-		resize(
-			originalWindowBounds.width,
-			originalWindowBounds.height,
-			originalWindowBounds.left,
-			originalWindowBounds.top
-		);
-	} else {
-		resize(width, height, left, top);
+// The side effects of putting iRacing back. Run by captureState, at most once per
+// capture, and AFTER it has already marked the sim as restored — so nothing here
+// may assume it can retry, and nothing here may throw (each step is guarded).
+function restoreSimState(): void {
+	try {
+		if (config.get('manualWindowRestore')) {
+			resize(width, height, left, top);
+		} else if (
+			originalWindowBounds &&
+			originalWindowBounds.width > 0 &&
+			originalWindowBounds.height > 0
+		) {
+			resize(
+				originalWindowBounds.width,
+				originalWindowBounds.height,
+				originalWindowBounds.left,
+				originalWindowBounds.top
+			);
+		} else {
+			resize(width, height, left, top);
+		}
+	} catch (error) {
+		log.warn('iRacing window restore failed', {
+			error: (error as Error)?.message || String(error),
+		});
 	}
 
 	originalWindowBounds = null;
@@ -3027,7 +3177,6 @@ function restoreScreenshotState(): void {
 		}
 	}
 
-	takingScreenshot = false;
 	log.info('iRacing window restored');
 }
 

@@ -199,8 +199,15 @@ function createScreenshotErrorPayload(errorLike, context, meta = {}) {
 	};
 }
 
-function sendScreenshotError(errorLike, context, meta = {}) {
-	const payload = createScreenshotErrorPayload(errorLike, context, meta);
+// `captureId` is the id main sent with the request this error belongs to. Main
+// restores only the capture that id names, so an error from a capture it already
+// gave up on cannot restore the next one. Passed explicitly, never read from
+// module state: a new request can arrive while an old capture is still saving.
+function sendScreenshotError(captureId, errorLike, context, meta = {}) {
+	const payload = {
+		...createScreenshotErrorPayload(errorLike, context, meta),
+		captureId,
+	};
 	log.info('Screenshot error', { context, message: payload.message });
 	console.error('Screenshot worker error:', payload.message);
 	if (payload.stack) {
@@ -280,6 +287,22 @@ async function createThumbnail(fileName, fileKey) {
 	log.info('Thumbnail created', { file: thumbPath });
 }
 
+// A gallery thumbnail is a convenience, made after the screenshot is already on
+// disk, and the gallery regenerates a missing one on demand (Home.vue
+// ensureThumbnail). So a failure here is logged and swallowed: reporting it sent
+// "Screenshot failed" for a shot that had saved — and, on the getUserMedia path, a
+// second screenshot-finished after main had already moved on. Same policy as the
+// main-side WGC save.
+async function createThumbnailBestEffort(make: () => Promise<void>) {
+	try {
+		await make();
+	} catch (error) {
+		log.warn('Thumbnail failed — screenshot still saved', {
+			error: (error as Error)?.message || String(error),
+		});
+	}
+}
+
 // In-memory gallery thumbnail: downscale the captured frame (fit:contain,
 // transparent letterbox) without re-decoding the saved full-resolution file.
 // Uses an alpha:true canvas so the letterbox padding stays transparent, matching
@@ -329,7 +352,7 @@ function getFileNameString() {
 	});
 }
 
-async function saveReshadeImage(sourceFile) {
+async function saveReshadeImage(captureId, sourceFile) {
 	try {
 		ensureDirectory(getScreenshotDir());
 		ensureDirectory(getCacheDir());
@@ -384,14 +407,24 @@ async function saveReshadeImage(sourceFile) {
 			cropTopLeft: cropTopLeftFlag,
 		});
 
-		await cleanupReshadeSourceFile(sourceFile, fileName);
-		await createThumbnail(fileName, fileKey);
+		// The shot is on disk from here on. Removing ReShade's copy and making the
+		// gallery thumbnail are follow-ups: a failure in either is logged, never
+		// reported as a failed screenshot (which also skipped the gallery update).
+		try {
+			await cleanupReshadeSourceFile(sourceFile, fileName);
+		} catch (cleanupError) {
+			log.warn('ReShade source file not removed — screenshot still saved', {
+				sourceFile,
+				error: (cleanupError as Error)?.message || String(cleanupError),
+			});
+		}
+		await createThumbnailBestEffort(() => createThumbnail(fileName, fileKey));
 		ipcRenderer.send('screenshot-response', fileName);
 		if (global.gc) {
 			global.gc();
 		}
 	} catch (error) {
-		sendScreenshotError(error, 'save-reshade-image', {
+		sendScreenshotError(captureId, error, 'save-reshade-image', {
 			sourceFile,
 			screenshotDir: getScreenshotDir(),
 			crop,
@@ -399,7 +432,7 @@ async function saveReshadeImage(sourceFile) {
 	}
 }
 
-async function saveImage(blob, thumbBlob) {
+async function saveImage(captureId, blob, thumbBlob) {
 	// Late-abort guard: main already restored the window + reported the error, so
 	// writing the file here would emit screenshot-finished/response and surface a
 	// "ghost" screenshot in the gallery (cq-renderer-capture-views#1).
@@ -428,26 +461,28 @@ async function saveImage(blob, thumbBlob) {
 		console.timeEnd('Save Image to file');
 
 		// Restore window immediately — thumbnail doesn't need to block it
-		ipcRenderer.send('screenshot-finished', '');
+		ipcRenderer.send('screenshot-finished', { captureId });
 		ipcRenderer.send('screenshot-response', fileName);
 
 		console.time('Save Thumbnail');
-		if (thumbBlob) {
-			const thumbPath = getThumbnailPath(fileKey);
-			const thumbStart = performance.now();
-			await fs.promises.writeFile(
-				thumbPath,
-				Buffer.from(await thumbBlob.arrayBuffer())
-			);
-			log.debug('Thumbnail write (in-memory)', {
-				elapsed: Math.round(performance.now() - thumbStart),
-				file: thumbPath,
-			});
-			log.info('Thumbnail created', { file: thumbPath });
-		} else {
-			// Fallback: no in-memory thumbnail was produced — re-decode the file.
-			await createThumbnail(fileName, fileKey);
-		}
+		await createThumbnailBestEffort(async () => {
+			if (thumbBlob) {
+				const thumbPath = getThumbnailPath(fileKey);
+				const thumbStart = performance.now();
+				await fs.promises.writeFile(
+					thumbPath,
+					Buffer.from(await thumbBlob.arrayBuffer())
+				);
+				log.debug('Thumbnail write (in-memory)', {
+					elapsed: Math.round(performance.now() - thumbStart),
+					file: thumbPath,
+				});
+				log.info('Thumbnail created', { file: thumbPath });
+			} else {
+				// Fallback: no in-memory thumbnail was produced — re-decode the file.
+				await createThumbnail(fileName, fileKey);
+			}
+		});
 		console.timeEnd('Save Thumbnail');
 		if (global.gc) {
 			global.gc();
@@ -456,15 +491,15 @@ async function saveImage(blob, thumbBlob) {
 		console.timeEnd('Save Image');
 		console.timeEnd('Screenshot');
 	} catch (error) {
-		ipcRenderer.send('screenshot-finished', '');
-		sendScreenshotError(error, 'save-image', {
+		ipcRenderer.send('screenshot-finished', { captureId });
+		sendScreenshotError(captureId, error, 'save-image', {
 			screenshotDir: getScreenshotDir(),
 			crop,
 		});
 	}
 }
 
-async function fullscreenScreenshot(callback) {
+async function fullscreenScreenshot(captureId, callback) {
 	// Draw the current frame of `video` (crop-adjusted) into an OffscreenCanvas,
 	// encode it, and hand the blob to the callback. The blob is self-contained,
 	// so the stream/video can be released immediately afterwards.
@@ -571,8 +606,8 @@ async function fullscreenScreenshot(callback) {
 			// Main already restored the window and reported the error on abort.
 			return;
 		}
-		ipcRenderer.send('screenshot-finished', '');
-		sendScreenshotError(error, 'fullscreen-capture', {
+		ipcRenderer.send('screenshot-finished', { captureId });
+		sendScreenshotError(captureId, error, 'fullscreen-capture', {
 			windowID,
 			crop,
 			captureBounds,
@@ -899,8 +934,10 @@ export default {
 				crop: input.crop,
 				cropTopLeft: input.cropTopLeft,
 			});
+			const captureId = input.captureId;
 			if (windowID === undefined) {
 				sendScreenshotError(
+					captureId,
 					'iRacing window not found',
 					'worker:screenshot-request',
 					{
@@ -917,8 +954,8 @@ export default {
 			// rejects (errors are swallowed by its internal handleError), so .finally
 			// always runs and clears the latch when the capture settles.
 			captureInFlight = true;
-			fullscreenScreenshot((blob, thumbBlob) => {
-				saveImage(blob, thumbBlob);
+			fullscreenScreenshot(captureId, (blob, thumbBlob) => {
+				saveImage(captureId, blob, thumbBlob);
 			}).finally(() => {
 				captureInFlight = false;
 			});
@@ -948,7 +985,7 @@ export default {
 			// null for ReShade flows and silently disables the crop branches.
 			targetWidth = arg.targetWidth || null;
 			targetHeight = arg.targetHeight || null;
-			saveReshadeImage(arg.file);
+			saveReshadeImage(arg.captureId, arg.file);
 		});
 	},
 	methods: {},
