@@ -405,6 +405,7 @@ import {
 import { applyLocale } from '../i18n';
 import {
 	acceleratorFromKeyPress,
+	modifierOfKey,
 	modifiersOf,
 } from '../../utilities/accelerator';
 import {
@@ -416,6 +417,12 @@ const { ipcRenderer, shell } = require('electron');
 
 // The payload types differ per channel; `never` lets each handler declare its own.
 type IpcHandler = (event: unknown, ...args: never[]) => void;
+
+// VK_SNAPSHOT: the one key Windows reports to a page only on release.
+const PRINT_SCREEN_KEY_CODE = 44;
+// How long before that release a modifier may have been let go and still be
+// part of the chord.
+const MODIFIER_RELEASE_GRACE_MS = 500;
 const path = require('path');
 
 export default {
@@ -915,23 +922,44 @@ export default {
 		// joined raw KeyboardEvent.key values and waited for every key to be
 		// released, which could produce strings Electron cannot register ('Control'
 		// alone, 'Control+ArrowUp') or never finish (Shift released first).
-		bindScreenshotKeybind() {
+		// `trigger` is the event that started the capture. Oruga's button emits
+		// its click during the Enter/Space KEYDOWN that activates it, and a window
+		// listener added there still receives that same keydown — which used to
+		// bind bare Enter (or Space) as the global hotkey, taking it from every
+		// application.
+		bindScreenshotKeybind(trigger?: Event) {
 			this.stopKeybindCapture();
 			this.keybindNotice = null;
 			this.bindingKey = true;
 
-			// Every modifier pressed so far in this chord. Used only when the
-			// capture completes on a key RELEASE: Windows reports PrintScreen only
-			// then, and the user may have let go of Ctrl first.
-			const chord = new Set<string>();
+			// When each modifier was last let go during this capture. A capture
+			// that completes on a key RELEASE (PrintScreen, which Windows reports
+			// only then) counts a modifier released just before it — Ctrl let go a
+			// beat before PrintScreen — but not one from long ago (an earlier
+			// Alt+Tab, AltGr's synthetic Ctrl+Alt).
+			const releasedAt = new Map<string, number>();
 			const onKey = (e: KeyboardEvent) => {
-				e.preventDefault();
-				if (e.type === 'keydown') {
-					modifiersOf(e).forEach((modifier) => chord.add(modifier));
+				if (e === trigger || e.repeat) {
+					return;
 				}
+				e.preventDefault();
+				const released = e.type === 'keyup' ? modifierOfKey(e.key) : null;
+				if (released) {
+					releasedAt.set(released, Date.now());
+				}
+				const completesOnRelease =
+					e.keyCode === PRINT_SCREEN_KEY_CODE || e.code === 'PrintScreen';
+				if (e.type === 'keyup' && !released && !completesOnRelease) {
+					// The release of a key whose press this capture never saw —
+					// pressed before the capture began.
+					return;
+				}
+				const recentlyReleased = [...releasedAt]
+					.filter(([, at]) => Date.now() - at <= MODIFIER_RELEASE_GRACE_MS)
+					.map(([modifier]) => modifier);
 				const result = acceleratorFromKeyPress(
 					e,
-					e.type === 'keyup' ? [...chord] : []
+					completesOnRelease && e.type === 'keyup' ? recentlyReleased : []
 				);
 				if (result.kind === 'modifier') {
 					this.screenshotKeybind = result.modifiers.join('+');

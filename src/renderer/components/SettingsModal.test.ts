@@ -68,7 +68,7 @@ const { i18n } = await import('../i18n');
 
 // The slice of the component instance these tests drive.
 interface SettingsVm {
-	bindScreenshotKeybind(): void;
+	bindScreenshotKeybind(trigger?: Event): void;
 	screenshotKeybind: string;
 	bindingKey: boolean;
 	keybindNotice: string | null;
@@ -250,6 +250,60 @@ describe('Settings hotkey capture', () => {
 			['screenshotKeybind-change', { newValue: 'Control+PrintScreen' }],
 		]);
 		wrapper.unmount();
+	});
+
+	// Regression: Oruga's button emits its click during the Enter keydown that
+	// activates it, and the capture's window listener then received that same
+	// keydown — binding bare Enter as a system-wide hotkey.
+	test('the keystroke that pressed the Edit Bind button is not captured', async () => {
+		invokeResult = { ok: true, accelerator: 'F12' };
+		const wrapper = mountSettings();
+		const activation = new KeyboardEvent('keydown', {
+			key: 'Enter',
+			code: 'Enter',
+			keyCode: 13,
+		});
+		vmOf(wrapper).bindScreenshotKeybind(activation);
+		window.dispatchEvent(activation);
+		key('keyup', { key: 'Enter', code: 'Enter', keyCode: 13 });
+		await flushPromises();
+		expect(rebinds()).toEqual([]);
+		expect(vmOf(wrapper).bindingKey).toBe(true);
+
+		key('keydown', { key: 'F12', code: 'F12', keyCode: 123 });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'F12' }],
+		]);
+		wrapper.unmount();
+	});
+
+	// Regression: every modifier pressed during the capture was kept, so one let
+	// go long before a bare PrintScreen (an Alt+Tab, AltGr's Ctrl+Alt) was bound
+	// into it.
+	test('a modifier released long before PrintScreen is not part of it', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		try {
+			invokeResult = { ok: true, accelerator: 'PrintScreen' };
+			const wrapper = mountSettings();
+			vmOf(wrapper).bindScreenshotKeybind();
+			key('keydown', {
+				key: 'Control',
+				code: 'ControlLeft',
+				keyCode: 17,
+				ctrlKey: true,
+			});
+			key('keyup', { key: 'Control', code: 'ControlLeft', keyCode: 17 });
+			vi.setSystemTime(Date.now() + 2000);
+			key('keyup', { key: 'PrintScreen', code: 'PrintScreen', keyCode: 44 });
+			await flushPromises();
+			expect(rebinds()).toEqual([
+				['screenshotKeybind-change', { newValue: 'PrintScreen' }],
+			]);
+			wrapper.unmount();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	test('Escape cancels without asking main for anything', async () => {

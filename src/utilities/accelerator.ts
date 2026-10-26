@@ -194,6 +194,26 @@ function mainKeyToken(press: KeyPress): string | null {
 	return tokenForCode(press);
 }
 
+// The accelerator modifier a modifier KEY is, from KeyboardEvent.key; null for
+// any other key. AltGraph is not one: Windows reports it as Ctrl+Alt, and those
+// arrive as their own events.
+export function modifierOfKey(key: string): string | null {
+	switch (key) {
+		case 'Control':
+			return 'Control';
+		case 'Alt':
+			return 'Alt';
+		case 'Shift':
+			return 'Shift';
+		case 'Meta':
+		case 'OS':
+		case 'Super':
+			return 'Super';
+		default:
+			return null;
+	}
+}
+
 export function modifiersOf(press: KeyPress): string[] {
 	const modifiers: string[] = [];
 	if (press.ctrlKey) modifiers.push('Control');
