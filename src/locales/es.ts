@@ -79,6 +79,8 @@ const es: Catalog = {
 		selectFolder: 'Elegir carpeta',
 		screenshotKeybind: 'Atajo de captura',
 		editBind: 'Editar atajo',
+		keybindRejected:
+			'{keys} no se puede usar como atajo de captura; puede que otra aplicación ya lo esté usando. {previous} sigue activo.',
 
 		customFilenameFormat: 'Formato de nombre personalizado',
 		customFilenameFormatDescription:

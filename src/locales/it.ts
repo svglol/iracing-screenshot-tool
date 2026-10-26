@@ -79,6 +79,8 @@ const it: Catalog = {
 		selectFolder: 'Scegli cartella',
 		screenshotKeybind: 'Scorciatoia screenshot',
 		editBind: 'Modifica scorciatoia',
+		keybindRejected:
+			'{keys} non può essere usato come scorciatoia screenshot: potrebbe essere già in uso da un’altra app. {previous} resta attivo.',
 
 		customFilenameFormat: 'Formato nome file personalizzato',
 		customFilenameFormatDescription:

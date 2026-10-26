@@ -85,6 +85,8 @@ const zhTW: Catalog = {
 		selectFolder: '選擇資料夾',
 		screenshotKeybind: '截圖快速鍵',
 		editBind: '變更快速鍵',
+		keybindRejected:
+			'{keys} 無法作為截圖快速鍵，可能已有其他應用程式在使用。{previous} 仍然有效。',
 
 		customFilenameFormat: '自訂檔名格式',
 		customFilenameFormatDescription:

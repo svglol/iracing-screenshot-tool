@@ -98,6 +98,8 @@ export default {
 		selectFolder: 'Select Folder',
 		screenshotKeybind: 'Screenshot Keybind',
 		editBind: 'Edit Bind',
+		keybindRejected:
+			"{keys} can't be used as the screenshot keybind — another app may already be using it. {previous} is still active.",
 
 		customFilenameFormat: 'Custom Filename Format',
 		customFilenameFormatDescription:

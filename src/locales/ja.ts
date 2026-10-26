@@ -86,6 +86,8 @@ const ja: Catalog = {
 		selectFolder: 'フォルダーを選択',
 		screenshotKeybind: 'スクリーンショットのキー割り当て',
 		editBind: 'キーを変更',
+		keybindRejected:
+			'{keys} はスクリーンショットのキーに割り当てられません。別のアプリがすでに使用している可能性があります。引き続き {previous} が有効です。',
 
 		customFilenameFormat: 'カスタムファイル名形式',
 		customFilenameFormatDescription:

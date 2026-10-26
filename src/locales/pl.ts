@@ -87,6 +87,8 @@ const pl: Catalog = {
 		selectFolder: 'Wybierz folder',
 		screenshotKeybind: 'Skrót klawiszowy zrzutu',
 		editBind: 'Zmień skrót',
+		keybindRejected:
+			'{keys} nie może być skrótem klawiszowym zrzutu — być może używa go już inna aplikacja. Nadal działa {previous}.',
 
 		customFilenameFormat: 'Własny format nazwy pliku',
 		customFilenameFormatDescription:

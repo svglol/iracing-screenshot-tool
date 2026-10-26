@@ -84,6 +84,8 @@ const no: Catalog = {
 		selectFolder: 'Velg mappe',
 		screenshotKeybind: 'Hurtigtast for skjermbilde',
 		editBind: 'Endre hurtigtast',
+		keybindRejected:
+			'{keys} kan ikke brukes som hurtigtast for skjermbilde – den kan allerede være i bruk av et annet program. {previous} er fortsatt aktiv.',
 
 		customFilenameFormat: 'Egendefinert filnavnformat',
 		customFilenameFormatDescription:

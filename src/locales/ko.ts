@@ -84,6 +84,8 @@ const ko: Catalog = {
 		selectFolder: '폴더 선택',
 		screenshotKeybind: '스크린샷 단축키',
 		editBind: '단축키 변경',
+		keybindRejected:
+			'{keys}은(는) 스크린샷 단축키로 사용할 수 없습니다. 다른 앱에서 이미 사용 중일 수 있습니다. {previous}이(가) 계속 사용됩니다.',
 
 		customFilenameFormat: '사용자 지정 파일 이름 형식',
 		customFilenameFormatDescription:

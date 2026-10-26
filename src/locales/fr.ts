@@ -80,6 +80,8 @@ const fr: Catalog = {
 		selectFolder: 'Choisir un dossier',
 		screenshotKeybind: 'Raccourci de capture',
 		editBind: 'Modifier le raccourci',
+		keybindRejected:
+			'{keys} ne peut pas servir de raccourci de capture : une autre application l’utilise peut-être déjà. {previous} reste actif.',
 
 		customFilenameFormat: 'Format de nom de fichier personnalisé',
 		customFilenameFormatDescription:

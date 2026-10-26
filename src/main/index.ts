@@ -21,6 +21,7 @@ import * as path from 'path';
 const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
+import { schema as configSchema } from '../utilities/config-schema';
 import { listForeignModules } from '../utilities/foreign-modules';
 import * as irsdk from './iracing-sdk';
 import {
@@ -41,6 +42,7 @@ import {
 	type CaptureBlock,
 } from './capture-decisions';
 import { CaptureState, type CaptureTicket } from './capture-state';
+import { rebindShortcut, registerStartupShortcut } from './global-shortcut';
 import {
 	RESTORE_GEOMETRY_KEYS,
 	isRestoreGeometryKey,
@@ -213,6 +215,8 @@ const WGC_SETTLE_MS = 250;
 const WGC_TIMEOUT_MS = 1500;
 const WGC_BLACK_FRAME_MAX_BRIGHTNESS = 24;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
+// What an unusable saved hotkey is replaced with — the schema's own default.
+const DEFAULT_SCREENSHOT_KEYBIND = configSchema.screenshotKeybind.default;
 
 // #11 diagnostics (observability-only): a snapshot of the most recent WGC capture
 // attempt, surfaced in the failure-time diagnostics so a user log can distinguish
@@ -2435,19 +2439,54 @@ app.on('ready', async () => {
 		});
 	});
 
-	ipcMain.on(
-		'screenshotKeybind-change',
-		(event, data: { oldValue: string; newValue: string }) => {
-			globalShortcut.unregister(data.oldValue);
-			globalShortcut.register(data.newValue, () => {
-				mainWindow?.webContents.send('hotkey-screenshot', '');
+	// Settings asks; main answers, and only main saves. The previous hotkey is
+	// the one main registered (config), not whatever the renderer believes it
+	// was, and a binding Electron refuses is never persisted.
+	ipcMain.handle('screenshotKeybind-change', (event, payload: unknown) => {
+		const previous = config.get('screenshotKeybind');
+		const next =
+			payload && typeof payload === 'object'
+				? (payload as { newValue?: unknown }).newValue
+				: undefined;
+		const result = rebindShortcut(
+			globalShortcut,
+			previous,
+			next,
+			onScreenshotHotkey
+		);
+		if (result.ok === false) {
+			log.warn('Screenshot hotkey rebind refused', {
+				requested: String(next),
+				kept: previous,
+				failure: result.failure,
+				reason: result.reason,
 			});
+			return { ok: false, accelerator: previous, reason: result.reason };
 		}
-	);
-
-	globalShortcut.register(config.get('screenshotKeybind'), () => {
-		mainWindow?.webContents.send('hotkey-screenshot', '');
+		config.set('screenshotKeybind', next);
+		log.info('Screenshot hotkey changed', { from: previous, to: next });
+		return { ok: true, accelerator: next, reason: null };
 	});
+
+	const startupHotkey = registerStartupShortcut(
+		globalShortcut,
+		config.get('screenshotKeybind'),
+		DEFAULT_SCREENSHOT_KEYBIND,
+		onScreenshotHotkey
+	);
+	if (startupHotkey.replacedInvalid) {
+		log.warn('Saved screenshot hotkey is not a valid accelerator', {
+			saved: config.get('screenshotKeybind'),
+			reason: startupHotkey.reason,
+			active: startupHotkey.active,
+		});
+		config.set('screenshotKeybind', DEFAULT_SCREENSHOT_KEYBIND);
+	} else if (!startupHotkey.active) {
+		log.warn('Screenshot hotkey not registered', {
+			saved: config.get('screenshotKeybind'),
+			reason: startupHotkey.reason,
+		});
+	}
 
 	// "Restore Now": adopt the geometry and put iRacing there immediately. The
 	// values are parseInt results from Settings, so they are checked here first —
@@ -2627,6 +2666,7 @@ app.on('will-quit', () => {
 		clearInterval(updatePollTimer);
 		updatePollTimer = null;
 	}
+	globalShortcut.unregisterAll();
 });
 
 // The current state, computed fresh. Called by every renderer on mount, which is
@@ -3423,6 +3463,10 @@ function adoptRestoreGeometry(key: RestoreGeometryKey, raw: unknown): boolean {
 			break;
 	}
 	return true;
+}
+
+function onScreenshotHotkey(): void {
+	mainWindow?.webContents.send('hotkey-screenshot', '');
 }
 
 function resize(

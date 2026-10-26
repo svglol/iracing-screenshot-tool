@@ -91,6 +91,8 @@ const tr: Catalog = {
 		selectFolder: 'Klasör Seç',
 		screenshotKeybind: 'Ekran Görüntüsü Kısayolu',
 		editBind: 'Kısayolu Düzenle',
+		keybindRejected:
+			'{keys} ekran görüntüsü kısayolu olarak kullanılamıyor; başka bir uygulama zaten kullanıyor olabilir. {previous} hâlâ etkin.',
 
 		customFilenameFormat: 'Özel Dosya Adı Biçimi',
 		customFilenameFormatDescription:

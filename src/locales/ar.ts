@@ -99,6 +99,8 @@ const ar: Catalog = {
 		selectFolder: 'اختيار مجلد',
 		screenshotKeybind: 'اختصار لقطة الشاشة',
 		editBind: 'تعديل الاختصار',
+		keybindRejected:
+			'لا يمكن استخدام {keys} كاختصار للقطة الشاشة — ربما يستخدمه تطبيق آخر بالفعل. لا يزال {previous} مفعّلًا.',
 
 		customFilenameFormat: 'تنسيق مخصص لاسم الملف',
 		// The tokens here are literal text the user types, not placeholders to be

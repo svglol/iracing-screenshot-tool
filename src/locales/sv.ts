@@ -79,6 +79,8 @@ const sv: Catalog = {
 		selectFolder: 'Välj mapp',
 		screenshotKeybind: 'Kortkommando för skärmbild',
 		editBind: 'Ändra kortkommando',
+		keybindRejected:
+			'{keys} kan inte användas som kortkommando för skärmbild – ett annat program kanske redan använder det. {previous} gäller fortfarande.',
 
 		customFilenameFormat: 'Eget filnamnsformat',
 		customFilenameFormatDescription:

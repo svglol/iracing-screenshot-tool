@@ -83,6 +83,8 @@ const fi: Catalog = {
 		selectFolder: 'Valitse kansio',
 		screenshotKeybind: 'Kuvakaappauksen pikanäppäin',
 		editBind: 'Muokkaa pikanäppäintä',
+		keybindRejected:
+			'{keys} ei kelpaa kuvakaappauksen pikanäppäimeksi – jokin toinen sovellus saattaa jo käyttää sitä. {previous} on edelleen käytössä.',
 
 		customFilenameFormat: 'Mukautettu tiedostonimimuoto',
 		customFilenameFormatDescription:

@@ -79,6 +79,8 @@ const nl: Catalog = {
 		selectFolder: 'Map kiezen',
 		screenshotKeybind: 'Sneltoets voor schermafbeelding',
 		editBind: 'Sneltoets wijzigen',
+		keybindRejected:
+			'{keys} kan niet als sneltoets voor schermafbeeldingen worden gebruikt; mogelijk gebruikt een andere app deze al. {previous} blijft actief.',
 
 		customFilenameFormat: 'Aangepaste bestandsnaamindeling',
 		customFilenameFormatDescription:

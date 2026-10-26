@@ -87,6 +87,8 @@ const cs: Catalog = {
 		selectFolder: 'Vybrat složku',
 		screenshotKeybind: 'Klávesová zkratka snímku',
 		editBind: 'Upravit zkratku',
+		keybindRejected:
+			'{keys} nelze použít jako klávesovou zkratku snímku – možná ji už používá jiná aplikace. Nadále platí {previous}.',
 
 		customFilenameFormat: 'Vlastní formát názvu souboru',
 		customFilenameFormatDescription:

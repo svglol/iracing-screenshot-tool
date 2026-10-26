@@ -80,6 +80,8 @@ const pt: Catalog = {
 		selectFolder: 'Escolher pasta',
 		screenshotKeybind: 'Atalho de captura',
 		editBind: 'Editar atalho',
+		keybindRejected:
+			'{keys} não pode ser usado como atalho de captura; talvez outra aplicação já o esteja a usar. {previous} continua ativo.',
 
 		customFilenameFormat: 'Formato de nome de ficheiro personalizado',
 		customFilenameFormatDescription:

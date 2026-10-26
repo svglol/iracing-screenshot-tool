@@ -102,6 +102,9 @@
 							</o-button>
 						</p>
 					</o-field>
+					<p v-if="keybindNotice" class="description">
+						{{ keybindNotice }}
+					</p>
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
@@ -401,11 +404,18 @@ import {
 } from '../../utilities/reshade-config';
 import { applyLocale } from '../i18n';
 import {
+	acceleratorFromKeyPress,
+	modifiersOf,
+} from '../../utilities/accelerator';
+import {
 	describeUpdate,
 	initialUpdateState,
 	updateActionChannel,
 } from '../../utilities/update-decisions';
 const { ipcRenderer, shell } = require('electron');
+
+// The payload types differ per channel; `never` lets each handler declare its own.
+type IpcHandler = (event: unknown, ...args: never[]) => void;
 const path = require('path');
 
 export default {
@@ -420,6 +430,17 @@ export default {
 			screenshotFolder: config.get('screenshotFolder'),
 			screenshotKeybind: config.get('screenshotKeybind'),
 			bindingKey: false,
+			// Why the last attempted binding was refused; null otherwise.
+			keybindNotice: null as string | null,
+			// The window listeners of an in-progress key capture, hoisted so it
+			// can be stopped from outside (unmount) — see stopKeybindCapture.
+			keybindListeners: null as {
+				keydown: (e: KeyboardEvent) => void;
+				keyup: (e: KeyboardEvent) => void;
+			} | null,
+			// ipcRenderer listeners registered in created(), hoisted so
+			// beforeUnmount can remove them (same pattern as TitleBar).
+			ipcListeners: [] as Array<[string, IpcHandler]>,
 			cropTopLeft: config.get('cropTopLeft'),
 			disableTooltips: config.get('disableTooltips'),
 			screenWidth: config.get('defaultScreenWidth'),
@@ -756,23 +777,20 @@ export default {
 
 		ipcRenderer.send('request-iracing-status', '');
 
-		ipcRenderer.on('iracing-status', (event, arg) => {
+		// Removed again in beforeUnmount. This component used to be a v-show
+		// modal that lived for the whole app, but its only host now is the
+		// /settings route, which unmounts on every navigation away — so each visit
+		// left four more listeners, each holding the dead component alive.
+		this.listenIpc('iracing-status', (event, arg) => {
 			this.iracingOpen = arg;
 		});
-
-		ipcRenderer.on('iracing-connected', () => {
+		this.listenIpc('iracing-connected', () => {
 			this.iracingOpen = true;
 		});
-
-		ipcRenderer.on('iracing-disconnected', () => {
+		this.listenIpc('iracing-disconnected', () => {
 			this.iracingOpen = false;
 		});
-
-		// Not removed on unmount on purpose: under the v-show Oruga modal this
-		// component stays mounted for the app lifetime (see the screenWidth watcher
-		// note above), so created() runs once and this is a single listener, not a
-		// leak per open.
-		ipcRenderer.on('update:state', (event, state) => {
+		this.listenIpc('update:state', (event, state) => {
 			this.update = state;
 			this.updateNotice = null;
 		});
@@ -785,7 +803,20 @@ export default {
 				// Main not ready; the broadcast will catch us up.
 			});
 	},
+	beforeUnmount() {
+		// A capture left running would keep listening on `window` after the page
+		// is gone, so the next shortcut typed anywhere became the global hotkey.
+		this.stopKeybindCapture();
+		for (const [channel, handler] of this.ipcListeners) {
+			ipcRenderer.removeListener(channel, handler);
+		}
+		this.ipcListeners = [];
+	},
 	methods: {
+		listenIpc(channel: string, handler: IpcHandler) {
+			ipcRenderer.on(channel, handler);
+			this.ipcListeners.push([channel, handler]);
+		},
 		async checkForUpdates() {
 			this.updateNotice = null;
 			try {
@@ -878,49 +909,78 @@ export default {
 					console.log(err);
 				});
 		},
+		// Capture the next key combination as an Electron accelerator. Completes
+		// on the first non-modifier key (on keydown, or keyup for PrintScreen,
+		// which Windows reports only on release); Escape cancels. The old capture
+		// joined raw KeyboardEvent.key values and waited for every key to be
+		// released, which could produce strings Electron cannot register ('Control'
+		// alone, 'Control+ArrowUp') or never finish (Shift released first).
 		bindScreenshotKeybind() {
-			const keys = [];
-			const keysReleased = [];
+			this.stopKeybindCapture();
+			this.keybindNotice = null;
 			this.bindingKey = true;
 
-			const onKeyDown = (e) => {
-				if (!this.bindingKey) {
-					window.removeEventListener('keydown', onKeyDown);
+			const onKey = (e: KeyboardEvent) => {
+				e.preventDefault();
+				const result = acceleratorFromKeyPress(e);
+				if (result.kind === 'modifier') {
+					this.screenshotKeybind = result.modifiers.join('+');
 					return;
 				}
-
-				if (!keys.includes(e.key)) {
-					keys.push(e.key);
-					this.screenshotKeybind = keys.join('+');
-				}
-			};
-
-			const onKeyUp = (e) => {
-				if (!this.bindingKey) {
-					window.removeEventListener('keyup', onKeyUp);
+				this.stopKeybindCapture();
+				if (result.kind === 'cancel') {
+					this.screenshotKeybind = config.get('screenshotKeybind');
 					return;
 				}
-
-				if (!keys.includes(e.key)) {
-					keys.push(e.key);
-					this.screenshotKeybind = keys.join('+');
+				if (result.kind === 'unsupported') {
+					this.rejectKeybind(
+						[...modifiersOf(e), e.key].filter(Boolean).join('+')
+					);
+					return;
 				}
-
-				keysReleased.push(e.key);
-				if (keysReleased.length === keys.length) {
-					this.bindingKey = false;
-					ipcRenderer.send('screenshotKeybind-change', {
-						newValue: this.screenshotKeybind,
-						oldValue: config.get('screenshotKeybind'),
-					});
-					config.set('screenshotKeybind', this.screenshotKeybind);
-					window.removeEventListener('keyup', onKeyUp);
-					window.removeEventListener('keydown', onKeyDown);
-				}
+				void this.applyKeybind(result.accelerator);
 			};
-
-			window.addEventListener('keydown', onKeyDown);
-			window.addEventListener('keyup', onKeyUp);
+			this.keybindListeners = { keydown: onKey, keyup: onKey };
+			window.addEventListener('keydown', onKey);
+			window.addEventListener('keyup', onKey);
+		},
+		stopKeybindCapture() {
+			if (this.keybindListeners) {
+				window.removeEventListener(
+					'keydown',
+					this.keybindListeners.keydown
+				);
+				window.removeEventListener('keyup', this.keybindListeners.keyup);
+				this.keybindListeners = null;
+			}
+			this.bindingKey = false;
+		},
+		// Main registers it and, only if that worked, saves it. A refusal (a key
+		// another app owns, or one Electron cannot register) leaves the previous
+		// hotkey active, and says so.
+		async applyKeybind(accelerator: string) {
+			this.screenshotKeybind = accelerator;
+			let result: { ok: boolean; accelerator: string } | null = null;
+			try {
+				result = await ipcRenderer.invoke('screenshotKeybind-change', {
+					newValue: accelerator,
+				});
+			} catch {
+				result = null;
+			}
+			if (result?.ok) {
+				this.screenshotKeybind = result.accelerator;
+				return;
+			}
+			this.rejectKeybind(accelerator, result?.accelerator);
+		},
+		rejectKeybind(attempted: string, kept?: string) {
+			const previous = kept || config.get('screenshotKeybind');
+			this.screenshotKeybind = previous;
+			this.keybindNotice = this.$t('settings.keybindRejected', {
+				keys: attempted,
+				previous,
+			});
 		},
 		insertField(token) {
 			this.filenameFormat = (this.filenameFormat || '') + token;

@@ -93,6 +93,8 @@ const el: Catalog = {
 		selectFolder: 'Επιλογή φακέλου',
 		screenshotKeybind: 'Συντόμευση στιγμιότυπου',
 		editBind: 'Επεξεργασία συντόμευσης',
+		keybindRejected:
+			'Το {keys} δεν μπορεί να χρησιμοποιηθεί ως συντόμευση στιγμιότυπου — ίσως το χρησιμοποιεί ήδη άλλη εφαρμογή. Παραμένει ενεργό το {previous}.',
 
 		customFilenameFormat: 'Προσαρμοσμένη μορφή ονόματος αρχείου',
 		// The tokens here are literal text the user types, not placeholders to be

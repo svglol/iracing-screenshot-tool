@@ -81,6 +81,8 @@ const de: Catalog = {
 		selectFolder: 'Ordner wählen',
 		screenshotKeybind: 'Screenshot-Tastenkombination',
 		editBind: 'Belegung ändern',
+		keybindRejected:
+			'{keys} kann nicht als Screenshot-Tastenkombination verwendet werden – möglicherweise nutzt eine andere App sie bereits. {previous} bleibt aktiv.',
 
 		customFilenameFormat: 'Eigenes Dateinamensformat',
 		customFilenameFormatDescription:

@@ -79,6 +79,8 @@ const da: Catalog = {
 		selectFolder: 'Vælg mappe',
 		screenshotKeybind: 'Tastaturgenvej til skærmbillede',
 		editBind: 'Redigér genvej',
+		keybindRejected:
+			'{keys} kan ikke bruges som tastaturgenvej til skærmbillede – den bruges måske allerede af et andet program. {previous} er stadig aktiv.',
 
 		customFilenameFormat: 'Brugerdefineret filnavnsformat',
 		customFilenameFormatDescription:
