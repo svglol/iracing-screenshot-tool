@@ -91,9 +91,16 @@ function mountSettings() {
 	});
 }
 
+// keyCode is the Windows virtual key — what the capture maps to a token.
 function key(
 	type: 'keydown' | 'keyup',
-	init: { key: string; code: string; ctrlKey?: boolean; shiftKey?: boolean }
+	init: {
+		key: string;
+		code: string;
+		keyCode: number;
+		ctrlKey?: boolean;
+		shiftKey?: boolean;
+	}
 ) {
 	window.dispatchEvent(new KeyboardEvent(type, init));
 }
@@ -125,10 +132,15 @@ describe('Settings listener hygiene', () => {
 		vmOf(wrapper).bindScreenshotKeybind();
 		wrapper.unmount();
 
-		key('keydown', { key: 'Control', code: 'ControlLeft', ctrlKey: true });
-		key('keydown', { key: 'c', code: 'KeyC', ctrlKey: true });
-		key('keyup', { key: 'c', code: 'KeyC', ctrlKey: true });
-		key('keyup', { key: 'Control', code: 'ControlLeft' });
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
+		key('keydown', { key: 'c', code: 'KeyC', keyCode: 67, ctrlKey: true });
+		key('keyup', { key: 'c', code: 'KeyC', keyCode: 67, ctrlKey: true });
+		key('keyup', { key: 'Control', code: 'ControlLeft', keyCode: 17 });
 		await flushPromises();
 		expect(rebinds()).toEqual([]);
 		expect(ipcRendererStub.send).not.toHaveBeenCalledWith(
@@ -149,9 +161,19 @@ describe('Settings hotkey capture', () => {
 		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
 
-		key('keydown', { key: 'Control', code: 'ControlLeft', ctrlKey: true });
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
 		expect(vm.screenshotKeybind).toBe('Control');
-		key('keydown', { key: 'ArrowUp', code: 'ArrowUp', ctrlKey: true });
+		key('keydown', {
+			key: 'ArrowUp',
+			code: 'ArrowUp',
+			keyCode: 38,
+			ctrlKey: true,
+		});
 		await flushPromises();
 
 		expect(rebinds()).toEqual([
@@ -173,8 +195,18 @@ describe('Settings hotkey capture', () => {
 		invokeResult = { ok: true, accelerator: 'Control+PrintScreen' };
 		const wrapper = mountSettings();
 		vmOf(wrapper).bindScreenshotKeybind();
-		key('keydown', { key: 'Control', code: 'ControlLeft', ctrlKey: true });
-		key('keyup', { key: 'PrintScreen', code: 'PrintScreen', ctrlKey: true });
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
+		key('keyup', {
+			key: 'PrintScreen',
+			code: 'PrintScreen',
+			keyCode: 44,
+			ctrlKey: true,
+		});
 		await flushPromises();
 		expect(rebinds()).toEqual([
 			['screenshotKeybind-change', { newValue: 'Control+PrintScreen' }],
@@ -191,7 +223,7 @@ describe('Settings hotkey capture', () => {
 		const wrapper = mountSettings();
 		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
-		key('keydown', { key: 'F12', code: 'F12' });
+		key('keydown', { key: 'F12', code: 'F12', keyCode: 123 });
 		await flushPromises();
 
 		expect(vm.screenshotKeybind).toBe('Control+PrintScreen');
@@ -200,13 +232,38 @@ describe('Settings hotkey capture', () => {
 		wrapper.unmount();
 	});
 
+	// PrintScreen arrives only on release, and Ctrl may be released first.
+	test('PrintScreen released after Ctrl still binds Ctrl+PrintScreen', async () => {
+		invokeResult = { ok: true, accelerator: 'Control+PrintScreen' };
+		const wrapper = mountSettings();
+		vmOf(wrapper).bindScreenshotKeybind();
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
+		key('keyup', { key: 'Control', code: 'ControlLeft', keyCode: 17 });
+		key('keyup', { key: 'PrintScreen', code: 'PrintScreen', keyCode: 44 });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'Control+PrintScreen' }],
+		]);
+		wrapper.unmount();
+	});
+
 	test('Escape cancels without asking main for anything', async () => {
 		const wrapper = mountSettings();
 		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
-		key('keydown', { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
-		key('keyup', { key: 'Shift', code: 'ShiftLeft' });
-		key('keydown', { key: 'Escape', code: 'Escape' });
+		key('keydown', {
+			key: 'Shift',
+			code: 'ShiftLeft',
+			keyCode: 16,
+			shiftKey: true,
+		});
+		key('keyup', { key: 'Shift', code: 'ShiftLeft', keyCode: 16 });
+		key('keydown', { key: 'Escape', code: 'Escape', keyCode: 27 });
 		await flushPromises();
 
 		expect(rebinds()).toEqual([]);
@@ -219,7 +276,7 @@ describe('Settings hotkey capture', () => {
 		const wrapper = mountSettings();
 		const vm = vmOf(wrapper);
 		vm.bindScreenshotKeybind();
-		key('keydown', { key: 'ContextMenu', code: 'ContextMenu' });
+		key('keydown', { key: 'ContextMenu', code: 'ContextMenu', keyCode: 93 });
 		await flushPromises();
 
 		expect(rebinds()).toEqual([]);

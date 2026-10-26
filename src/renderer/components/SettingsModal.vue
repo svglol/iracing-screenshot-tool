@@ -920,9 +920,19 @@ export default {
 			this.keybindNotice = null;
 			this.bindingKey = true;
 
+			// Every modifier pressed so far in this chord. Used only when the
+			// capture completes on a key RELEASE: Windows reports PrintScreen only
+			// then, and the user may have let go of Ctrl first.
+			const chord = new Set<string>();
 			const onKey = (e: KeyboardEvent) => {
 				e.preventDefault();
-				const result = acceleratorFromKeyPress(e);
+				if (e.type === 'keydown') {
+					modifiersOf(e).forEach((modifier) => chord.add(modifier));
+				}
+				const result = acceleratorFromKeyPress(
+					e,
+					e.type === 'keyup' ? [...chord] : []
+				);
 				if (result.kind === 'modifier') {
 					this.screenshotKeybind = result.modifiers.join('+');
 					return;
