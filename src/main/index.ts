@@ -42,6 +42,10 @@ import {
 	type CaptureBlock,
 } from './capture-decisions';
 import { CaptureState, type CaptureTicket } from './capture-state';
+import {
+	RESHADE_WAIT_TIMEOUT_MS,
+	waitForReshadeScreenshot,
+} from './reshade-screenshot-wait';
 import { rebindShortcut, registerStartupShortcut } from './global-shortcut';
 import {
 	RESTORE_GEOMETRY_KEYS,
@@ -120,7 +124,6 @@ import {
 	createScreenshotErrorPayload,
 	describeReshadeIniError,
 	getReshadeScreenshotFolder,
-	normalizeFileKey,
 	parseCameraState as parseCameraStateFromArray,
 	type ReshadeIni,
 	type ReshadeScreenshotFolder,
@@ -190,20 +193,23 @@ let workerReady = false;
 // false->true self-heal edge (commit 07f8182) is logged once instead of on every
 // poll (obs-lifecycle-telemetry#3).
 let lastIracingStatusReply: boolean | null = null;
-let cancelReshadeWait: ((reason: string) => void) | null = null;
+// Cancels the in-flight ReShade folder wait, if any. One controller per wait, so
+// cancelling cannot reach a wait that belongs to a later capture.
+let reshadeWaitAbort: AbortController | null = null;
 // Backstop timer for the non-ReShade capture path: if the worker never posts
 // back (screenshot-finished/response/error), force-restore so the app can't
 // wedge with iRacing stuck resized + UI hidden.
 let captureWatchdog: ReturnType<typeof setTimeout> | null = null;
 let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
-// Kept strictly GREATER than waitForReshadeScreenshot's own 30000ms timeout: the
+// Kept strictly GREATER than waitForReshadeScreenshot's own timeout (derived from
+// it below, so the two cannot drift): the
 // watchdog is armed the instant the capture begins (before the ReShade branch),
 // so on a genuine ReShade timeout its own wait must win the race and surface the
 // accurate "Timed out waiting for a ReShade screenshot" — not the watchdog's
 // worker-oriented "the capture worker did not respond". The reshade catch's
 // restoreScreenshotState() clears this watchdog before the 35s mark. The extra 5s
 // still nets a truly hung resize on any path.
-const CAPTURE_WATCHDOG_MS = 35000;
+const CAPTURE_WATCHDOG_MS = RESHADE_WAIT_TIMEOUT_MS + 5000;
 const CAPTURE_ABORT_DEBOUNCE_MS = 400;
 // getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
 // requesting larger can never converge on the dim-match — bound requests here.
@@ -2360,9 +2366,21 @@ app.on('ready', async () => {
 				handle: id,
 			});
 
-			const reshadeFile = await waitForReshadeScreenshot(
-				reshadeLocation.folder
-			);
+			const waitAbort = new AbortController();
+			reshadeWaitAbort = waitAbort;
+			let reshadeFile: string;
+			try {
+				reshadeFile = await waitForReshadeScreenshot(
+					reshadeLocation.folder,
+					{
+						signal: waitAbort.signal,
+					}
+				);
+			} finally {
+				if (reshadeWaitAbort === waitAbort) {
+					reshadeWaitAbort = null;
+				}
+			}
 			if (!captureState.holds(ticket)) {
 				// The abort already restored and reported. Leave the file where
 				// ReShade put it rather than saving a shot the user was told failed.
@@ -2760,13 +2778,13 @@ ipcMain.handle('update:install', async () => {
 });
 
 function clearPendingReshadeWait(reason = 'Screenshot cancelled'): void {
-	if (typeof cancelReshadeWait !== 'function') {
+	if (!reshadeWaitAbort) {
 		return;
 	}
 
-	const cancel = cancelReshadeWait;
-	cancelReshadeWait = null;
-	cancel(reason);
+	const controller = reshadeWaitAbort;
+	reshadeWaitAbort = null;
+	controller.abort(new Error(reason));
 }
 
 function clampCaptureDimension(value: unknown, fallback: number): number {
@@ -3232,211 +3250,6 @@ function restoreSimState(): void {
 	}
 
 	log.info('iRacing window restored');
-}
-
-interface ReshadeFileInfo {
-	fullPath: string;
-	key: string;
-	mtimeMs: number;
-	size: number;
-}
-
-async function listReshadeScreenshotFiles(
-	folder: string
-): Promise<ReshadeFileInfo[]> {
-	const supportedExtensions = new Set(['.bmp', '.jpeg', '.jpg', '.png']);
-	let entries: fs.Dirent[] = [];
-
-	try {
-		entries = await fs.promises.readdir(folder, { withFileTypes: true });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-			return [];
-		}
-
-		throw error;
-	}
-
-	const files: ReshadeFileInfo[] = [];
-
-	for (const entry of entries) {
-		if (!entry.isFile()) {
-			continue;
-		}
-
-		const fullPath = path.join(folder, entry.name);
-		const extension = path.extname(entry.name).toLowerCase();
-
-		if (!supportedExtensions.has(extension)) {
-			continue;
-		}
-
-		try {
-			const stats = await fs.promises.stat(fullPath);
-			files.push({
-				fullPath,
-				key: normalizeFileKey(fullPath),
-				mtimeMs: stats.mtimeMs,
-				size: stats.size,
-			});
-		} catch (error) {
-			log.warn('ReShade screenshot stat failed', {
-				fullPath,
-				error: (error as Error)?.message || String(error),
-			});
-		}
-	}
-
-	return files;
-}
-
-async function findLatestReshadeScreenshot(
-	folder: string,
-	baselineFiles: Map<string, ReshadeFileInfo>,
-	startedAt: number
-): Promise<ReshadeFileInfo | null> {
-	const files = await listReshadeScreenshotFiles(folder);
-	const candidates = files.filter((file) => {
-		const previous = baselineFiles.get(file.key);
-
-		if (!previous) {
-			return file.mtimeMs >= startedAt - 1000;
-		}
-
-		return file.mtimeMs > previous.mtimeMs || file.size !== previous.size;
-	});
-
-	candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-	return candidates[0] || null;
-}
-
-async function waitForFileToSettle(
-	filePath: string,
-	attempts = 12,
-	intervalMs = 250
-): Promise<void> {
-	let previousStats: { size: number; mtimeMs: number } | null = null;
-
-	for (let index = 0; index < attempts; index += 1) {
-		try {
-			const stats = await fs.promises.stat(filePath);
-
-			if (
-				previousStats &&
-				stats.size > 0 &&
-				stats.size === previousStats.size &&
-				stats.mtimeMs === previousStats.mtimeMs
-			) {
-				return;
-			}
-
-			previousStats = {
-				size: stats.size,
-				mtimeMs: stats.mtimeMs,
-			};
-		} catch (error) {
-			if (index === attempts - 1) {
-				throw error;
-			}
-		}
-
-		await delay(intervalMs);
-	}
-}
-
-async function waitForReshadeScreenshot(
-	folder: string,
-	timeoutMs = 30000
-): Promise<string> {
-	fs.mkdirSync(folder, { recursive: true });
-
-	const baselineFiles = new Map<string, ReshadeFileInfo>(
-		(await listReshadeScreenshotFiles(folder)).map((file) => [file.key, file])
-	);
-	const startedAt = Date.now();
-
-	return new Promise<string>((resolve, reject) => {
-		let settled = false;
-		let scanInFlight = false;
-		let watcher: fs.FSWatcher | undefined;
-		let poller: NodeJS.Timeout | undefined;
-		let timeoutId: NodeJS.Timeout | undefined;
-
-		const finish = <T>(callback: (value: T) => void, value: T): void => {
-			if (settled) {
-				return;
-			}
-
-			settled = true;
-
-			if (watcher) {
-				watcher.close();
-			}
-
-			if (poller) {
-				clearInterval(poller);
-			}
-
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-
-			if (cancelReshadeWait === cancel) {
-				cancelReshadeWait = null;
-			}
-
-			callback(value);
-		};
-
-		const cancel = (reason: string): void => {
-			finish(reject, new Error(reason));
-		};
-
-		const scan = async (): Promise<void> => {
-			if (settled || scanInFlight) {
-				return;
-			}
-
-			scanInFlight = true;
-
-			try {
-				const candidate = await findLatestReshadeScreenshot(
-					folder,
-					baselineFiles,
-					startedAt
-				);
-
-				if (candidate) {
-					await waitForFileToSettle(candidate.fullPath);
-					finish(resolve, candidate.fullPath);
-				}
-			} catch (error) {
-				finish(reject, error as Error);
-			} finally {
-				scanInFlight = false;
-			}
-		};
-
-		try {
-			watcher = fs.watch(folder, () => {
-				void scan();
-			});
-		} catch (error) {
-			finish(reject, error as Error);
-			return;
-		}
-
-		poller = setInterval(() => {
-			void scan();
-		}, 500);
-
-		timeoutId = setTimeout(() => {
-			cancel('Timed out waiting for a ReShade screenshot');
-		}, timeoutMs);
-
-		cancelReshadeWait = cancel;
-		void scan();
-	});
 }
 
 // Take a manual-restore geometry value into main's copy (what restore and the
