@@ -406,6 +406,7 @@ import { applyLocale } from '../i18n';
 import {
 	acceleratorFromKeyPress,
 	modifiersOfKey,
+	sameAccelerator,
 	modifiersOf,
 } from '../../utilities/accelerator';
 import {
@@ -1007,7 +1008,10 @@ export default {
 						e.code === 'PrintScreen';
 					const isOwnHotkey =
 						result.kind === 'accelerator' &&
-						result.accelerator === config.get('screenshotKeybind');
+						sameAccelerator(
+							result.accelerator,
+							config.get('screenshotKeybind')
+						);
 					if (!isPrintScreen && !isOwnHotkey) {
 						const modifierPressedHere = [
 							...modifiersOf(e),

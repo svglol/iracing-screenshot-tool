@@ -1,6 +1,7 @@
 import {
 	acceleratorFromKeyPress,
 	modifiersOfKey,
+	sameAccelerator,
 	type KeyPress,
 } from './accelerator';
 
@@ -209,5 +210,25 @@ describe('modifiersOfKey', () => {
 	test('any other key is none', () => {
 		expect(modifiersOfKey('F1')).toEqual([]);
 		expect(modifiersOfKey('PrintScreen')).toEqual([]);
+	});
+});
+
+describe('sameAccelerator', () => {
+	// v3.5.0 saved raw KeyboardEvent.key values in press order.
+	test('ignores case, modifier order and spelling, as Electron does', () => {
+		expect(sameAccelerator('Control+s', 'Control+S')).toBe(true);
+		expect(sameAccelerator('Shift+Control+S', 'Control+Shift+S')).toBe(true);
+		expect(sameAccelerator('Ctrl+PrintScreen', 'Control+PrintScreen')).toBe(
+			true
+		);
+	});
+	test('a different chord is not the same', () => {
+		expect(sameAccelerator('Control+S', 'Control+Shift+S')).toBe(false);
+		expect(sameAccelerator('Control+S', 'Alt+S')).toBe(false);
+		expect(sameAccelerator('F9', 'F10')).toBe(false);
+	});
+	test('nothing is the same as a missing value', () => {
+		expect(sameAccelerator('Control+S', undefined)).toBe(false);
+		expect(sameAccelerator('', '')).toBe(false);
 	});
 });

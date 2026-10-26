@@ -590,6 +590,29 @@ describe('Settings hotkey capture', () => {
 		wrapper.unmount();
 	});
 
+	// Regression: the comparison was exact, so a hotkey saved by v3.5.0 in its
+	// raw spelling ('Control+s') was refused as another application's.
+	test('the current hotkey in an older spelling is still recognised', async () => {
+		store.screenshotKeybind = 'Control+s';
+		invokeResult = { ok: true, accelerator: 'Control+S' };
+		const wrapper = mountSettings();
+		const vm = vmOf(wrapper);
+		vm.bindScreenshotKeybind();
+		key('keydown', {
+			key: 'Control',
+			code: 'ControlLeft',
+			keyCode: 17,
+			ctrlKey: true,
+		});
+		key('keyup', { key: 's', code: 'KeyS', keyCode: 83, ctrlKey: true });
+		await flushPromises();
+		expect(rebinds()).toEqual([
+			['screenshotKeybind-change', { newValue: 'Control+S' }],
+		]);
+		expect(vm.keybindNotice).toBeNull();
+		wrapper.unmount();
+	});
+
 	test('a click anywhere, or leaving the window, abandons the capture', async () => {
 		const wrapper = mountSettings();
 		const vm = vmOf(wrapper);

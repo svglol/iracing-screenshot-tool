@@ -226,6 +226,46 @@ export function modifiersOf(press: KeyPress): string[] {
 	return modifiers;
 }
 
+// Electron's spellings of each modifier, as this app can meet them in a saved
+// hotkey (Windows meanings: Command/Cmd/Meta are the Windows key).
+const MODIFIER_ALIASES: Record<string, string> = {
+	control: 'Control',
+	ctrl: 'Control',
+	commandorcontrol: 'Control',
+	cmdorctrl: 'Control',
+	alt: 'Alt',
+	option: 'Alt',
+	shift: 'Shift',
+	super: 'Super',
+	meta: 'Super',
+	command: 'Super',
+	cmd: 'Super',
+};
+
+function chordOf(accelerator: unknown): string | null {
+	if (typeof accelerator !== 'string' || accelerator.trim() === '') {
+		return null;
+	}
+	const tokens = accelerator.split('+').map((token) => token.trim());
+	const key = tokens.pop().toLowerCase();
+	const modifiers = new Set(
+		tokens.map((token) => MODIFIER_ALIASES[token.toLowerCase()] ?? token)
+	);
+	return [
+		...MODIFIER_ORDER.filter((name) => modifiers.delete(name)),
+		...modifiers,
+		key,
+	].join('+');
+}
+
+// Whether two accelerators name the same chord, as Electron parses them: case
+// does not matter, nor modifier order or spelling. v3.5.0 saved hotkeys from raw
+// KeyboardEvent.key values in press order ('Control+s', 'Shift+Control+S').
+export function sameAccelerator(a: unknown, b: unknown): boolean {
+	const chord = chordOf(a);
+	return chord !== null && chord === chordOf(b);
+}
+
 // `alsoHeld`: modifiers known to be part of the chord though this event does not
 // report them. A key whose press Windows keeps from the page (PrintScreen, or a
 // combination another application holds as a hot key) reaches it only on key
