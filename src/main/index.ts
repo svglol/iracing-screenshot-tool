@@ -1997,10 +1997,17 @@ app.on('ready', async () => {
 			// sends a still's completion (and on failure sends nothing at all),
 			// so a silent refusal left the sidebar's capture button stuck
 			// "loading" — and the hotkey dead — until the app was restarted.
-			if (holder?.kind === 'long-exposure') {
-				reportScreenshotError(t('longExposureCapture.busy'), {
-					context: 'resize-screenshot:busy-long-exposure',
-					meta: { request: data },
+			//
+			// A refusal, not a failure: just the reply the sidebar needs, without
+			// the failure reporter's diagnostics sweep or error-log entry — which
+			// would otherwise run on the main thread mid-exposure, once per press.
+			if (
+				holder?.kind === 'long-exposure' &&
+				mainWindow &&
+				!mainWindow.isDestroyed()
+			) {
+				mainWindow.webContents.send('screenshot-error', {
+					message: t('longExposureCapture.busy'),
 				});
 			}
 			return;
