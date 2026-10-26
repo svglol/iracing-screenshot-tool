@@ -1,5 +1,6 @@
 import { schema } from './config-schema';
 import { repairConfigData } from './config-repair';
+import { createLogger } from './logger';
 
 const { ipcRenderer } = require('electron');
 const Store = require('electron-store');
@@ -67,8 +68,11 @@ if ((process as { type?: string }).type === 'renderer') {
 // setting. Now: drop only the invalid values (config-repair.ts) and reopen; and
 // if the file cannot be salvaged, set it aside rather than destroy it.
 //
-// The logger is required lazily: config.ts also loads in the renderer, so logger
-// init() must never run at module load — only on an actual recovery.
+// The logger is only CREATED on an actual recovery: config.ts also loads in the
+// renderer, and createLogger() is what runs the logger's init(). It used to be a
+// lazy require('../utilities/logger'), which the bundler leaves as a runtime path
+// relative to out/main/ where no such file exists — so in a built app the throw
+// was swallowed and the reset this was meant to record was never logged.
 function openStoreWithRecovery(): ConfigShape {
 	try {
 		return new Store({ schema });
@@ -131,7 +135,6 @@ function logConfigRecovery(
 	meta: Record<string, unknown>
 ): void {
 	try {
-		const { createLogger } = require('../utilities/logger');
 		createLogger('config')[level](message, meta);
 	} catch {
 		// Logger unavailable — the recovery proceeds regardless.
