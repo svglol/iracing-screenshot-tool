@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 	stopSDK: vi.fn(),
 	waitForData: vi.fn(() => false),
 	getSessionData: vi.fn(() => null),
+	getSessionVersionNum: vi.fn(() => 1),
 	getTelemetry: vi.fn(() => null),
 	broadcastUnsafe: vi.fn(),
 	logInfo: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('irsdk-node', () => {
 		stopSDK = mocks.stopSDK;
 		waitForData = mocks.waitForData;
 		getSessionData = mocks.getSessionData;
+		getSessionVersionNum = mocks.getSessionVersionNum;
 		getTelemetry = mocks.getTelemetry;
 		broadcastUnsafe = mocks.broadcastUnsafe;
 		static IsSimRunning = mocks.isSimRunning;
@@ -78,6 +80,7 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	vi.clearAllMocks();
 	mocks.waitForData.mockReturnValue(false);
+	mocks.getSessionVersionNum.mockReturnValue(1);
 	unhandledCount = 0;
 	unhandledListener = () => {
 		unhandledCount++;
@@ -185,5 +188,99 @@ describe('IRacingBridge poll-loop self-heal', () => {
 		bridge.loopActive = false;
 		await vi.advanceTimersByTimeAsync(50);
 		await restart;
+	});
+});
+
+describe('IRacingBridge session info', () => {
+	// Regression: irsdk-node's own session cache never hits (its version marker
+	// is only ever reset to -1), so the loop re-parsed the whole session YAML on
+	// every 16 ms tick, on the main thread.
+	test('parses the session YAML only when its version changes', async () => {
+		mocks.isSimRunning.mockResolvedValue(true);
+		mocks.waitForData.mockReturnValue(true);
+		mocks.getTelemetry.mockReturnValue({ CamCameraState: [] });
+		mocks.getSessionData.mockReturnValue({
+			WeekendInfo: { TrackName: 'spa' },
+		});
+
+		const bridge = new IRacingBridge();
+		await vi.advanceTimersByTimeAsync(200);
+		expect(mocks.getSessionData).toHaveBeenCalledTimes(1);
+		expect(bridge.sessionInfo).toEqual({
+			data: { WeekendInfo: { TrackName: 'spa' } },
+		});
+
+		mocks.getSessionVersionNum.mockReturnValue(2);
+		mocks.getSessionData.mockReturnValue({
+			WeekendInfo: { TrackName: 'monza' },
+		});
+		await vi.advanceTimersByTimeAsync(200);
+		expect(mocks.getSessionData).toHaveBeenCalledTimes(2);
+		expect(bridge.sessionInfo).toEqual({
+			data: { WeekendInfo: { TrackName: 'monza' } },
+		});
+
+		await stopBridge(bridge);
+	});
+
+	test('keeps retrying while the session data is not available yet', async () => {
+		mocks.isSimRunning.mockResolvedValue(true);
+		mocks.waitForData.mockReturnValue(true);
+		mocks.getSessionData.mockReturnValue(null);
+
+		const bridge = new IRacingBridge();
+		await vi.advanceTimersByTimeAsync(100);
+		const attempts = mocks.getSessionData.mock.calls.length;
+		expect(attempts).toBeGreaterThan(1);
+
+		mocks.getSessionData.mockReturnValue({ WeekendInfo: {} });
+		await vi.advanceTimersByTimeAsync(100);
+		expect(bridge.sessionInfo).toEqual({ data: { WeekendInfo: {} } });
+
+		await stopBridge(bridge);
+	});
+
+	test('fetches it afresh after a reconnect, even at the same version', async () => {
+		mocks.isSimRunning.mockResolvedValue(true);
+		mocks.waitForData.mockReturnValue(true);
+		mocks.getSessionData.mockReturnValue({ WeekendInfo: {} });
+
+		const bridge = new IRacingBridge();
+		await vi.advanceTimersByTimeAsync(100);
+		expect(mocks.getSessionData).toHaveBeenCalledTimes(1);
+
+		mocks.isSimRunning.mockResolvedValue(false);
+		await vi.advanceTimersByTimeAsync(600);
+		expect(bridge.sessionInfo).toBeNull();
+
+		mocks.isSimRunning.mockResolvedValue(true);
+		await vi.advanceTimersByTimeAsync(600);
+		expect(mocks.getSessionData).toHaveBeenCalledTimes(2);
+
+		await stopBridge(bridge);
+	});
+});
+
+describe('IRacingBridge disconnect', () => {
+	// Disconnected is what aborts a capture in flight when iRacing exits; a throw
+	// from stopSDK on the sim-exit path used to skip it.
+	test('emits Disconnected when the sim exits even if stopSDK throws', async () => {
+		mocks.isSimRunning.mockResolvedValue(true);
+		const bridge = new IRacingBridge();
+		const disconnected = vi.fn();
+		bridge.on('Disconnected', disconnected);
+		await vi.advanceTimersByTimeAsync(50);
+
+		mocks.stopSDK.mockImplementationOnce(() => {
+			throw new Error('SDK already torn down');
+		});
+		mocks.isSimRunning.mockResolvedValue(false);
+		await vi.advanceTimersByTimeAsync(600);
+
+		expect(disconnected).toHaveBeenCalledTimes(1);
+		expect(bridge.connected).toBe(false);
+		expect(bridge.telemetry).toBeNull();
+
+		await stopBridge(bridge);
 	});
 });
