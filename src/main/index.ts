@@ -44,6 +44,7 @@ import {
 	type CaptureBlock,
 } from './capture-decisions';
 import { CaptureState, type CaptureTicket } from './capture-state';
+import { restoreWindowBounds } from './window-bounds';
 import {
 	RESHADE_WAIT_TIMEOUT_MS,
 	waitForReshadeScreenshot,
@@ -856,13 +857,27 @@ function createWindow(): void {
 	}
 
 	log.info('Creating main window');
+	// The saved position only if a display still shows the title bar — this
+	// window is frameless, so one reopened off-screen could never be moved back.
+	const bounds = restoreWindowBounds(
+		{
+			x: config.get('winPosX'),
+			y: config.get('winPosY'),
+			width: config.get('winWidth'),
+			height: config.get('winHeight'),
+		},
+		screen.getAllDisplays().map((display) => display.workArea),
+		{ width: 1100, height: 655 }
+	);
+	if (bounds.x === undefined) {
+		log.info('Saved window position is off-screen — centring', {
+			saved: { x: config.get('winPosX'), y: config.get('winPosY') },
+		});
+	}
 	mainWindow = new BrowserWindow({
 		title: app.name,
 		show: false,
-		x: config.get('winPosX'),
-		y: config.get('winPosY'),
-		width: config.get('winWidth'),
-		height: config.get('winHeight'),
+		...bounds,
 		minWidth: 1100,
 		minHeight: 655,
 		backgroundColor: '#252525',
