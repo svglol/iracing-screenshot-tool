@@ -269,3 +269,51 @@ export function captureBlockMessage(
 		? t('capture.blockedElevated')
 		: t('capture.blockedDenied', { hresult: hresult || 'unknown' });
 }
+
+// getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
+// requesting larger can never converge on the dim-match — bound requests here.
+export const MAX_CAPTURE_DIMENSION = 10000;
+
+// A requested capture dimension, made safe: the sidebar's input max is only a
+// hint and the global hotkey bypasses the UI, so main never trusts it. Anything
+// that is not a positive number falls back; anything larger is capped.
+export function clampCaptureDimension(
+	value: unknown,
+	fallback: number
+): number {
+	const n = Math.round(Number(value));
+	if (!Number.isFinite(n) || n < 1) {
+		return fallback;
+	}
+	return Math.min(n, MAX_CAPTURE_DIMENSION);
+}
+
+// The all-black brightness floor (sum of R+G+B, ~8 per channel), shared with the
+// renderer's isFrameBlack in Worker.vue.
+export const BLACK_FRAME_MAX_BRIGHTNESS = 24;
+
+// Cheap all-black guard for a raw RGBA frame: sample a coarse grid and call it
+// black only if EVERY sampled pixel is essentially black (matches the renderer's
+// isFrameBlack threshold). Real scenes always have some brighter pixels, so this
+// won't false-positive on dark-but-valid shots; an all-black grab means capture
+// failed. A true here sends the WGC path to its getUserMedia fallback.
+export function isRgbaBufferBlack(
+	buffer: Buffer,
+	frameWidth: number,
+	frameHeight: number
+): boolean {
+	const stepX = Math.max(1, Math.floor(frameWidth / 32));
+	const stepY = Math.max(1, Math.floor(frameHeight / 18));
+	for (let y = 0; y < frameHeight; y += stepY) {
+		for (let x = 0; x < frameWidth; x += stepX) {
+			const i = (y * frameWidth + x) * 4;
+			if (
+				buffer[i] + buffer[i + 1] + buffer[i + 2] >
+				BLACK_FRAME_MAX_BRIGHTNESS
+			) {
+				return false;
+			}
+		}
+	}
+	return true;
+}

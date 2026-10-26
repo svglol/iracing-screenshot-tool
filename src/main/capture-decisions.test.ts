@@ -7,6 +7,10 @@ import {
 	decideWgcSupport,
 	NATIVE_CAPTURE_REQUIRED_REASON,
 	WGC_CURSOR_CAVEAT,
+	clampCaptureDimension,
+	isRgbaBufferBlack,
+	BLACK_FRAME_MAX_BRIGHTNESS,
+	MAX_CAPTURE_DIMENSION,
 } from './capture-decisions';
 
 describe('decideWgcSupport', () => {
@@ -353,5 +357,82 @@ describe('captureBlockMessage', () => {
 			'0x80070005'
 		);
 		expect(captureBlockMessage('denied', null)).toContain('unknown');
+	});
+});
+
+describe('clampCaptureDimension', () => {
+	test('passes a sane dimension through, rounded', () => {
+		expect(clampCaptureDimension(3840, 1920)).toBe(3840);
+		expect(clampCaptureDimension(1439.6, 1920)).toBe(1440);
+		expect(clampCaptureDimension('2560', 1920)).toBe(2560);
+	});
+
+	test('caps at the capture ceiling', () => {
+		expect(clampCaptureDimension(20000, 1920)).toBe(MAX_CAPTURE_DIMENSION);
+	});
+
+	test.each([NaN, 0, -1, undefined, null, 'wide', {}])(
+		'falls back for %j',
+		(value) => {
+			expect(clampCaptureDimension(value, 1920)).toBe(1920);
+		}
+	);
+});
+
+describe('isRgbaBufferBlack', () => {
+	function frame(width: number, height: number, fill = 0): Buffer {
+		return Buffer.alloc(width * height * 4, fill);
+	}
+	function setPixel(
+		buffer: Buffer,
+		width: number,
+		x: number,
+		y: number,
+		rgb: [number, number, number]
+	): void {
+		const i = (y * width + x) * 4;
+		[buffer[i], buffer[i + 1], buffer[i + 2]] = rgb;
+	}
+
+	test('an all-black frame is black', () => {
+		expect(isRgbaBufferBlack(frame(640, 360), 640, 360)).toBe(true);
+	});
+
+	test('a dark-but-real frame is not', () => {
+		// 10 per channel: a night scene, well under any "black" a person sees,
+		// yet over the floor.
+		expect(isRgbaBufferBlack(frame(640, 360, 10), 640, 360)).toBe(false);
+	});
+
+	test('the floor is inclusive: a sum of exactly the threshold is still black', () => {
+		const width = 64;
+		const buffer = frame(width, 36);
+		setPixel(buffer, width, 0, 0, [8, 8, BLACK_FRAME_MAX_BRIGHTNESS - 16]);
+		expect(isRgbaBufferBlack(buffer, width, 36)).toBe(true);
+		setPixel(buffer, width, 0, 0, [8, 8, BLACK_FRAME_MAX_BRIGHTNESS - 15]);
+		expect(isRgbaBufferBlack(buffer, width, 36)).toBe(false);
+	});
+
+	test('alpha is ignored', () => {
+		expect(
+			isRgbaBufferBlack(frame(64, 36).fill(0).fill(255, 3, 4), 64, 36)
+		).toBe(true);
+	});
+
+	// Characterisation of the sampling, not an endorsement: one bright pixel that
+	// falls between grid points is not seen. A real scene is never a single pixel.
+	test('samples a coarse grid: a lone pixel between grid points is not seen', () => {
+		const width = 640;
+		const buffer = frame(width, 360);
+		setPixel(buffer, width, 1, 1, [255, 255, 255]);
+		expect(isRgbaBufferBlack(buffer, width, 360)).toBe(true);
+		setPixel(buffer, width, 20, 20, [255, 255, 255]);
+		expect(isRgbaBufferBlack(buffer, width, 360)).toBe(false);
+	});
+
+	test('a frame narrower than the grid samples every pixel', () => {
+		const buffer = frame(8, 4);
+		setPixel(buffer, 8, 7, 3, [200, 0, 0]);
+		expect(isRgbaBufferBlack(buffer, 8, 4)).toBe(false);
 	});
 });

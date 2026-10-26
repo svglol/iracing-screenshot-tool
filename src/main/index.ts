@@ -39,6 +39,8 @@ import {
 	decideLongExposureAvailability,
 	decideCaptureBlock,
 	captureBlockMessage,
+	clampCaptureDimension,
+	isRgbaBufferBlack,
 	type CaptureBlock,
 } from './capture-decisions';
 import { CaptureState, type CaptureTicket } from './capture-state';
@@ -211,15 +213,12 @@ let pendingCaptureAbort: ReturnType<typeof setTimeout> | null = null;
 // still nets a truly hung resize on any path.
 const CAPTURE_WATCHDOG_MS = RESHADE_WAIT_TIMEOUT_MS + 5000;
 const CAPTURE_ABORT_DEBOUNCE_MS = 400;
-// getUserMedia desktop-capture caps width/height at 10000 (Worker.vue), so
-// requesting larger can never converge on the dim-match — bound requests here.
-const MAX_CAPTURE_DIMENSION = 10000;
 // #11 WGC native capture: settle delay after the resize so iRacing presents a
-// frame at the new size before the grab; hard cap on the (synchronous) native
-// grab; and the all-black brightness floor shared with the renderer's detector.
+// frame at the new size before the grab, and a hard cap on the (synchronous)
+// native grab. The dimension clamp and the black-frame detector live in
+// capture-decisions.ts.
 const WGC_SETTLE_MS = 250;
 const WGC_TIMEOUT_MS = 1500;
-const WGC_BLACK_FRAME_MAX_BRIGHTNESS = 24;
 const appId = build?.appId || 'com.svglol.iracing-screenshot-tool';
 // What an unusable saved hotkey is replaced with — the schema's own default.
 const DEFAULT_SCREENSHOT_KEYBIND = configSchema.screenshotKeybind.default;
@@ -2805,14 +2804,6 @@ function clearPendingReshadeWait(reason = 'Screenshot cancelled'): void {
 	controller.abort(new Error(reason));
 }
 
-function clampCaptureDimension(value: unknown, fallback: number): number {
-	const n = Math.round(Number(value));
-	if (!Number.isFinite(n) || n < 1) {
-		return fallback;
-	}
-	return Math.min(n, MAX_CAPTURE_DIMENSION);
-}
-
 function clearCaptureWatchdog(): void {
 	if (captureWatchdog) {
 		clearTimeout(captureWatchdog);
@@ -2888,32 +2879,6 @@ function workerCaptureId(payload: unknown): number | undefined {
 			? (payload as { captureId?: unknown }).captureId
 			: undefined;
 	return typeof id === 'number' ? id : undefined;
-}
-
-// Cheap all-black guard for a raw RGBA frame: sample a coarse grid and call it
-// black only if EVERY sampled pixel is essentially black (matches the renderer's
-// isFrameBlack threshold). Real scenes always have some brighter pixels, so this
-// won't false-positive on dark-but-valid shots; an all-black grab means capture
-// failed.
-function isRgbaBufferBlack(
-	buffer: Buffer,
-	frameWidth: number,
-	frameHeight: number
-): boolean {
-	const stepX = Math.max(1, Math.floor(frameWidth / 32));
-	const stepY = Math.max(1, Math.floor(frameHeight / 18));
-	for (let y = 0; y < frameHeight; y += stepY) {
-		for (let x = 0; x < frameWidth; x += stepX) {
-			const i = (y * frameWidth + x) * 4;
-			if (
-				buffer[i] + buffer[i + 1] + buffer[i + 2] >
-				WGC_BLACK_FRAME_MAX_BRIGHTNESS
-			) {
-				return false;
-			}
-		}
-	}
-	return true;
 }
 
 // Apply the user's output format to a sharp pipeline at max fidelity. JPEG uses
