@@ -56,6 +56,7 @@ import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import VueSimpleContextMenu from 'vue-simple-context-menu';
 import VueShortkey from 'vue3-shortkey';
+import { SHORTKEY_OPTIONS } from './shortkey-options';
 import Vue3MarkdownIt from 'vue3-markdown-it';
 
 library.add(
@@ -121,7 +122,7 @@ app.use(oruga, {
 	iconComponent: 'vue-fontawesome',
 	iconPack: 'fas',
 });
-app.use(VueShortkey);
+app.use(VueShortkey, SHORTKEY_OPTIONS);
 app.component('FontAwesomeIcon', FontAwesomeIcon);
 app.component('VueSimpleContextMenu', VueSimpleContextMenu);
 app.component('Vue3MarkdownIt', Vue3MarkdownIt);

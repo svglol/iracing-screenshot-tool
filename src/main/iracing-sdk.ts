@@ -9,6 +9,11 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// How long the bridge waits before asking again whether the sim is running, once
+// it is not. A Disconnected that is only a blip is followed by Connected no
+// sooner than this — which is what a consumer's debounce has to outlast.
+export const SIM_RECHECK_INTERVAL_MS = 500;
+
 type FlattenedTelemetry = { values: Record<string, unknown> };
 type SessionInfo = { data: unknown };
 
@@ -25,6 +30,9 @@ class IRacingBridge extends EventEmitter {
 	// disconnect — so the 'telemetry first available' edge logs once per connect
 	// (obs-lifecycle-telemetry#1), never on every 16ms frame.
 	_hadTelemetry: boolean;
+	// iRacing's session-info version for the sessionInfo currently held, so the
+	// YAML is parsed only when it changes. Null = nothing cached.
+	_sessionVersion: number | null;
 
 	constructor() {
 		super();
@@ -35,6 +43,7 @@ class IRacingBridge extends EventEmitter {
 		this.telemetry = null;
 		this.sessionInfo = null;
 		this._hadTelemetry = false;
+		this._sessionVersion = null;
 		this.Consts = { CameraState };
 		this.camControls = {
 			setState: (state: number) => this.sdk.broadcastUnsafe(2, state, 0, 0),
@@ -69,8 +78,18 @@ class IRacingBridge extends EventEmitter {
 							this.connected = false;
 							this.telemetry = null;
 							this.sessionInfo = null;
+							this._sessionVersion = null;
 							this._hadTelemetry = false;
-							this.sdk.stopSDK();
+							// Guarded like the error path below: a throw here used to
+							// skip the Disconnected emit, and that event is what aborts a
+							// capture in flight when iRacing exits.
+							try {
+								this.sdk.stopSDK();
+							} catch (error) {
+								log.warn('stopSDK failed on sim exit', {
+									error: (error as Error)?.message || String(error),
+								});
+							}
 							// Low-level SDK teardown record; the app-facing 'iRacing
 							// disconnected' transition (with midCapture context) is logged
 							// by the index.ts iracing.on('Disconnected') handler.
@@ -79,7 +98,7 @@ class IRacingBridge extends EventEmitter {
 						}
 
 						consecutiveErrors = 0;
-						await delay(500);
+						await delay(SIM_RECHECK_INTERVAL_MS);
 						continue;
 					}
 
@@ -96,10 +115,9 @@ class IRacingBridge extends EventEmitter {
 					const hasData = this.sdk.waitForData(16);
 
 					if (hasData) {
-						const sessionData = this.sdk.getSessionData();
+						this.refreshSessionInfo();
 						const telemetry = this.sdk.getTelemetry();
 
-						this.sessionInfo = sessionData ? { data: sessionData } : null;
 						this.telemetry = telemetry
 							? flattenTelemetry(telemetry)
 							: null;
@@ -132,6 +150,7 @@ class IRacingBridge extends EventEmitter {
 						this.connected = false;
 						this.telemetry = null;
 						this.sessionInfo = null;
+						this._sessionVersion = null;
 						this._hadTelemetry = false;
 						try {
 							this.sdk.stopSDK();
@@ -153,6 +172,31 @@ class IRacingBridge extends EventEmitter {
 			this.loopActive = false;
 		}
 	}
+
+	// The session YAML (drivers, track, weekend) changes only when iRacing bumps
+	// its session-info version — a handful of times per session — but loading it
+	// is the costliest thing this loop does: a full js-yaml parse of 100+ KB for a
+	// big grid. irsdk-node's own cache never hits (its version marker is only ever
+	// reset, never set), so this used to re-parse it on every 16 ms tick, on the
+	// main thread. Now only when the version moves, or while nothing is held yet.
+	// An SDK without the version call keeps the old every-tick behaviour.
+	refreshSessionInfo(): void {
+		const version =
+			typeof this.sdk.getSessionVersionNum === 'function'
+				? Number(this.sdk.getSessionVersionNum())
+				: NaN;
+		const known = Number.isFinite(version) ? version : null;
+		if (
+			this.sessionInfo &&
+			known !== null &&
+			known === this._sessionVersion
+		) {
+			return;
+		}
+		const sessionData = this.sdk.getSessionData();
+		this.sessionInfo = sessionData ? { data: sessionData } : null;
+		this._sessionVersion = this.sessionInfo ? known : null;
+	}
 }
 
 let instance: IRacingBridge | null = null;
@@ -170,5 +214,9 @@ export { IRacingBridge };
 // Preserve CommonJS interop for existing `const irsdk = require('./iracing-sdk');
 // irsdk.getInstance()` callers in index.ts. Dual-form is legal; ESM `export`
 // statements above coexist with this assignment under our tsconfig settings.
-module.exports = { getInstance, IRacingBridge };
-module.exports.default = { getInstance, IRacingBridge };
+module.exports = { getInstance, IRacingBridge, SIM_RECHECK_INTERVAL_MS };
+module.exports.default = {
+	getInstance,
+	IRacingBridge,
+	SIM_RECHECK_INTERVAL_MS,
+};

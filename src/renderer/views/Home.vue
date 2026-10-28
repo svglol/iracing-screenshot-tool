@@ -91,6 +91,7 @@
 						>
 							<li>
 								<a
+									v-if="active"
 									v-show="false"
 									v-shortkey="['del']"
 									@click="deleteFile"
@@ -105,6 +106,7 @@
 							</li>
 							<li>
 								<a
+									v-if="active"
 									v-show="false"
 									v-shortkey="['ctrl', 'c']"
 									@shortkey="copy"
@@ -386,6 +388,11 @@ export default {
 				| ((event: unknown, filePath: string) => void)
 				| null,
 			configFolderDisposer: null as (() => void) | null,
+			// False while another page is shown. Home is kept alive, and its
+			// Delete / Ctrl+C shortcuts (document-wide) stayed registered behind
+			// it: Delete pressed in Settings deleted the selected screenshot.
+			// The v-if unmounts them, which unregisters them.
+			active: true,
 		};
 	},
 	computed: {
@@ -462,6 +469,12 @@ export default {
 			}
 			void this.ensureWindowThumbnails(newIndex, this.galleryLoadId);
 		},
+	},
+	activated() {
+		this.active = true;
+	},
+	deactivated() {
+		this.active = false;
 	},
 	mounted() {
 		// Hoist to an instance field so beforeUnmount can removeListener it.

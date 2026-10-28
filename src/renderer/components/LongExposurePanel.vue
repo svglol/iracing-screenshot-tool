@@ -428,6 +428,8 @@ export default defineComponent({
 			onProgress: null as
 				| ((event: unknown, update: { phase: string }) => void)
 				| null,
+			// Disposer for the disableTooltips subscription made in mounted().
+			offDisableTooltips: null as (() => void) | null,
 		};
 	},
 	computed: {
@@ -814,6 +816,14 @@ export default defineComponent({
 		};
 		ipcRenderer.on('long-exposure:progress', this.onProgress);
 
+		// Read once in data() and never again, so turning tips off in Settings left
+		// this panel's tips showing (the sidebar around it already follows the
+		// setting). The panel lives in the kept-alive Home, so it must listen.
+		this.offDisableTooltips =
+			config.onDidChange?.('disableTooltips', (value) => {
+				this.disableTooltips = value === true;
+			}) ?? null;
+
 		void this.poll();
 		this.pollTimer = setInterval(() => {
 			void this.poll();
@@ -830,6 +840,8 @@ export default defineComponent({
 		if (this.onProgress) {
 			ipcRenderer.removeListener('long-exposure:progress', this.onProgress);
 		}
+		this.offDisableTooltips?.();
+		this.offDisableTooltips = null;
 	},
 	methods: {
 		toggleCollapsed() {

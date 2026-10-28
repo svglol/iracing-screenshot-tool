@@ -88,6 +88,10 @@ const ru: Catalog = {
 		selectFolder: 'Выбрать папку',
 		screenshotKeybind: 'Сочетание клавиш для снимка',
 		editBind: 'Изменить сочетание',
+		keybindRejected:
+			'{keys} нельзя назначить сочетанием клавиш для снимка — возможно, оно уже занято другим приложением. По-прежнему действует {previous}.',
+		keybindRejectedNoneActive:
+			'{keys} нельзя назначить сочетанием клавиш для снимка — возможно, оно уже занято другим приложением. Сейчас не действует ни одно сочетание клавиш для снимка.',
 
 		customFilenameFormat: 'Свой формат имени файла',
 		// The tokens here are literal text the user types, not placeholders to be
@@ -541,6 +545,8 @@ const ru: Catalog = {
 			'Длинной выдержке нужна телеметрия повтора из iRacing. Проверьте, что симулятор запущен и находится в сессии.',
 		windowNotFound: 'Окно iRacing не найдено.',
 		cancelled: 'Захват отменён.',
+		simExited:
+			'iRacing закрылся во время экспозиции. На очень высоких разрешениях это может случиться, если не хватает видеопамяти (VRAM).',
 		seekTimeout:
 			'Повтор не дошёл до кадра {frame} вовремя. Возможно, он ещё загружается.',
 		warmUpFellBack:

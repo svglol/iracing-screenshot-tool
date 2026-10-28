@@ -80,6 +80,10 @@ const fr: Catalog = {
 		selectFolder: 'Choisir un dossier',
 		screenshotKeybind: 'Raccourci de capture',
 		editBind: 'Modifier le raccourci',
+		keybindRejected:
+			'{keys} ne peut pas servir de raccourci de capture : une autre application l’utilise peut-être déjà. {previous} reste actif.',
+		keybindRejectedNoneActive:
+			'{keys} ne peut pas servir de raccourci de capture : une autre application l’utilise peut-être déjà. Aucun raccourci de capture n’est actif.',
 
 		customFilenameFormat: 'Format de nom de fichier personnalisé',
 		customFilenameFormatDescription:
@@ -528,6 +532,8 @@ const fr: Catalog = {
 			'La pose longue nécessite la télémétrie de replay d’iRacing. Vérifiez que le simulateur est lancé et dans une session.',
 		windowNotFound: 'Fenêtre iRacing introuvable.',
 		cancelled: 'Capture annulée.',
+		simExited:
+			'iRacing s’est fermé pendant la pose. À très haute résolution, cela peut arriver s’il manque de mémoire vidéo (VRAM).',
 		seekTimeout:
 			'Le replay n’a pas atteint l’image {frame} à temps. Il est peut-être encore en cours de chargement.',
 		warmUpFellBack:

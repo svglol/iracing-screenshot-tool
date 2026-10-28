@@ -86,6 +86,10 @@ const ja: Catalog = {
 		selectFolder: 'フォルダーを選択',
 		screenshotKeybind: 'スクリーンショットのキー割り当て',
 		editBind: 'キーを変更',
+		keybindRejected:
+			'{keys} はスクリーンショットのキーに割り当てられません。別のアプリがすでに使用している可能性があります。引き続き {previous} が有効です。',
+		keybindRejectedNoneActive:
+			'{keys} はスクリーンショットのキーに割り当てられません。別のアプリがすでに使用している可能性があります。現在有効なスクリーンショットのキーはありません。',
 
 		customFilenameFormat: 'カスタムファイル名形式',
 		customFilenameFormatDescription:
@@ -535,6 +539,8 @@ const ja: Catalog = {
 			'長時間露光には iRacing のリプレイテレメトリが必要です。シムが起動していて、セッション中であることを確認してください。',
 		windowNotFound: 'iRacing のウィンドウが見つかりません。',
 		cancelled: 'キャプチャをキャンセルしました。',
+		simExited:
+			'露光中に iRacing が終了しました。非常に高い解像度では、ビデオメモリ (VRAM) が不足するとこの現象が起こることがあります。',
 		seekTimeout:
 			'リプレイが時間内にフレーム {frame} へ到達しませんでした。まだ読み込み中の可能性があります。',
 		warmUpFellBack:
