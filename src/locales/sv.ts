@@ -79,6 +79,10 @@ const sv: Catalog = {
 		selectFolder: 'Välj mapp',
 		screenshotKeybind: 'Kortkommando för skärmbild',
 		editBind: 'Ändra kortkommando',
+		keybindRejected:
+			'{keys} kan inte användas som kortkommando för skärmbild – ett annat program kanske redan använder det. {previous} gäller fortfarande.',
+		keybindRejectedNoneActive:
+			'{keys} kan inte användas som kortkommando för skärmbild – ett annat program kanske redan använder det. Inget kortkommando för skärmbild är aktivt.',
 
 		customFilenameFormat: 'Eget filnamnsformat',
 		customFilenameFormatDescription:
@@ -520,6 +524,8 @@ const sv: Catalog = {
 			'Långtidsexponering kräver replaytelemetri från iRacing. Kontrollera att simulatorn körs och befinner sig i en session.',
 		windowNotFound: 'iRacing-fönstret hittades inte.',
 		cancelled: 'Inspelningen avbröts.',
+		simExited:
+			'iRacing avslutades under exponeringen. Vid mycket höga upplösningar kan det hända om videominnet (VRAM) tar slut.',
 		seekTimeout:
 			'Replayen nådde inte bildruta {frame} i tid. Den kanske fortfarande läses in.',
 		warmUpFellBack:

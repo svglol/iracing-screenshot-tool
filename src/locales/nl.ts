@@ -79,6 +79,10 @@ const nl: Catalog = {
 		selectFolder: 'Map kiezen',
 		screenshotKeybind: 'Sneltoets voor schermafbeelding',
 		editBind: 'Sneltoets wijzigen',
+		keybindRejected:
+			'{keys} kan niet als sneltoets voor schermafbeeldingen worden gebruikt; mogelijk gebruikt een andere app deze al. {previous} blijft actief.',
+		keybindRejectedNoneActive:
+			'{keys} kan niet als sneltoets voor schermafbeeldingen worden gebruikt; mogelijk gebruikt een andere app deze al. Er is nu geen sneltoets voor schermafbeeldingen actief.',
 
 		customFilenameFormat: 'Aangepaste bestandsnaamindeling',
 		customFilenameFormatDescription:
@@ -523,6 +527,8 @@ const nl: Catalog = {
 			'Lange sluitertijd vereist replaytelemetrie van iRacing. Controleer of de sim draait en in een sessie zit.',
 		windowNotFound: 'iRacing-venster niet gevonden.',
 		cancelled: 'Opname geannuleerd.',
+		simExited:
+			'iRacing is tijdens de belichting afgesloten. Bij zeer hoge resoluties kan dat gebeuren als het videogeheugen (VRAM) opraakt.',
 		seekTimeout:
 			'De replay bereikte beeld {frame} niet op tijd. Mogelijk wordt hij nog geladen.',
 		warmUpFellBack:

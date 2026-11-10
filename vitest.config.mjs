@@ -24,6 +24,12 @@ export default defineConfig({
 		coverage: {
 			provider: 'v8',
 			reporter: ['text', 'html', 'lcov'],
+			// Report every source file, not only the ones some test imports —
+			// without this, untested modules (index.ts, most views) vanished from
+			// the denominator and the total overstated coverage by ~30 points.
+			include: ['src/**/*.{ts,vue}', '_scripts/**/*.js'],
+			// A failing run is exactly when the report is wanted.
+			reportOnFailure: true,
 			exclude: [
 				'node_modules/**',
 				'.tools/**',

@@ -84,6 +84,10 @@ const no: Catalog = {
 		selectFolder: 'Velg mappe',
 		screenshotKeybind: 'Hurtigtast for skjermbilde',
 		editBind: 'Endre hurtigtast',
+		keybindRejected:
+			'{keys} kan ikke brukes som hurtigtast for skjermbilde – den kan allerede være i bruk av et annet program. {previous} er fortsatt aktiv.',
+		keybindRejectedNoneActive:
+			'{keys} kan ikke brukes som hurtigtast for skjermbilde – den kan allerede være i bruk av et annet program. Ingen hurtigtast for skjermbilde er aktiv.',
 
 		customFilenameFormat: 'Egendefinert filnavnformat',
 		customFilenameFormatDescription:
@@ -524,6 +528,8 @@ const no: Catalog = {
 			'Lang eksponering krever reprisetelemetri fra iRacing. Kontroller at simulatoren kjører og er i en økt.',
 		windowNotFound: 'Fant ikke iRacing-vinduet.',
 		cancelled: 'Opptaket ble avbrutt.',
+		simExited:
+			'iRacing ble avsluttet under eksponeringen. Ved svært høye oppløsninger kan dette skje hvis videominnet (VRAM) går tomt.',
 		seekTimeout:
 			'Reprisen nådde ikke bilde {frame} i tide. Den laster kanskje fortsatt.',
 		warmUpFellBack:

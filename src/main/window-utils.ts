@@ -5,6 +5,14 @@ const log = createLogger('window-utils');
 
 const IRACING_PROCESS_NAME = 'iRacingSim64DX11';
 const IRACING_PROCESS_EXE = `${IRACING_PROCESS_NAME}.exe`;
+// Upper bound on any PowerShell fallback. A normal run is ~1-3 s (CLR start plus
+// Add-Type); without a bound, a child that never exits (stuck on a policy or AV
+// prompt) blocked the main thread forever in the spawnSync variants, and left a
+// capture's resize unresolved in the async one. A killed child exits non-zero,
+// which every caller already treats as "window not found".
+const POWERSHELL_TIMEOUT_MS = 15000;
+// How long after that the async variant stops waiting for its pipes to close.
+const POWERSHELL_CLOSE_GRACE_MS = 2000;
 
 export interface IRacingWindowDetails {
 	handle: string;
@@ -675,10 +683,17 @@ $rect = New-Object Win32Rect+RECT
 		{
 			encoding: 'utf8',
 			windowsHide: true,
+			timeout: POWERSHELL_TIMEOUT_MS,
 		}
 	);
 
 	if (result.status !== 0) {
+		if (result.error) {
+			// ETIMEDOUT when POWERSHELL_TIMEOUT_MS killed it.
+			log.warn('PowerShell window query failed', {
+				error: result.error.message,
+			});
+		}
 		if (result.stderr) {
 			log.warn('PowerShell window query returned stderr', {
 				stderr: result.stderr.trim(),
@@ -757,10 +772,17 @@ Write-Output ([int64]$window)
 		{
 			encoding: 'utf8',
 			windowsHide: true,
+			timeout: POWERSHELL_TIMEOUT_MS,
 		}
 	);
 
 	if (result.status !== 0) {
+		if (result.error) {
+			// ETIMEDOUT when POWERSHELL_TIMEOUT_MS killed it.
+			log.warn('PowerShell window query failed', {
+				error: result.error.message,
+			});
+		}
 		if (result.stderr) {
 			log.warn('PowerShell window query returned stderr', {
 				stderr: result.stderr.trim(),
@@ -838,8 +860,20 @@ Write-Output ([int64]$window)
 			['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
 			{
 				windowsHide: true,
+				timeout: POWERSHELL_TIMEOUT_MS,
 			}
 		);
+
+		// 'close' waits for every holder of the stdio pipes, and Add-Type runs the
+		// C# compiler as a child of powershell.exe — which the timeout's kill does
+		// not reach. So 'close' alone could still never come: settle regardless,
+		// shortly after the kill.
+		const backstop = setTimeout(() => {
+			log.warn('PowerShell fallback did not finish — giving up', {
+				timeoutMs: POWERSHELL_TIMEOUT_MS,
+			});
+			resolve(undefined);
+		}, POWERSHELL_TIMEOUT_MS + POWERSHELL_CLOSE_GRACE_MS);
 
 		let stdout = '';
 		let stderr = '';
@@ -854,12 +888,14 @@ Write-Output ([int64]$window)
 		// try/catch — a hard crash in the very safety net we fall back to. Treat
 		// it as "window not found" instead.
 		child.on('error', (error: Error) => {
+			clearTimeout(backstop);
 			log.error('PowerShell fallback spawn failed', {
 				error: error.message || String(error),
 			});
 			resolve(undefined);
 		});
 		child.on('close', (code: number | null) => {
+			clearTimeout(backstop);
 			if (code !== 0) {
 				if (stderr.trim()) {
 					log.warn('PowerShell fallback returned stderr', {

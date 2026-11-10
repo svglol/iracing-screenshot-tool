@@ -247,7 +247,11 @@ export function resolveReshadeBasePath(
 	reshadeIni: ReshadeIni = {},
 	reshadeIniPath = ''
 ): string {
-	const iniDir = reshadeIniPath ? path.dirname(reshadeIniPath) : process.cwd();
+	// path.win32 like the branches below: the ini path is always a Windows path,
+	// and the host's dirname would not split it on a non-Windows test runner.
+	const iniDir = reshadeIniPath
+		? path.win32.dirname(reshadeIniPath)
+		: process.cwd();
 	const rawBasePath = trimWrappedQuotes(
 		expandWindowsEnvironmentVariables(reshadeIni.INSTALL?.BasePath || '')
 	);

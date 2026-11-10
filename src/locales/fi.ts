@@ -83,6 +83,10 @@ const fi: Catalog = {
 		selectFolder: 'Valitse kansio',
 		screenshotKeybind: 'Kuvakaappauksen pikanäppäin',
 		editBind: 'Muokkaa pikanäppäintä',
+		keybindRejected:
+			'{keys} ei kelpaa kuvakaappauksen pikanäppäimeksi – jokin toinen sovellus saattaa jo käyttää sitä. {previous} on edelleen käytössä.',
+		keybindRejectedNoneActive:
+			'{keys} ei kelpaa kuvakaappauksen pikanäppäimeksi – jokin toinen sovellus saattaa jo käyttää sitä. Mikään kuvakaappauksen pikanäppäin ei ole nyt käytössä.',
 
 		customFilenameFormat: 'Mukautettu tiedostonimimuoto',
 		customFilenameFormatDescription:
@@ -523,6 +527,8 @@ const fi: Catalog = {
 			'Pitkä valotus vaatii uusintatelemetrian iRacingista. Tarkista, että simulaattori on käynnissä ja sessiossa.',
 		windowNotFound: 'iRacing-ikkunaa ei löytynyt.',
 		cancelled: 'Kaappaus peruutettiin.',
+		simExited:
+			'iRacing sulkeutui valotuksen aikana. Hyvin suurilla resoluutioilla näin voi käydä, jos näyttömuisti (VRAM) loppuu.',
 		seekTimeout:
 			'Uusinta ei ehtinyt ruutuun {frame} ajoissa. Se saattaa vielä latautua.',
 		warmUpFellBack:

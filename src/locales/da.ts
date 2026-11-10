@@ -79,6 +79,10 @@ const da: Catalog = {
 		selectFolder: 'Vælg mappe',
 		screenshotKeybind: 'Tastaturgenvej til skærmbillede',
 		editBind: 'Redigér genvej',
+		keybindRejected:
+			'{keys} kan ikke bruges som tastaturgenvej til skærmbillede – den bruges måske allerede af et andet program. {previous} er stadig aktiv.',
+		keybindRejectedNoneActive:
+			'{keys} kan ikke bruges som tastaturgenvej til skærmbillede – den bruges måske allerede af et andet program. Ingen tastaturgenvej til skærmbillede er aktiv.',
 
 		customFilenameFormat: 'Brugerdefineret filnavnsformat',
 		customFilenameFormatDescription:
@@ -520,6 +524,8 @@ const da: Catalog = {
 			'Lang eksponering kræver replaytelemetri fra iRacing. Kontrollér, at simulatoren kører og er i en session.',
 		windowNotFound: 'iRacing-vinduet blev ikke fundet.',
 		cancelled: 'Optagelsen blev annulleret.',
+		simExited:
+			'iRacing lukkede under eksponeringen. Ved meget høje opløsninger kan det ske, hvis videohukommelsen (VRAM) slipper op.',
 		seekTimeout:
 			'Replayet nåede ikke billede {frame} i tide. Det er måske stadig ved at indlæse.',
 		warmUpFellBack:

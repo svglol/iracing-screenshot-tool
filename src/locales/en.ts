@@ -98,6 +98,10 @@ export default {
 		selectFolder: 'Select Folder',
 		screenshotKeybind: 'Screenshot Keybind',
 		editBind: 'Edit Bind',
+		keybindRejected:
+			"{keys} can't be used as the screenshot keybind — another app may already be using it. {previous} is still active.",
+		keybindRejectedNoneActive:
+			"{keys} can't be used as the screenshot keybind — another app may already be using it. No screenshot keybind is active.",
 
 		customFilenameFormat: 'Custom Filename Format',
 		customFilenameFormatDescription:
@@ -558,6 +562,8 @@ export default {
 			'Long exposure needs replay telemetry from iRacing. Check that the sim is running and in a session.',
 		windowNotFound: 'iRacing window not found.',
 		cancelled: 'Capture cancelled.',
+		simExited:
+			'iRacing exited during the exposure. At very high resolutions this can happen if it runs out of video memory (VRAM).',
 		seekTimeout:
 			'The replay did not reach frame {frame} in time. It may still be loading.',
 		warmUpFellBack:

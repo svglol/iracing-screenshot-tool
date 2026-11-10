@@ -15,8 +15,19 @@ const nodeRequire = createRequire(import.meta.url);
 vi.mock('@oruga-ui/oruga-next', () => ({
 	useOruga: () => ({ notification: { open: vi.fn() } }),
 }));
+const configListeners = vi.hoisted(
+	() => new Map<string, Set<(value: unknown) => void>>()
+);
 vi.mock('../../utilities/config', () => ({
-	default: { get: () => undefined, set: vi.fn() },
+	default: {
+		get: () => undefined,
+		set: vi.fn(),
+		onDidChange: (key: string, callback: (value: unknown) => void) => {
+			if (!configListeners.has(key)) configListeners.set(key, new Set());
+			configListeners.get(key).add(callback);
+			return () => configListeners.get(key)?.delete(callback);
+		},
+	},
 }));
 
 const id = nodeRequire.resolve('electron');
@@ -24,7 +35,14 @@ nodeRequire.cache[id] = {
 	id,
 	filename: id,
 	loaded: true,
-	exports: { ipcRenderer: { invoke: vi.fn(), on: vi.fn(), send: vi.fn() } },
+	exports: {
+		ipcRenderer: {
+			invoke: vi.fn(),
+			on: vi.fn(),
+			send: vi.fn(),
+			removeListener: vi.fn(),
+		},
+	},
 } as unknown as NodeModule;
 
 const { default: LongExposurePanel } = await import('./LongExposurePanel.vue');
@@ -239,5 +257,42 @@ describe('LongExposurePanel highlight recovery readout', () => {
 			readout: '3',
 			spoken: 'longExposure.modified.recovery:{"stops":3}',
 		});
+	});
+});
+
+describe('LongExposurePanel follows the Hide Tips setting', () => {
+	type Lifecycle = {
+		mounted(this: unknown): void;
+		beforeUnmount(this: unknown): void;
+	};
+	const { mounted, beforeUnmount } = LongExposurePanel as unknown as Lifecycle;
+
+	// Regression: read once in data(), so the panel kept showing tips after they
+	// were turned off in Settings (the panel is never remounted: Home is kept
+	// alive).
+	test('picks up a change while mounted, and stops listening once unmounted', () => {
+		vi.useFakeTimers();
+		try {
+			const panel = {
+				disableTooltips: false,
+				onProgress: null,
+				offDisableTooltips: null,
+				pollTimer: null,
+				poll: vi.fn(),
+			};
+			mounted.call(panel);
+			const emit = (value: unknown) =>
+				configListeners.get('disableTooltips')?.forEach((cb) => cb(value));
+
+			emit(true);
+			expect(panel.disableTooltips).toBe(true);
+
+			beforeUnmount.call(panel);
+			expect(configListeners.get('disableTooltips')?.size ?? 0).toBe(0);
+			emit(false);
+			expect(panel.disableTooltips).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Writable } from 'node:stream';
 import zlib from 'node:zlib';
 import { PNG } from 'pngjs';
 import { buildScanlines, encodePng16, writePng16 } from './png16';
@@ -401,5 +402,75 @@ describe('writePng16', () => {
 		await expect(
 			writePng16(tmp, { rgbaLe: Buffer.alloc(8), width: 0, height: 1 })
 		).rejects.toThrow(/invalid PNG dimensions/);
+	});
+
+	// A destination that writes to the real file but fails the writes `failOn`
+	// picks — standing in for a disk filling up, a network share dropping or an
+	// antivirus lock part-way through a multi-hundred-megabyte master.
+	function failingDestination(
+		failOn: (chunk: Buffer, index: number) => boolean
+	) {
+		return vi.spyOn(fs, 'createWriteStream').mockImplementation(((
+			filePath: string
+		) => {
+			const fd = fs.openSync(filePath, 'w');
+			let index = 0;
+			return new Writable({
+				write(chunk: Buffer, _encoding, done) {
+					if (failOn(chunk, index++)) {
+						done(new Error('ENOSPC: no space left on device, write'));
+						return;
+					}
+					fs.writeSync(fd, chunk);
+					done();
+				},
+				destroy(error, done) {
+					fs.closeSync(fd);
+					done(error);
+				},
+			});
+		}) as unknown as typeof fs.createWriteStream);
+	}
+
+	function sampleImage() {
+		const width = 64;
+		const height = 48;
+		const rgbaLe = Buffer.alloc(width * height * 8);
+		for (let i = 0; i < rgbaLe.length; i += 2) {
+			rgbaLe.writeUInt16LE((i * 2654435761) % 65536, i);
+		}
+		return { rgbaLe, width, height, compressionLevel: 0 };
+	}
+
+	// Regression: the IEND write's error was ignored (end()'s callback dropped
+	// its argument), so a master missing its final chunk was logged as written,
+	// announced to the gallery and given a sidecar.
+	it('rejects, and leaves no file, when the final chunk cannot be written', async () => {
+		const spy = failingDestination((chunk) => chunk.length === 12);
+		try {
+			await expect(writePng16(tmp, sampleImage())).rejects.toThrow(/ENOSPC/);
+			expect(fs.existsSync(tmp)).toBe(false);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it('rejects when the file cannot be created', async () => {
+		await expect(
+			writePng16(
+				path.join(os.tmpdir(), `png16-missing-${process.pid}`, 'x.png'),
+				sampleImage()
+			)
+		).rejects.toThrow(/ENOENT/);
+	});
+
+	it('rejects, and leaves no file, when an image-data write fails', async () => {
+		const spy = failingDestination((_chunk, index) => index === 2);
+		try {
+			await expect(writePng16(tmp, sampleImage())).rejects.toThrow(/ENOSPC/);
+			expect(fs.existsSync(tmp)).toBe(false);
+		} finally {
+			spy.mockRestore();
+		}
 	});
 });

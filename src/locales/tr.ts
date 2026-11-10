@@ -91,6 +91,10 @@ const tr: Catalog = {
 		selectFolder: 'Klasör Seç',
 		screenshotKeybind: 'Ekran Görüntüsü Kısayolu',
 		editBind: 'Kısayolu Düzenle',
+		keybindRejected:
+			'{keys} ekran görüntüsü kısayolu olarak kullanılamıyor; başka bir uygulama zaten kullanıyor olabilir. {previous} hâlâ etkin.',
+		keybindRejectedNoneActive:
+			'{keys} ekran görüntüsü kısayolu olarak kullanılamıyor; başka bir uygulama zaten kullanıyor olabilir. Şu anda etkin bir ekran görüntüsü kısayolu yok.',
 
 		customFilenameFormat: 'Özel Dosya Adı Biçimi',
 		customFilenameFormatDescription:
@@ -533,6 +537,8 @@ const tr: Catalog = {
 			"Uzun pozlama, iRacing'den replay telemetrisi gerektirir. Simülatörün çalıştığını ve bir oturumda olduğunu kontrol edin.",
 		windowNotFound: 'iRacing penceresi bulunamadı.',
 		cancelled: 'Yakalama iptal edildi.',
+		simExited:
+			'iRacing pozlama sırasında kapandı. Çok yüksek çözünürlüklerde video belleği (VRAM) yetmezse bu olabilir.',
 		seekTimeout:
 			'Replay, {frame} karesine zamanında ulaşamadı. Hâlâ yükleniyor olabilir.',
 		warmUpFellBack:

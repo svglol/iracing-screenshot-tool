@@ -80,6 +80,10 @@ const pt: Catalog = {
 		selectFolder: 'Escolher pasta',
 		screenshotKeybind: 'Atalho de captura',
 		editBind: 'Editar atalho',
+		keybindRejected:
+			'{keys} não pode ser usado como atalho de captura; talvez outra aplicação já o esteja a usar. {previous} continua ativo.',
+		keybindRejectedNoneActive:
+			'{keys} não pode ser usado como atalho de captura; talvez outra aplicação já o esteja a usar. Nenhum atalho de captura está ativo.',
 
 		customFilenameFormat: 'Formato de nome de ficheiro personalizado',
 		customFilenameFormatDescription:
@@ -522,6 +526,8 @@ const pt: Catalog = {
 			'A longa exposição precisa da telemetria de repetição do iRacing. Verifica se o simulador está a correr e dentro de uma sessão.',
 		windowNotFound: 'Janela do iRacing não encontrada.',
 		cancelled: 'Captura cancelada.',
+		simExited:
+			'O iRacing fechou durante a exposição. Em resoluções muito altas, isto pode acontecer se ficar sem memória de vídeo (VRAM).',
 		seekTimeout:
 			'A repetição não chegou ao fotograma {frame} a tempo. Pode ainda estar a carregar.',
 		warmUpFellBack:

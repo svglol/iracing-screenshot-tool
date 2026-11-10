@@ -87,6 +87,10 @@ const cs: Catalog = {
 		selectFolder: 'Vybrat složku',
 		screenshotKeybind: 'Klávesová zkratka snímku',
 		editBind: 'Upravit zkratku',
+		keybindRejected:
+			'{keys} nelze použít jako klávesovou zkratku snímku – možná ji už používá jiná aplikace. Nadále platí {previous}.',
+		keybindRejectedNoneActive:
+			'{keys} nelze použít jako klávesovou zkratku snímku – možná ji už používá jiná aplikace. Momentálně neplatí žádná klávesová zkratka snímku.',
 
 		customFilenameFormat: 'Vlastní formát názvu souboru',
 		customFilenameFormatDescription:
@@ -528,6 +532,8 @@ const cs: Catalog = {
 			'Dlouhá expozice vyžaduje telemetrii záznamu z iRacingu. Zkontrolujte, že simulátor běží a je v relaci.',
 		windowNotFound: 'Okno iRacingu nebylo nalezeno.',
 		cancelled: 'Snímání zrušeno.',
+		simExited:
+			'iRacing se během expozice ukončil. Při velmi vysokých rozlišeních k tomu může dojít, když mu dojde videopaměť (VRAM).',
 		seekTimeout:
 			'Záznam nedosáhl snímku {frame} včas. Možná se ještě načítá.',
 		warmUpFellBack:

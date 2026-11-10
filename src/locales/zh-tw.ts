@@ -85,6 +85,10 @@ const zhTW: Catalog = {
 		selectFolder: '選擇資料夾',
 		screenshotKeybind: '截圖快速鍵',
 		editBind: '變更快速鍵',
+		keybindRejected:
+			'{keys} 無法作為截圖快速鍵，可能已有其他應用程式在使用。{previous} 仍然有效。',
+		keybindRejectedNoneActive:
+			'{keys} 無法作為截圖快速鍵，可能已有其他應用程式在使用。目前沒有有效的截圖快速鍵。',
 
 		customFilenameFormat: '自訂檔名格式',
 		customFilenameFormatDescription:
@@ -516,6 +520,8 @@ const zhTW: Catalog = {
 			'長時間曝光需要來自 iRacing 的重播遙測資料。請確認模擬器正在執行，而且位於某個賽段中。',
 		windowNotFound: '找不到 iRacing 視窗。',
 		cancelled: '已取消擷取。',
+		simExited:
+			'iRacing 在曝光期間結束。在非常高的解析度下，若視訊記憶體 (VRAM) 不足就可能發生這種情況。',
 		seekTimeout: '重播沒能及時到達第 {frame} 格，它可能還在載入。',
 		warmUpFellBack:
 			'特效預熱之後，重播沒能及時放慢，因此這張照片是在沒有預熱的情況下拍攝的。軌跡起頭可能缺少煙霧、塵土和車輪旋轉的效果。',

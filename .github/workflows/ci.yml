@@ -39,8 +39,8 @@ jobs:
             # `npm run lint` is `eslint --fix ./` — it writes. CI must use the
             # non-writing variant so a failure is reported, not silently repaired.
             #
-            # Blocking: the error count is zero. 28 warnings remain (21 no-explicit-any
-            # plus 7 Vue advisories) and do not fail the step — `eslint` only exits
+            # Blocking: the error count is zero. 31 warnings remain (21 no-explicit-any
+            # plus 10 Vue advisories) and do not fail the step — `eslint` only exits
             # non-zero on errors.
             - name: Lint
               run: npm run lint:check
@@ -53,6 +53,13 @@ jobs:
 
             - name: Test
               run: npm test
+
+            # The production bundle (electron-vite: rollup + Sass) was otherwise
+            # first built by the release workflow, after the version bump had been
+            # tagged and pushed. esbuild strips types without checking them, so an
+            # unresolvable import or a Sass error passes every step above.
+            - name: Build
+              run: npm run pack
 
     # native/wgc-capture.node is committed, so nothing in `check` would notice
     # src/lib.rs failing to compile. This job is what catches that.

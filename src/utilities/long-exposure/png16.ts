@@ -21,7 +21,7 @@
 
 import fs from 'node:fs';
 import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { finished, pipeline } from 'node:stream/promises';
 import zlib from 'node:zlib';
 
 const PNG_SIGNATURE = Buffer.from([
@@ -225,6 +225,9 @@ export async function writePng16(
 	const file = fs.createWriteStream(filePath);
 	try {
 		await new Promise<void>((resolve, reject) => {
+			// Also what keeps an open failure (a missing folder, access denied)
+			// from being an 'error' event with no listener: it stays attached
+			// until the stream's first error, whenever that comes.
 			file.once('error', reject);
 			file.write(
 				Buffer.concat([PNG_SIGNATURE, ihdr(width, height), srgbChunks()]),
@@ -247,12 +250,24 @@ export async function writePng16(
 			{ end: false }
 		);
 
-		await new Promise<void>((resolve, reject) => {
-			file.end(chunk('IEND', Buffer.alloc(0)), () => resolve());
-			file.once('error', reject);
-		});
+		// `finished` settles only once everything buffered has reached the file
+		// and it is closed, and rejects if ANY write failed — including the ones
+		// still queued when the pipeline above resolved (end: false resolves as
+		// soon as the last chunk is handed over, not when it is written). This
+		// used to be end()'s callback with its error argument ignored, so a master
+		// missing its tail was reported as written.
+		file.end(chunk('IEND', Buffer.alloc(0)));
+		await finished(file);
 	} catch (error) {
+		// Never leave a truncated master behind looking like a finished one: it
+		// would sit in the screenshot folder, and the gallery, as a broken image.
 		file.destroy();
+		if (!file.closed) {
+			await new Promise<void>((resolve) =>
+				file.once('close', () => resolve())
+			);
+		}
+		await fs.promises.rm(filePath, { force: true }).catch(() => {});
 		throw error;
 	}
 }

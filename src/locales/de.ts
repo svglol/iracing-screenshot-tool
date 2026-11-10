@@ -81,6 +81,10 @@ const de: Catalog = {
 		selectFolder: 'Ordner wählen',
 		screenshotKeybind: 'Screenshot-Tastenkombination',
 		editBind: 'Belegung ändern',
+		keybindRejected:
+			'{keys} kann nicht als Screenshot-Tastenkombination verwendet werden – möglicherweise nutzt eine andere App sie bereits. {previous} bleibt aktiv.',
+		keybindRejectedNoneActive:
+			'{keys} kann nicht als Screenshot-Tastenkombination verwendet werden – möglicherweise nutzt eine andere App sie bereits. Derzeit ist keine Screenshot-Tastenkombination aktiv.',
 
 		customFilenameFormat: 'Eigenes Dateinamensformat',
 		customFilenameFormatDescription:
@@ -527,6 +531,8 @@ const de: Catalog = {
 			'Langzeitbelichtung benötigt Replay-Telemetrie von iRacing. Prüfe, ob der Simulator läuft und sich in einer Session befindet.',
 		windowNotFound: 'iRacing-Fenster nicht gefunden.',
 		cancelled: 'Aufnahme abgebrochen.',
+		simExited:
+			'iRacing wurde während der Belichtung beendet. Bei sehr hohen Auflösungen kann das passieren, wenn der Grafikspeicher (VRAM) ausgeht.',
 		seekTimeout:
 			'Das Replay hat Bild {frame} nicht rechtzeitig erreicht. Es lädt möglicherweise noch.',
 		warmUpFellBack:

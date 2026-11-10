@@ -92,7 +92,7 @@
 							type="text"
 							:model-value="screenshotKeybind"
 						/>
-						<p class="control">
+						<p ref="keybindControl" class="control">
 							<o-button
 								class="button is-primary settings-action"
 								:loading="bindingKey"
@@ -102,6 +102,9 @@
 							</o-button>
 						</p>
 					</o-field>
+					<p v-if="keybindNotice" class="description">
+						{{ keybindNotice }}
+					</p>
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
@@ -401,11 +404,27 @@ import {
 } from '../../utilities/reshade-config';
 import { applyLocale } from '../i18n';
 import {
+	acceleratorFromKeyPress,
+	modifiersOfKey,
+	sameAccelerator,
+	modifiersOf,
+} from '../../utilities/accelerator';
+import {
 	describeUpdate,
 	initialUpdateState,
 	updateActionChannel,
 } from '../../utilities/update-decisions';
 const { ipcRenderer, shell } = require('electron');
+
+// The payload types differ per channel; `never` lets each handler declare its own.
+type IpcHandler = (event: unknown, ...args: never[]) => void;
+
+// VK_SNAPSHOT: Windows takes PrintScreen's press itself, so a page sees only
+// its release.
+const PRINT_SCREEN_KEY_CODE = 44;
+// How long before a key release that completes the hotkey capture a modifier
+// may have been let go and still be part of the chord.
+const MODIFIER_RELEASE_GRACE_MS = 500;
 const path = require('path');
 
 export default {
@@ -420,6 +439,18 @@ export default {
 			screenshotFolder: config.get('screenshotFolder'),
 			screenshotKeybind: config.get('screenshotKeybind'),
 			bindingKey: false,
+			// Why the last attempted binding was refused; null otherwise.
+			keybindNotice: null as string | null,
+			// The window listeners of an in-progress key capture, hoisted so it
+			// can be stopped from outside (unmount) — see stopKeybindCapture.
+			keybindListeners: null as {
+				keydown: (e: KeyboardEvent) => void;
+				keyup: (e: KeyboardEvent) => void;
+				abandon: (e: Event) => void;
+			} | null,
+			// ipcRenderer listeners registered in created(), hoisted so
+			// beforeUnmount can remove them (same pattern as TitleBar).
+			ipcListeners: [] as Array<[string, IpcHandler]>,
 			cropTopLeft: config.get('cropTopLeft'),
 			disableTooltips: config.get('disableTooltips'),
 			screenWidth: config.get('defaultScreenWidth'),
@@ -723,14 +754,19 @@ export default {
 				config.set('defaultScreenHeight', value);
 			}
 		},
+		// Number.isFinite, not `!== ''`: a number input can hold text parseInt
+		// cannot read (".5", "-"), and the NaN that produced used to be saved —
+		// corrupting the settings file (see main/settings-guards.ts).
 		screenLeft() {
-			if (this.screenLeft !== '') {
-				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
+			const value = parseInt(this.screenLeft, 10);
+			if (Number.isFinite(value)) {
+				config.set('defaultScreenLeft', value);
 			}
 		},
 		screenTop() {
-			if (this.screenTop !== '') {
-				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
+			const value = parseInt(this.screenTop, 10);
+			if (Number.isFinite(value)) {
+				config.set('defaultScreenTop', value);
 			}
 		},
 	},
@@ -751,23 +787,20 @@ export default {
 
 		ipcRenderer.send('request-iracing-status', '');
 
-		ipcRenderer.on('iracing-status', (event, arg) => {
+		// Removed again in beforeUnmount. This component used to be a v-show
+		// modal that lived for the whole app, but its only host now is the
+		// /settings route, which unmounts on every navigation away — so each visit
+		// left four more listeners, each holding the dead component alive.
+		this.listenIpc('iracing-status', (event, arg) => {
 			this.iracingOpen = arg;
 		});
-
-		ipcRenderer.on('iracing-connected', () => {
+		this.listenIpc('iracing-connected', () => {
 			this.iracingOpen = true;
 		});
-
-		ipcRenderer.on('iracing-disconnected', () => {
+		this.listenIpc('iracing-disconnected', () => {
 			this.iracingOpen = false;
 		});
-
-		// Not removed on unmount on purpose: under the v-show Oruga modal this
-		// component stays mounted for the app lifetime (see the screenWidth watcher
-		// note above), so created() runs once and this is a single listener, not a
-		// leak per open.
-		ipcRenderer.on('update:state', (event, state) => {
+		this.listenIpc('update:state', (event, state) => {
 			this.update = state;
 			this.updateNotice = null;
 		});
@@ -780,7 +813,20 @@ export default {
 				// Main not ready; the broadcast will catch us up.
 			});
 	},
+	beforeUnmount() {
+		// A capture left running would keep listening on `window` after the page
+		// is gone, so the next shortcut typed anywhere became the global hotkey.
+		this.stopKeybindCapture();
+		for (const [channel, handler] of this.ipcListeners) {
+			ipcRenderer.removeListener(channel, handler);
+		}
+		this.ipcListeners = [];
+	},
 	methods: {
+		listenIpc(channel: string, handler: IpcHandler) {
+			ipcRenderer.on(channel, handler);
+			this.ipcListeners.push([channel, handler]);
+		},
 		async checkForUpdates() {
 			this.updateNotice = null;
 			try {
@@ -816,24 +862,27 @@ export default {
 		restoreNow() {
 			const w = parseInt(this.screenWidth, 10);
 			const h = parseInt(this.screenHeight, 10);
-			// Live-resize iRacing now (what the button is for)…
-			ipcRenderer.send('defaultScreenWidth', w);
-			ipcRenderer.send('defaultScreenHeight', h);
-			ipcRenderer.send('defaultScreenLeft', parseInt(this.screenLeft, 10));
-			ipcRenderer.send('defaultScreenTop', parseInt(this.screenTop, 10));
-			// …and persist, so a value left untouched since load (no watcher fired)
-			// is still saved when Restore Now is clicked (cq-renderer-settings-ui#1).
-			if (w >= 1080 && w <= 10320) {
-				config.set('defaultScreenWidth', w);
-			}
-			if (h >= 720 && h <= 10320) {
-				config.set('defaultScreenHeight', h);
-			}
-			if (this.screenLeft !== '') {
-				config.set('defaultScreenLeft', parseInt(this.screenLeft, 10));
-			}
-			if (this.screenTop !== '') {
-				config.set('defaultScreenTop', parseInt(this.screenTop, 10));
+			const l = parseInt(this.screenLeft, 10);
+			const t = parseInt(this.screenTop, 10);
+			// Only values the watchers above would also save. Restore Now used to
+			// send every field unchecked, so an empty or half-typed one moved
+			// iRacing to a NaN (= 0) size or position for the rest of the session.
+			const geometry = {
+				defaultScreenWidth: w >= 1080 && w <= 10320 ? w : null,
+				defaultScreenHeight: h >= 720 && h <= 10320 ? h : null,
+				defaultScreenLeft: Number.isFinite(l) ? l : null,
+				defaultScreenTop: Number.isFinite(t) ? t : null,
+			};
+			for (const [key, value] of Object.entries(geometry)) {
+				if (value === null) {
+					continue;
+				}
+				// Live-resize iRacing now (what the button is for)…
+				ipcRenderer.send(key, value);
+				// …and persist, so a value left untouched since load (no watcher
+				// fired) is still saved when Restore Now is clicked
+				// (cq-renderer-settings-ui#1).
+				config.set(key, value);
 			}
 		},
 		openFolderDialog() {
@@ -870,49 +919,212 @@ export default {
 					console.log(err);
 				});
 		},
-		bindScreenshotKeybind() {
-			const keys = [];
-			const keysReleased = [];
+		// Capture the next key combination as an Electron accelerator. Completes
+		// on the first non-modifier key (on keydown, or on keyup when a global
+		// hot key took the keydown — see below); Escape, a click anywhere or
+		// leaving the window cancels. The old capture
+		// joined raw KeyboardEvent.key values and waited for every key to be
+		// released, which could produce strings Electron cannot register ('Control'
+		// alone, 'Control+ArrowUp') or never finish (Shift released first).
+		// `trigger` is the event that started the capture. Oruga's button emits
+		// its click during the Enter/Space KEYDOWN that activates it, and a
+		// (bubble-phase) window listener added there received that same keydown —
+		// which used to bind bare Enter (or Space) as the global hotkey, taking it
+		// from every application.
+		bindScreenshotKeybind(trigger?: Event) {
+			this.stopKeybindCapture();
+			this.keybindNotice = null;
 			this.bindingKey = true;
 
-			const onKeyDown = (e) => {
-				if (!this.bindingKey) {
-					window.removeEventListener('keydown', onKeyDown);
+			// When each modifier was last let go during this capture. A capture
+			// that completes on a key RELEASE counts a modifier released just
+			// before it — Ctrl let go a beat before PrintScreen — but not one from
+			// long ago (an earlier Alt+Tab).
+			const releasedAt = new Map<string, number>();
+			// The modifiers whose press this capture saw.
+			const pressed = new Set<string>();
+			// The key that pressed Edit Bind, if a key did. Its release is still
+			// to come, and it is not a key press of this capture.
+			let triggerCode =
+				trigger instanceof KeyboardEvent ? trigger.code : null;
+			const onKey = (e: KeyboardEvent) => {
+				if (e === trigger) {
 					return;
 				}
-
-				if (!keys.includes(e.key)) {
-					keys.push(e.key);
-					this.screenshotKeybind = keys.join('+');
-				}
-			};
-
-			const onKeyUp = (e) => {
-				if (!this.bindingKey) {
-					window.removeEventListener('keyup', onKeyUp);
+				// The armed capture owns the keyboard. Its listeners run first (the
+				// window, capture phase) and stop each key there: vue3-shortkey's
+				// document listeners used to take Delete, F1 and Ctrl+C before the
+				// capture saw them — running Home's delete of the selected
+				// screenshot instead of binding Delete.
+				e.preventDefault();
+				e.stopPropagation();
+				if (e.repeat) {
 					return;
 				}
-
-				if (!keys.includes(e.key)) {
-					keys.push(e.key);
-					this.screenshotKeybind = keys.join('+');
+				if (e.type === 'keydown') {
+					for (const modifier of modifiersOfKey(e.key)) {
+						pressed.add(modifier);
+					}
 				}
-
-				keysReleased.push(e.key);
-				if (keysReleased.length === keys.length) {
-					this.bindingKey = false;
-					ipcRenderer.send('screenshotKeybind-change', {
-						newValue: this.screenshotKeybind,
-						oldValue: config.get('screenshotKeybind'),
-					});
-					config.set('screenshotKeybind', this.screenshotKeybind);
-					window.removeEventListener('keyup', onKeyUp);
-					window.removeEventListener('keydown', onKeyDown);
+				const released = e.type === 'keyup' ? modifiersOfKey(e.key) : [];
+				for (const modifier of released) {
+					releasedAt.set(modifier, Date.now());
 				}
+				// A non-modifier key goes up without the capture having seen it go
+				// down (its keydown would have completed the capture).
+				const releaseOnly = e.type === 'keyup' && released.length === 0;
+				if (releaseOnly && triggerCode !== null && e.code === triggerCode) {
+					triggerCode = null;
+					return;
+				}
+				const recentlyReleased = [...releasedAt]
+					.filter(([, at]) => Date.now() - at <= MODIFIER_RELEASE_GRACE_MS)
+					.map(([modifier]) => modifier);
+				const result = acceleratorFromKeyPress(
+					e,
+					releaseOnly ? recentlyReleased : []
+				);
+				// Such a release IS the press when a global hot key took the
+				// keydown: Windows' own for PrintScreen, or RegisterHotKey for a
+				// combination another application — or this one — holds. Ignoring
+				// those left the capture armed, silently, for whatever was typed
+				// next. But most releases of that kind are of a key pressed
+				// elsewhere: before the capture began (a Tab rolled into the Enter
+				// that pressed Edit Bind), in a native dialog, in another window
+				// before Alt+Tab. Binding those took Tab or Enter from every
+				// application.
+				//
+				// So PrintScreen completes the capture, and so does this app's own
+				// hotkey (registered again, unchanged). A chord with a modifier
+				// pressed during this capture (the keydowns of modifiers do reach
+				// the page) is another application's hot key: it is refused here,
+				// never registered — registering it can only fail, or, when a
+				// modifier let go early is missing from it, succeed for a chord
+				// that was never pressed (Ctrl+S out of Ctrl+Shift+S). Any other
+				// release is ignored.
+				if (releaseOnly) {
+					const isPrintScreen =
+						e.keyCode === PRINT_SCREEN_KEY_CODE ||
+						e.code === 'PrintScreen';
+					const isOwnHotkey =
+						result.kind === 'accelerator' &&
+						sameAccelerator(
+							result.accelerator,
+							config.get('screenshotKeybind')
+						);
+					if (!isPrintScreen && !isOwnHotkey) {
+						const modifierPressedHere = [
+							...modifiersOf(e),
+							...recentlyReleased,
+						].some((modifier) => pressed.has(modifier));
+						if (modifierPressedHere && result.kind === 'accelerator') {
+							this.stopKeybindCapture();
+							this.rejectKeybind(result.accelerator);
+						}
+						return;
+					}
+				}
+				if (result.kind === 'modifier') {
+					this.screenshotKeybind = result.modifiers.join('+');
+					return;
+				}
+				this.stopKeybindCapture();
+				if (result.kind === 'cancel') {
+					this.screenshotKeybind = config.get('screenshotKeybind');
+					return;
+				}
+				if (result.kind === 'unsupported') {
+					this.rejectKeybind(
+						[...modifiersOf(e), e.key].filter(Boolean).join('+')
+					);
+					return;
+				}
+				void this.applyKeybind(result.accelerator);
 			};
-
-			window.addEventListener('keydown', onKeyDown);
-			window.addEventListener('keyup', onKeyUp);
+			// Like Escape: nothing that follows a click or a trip to another
+			// window is an answer to "press the keys". A click on Edit Bind's own
+			// control is not abandoning it: the second click of a double-click
+			// lands there (the loading button takes no pointer events) and would
+			// otherwise switch off the capture the first click armed.
+			const abandon = (e: Event) => {
+				const control = this.$refs.keybindControl as
+					| HTMLElement
+					| undefined;
+				if (
+					e.type === 'pointerdown' &&
+					e.target instanceof Node &&
+					control?.contains(e.target)
+				) {
+					return;
+				}
+				this.stopKeybindCapture();
+				this.screenshotKeybind = config.get('screenshotKeybind');
+			};
+			this.keybindListeners = { keydown: onKey, keyup: onKey, abandon };
+			window.addEventListener('keydown', onKey, true);
+			window.addEventListener('keyup', onKey, true);
+			window.addEventListener('blur', abandon);
+			window.addEventListener('pointerdown', abandon, true);
+		},
+		stopKeybindCapture() {
+			if (this.keybindListeners) {
+				window.removeEventListener(
+					'keydown',
+					this.keybindListeners.keydown,
+					true
+				);
+				window.removeEventListener(
+					'keyup',
+					this.keybindListeners.keyup,
+					true
+				);
+				window.removeEventListener('blur', this.keybindListeners.abandon);
+				window.removeEventListener(
+					'pointerdown',
+					this.keybindListeners.abandon,
+					true
+				);
+				this.keybindListeners = null;
+			}
+			this.bindingKey = false;
+		},
+		// Main registers it and, only if that worked, saves it. A refusal (a key
+		// another app owns, or one Electron cannot register) puts the previous
+		// hotkey back, and says so.
+		async applyKeybind(accelerator: string) {
+			this.screenshotKeybind = accelerator;
+			let result: { ok: boolean; accelerator: string | null } | null = null;
+			try {
+				result = await ipcRenderer.invoke('screenshotKeybind-change', {
+					newValue: accelerator,
+				});
+			} catch {
+				result = null;
+			}
+			if (result?.ok) {
+				this.screenshotKeybind = result.accelerator;
+				return;
+			}
+			this.rejectKeybind(
+				accelerator,
+				result ? result.accelerator : undefined
+			);
+		},
+		// `kept`: the hotkey main reports still registered, null when it could
+		// not put the previous one back either (another app took it), undefined
+		// when main was not asked.
+		rejectKeybind(attempted: string, kept?: string | null) {
+			const previous = kept || config.get('screenshotKeybind');
+			this.screenshotKeybind = previous;
+			this.keybindNotice =
+				kept === null
+					? this.$t('settings.keybindRejectedNoneActive', {
+							keys: attempted,
+						})
+					: this.$t('settings.keybindRejected', {
+							keys: attempted,
+							previous,
+						});
 		},
 		insertField(token) {
 			this.filenameFormat = (this.filenameFormat || '') + token;

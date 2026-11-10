@@ -99,6 +99,10 @@ const ar: Catalog = {
 		selectFolder: 'اختيار مجلد',
 		screenshotKeybind: 'اختصار لقطة الشاشة',
 		editBind: 'تعديل الاختصار',
+		keybindRejected:
+			'لا يمكن استخدام {keys} كاختصار للقطة الشاشة — ربما يستخدمه تطبيق آخر بالفعل. لا يزال {previous} مفعّلًا.',
+		keybindRejectedNoneActive:
+			'لا يمكن استخدام {keys} كاختصار للقطة الشاشة — ربما يستخدمه تطبيق آخر بالفعل. لا يوجد اختصار مفعّل للقطة الشاشة حاليًا.',
 
 		customFilenameFormat: 'تنسيق مخصص لاسم الملف',
 		// The tokens here are literal text the user types, not placeholders to be
@@ -553,6 +557,8 @@ const ar: Catalog = {
 			'يحتاج التعريض الطويل إلى بيانات القياس عن بُعد للإعادة من iRacing. تأكد من أن المحاكي يعمل وأنه داخل جلسة.',
 		windowNotFound: 'لم يُعثر على نافذة iRacing.',
 		cancelled: 'تم إلغاء الالتقاط.',
+		simExited:
+			'أُغلق iRacing أثناء التعريض. عند الدقات العالية جدًا قد يحدث هذا إذا نفدت ذاكرة الفيديو (VRAM).',
 		seekTimeout:
 			'لم تصل الإعادة إلى الإطار {frame} في الوقت المحدد. وقد تكون ما تزال قيد التحميل.',
 		warmUpFellBack:

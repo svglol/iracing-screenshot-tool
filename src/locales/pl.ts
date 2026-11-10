@@ -87,6 +87,10 @@ const pl: Catalog = {
 		selectFolder: 'Wybierz folder',
 		screenshotKeybind: 'Skrót klawiszowy zrzutu',
 		editBind: 'Zmień skrót',
+		keybindRejected:
+			'{keys} nie może być skrótem klawiszowym zrzutu — być może używa go już inna aplikacja. Nadal działa {previous}.',
+		keybindRejectedNoneActive:
+			'{keys} nie może być skrótem klawiszowym zrzutu — być może używa go już inna aplikacja. Obecnie nie działa żaden skrót klawiszowy zrzutu.',
 
 		customFilenameFormat: 'Własny format nazwy pliku',
 		customFilenameFormatDescription:
@@ -537,6 +541,8 @@ const pl: Catalog = {
 			'Długie naświetlanie wymaga telemetrii powtórki z iRacing. Sprawdź, czy symulator jest uruchomiony i znajduje się w sesji.',
 		windowNotFound: 'Nie znaleziono okna iRacing.',
 		cancelled: 'Przechwytywanie anulowane.',
+		simExited:
+			'iRacing zamknął się w trakcie naświetlania. Przy bardzo wysokich rozdzielczościach może się to zdarzyć, gdy zabraknie pamięci wideo (VRAM).',
 		seekTimeout:
 			'Powtórka nie dotarła na czas do klatki {frame}. Może się jeszcze wczytywać.',
 		warmUpFellBack:

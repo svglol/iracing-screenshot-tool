@@ -79,6 +79,10 @@ const es: Catalog = {
 		selectFolder: 'Elegir carpeta',
 		screenshotKeybind: 'Atajo de captura',
 		editBind: 'Editar atajo',
+		keybindRejected:
+			'{keys} no se puede usar como atajo de captura; puede que otra aplicación ya lo esté usando. {previous} sigue activo.',
+		keybindRejectedNoneActive:
+			'{keys} no se puede usar como atajo de captura; puede que otra aplicación ya lo esté usando. Ahora no hay ningún atajo de captura activo.',
 
 		customFilenameFormat: 'Formato de nombre personalizado',
 		customFilenameFormatDescription:
@@ -521,6 +525,8 @@ const es: Catalog = {
 			'La exposición larga necesita la telemetría de repetición de iRacing. Comprueba que el simulador está en marcha y dentro de una sesión.',
 		windowNotFound: 'No se encontró la ventana de iRacing.',
 		cancelled: 'Captura cancelada.',
+		simExited:
+			'iRacing se cerró durante la exposición. A resoluciones muy altas esto puede ocurrir si se queda sin memoria de vídeo (VRAM).',
 		seekTimeout:
 			'La repetición no llegó al fotograma {frame} a tiempo. Puede que aún se esté cargando.',
 		warmUpFellBack:

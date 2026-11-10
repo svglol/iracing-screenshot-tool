@@ -835,11 +835,26 @@ describe('normalizeFileKey', () => {
 		expect(key).toContain('photo.png');
 	});
 
-	test('normalizes path separators', () => {
-		const key1 = normalizeFileKey('C:\\Users\\Test\\photo.png');
-		const key2 = normalizeFileKey('C:\\Users\\Test/photo.png');
-		expect(key1).toBe(key2);
-	});
+	// The keys come from the HOST's readdir and are only compared with each
+	// other, so normalisation follows the host's path rules: a backslash is a
+	// separator only on Windows (where CI runs this).
+	test.runIf(process.platform === 'win32')(
+		'normalizes path separators',
+		() => {
+			const key1 = normalizeFileKey('C:\\Users\\Test\\photo.png');
+			const key2 = normalizeFileKey('C:\\Users\\Test/photo.png');
+			expect(key1).toBe(key2);
+		}
+	);
+
+	test.skipIf(process.platform === 'win32')(
+		'normalizes dot segments and case on a POSIX host',
+		() => {
+			expect(normalizeFileKey('/Shots/a/../Photo.PNG')).toBe(
+				normalizeFileKey('/shots/photo.png')
+			);
+		}
+	);
 });
 
 // ---------------------------------------------------------------------------

@@ -79,6 +79,10 @@ const it: Catalog = {
 		selectFolder: 'Scegli cartella',
 		screenshotKeybind: 'Scorciatoia screenshot',
 		editBind: 'Modifica scorciatoia',
+		keybindRejected:
+			'{keys} non può essere usato come scorciatoia screenshot: potrebbe essere già in uso da un’altra app. {previous} resta attivo.',
+		keybindRejectedNoneActive:
+			'{keys} non può essere usato come scorciatoia screenshot: potrebbe essere già in uso da un’altra app. Nessuna scorciatoia screenshot è attiva.',
 
 		customFilenameFormat: 'Formato nome file personalizzato',
 		customFilenameFormatDescription:
@@ -523,6 +527,8 @@ const it: Catalog = {
 			'La lunga esposizione richiede la telemetria di replay di iRacing. Verifica che il simulatore sia in esecuzione e all’interno di una sessione.',
 		windowNotFound: 'Finestra di iRacing non trovata.',
 		cancelled: 'Cattura annullata.',
+		simExited:
+			'iRacing si è chiuso durante l’esposizione. Alle risoluzioni molto alte può succedere se esaurisce la memoria video (VRAM).',
 		seekTimeout:
 			'Il replay non ha raggiunto il fotogramma {frame} in tempo. Potrebbe essere ancora in caricamento.',
 		warmUpFellBack:
