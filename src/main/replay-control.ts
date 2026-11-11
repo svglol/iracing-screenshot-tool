@@ -28,8 +28,8 @@
 //
 // All deps are injected so the whole state machine is unit-testable with no sim.
 
-import { createLogger } from '../../utilities/logger';
-import { replayFrameWallMs } from '../../utilities/long-exposure/exposure-math';
+import { createLogger } from '../utilities/logger';
+import { replayFrameWallMs } from '../utilities/long-exposure/exposure-math';
 
 const log = createLogger('long-exposure/replay');
 

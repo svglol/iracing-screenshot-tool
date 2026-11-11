@@ -60,7 +60,7 @@ import {
 	readReplayState,
 	tapeEndFrame,
 	type ReplayState,
-} from './long-exposure/replay-control';
+} from './replay-control';
 import { executeRecipe } from './long-exposure/capture-session';
 import { writeLongExposure } from './long-exposure/output';
 import {

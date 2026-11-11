@@ -45,13 +45,13 @@ import {
 import { summarizeFrameContent } from '../../utilities/long-exposure/frame-content';
 import { assessLongExposureVram } from '../../utilities/long-exposure/vram-budget';
 import type { Dimensions, VramInfo } from '../../utilities/vram-prediction';
-import type { PlaybackSnapshot, ReplayState } from './replay-control';
+import type { PlaybackSnapshot, ReplayState } from '../replay-control';
 import { t } from '../../utilities/i18n';
 import {
 	ReplayController,
 	capturePlaybackSnapshot,
 	tapeEndFrame,
-} from './replay-control';
+} from '../replay-control';
 import { createLogger } from '../../utilities/logger';
 
 const log = createLogger('long-exposure/session');

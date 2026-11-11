@@ -21,16 +21,52 @@ export const TRK_NOT_IN_WORLD = -1;
 export interface GridDriver {
 	carIdx: number;
 	carNumber: string;
-	// The car number as the camera broadcast expects it. iRacing encodes leading
-	// zeros into it ("007" and "7" are different cars), so this — never a parse of
-	// `carNumber` — is what goes to changeCameraNumber.
-	carNumberRaw: number;
+	// The car number as the camera broadcast (irsdk_BroadcastCamSwitchNum) expects
+	// it, leading zeros encoded — see encodeCameraCarNumber. Null when the session
+	// gives nothing usable; such a car cannot be switched to.
+	cameraNumber: number | null;
 	driverName: string;
 	isPaceCar: boolean;
 	isSpectator: boolean;
 	// The class's estimated lap time in seconds, the position search's first guess
-	// at how fast this car covers the lap. Null when the session does not say.
+	// at how fast this car covers the lap. Null when the session does not give a
+	// plausible one.
 	estLapTimeSec: number | null;
+}
+
+// A class lap-time estimate outside this range is not an estimate. Measured on
+// hardware 2026-11-11: an AI race at Fuji reported CarClassEstLapTime = 1 for
+// every car, which taken at face value makes the position search step nine
+// frames at a time and run out of seeks on every car.
+export const MIN_PLAUSIBLE_LAP_SEC = 10;
+export const MAX_PLAUSIBLE_LAP_SEC = 3600;
+
+// irsdk_padCarNum, from the SDK's irsdk_utils.cpp: the camera broadcast tells
+// "007" from "7" by adding 1000 × (digits + leading zeros). irsdk-node passes
+// the number through untouched, so the encoding is ours.
+export function padCarNum(num: number, zero: number): number {
+	let numPlace = num > 99 ? 3 : num > 9 ? 2 : 1;
+	if (zero) {
+		numPlace += zero;
+		return num + 1000 * numPlace;
+	}
+	return num;
+}
+
+// The camera-broadcast number for a car, from its displayed number ("007").
+// CarNumberRaw is only the fallback: every session seen so far had no leading
+// zeros, so whether iRacing pre-encodes them in it is unconfirmed — the display
+// string is unambiguous. The grid verifies every switch against CamCarIdx anyway.
+export function encodeCameraCarNumber(
+	carNumber: string,
+	carNumberRaw: number | null
+): number | null {
+	const display = carNumber.trim();
+	if (/^\d{1,3}$/.test(display)) {
+		const value = Number(display);
+		return padCarNum(value, display.length - String(value).length);
+	}
+	return carNumberRaw !== null && carNumberRaw >= 0 ? carNumberRaw : null;
 }
 
 function num(value: unknown): number | null {
@@ -68,10 +104,11 @@ export function readGridDrivers(sessionData: unknown): GridDriver[] {
 			continue;
 		}
 		const estLapTime = num(d?.CarClassEstLapTime);
+		const carNumber = str(d?.CarNumber);
 		out.push({
 			carIdx,
-			carNumber: str(d?.CarNumber),
-			carNumberRaw: num(d?.CarNumberRaw) ?? -1,
+			carNumber,
+			cameraNumber: encodeCameraCarNumber(carNumber, num(d?.CarNumberRaw)),
 			driverName: str(d?.UserName),
 			isPaceCar:
 				d?.CarIsPaceCar === 1 ||
@@ -79,7 +116,11 @@ export function readGridDrivers(sessionData: unknown): GridDriver[] {
 				(paceCarIdx !== null && paceCarIdx >= 0 && carIdx === paceCarIdx),
 			isSpectator: d?.IsSpectator === 1 || d?.IsSpectator === true,
 			estLapTimeSec:
-				estLapTime !== null && estLapTime > 0 ? estLapTime : null,
+				estLapTime !== null &&
+				estLapTime >= MIN_PLAUSIBLE_LAP_SEC &&
+				estLapTime <= MAX_PLAUSIBLE_LAP_SEC
+					? estLapTime
+					: null,
 		});
 	}
 	return out;
@@ -147,12 +188,18 @@ export function carLapDistPct(
 		: null;
 }
 
-export type GridSkipReason = 'pace-car' | 'spectator' | 'not-in-world';
+export type GridSkipReason =
+	| 'pace-car'
+	| 'spectator'
+	| 'not-in-world'
+	// No car number the camera broadcast can be given, so the camera cannot be
+	// switched to it. Never the reference car, which needs no switch.
+	| 'no-car-number';
 
 export interface GridCar {
 	carIdx: number;
 	carNumber: string;
-	carNumberRaw: number;
+	cameraNumber: number | null;
 	driverName: string;
 	estLapTimeSec: number | null;
 	// Race position at the starting moment; null before the green flag, or for a
@@ -243,13 +290,17 @@ export function buildGridRoster(
 			skip('not-in-world');
 			continue;
 		}
+		if (driver.cameraNumber === null && driver.carIdx !== referenceCarIdx) {
+			skip('no-car-number');
+			continue;
+		}
 
 		const position = telemetry.racePosition?.[driver.carIdx];
 		const laps = telemetry.lapCompleted?.[driver.carIdx];
 		ranked.push({
 			carIdx: driver.carIdx,
 			carNumber: driver.carNumber,
-			carNumberRaw: driver.carNumberRaw,
+			cameraNumber: driver.cameraNumber,
 			driverName: driver.driverName,
 			estLapTimeSec: driver.estLapTimeSec,
 			// iRacing reports 0 for "no position yet".

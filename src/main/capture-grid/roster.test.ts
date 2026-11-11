@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildGridRoster,
 	carLapDistPct,
+	encodeCameraCarNumber,
+	padCarNum,
 	parseTrackLengthMeters,
 	readGridDrivers,
 	readGridTelemetry,
@@ -16,7 +18,7 @@ function driver(
 	return {
 		carIdx,
 		carNumber: String(carIdx),
-		carNumberRaw: carIdx,
+		cameraNumber: carIdx,
 		driverName: `Driver ${carIdx}`,
 		isPaceCar: false,
 		isSpectator: false,
@@ -99,7 +101,7 @@ describe('readGridDrivers', () => {
 		expect(drivers[2].isPaceCar).toBe(true); // via CarIsPaceCar
 		expect(drivers[1]).toMatchObject({
 			carNumber: '007',
-			carNumberRaw: 3007,
+			cameraNumber: 3007,
 			estLapTimeSec: 92.5,
 			isPaceCar: false,
 		});
@@ -112,6 +114,19 @@ describe('readGridDrivers', () => {
 		expect(readGridDrivers({ DriverInfo: {} })).toEqual([]);
 	});
 
+	it('discards an implausible class lap-time estimate', () => {
+		// Hardware, 2026-11-11: an AI race at Fuji reported 1 for every car.
+		const drivers = readGridDrivers({
+			DriverInfo: {
+				Drivers: [
+					{ CarIdx: 1, CarNumber: '3', CarClassEstLapTime: 1 },
+					{ CarIdx: 2, CarNumber: '4', CarClassEstLapTime: 101.2 },
+				],
+			},
+		});
+		expect(drivers.map((d) => d.estLapTimeSec)).toEqual([null, 101.2]);
+	});
+
 	it('does not treat a PaceCarIdx of -1 as car 0', () => {
 		const [d] = readGridDrivers({
 			DriverInfo: {
@@ -120,6 +135,30 @@ describe('readGridDrivers', () => {
 			},
 		});
 		expect(d.isPaceCar).toBe(false);
+	});
+});
+
+describe('car numbers for the camera broadcast', () => {
+	it('matches irsdk_padCarNum', () => {
+		expect(padCarNum(1, 2)).toBe(3001); // the SDK header's own example: #001
+		expect(padCarNum(7, 0)).toBe(7);
+		expect(padCarNum(12, 1)).toBe(3012);
+		expect(padCarNum(0, 1)).toBe(2000);
+	});
+
+	it('encodes leading zeros from the displayed number', () => {
+		expect(encodeCameraCarNumber('7', 7)).toBe(7);
+		expect(encodeCameraCarNumber('007', 7)).toBe(3007);
+		expect(encodeCameraCarNumber('07', 7)).toBe(2007);
+		expect(encodeCameraCarNumber('194', 194)).toBe(194);
+		expect(encodeCameraCarNumber('0', 0)).toBe(0);
+	});
+
+	it('falls back to CarNumberRaw for a non-numeric display', () => {
+		expect(encodeCameraCarNumber('', 42)).toBe(42);
+		expect(encodeCameraCarNumber('A1', 5)).toBe(5);
+		expect(encodeCameraCarNumber('', null)).toBeNull();
+		expect(encodeCameraCarNumber('', -1)).toBeNull();
 	});
 });
 
@@ -237,6 +276,27 @@ describe('buildGridRoster', () => {
 			[2, 'spectator'],
 			[3, 'not-in-world'],
 		]);
+	});
+
+	it('skips a car the camera cannot be pointed at, but never the reference', () => {
+		const roster = buildGridRoster(
+			[driver(1, { cameraNumber: null }), driver(2, { cameraNumber: null })],
+			telemetry({ 1: { pct: 0.5, pos: 1 }, 2: { pct: 0.4, pos: 2 } }, 1)
+		);
+		expect(roster.cars.map((c) => c.carIdx)).toEqual([1]);
+		expect(roster.skipped.map((s) => [s.carIdx, s.reason])).toEqual([
+			[2, 'no-car-number'],
+		]);
+	});
+
+	it('ignores the pace car slot past the end of the telemetry arrays', () => {
+		// Hardware, 2026-11-11: the pace car was CarIdx 64 with 64-slot arrays.
+		const roster = buildGridRoster(
+			[driver(1), driver(64, { isPaceCar: true })],
+			telemetry({ 1: { pct: 0.5, pos: 1 } }, 1)
+		);
+		expect(roster.cars.map((c) => c.carIdx)).toEqual([1]);
+		expect(roster.skipped.map((s) => s.reason)).toEqual(['pace-car']);
 	});
 
 	it('still has a reference distance when the camera is on the pace car', () => {

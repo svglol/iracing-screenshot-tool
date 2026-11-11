@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	MAX_SEEKS,
+	firstGuessLapSeconds,
 	searchCarPosition,
 	wrapLaps,
 	type PositionSearchDeps,
@@ -194,6 +195,34 @@ describe('searchCarPosition', () => {
 			expect(r.frame).toBe(10_000 + 0.45 * LAP_FRAMES);
 		}
 	);
+
+	it('falls back to the track length when the session has no estimate', async () => {
+		expect(
+			firstGuessLapSeconds({
+				estLapTimeSec: null,
+				trackLengthMeters: 4483.7,
+			})
+		).toBeCloseTo(49.8, 1);
+		expect(
+			firstGuessLapSeconds({ estLapTimeSec: null, trackLengthMeters: 500 })
+		).toBe(10);
+		expect(firstGuessLapSeconds({ estLapTimeSec: null })).toBe(15);
+		expect(firstGuessLapSeconds({ estLapTimeSec: 92 })).toBe(92);
+
+		// Fuji with no estimate, a 100 s real lap: still converges inside the budget.
+		const fujiLap = 6000;
+		const tape = makeTape({
+			startFrame: 30_000,
+			laps: (f) => 0.2 + (f - 30_000) / fujiLap,
+		});
+		const r = await tape.search({
+			targetPct: 0.69,
+			estLapTimeSec: null,
+			trackLengthMeters: 4483.7,
+		});
+		expect(r.found).toBe(true);
+		expect(r.frame).toBe(30_000 + 0.49 * fujiLap);
+	});
 
 	it('lands on the closest frame when the pace varies through the lap', async () => {
 		// Corners and straights: speed swings ±56 % around the mean, three times a lap.

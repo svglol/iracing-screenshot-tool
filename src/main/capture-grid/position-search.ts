@@ -25,29 +25,33 @@
 //
 // Positions are tracked UNWRAPPED (laps + fraction) so crossing the start/finish
 // line is not a discontinuity. That only works while consecutive readings are
-// less than half a lap apart, which is why every step is capped at a quarter lap
+// less than half a lap apart, which is why every step is capped (MAX_STEP_LAPS)
 // at the speed we believe the car is doing.
 //
-// Telemetry is the only position authority, as in long-exposure/replay-control:
+// Telemetry is the only position authority, as in ../replay-control:
 // wall-clock time is used only as a timeout on seeks that may never land.
 //
 // All deps are injected so the search is unit-tested against a simulated tape.
 
 import { createLogger } from '../../utilities/logger';
-import {
-	POLL_INTERVAL_MS,
-	SEEK_TIMEOUT_MS,
-} from '../long-exposure/replay-control';
+import { POLL_INTERVAL_MS, SEEK_TIMEOUT_MS } from '../replay-control';
 
 const log = createLogger('capture-grid/search');
 
 // iRacing records replays at 60 frames per second.
 export const REPLAY_FPS = 60;
-// The first-guess lap time when the session does not give one. Deliberately
-// FAST (a short oval): overestimating speed only makes steps short, while
-// underestimating it can make a step overshoot by more than half a lap, which
-// the unwrapping cannot survive.
+// When the session gives no plausible lap-time estimate (hardware, 2026-11-11:
+// an AI race reported 1 s for every class), the first guess is the track length
+// covered at FALLBACK_SPEED_MPS — deliberately FAST, because overestimating speed
+// only makes steps short, while underestimating it can make a step overshoot by
+// more than half a lap, which the unwrapping cannot survive. Without a track
+// length either, a short oval's lap. The guess stays a FLOOR on the speed used
+// to size steps even after real measurements: a speed measured through a
+// hairpin and then spent on a straight is exactly the aliasing case, and the
+// only price of the floor is a few more (short) seeks.
+export const FALLBACK_SPEED_MPS = 90; // 324 km/h
 export const FALLBACK_LAP_SECONDS = 15;
+export const MIN_FALLBACK_LAP_SECONDS = 10;
 // The largest single step, as a fraction of a lap at the believed speed. Keeps
 // consecutive readings under the half-lap the unwrapping needs even when the
 // car is moving three times faster than believed — a class lap-time estimate
@@ -61,7 +65,9 @@ export const MIN_SLOPE_PCT_PER_FRAME = 1 / (3600 * REPLAY_FPS);
 export const MAX_STALLS = 3;
 // Hard cap on seeks for one car, so a car the search cannot settle on costs a
 // bounded amount of time and is reported, not retried for ever.
-export const MAX_SEEKS = 24;
+// 32 covers the worst case with a fast fallback guess: about a lap of 0.15-lap
+// steps to the other crossing, plus the refinement.
+export const MAX_SEEKS = 32;
 // Polls after landing that must agree (same frame, same distance) before a
 // reading is trusted. Guards against reading a car's distance one telemetry tick
 // before the sim has updated it for the new frame.
@@ -88,8 +94,10 @@ export interface PositionSearchDeps {
 export interface PositionSearchOptions {
 	carIdx: number;
 	targetPct: number;
-	// First guess at the car's pace. Null falls back to FALLBACK_LAP_SECONDS.
+	// First guess at the car's pace. Null falls back to the track length at
+	// FALLBACK_SPEED_MPS, then FALLBACK_LAP_SECONDS.
 	estLapTimeSec: number | null;
+	trackLengthMeters?: number | null;
 	// Last frame on the tape (absolute), or null when unknown — then only the
 	// start of the tape bounds the search.
 	tapeEndFrame: number | null;
@@ -185,10 +193,7 @@ export async function searchCarPosition(
 	let target = first.pct + wrapLaps(opts.targetPct - first.pct);
 	const errorAt = (reading: Reading) => target - reading.unwrapped;
 
-	const estLap =
-		opts.estLapTimeSec !== null && opts.estLapTimeSec > 0
-			? opts.estLapTimeSec
-			: FALLBACK_LAP_SECONDS;
+	const estLap = firstGuessLapSeconds(opts);
 	// Laps per replay frame.
 	let slope = 1 / (estLap * REPLAY_FPS);
 	// Steps are SIZED from the fastest pace believed so far, never the latest
@@ -351,6 +356,19 @@ export async function searchCarPosition(
 		return result({ reason: 'aborted' });
 	}
 	return result({ found: true, errorLaps: errorAt(current) });
+}
+
+export function firstGuessLapSeconds(
+	opts: Pick<PositionSearchOptions, 'estLapTimeSec' | 'trackLengthMeters'>
+): number {
+	if (opts.estLapTimeSec !== null && opts.estLapTimeSec > 0) {
+		return opts.estLapTimeSec;
+	}
+	const length = opts.trackLengthMeters;
+	if (typeof length === 'number' && Number.isFinite(length) && length > 0) {
+		return Math.max(MIN_FALLBACK_LAP_SECONDS, length / FALLBACK_SPEED_MPS);
+	}
+	return FALLBACK_LAP_SECONDS;
 }
 
 function safeRead(deps: PositionSearchDeps, carIdx: number): CarSample | null {
