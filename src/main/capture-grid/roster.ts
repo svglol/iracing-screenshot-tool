@@ -206,6 +206,9 @@ export interface GridCar {
 	// car the sim has not classified.
 	racePosition: number | null;
 	onPitRoad: boolean;
+	// Distance around the lap at the starting frame. The position search starts
+	// from it, so the crossing it finds is the one nearest the STARTING moment.
+	startPct: number;
 	// The car the camera was on. It is shot at the starting frame itself, with no
 	// search — its position IS the reference.
 	isReference: boolean;
@@ -311,6 +314,7 @@ export function buildGridRoster(
 					? position
 					: null,
 			onPitRoad: telemetry.onPitRoad?.[driver.carIdx] === true,
+			startPct: pct,
 			isReference: driver.carIdx === referenceCarIdx,
 			progress:
 				(typeof laps === 'number' && Number.isFinite(laps) && laps > 0

@@ -171,6 +171,34 @@ describe('searchCarPosition', () => {
 		expect(r.frame).toBe(10_000 - 0.05 * LAP_FRAMES);
 	});
 
+	it('searches from a given start, not from where the replay is', async () => {
+		// The replay sits where the previous car left it (frame 4 000); the car's
+		// reading at the starting frame (10 000) is given. Nearest crossing must be
+		// judged from 10 000.
+		const laps = steady(10_000, 0.2);
+		const tape = makeTape({ startFrame: 4_000, laps });
+		const r = await tape.search({
+			targetPct: 0.5,
+			start: { frame: 10_000, pct: 0.2 },
+		});
+		expect(r.found).toBe(true);
+		expect(r.frame).toBe(10_000 + 0.3 * LAP_FRAMES);
+		expect(tape.currentFrame()).toBe(r.frame);
+	});
+
+	it('seeks to the start itself when the car is already on the mark there', async () => {
+		const laps = steady(10_000, 0.4);
+		const tape = makeTape({ startFrame: 4_000, laps });
+		const r = await tape.search({
+			targetPct: 0.4,
+			start: { frame: 10_000, pct: 0.4 },
+		});
+		expect(r.found).toBe(true);
+		expect(r.frame).toBe(10_000);
+		expect(tape.currentFrame()).toBe(10_000);
+		expect(r.seeks).toBe(1);
+	});
+
 	it('does no seeking when the car is already on the target', async () => {
 		const tape = makeTape({ startFrame: 10_000, laps: steady(10_000, 0.4) });
 		const r = await tape.search({ targetPct: 0.4 });

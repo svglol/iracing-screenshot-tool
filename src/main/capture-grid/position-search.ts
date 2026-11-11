@@ -101,6 +101,12 @@ export interface PositionSearchOptions {
 	// Last frame on the tape (absolute), or null when unknown — then only the
 	// start of the tape bounds the search.
 	tapeEndFrame: number | null;
+	// A reading already known, to search FROM instead of where the replay is now.
+	// The grid passes each car's distance at the starting frame (the roster read
+	// every car there), so "nearest crossing" means nearest to the moment the user
+	// chose — not to wherever the previous car's search left the replay — without
+	// spending a seek per car to go back first.
+	start?: { frame: number; pct: number };
 	signal?: { aborted: boolean };
 }
 
@@ -179,11 +185,16 @@ export async function searchCarPosition(
 		return out;
 	};
 
-	// --- start where the replay is ------------------------------------------
-	const first = safeRead(deps, carIdx);
-	if (!first) {
+	// --- the starting reading -------------------------------------------------
+	// `shownFrame` is the frame the replay is actually showing, which differs from
+	// `current` when searching from a given start; the answer is only returned
+	// once the replay shows it.
+	const live = safeRead(deps, carIdx);
+	if (!live) {
 		return result({ reason: 'no-telemetry' });
 	}
+	let shownFrame = live.frame;
+	const first = opts.start ?? live;
 	if (first.pct === null) {
 		return result({ frame: first.frame, reason: 'not-in-world' });
 	}
@@ -213,12 +224,13 @@ export async function searchCarPosition(
 			deps,
 			carIdx,
 			toFrame,
-			from.frame,
+			shownFrame,
 			signal
 		);
 		if (typeof landed === 'string') {
 			return landed;
 		}
+		shownFrame = landed.frame;
 		if (landed.pct === null) {
 			return 'not-in-world';
 		}
@@ -329,6 +341,7 @@ export async function searchCarPosition(
 			if (typeof back === 'string') {
 				return result({ reason: back });
 			}
+			shownFrame = back.frame;
 			break;
 		}
 		if (Math.abs(errorAt(next)) < Math.abs(errorAt(previous))) {
@@ -348,12 +361,29 @@ export async function searchCarPosition(
 		if (typeof back === 'string') {
 			return result({ reason: back });
 		}
+		shownFrame = back.frame;
 		current = previous;
 		break;
 	}
 
 	if (signal?.aborted) {
 		return result({ reason: 'aborted' });
+	}
+	// Searching from a given start can settle without the replay ever moving —
+	// the car was already on the mark at the starting frame — so put the replay on
+	// the answer before reporting it.
+	if (shownFrame !== current.frame) {
+		seeks += 1;
+		const landed = await seekAndRead(
+			deps,
+			carIdx,
+			current.frame,
+			shownFrame,
+			signal
+		);
+		if (typeof landed === 'string') {
+			return result({ reason: landed });
+		}
 	}
 	return result({ found: true, errorLaps: errorAt(current) });
 }
