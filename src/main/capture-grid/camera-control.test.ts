@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	CAMERA_SWITCH_TIMEOUT_MS,
+	classifyCameraGroup,
 	readCameraView,
 	switchCameraToCar,
 	type CameraControlDeps,
@@ -150,5 +151,39 @@ describe('switchCameraToCar', () => {
 			{ signal: { aborted: true } }
 		);
 		expect(r.reason).toBe('aborted');
+	});
+});
+
+describe('classifyCameraGroup', () => {
+	// Shapes from the live Fuji session, 2026-11-11.
+	const many = (n: number) =>
+		Array.from({ length: n }, (_, i) => ({ CameraNum: i + 1 }));
+	const session = {
+		CameraInfo: {
+			Groups: [
+				{
+					GroupNum: 10,
+					GroupName: 'Scenic',
+					IsScenic: true,
+					Cameras: many(10),
+				},
+				{ GroupNum: 11, GroupName: 'TV1', Cameras: many(14) },
+				{ GroupNum: 20, GroupName: 'Chase', Cameras: many(1) },
+				{ GroupNum: 22, GroupName: 'Rear Chase', Cameras: many(1) },
+			],
+		},
+	};
+
+	it('tells car-mounted groups from trackside ones', () => {
+		expect(classifyCameraGroup(session, 20)).toBe('car');
+		expect(classifyCameraGroup(session, 22)).toBe('car');
+		expect(classifyCameraGroup(session, 11)).toBe('trackside');
+		expect(classifyCameraGroup(session, 10)).toBe('trackside');
+	});
+
+	it('says unknown when it cannot tell', () => {
+		expect(classifyCameraGroup(session, 99)).toBe('unknown');
+		expect(classifyCameraGroup(session, null)).toBe('unknown');
+		expect(classifyCameraGroup(null, 20)).toBe('unknown');
 	});
 });

@@ -51,6 +51,8 @@ import {
 	faCheck,
 	faFileImport,
 	faDownload,
+	// Capture grid's start button.
+	faTableCells,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -78,6 +80,7 @@ library.add(
 	faCheck,
 	faFileImport,
 	faDownload,
+	faTableCells,
 	faDiscord
 );
 

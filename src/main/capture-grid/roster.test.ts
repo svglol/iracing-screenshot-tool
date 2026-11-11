@@ -3,6 +3,7 @@ import {
 	buildGridRoster,
 	carLapDistPct,
 	encodeCameraCarNumber,
+	groupByClass,
 	padCarNum,
 	parseTrackLengthMeters,
 	readGridDrivers,
@@ -19,6 +20,9 @@ function driver(
 		carIdx,
 		carNumber: String(carIdx),
 		cameraNumber: carIdx,
+		classId: 1,
+		className: 'GT3',
+		classColor: 0xff0000,
 		driverName: `Driver ${carIdx}`,
 		isPaceCar: false,
 		isSpectator: false,
@@ -314,5 +318,63 @@ describe('buildGridRoster', () => {
 			telemetry({ 1: { pct: 0.5, surface: -1 }, 2: { pct: 0.5, pos: 1 } }, 1)
 		);
 		expect(roster.referencePct).toBeNull();
+	});
+});
+
+describe('classes', () => {
+	it('reads the class, falling back to the car name, then the id', () => {
+		const drivers = readGridDrivers({
+			DriverInfo: {
+				Drivers: [
+					{
+						CarIdx: 1,
+						CarClassID: 4,
+						CarClassShortName: 'GT3',
+						CarClassColor: 0xffda59,
+					},
+					{
+						CarIdx: 2,
+						CarClassID: 5,
+						CarClassShortName: ' ',
+						CarScreenNameShort: 'MX-5',
+					},
+					{ CarIdx: 3, CarClassID: 6 },
+				],
+			},
+		});
+		expect(
+			drivers.map((d) => [d.classId, d.className, d.classColor])
+		).toEqual([
+			[4, 'GT3', 0xffda59],
+			[5, 'MX-5', null],
+			[6, 'Class 6', null],
+		]);
+	});
+
+	it('groups cars by class, leading class first, race order kept', () => {
+		const roster = buildGridRoster(
+			[
+				driver(1, { classId: 2, className: 'GT4' }),
+				driver(2, { classId: 1, className: 'GT3' }),
+				driver(3, { classId: 2, className: 'GT4' }),
+				driver(4, { classId: 1, className: 'GT3' }),
+			],
+			telemetry(
+				{
+					1: { pct: 0.1, pos: 3 },
+					2: { pct: 0.2, pos: 1 },
+					3: { pct: 0.3, pos: 4 },
+					4: { pct: 0.4, pos: 2 },
+				},
+				2
+			)
+		);
+		const classes = groupByClass(roster.cars);
+		expect(
+			classes.map((c) => [c.className, c.cars.map((x) => x.carIdx)])
+		).toEqual([
+			['GT3', [2, 4]],
+			['GT4', [1, 3]],
+		]);
 	});
 });

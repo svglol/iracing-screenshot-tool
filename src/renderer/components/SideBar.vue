@@ -122,6 +122,11 @@
 		     genuinely can't work — is caught by the capture pre-flight with a
 		     specific message. -->
 		<LongExposurePanel :reshade="reshade" />
+
+		<!-- Capture grid: one shot of each selected car at the reference car's
+		     spot on track. Self-contained like long exposure — its own picker, its
+		     own button and its own capture call. -->
+		<CaptureGridPanel />
 	</div>
 </template>
 
@@ -142,6 +147,7 @@ import {
 import { resolveCropTarget } from '../../utilities/screenshot-output';
 import { useOruga } from '@oruga-ui/oruga-next';
 import LongExposurePanel from './LongExposurePanel.vue';
+import CaptureGridPanel from './CaptureGridPanel.vue';
 import NoticeCard from './NoticeCard.vue';
 // Module-level `t` for the toast content component below, which is defined at
 // module scope and so has no `this.$t`.
@@ -204,7 +210,7 @@ const ScreenshotErrorContent = defineComponent({
 // baseline window size and silently ignored the Resolution control above.
 
 export default {
-	components: { LongExposurePanel, NoticeCard },
+	components: { LongExposurePanel, CaptureGridPanel, NoticeCard },
 	// Declare 'screenshot' as a custom emit. Previously used 'click', which in
 	// Vue 3 is treated as a NATIVE DOM event unless explicitly declared —
 	// native clicks from child elements (e.g. <o-select> dropdown) bubbled

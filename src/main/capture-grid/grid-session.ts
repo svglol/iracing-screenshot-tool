@@ -291,6 +291,17 @@ export async function runGrid(
 				});
 				continue;
 			}
+			// Aborted while the shot was in flight (a ReShade wait the abort
+			// cancelled): this car was not shot because of the abort, not a fault.
+			if (signal.aborted) {
+				finish({
+					status: 'skipped',
+					reason: 'aborted',
+					frame: found.frame,
+					errorMeters,
+				});
+				break;
+			}
 			if (shot.fatal) {
 				fatal = true;
 				message = shot.reason;

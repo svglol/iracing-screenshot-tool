@@ -145,3 +145,41 @@ function safeRead(deps: CameraControlDeps): CameraView | null {
 		return null;
 	}
 }
+
+// Whether a camera group rides on the car or watches from the track.
+//
+// Measured live (2026-11-11): on a car-mounted group (Rear Chase) every car got
+// the same camera and therefore identical framing; on TV1 the same frames came
+// back from cameras 4, 8 and 3 — iRacing's director picks the trackside camera
+// and ignores the one requested. So a grid on a trackside group still runs, but
+// the user is told the framing will vary.
+//
+// Trackside = flagged scenic, or a group of more than one camera (TV1 had 14,
+// Scenic 10; every car-mounted group in that session had exactly 1).
+export type CameraKind = 'car' | 'trackside' | 'unknown';
+
+export function classifyCameraGroup(
+	sessionData: unknown,
+	groupNum: number | null
+): CameraKind {
+	if (groupNum === null) {
+		return 'unknown';
+	}
+	const groups = (
+		sessionData as { CameraInfo?: { Groups?: unknown } } | null | undefined
+	)?.CameraInfo?.Groups;
+	if (!Array.isArray(groups)) {
+		return 'unknown';
+	}
+	const group = groups.find(
+		(g) => (g as { GroupNum?: unknown })?.GroupNum === groupNum
+	) as { IsScenic?: unknown; Cameras?: unknown } | undefined;
+	if (!group) {
+		return 'unknown';
+	}
+	if (group.IsScenic === true || group.IsScenic === 1) {
+		return 'trackside';
+	}
+	const cameras = Array.isArray(group.Cameras) ? group.Cameras.length : 0;
+	return cameras > 1 ? 'trackside' : cameras === 1 ? 'car' : 'unknown';
+}

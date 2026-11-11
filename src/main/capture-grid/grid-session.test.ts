@@ -120,6 +120,9 @@ function car(
 		carNumber: String(carIdx),
 		cameraNumber: carIdx,
 		driverName: `Driver ${carIdx}`,
+		classId: 1,
+		className: 'GT3',
+		classColor: null,
 		estLapTimeSec: 90,
 		racePosition: carIdx,
 		onPitRoad: false,
@@ -283,6 +286,28 @@ describe('runGrid', () => {
 		]);
 		expect(g.world.frame()).toBe(ANCHOR);
 		expect(g.restoreWindow).toHaveBeenCalledTimes(1);
+	});
+
+	it('labels the car in flight "aborted" when the abort cancels its shot', async () => {
+		const g = setup(
+			{ 1: 0.3, 2: 0.25, 3: 0.4 },
+			{
+				shoot: (c) => {
+					if (c.carIdx === 2) {
+						// The abort cancels the ReShade wait, which then fails.
+						g.signal.aborted = true;
+						return { ok: false, reason: 'cancelled' };
+					}
+					return { ok: true, path: 'x' };
+				},
+			}
+		);
+		const out = await g.run();
+		expect(out.results.map((r) => [r.carIdx, r.status, r.reason])).toEqual([
+			[1, 'shot', null],
+			[2, 'skipped', 'aborted'],
+			[3, 'skipped', 'aborted'],
+		]);
 	});
 
 	it('stops on a fatal shot failure and says why', async () => {

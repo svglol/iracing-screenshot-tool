@@ -165,6 +165,13 @@ const schema = {
 		type: 'boolean',
 		default: true,
 	},
+	// Whether the capture-grid panel is folded away in the sidebar. Collapsed by
+	// default, for the same reason as long exposure: a replay-driven mode that
+	// someone who came for one screenshot should not have to read past.
+	captureGridCollapsed: {
+		type: 'boolean',
+		default: true,
+	},
 	// Whether the panel's Advanced group is unfolded. Separate from the panel fold
 	// so opening the panel does not drag seven tuning controls back onto the screen.
 	longExposureAdvancedOpen: {

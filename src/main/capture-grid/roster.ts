@@ -26,6 +26,13 @@ export interface GridDriver {
 	// gives nothing usable; such a car cannot be switched to.
 	cameraNumber: number | null;
 	driverName: string;
+	// The car's class, for the picker's grouping. Name falls back to the car's
+	// short name, then the id, because single-make sessions can leave the class
+	// short name empty.
+	classId: number;
+	className: string;
+	// 0xRRGGBB as iRacing sends it, or null.
+	classColor: number | null;
 	isPaceCar: boolean;
 	isSpectator: boolean;
 	// The class's estimated lap time in seconds, the position search's first guess
@@ -105,10 +112,17 @@ export function readGridDrivers(sessionData: unknown): GridDriver[] {
 		}
 		const estLapTime = num(d?.CarClassEstLapTime);
 		const carNumber = str(d?.CarNumber);
+		const classId = num(d?.CarClassID) ?? -1;
 		out.push({
 			carIdx,
 			carNumber,
 			cameraNumber: encodeCameraCarNumber(carNumber, num(d?.CarNumberRaw)),
+			classId,
+			className:
+				str(d?.CarClassShortName).trim() ||
+				str(d?.CarScreenNameShort).trim() ||
+				`Class ${classId}`,
+			classColor: num(d?.CarClassColor),
 			driverName: str(d?.UserName),
 			isPaceCar:
 				d?.CarIsPaceCar === 1 ||
@@ -201,6 +215,9 @@ export interface GridCar {
 	carNumber: string;
 	cameraNumber: number | null;
 	driverName: string;
+	classId: number;
+	className: string;
+	classColor: number | null;
 	estLapTimeSec: number | null;
 	// Race position at the starting moment; null before the green flag, or for a
 	// car the sim has not classified.
@@ -304,6 +321,9 @@ export function buildGridRoster(
 			carIdx: driver.carIdx,
 			carNumber: driver.carNumber,
 			cameraNumber: driver.cameraNumber,
+			classId: driver.classId,
+			className: driver.className,
+			classColor: driver.classColor,
 			driverName: driver.driverName,
 			estLapTimeSec: driver.estLapTimeSec,
 			// iRacing reports 0 for "no position yet".
@@ -327,4 +347,32 @@ export function buildGridRoster(
 	const cars: GridCar[] = ranked.map(({ progress: _progress, ...car }) => car);
 
 	return { referenceCarIdx, referencePct, cars, skipped };
+}
+
+export interface GridClass {
+	classId: number;
+	className: string;
+	classColor: number | null;
+	cars: GridCar[];
+}
+
+// The roster grouped for the picker: classes in the order their best-placed car
+// appears in the roster (so the leading class comes first, as on a timing
+// screen), cars inside each class keeping the roster's race-position order.
+export function groupByClass(cars: readonly GridCar[]): GridClass[] {
+	const classes = new Map<number, GridClass>();
+	for (const car of cars) {
+		let group = classes.get(car.classId);
+		if (!group) {
+			group = {
+				classId: car.classId,
+				className: car.className,
+				classColor: car.classColor,
+				cars: [],
+			};
+			classes.set(car.classId, group);
+		}
+		group.cars.push(car);
+	}
+	return [...classes.values()];
 }
