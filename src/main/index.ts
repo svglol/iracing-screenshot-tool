@@ -42,6 +42,7 @@ import {
 } from './capture-decisions';
 import {
 	captureIracingWindowNative,
+	type WgcCaptureResult,
 	getCaptureConsentStatus,
 	getCapturePermission,
 	getLastNativeFailureReason,
@@ -2722,19 +2723,19 @@ function encodeForFormat(
 
 type WgcCaptureOutcome = 'saved' | 'fallback' | 'aborted';
 
-// #11: main-side WGC capture + save. Grabs one true-RGBA frame of the (already
-// resized/raised) iRacing window, crops the watermark margin, encodes at max
-// fidelity, writes the file + gallery thumbnail, notifies the UI, and restores.
-// Returns:
-//   'saved'    — file written, gallery notified, window restored.
-//   'fallback' — no usable frame (or save failed); caller should run the
-//                getUserMedia path. The window is left resized/raised for it.
+// #11: main-side WGC capture, in two halves so a caller can take several shots
+// without restoring between them (capture grid): grabWgcFrame settles and grabs
+// one frame of the already resized/raised window; saveWgcFrame writes it, its
+// thumbnail and the gallery notification. Neither restores the window — only
+// the still path's wrapper, captureAndSaveViaWgc, does, exactly as it always has.
+
+// Returns the frame, or:
+//   'fallback' — no usable frame; the still path runs getUserMedia instead.
 //   'aborted'  — capture was cancelled mid-flight (iRacing disconnected /
 //                already restored); caller must NOT fall back or restore again.
-async function captureAndSaveViaWgc(
-	id: number,
-	data: CaptureRequestData
-): Promise<WgcCaptureOutcome> {
+async function grabWgcFrame(
+	id: number
+): Promise<{ frame: WgcCaptureResult } | 'fallback' | 'aborted'> {
 	// WGC is now the active backend and in-flight. Mark it BEFORE the settle so a
 	// disconnect during the settle (scheduleCaptureAbortOnDisconnect → the
 	// diagnostics snapshot) attributes the aborted capture to WGC ('attempted')
@@ -2795,14 +2796,24 @@ async function captureAndSaveViaWgc(
 		return 'fallback';
 	}
 
-	// Tracks whether the primary file reached disk. Once it has, a later failure
-	// (thumbnail, notify, restore) must NOT return 'fallback' — the getUserMedia
-	// path would then write a SECOND file for one keypress (buildUniqueScreenshotName
-	// sees the first and picks a new name). Past this point we finalize as 'saved'.
+	return { frame };
+}
+
+// Writes one grabbed frame: the file (watermark margin cropped, max-fidelity
+// encode), the gallery thumbnail, and the gallery notification. Never restores.
+// `committed` says whether the primary file reached disk — once it has, the
+// caller must treat the shot as taken even if `error` is set (a post-write step
+// failed), or a fallback would write a SECOND file for one keypress.
+async function saveWgcFrame(
+	frame: WgcCaptureResult,
+	data: CaptureRequestData,
+	opts: { screenshotDir?: string } = {}
+): Promise<{ committed: boolean; savedPath: string; error: unknown }> {
 	let committed = false;
 	let savedPath = '';
 	try {
-		const screenshotDir = path.resolve(config.get('screenshotFolder'));
+		const screenshotDir =
+			opts.screenshotDir ?? path.resolve(config.get('screenshotFolder'));
 		const cacheDir = path.join(app.getPath('userData'), 'Cache');
 		fs.mkdirSync(screenshotDir, { recursive: true });
 		fs.mkdirSync(cacheDir, { recursive: true });
@@ -2899,35 +2910,50 @@ async function captureAndSaveViaWgc(
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('screenshot-response', savedPath);
 		}
-		restoreScreenshotState();
-		lastWgcAttempt.outcome = 'saved';
-		return 'saved';
+		return { committed, savedPath, error: null };
 	} catch (error) {
-		if (committed) {
+		return { committed, savedPath, error };
+	}
+}
+
+// The still path: grab, save, restore. Returns:
+//   'saved'    — file written, gallery notified, window restored.
+//   'fallback' — no usable frame (or save failed); caller should run the
+//                getUserMedia path. The window is left resized/raised for it.
+//   'aborted'  — capture was cancelled mid-flight (iRacing disconnected /
+//                already restored); caller must NOT fall back or restore again.
+async function captureAndSaveViaWgc(
+	id: number,
+	data: CaptureRequestData
+): Promise<WgcCaptureOutcome> {
+	const grab = await grabWgcFrame(id);
+	if (grab === 'fallback' || grab === 'aborted') {
+		return grab;
+	}
+	const { committed, savedPath, error } = await saveWgcFrame(grab.frame, data);
+	if (committed) {
+		if (error) {
 			// The primary file is already on disk — a post-write failure must not
 			// trigger a second capture. Finalize as saved and restore.
 			log.info('WGC post-save step failed — screenshot already saved', {
 				file: savedPath,
 				error: (error as Error).message || String(error),
 			});
-			restoreScreenshotState();
-			lastWgcAttempt.outcome = 'saved';
-			return 'saved';
 		}
-		// Grab / crop / primary write failed with nothing written — safe to
-		// re-capture via the getUserMedia path.
-		lastWgcAttempt.outcome = 'fallback';
-		lastWgcAttempt.fallbackReason = `pre-save-throw: ${
-			(error as Error).message || String(error)
-		}`;
-		log.info(
-			'WGC capture failed before save — falling back to getUserMedia',
-			{
-				error: (error as Error).message || String(error),
-			}
-		);
-		return 'fallback';
+		restoreScreenshotState();
+		lastWgcAttempt.outcome = 'saved';
+		return 'saved';
 	}
+	// Grab / crop / primary write failed with nothing written — safe to
+	// re-capture via the getUserMedia path.
+	lastWgcAttempt.outcome = 'fallback';
+	lastWgcAttempt.fallbackReason = `pre-save-throw: ${
+		(error as Error).message || String(error)
+	}`;
+	log.info('WGC capture failed before save — falling back to getUserMedia', {
+		error: (error as Error).message || String(error),
+	});
+	return 'fallback';
 }
 
 function armCaptureWatchdog(): void {
