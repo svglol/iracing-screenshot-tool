@@ -9,7 +9,7 @@ import {
 	blackFrameDigest,
 	referenceDigest,
 } from '../../utilities/long-exposure/frame-content';
-import { ReplayController, type ReplayState } from './replay-control';
+import { ReplayController, type ReplayState } from '../replay-control';
 import {
 	WARM_UP_BRAKE_FRAMES,
 	WARM_UP_RETRY_BRAKE_FRAMES,

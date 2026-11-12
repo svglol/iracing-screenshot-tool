@@ -11,10 +11,10 @@ import {
 	type ReplayControlDeps,
 	type ReplayState,
 } from './replay-control';
-import { WARM_UP_BRAKE_FRAMES } from '../../utilities/long-exposure/exposure-math';
+import { WARM_UP_BRAKE_FRAMES } from '../utilities/long-exposure/exposure-math';
 
 // The logger writes through electron's app paths; stub it so these stay pure.
-vi.mock('../../utilities/logger', () => ({
+vi.mock('../utilities/logger', () => ({
 	createLogger: () => ({
 		info: vi.fn(),
 		warn: vi.fn(),

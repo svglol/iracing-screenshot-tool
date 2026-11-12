@@ -79,6 +79,10 @@ const it: Catalog = {
 		selectFolder: 'Scegli cartella',
 		screenshotKeybind: 'Scorciatoia screenshot',
 		editBind: 'Modifica scorciatoia',
+		abortKeybind: 'Abort Keybind',
+		abortKeybindDescription:
+			'Stops a running capture grid or long exposure. Only active while one is running.',
+		keybindClash: 'The other keybind already uses this key. Pick another.',
 
 		customFilenameFormat: 'Formato nome file personalizzato',
 		customFilenameFormatDescription:
@@ -592,6 +596,109 @@ const it: Catalog = {
 	// The navigation rail’s tooltips.
 	nav: {
 		home: 'Screenshot',
+	},
+
+	// Capture grid: one shot of each selected car at the reference car's spot on
+	// track. Panel in the sidebar, banner over iRacing while it runs, and the
+	// refusals main returns before touching the sim.
+	captureGrid: {
+		title: 'Capture grid',
+		intro: 'One shot of every selected car, each at the exact spot on track where the camera car is now.',
+		refresh: 'Refresh',
+		selectAll: 'All',
+		selectNone: 'None',
+		selectedCount: '{selected} of {total} cars selected',
+		start: 'Capture grid ({count})',
+		abort: 'Abort',
+		skip: 'Skip car',
+		openFolder: 'Open folder',
+		reference: 'Reference: #{carNumber} {driverName}',
+		referenceTag: 'reference',
+		pitTag: 'pit',
+		unavailable: 'Not available: {list}',
+		skipReasons: {
+			paceCar: 'pace car',
+			spectator: 'spectator',
+			notInWorld: 'not on track',
+			noCarNumber: 'no car number',
+		},
+		notices: {
+			notConnected: 'Start iRacing and open a replay to set up a grid.',
+			noReference:
+				'Put the camera on a car that is on track. Its position is the spot every car is shot at.',
+			trackside:
+				'This is a TV or scenic camera. iRacing picks its own angle for each car, so the framing will vary. Use a chase or cockpit camera for a matching grid.',
+			reshade:
+				'ReShade mode: the grid lines up each car, then waits for you to press your ReShade screenshot key in iRacing.',
+		},
+		progress: {
+			positioning:
+				'Car {index} of {total}: #{carNumber} {driverName}, finding the spot',
+			capturing:
+				'Car {index} of {total}: #{carNumber} {driverName}, capturing',
+			waitingReshade:
+				'Car {index} of {total}: #{carNumber} {driverName}. Press your ReShade key in iRacing',
+			findingClearLap:
+				'Car {index} of {total}: #{carNumber} {driverName}, another car is too close, trying another lap',
+			restoringCamera:
+				'Car {index} of {total}: #{carNumber} {driverName}, the camera moved, putting it back',
+		},
+		minGap: 'Minimum gap to other cars',
+		minGapUnit: 'm',
+		minGapHint:
+			'A car with another car closer than this along the track is shot at the same spot on a nearby lap. 0 turns this off.',
+		summary: '{shot} shot, {failed} failed, {skipped} skipped',
+		summaryAborted:
+			'Aborted: {shot} shot, {failed} failed, {skipped} skipped',
+		failedCar: '#{carNumber} {driverName}: {reason}',
+		failReasons: {
+			cameraWrongCar:
+				'the camera went to a different car (duplicate car number?)',
+			cameraTimeout: 'the camera did not switch to this car',
+			cameraLost: 'the camera could not be put back on this car',
+			cameraKeptMoving:
+				'the camera kept moving while this car was being shot',
+			positionNotMoving: 'the car is not moving',
+			positionOutOfTape: 'that spot is not in the recorded replay',
+			positionDidNotConverge: 'could not find the spot',
+			positionSeekTimeout: 'the replay did not respond',
+			positionNotInWorld: 'the car left the track',
+		},
+		errors: {
+			busy: 'Another capture is running. Wait for it to finish.',
+			noTelemetry: 'iRacing telemetry is not available.',
+			noReference:
+				'Put the camera on a car that is on track. Its position is the spot every car is shot at.',
+			nothingSelected: 'Select at least one car.',
+			needsNativeCapture:
+				'Capture grid needs High-Fidelity Capture. Turn it on in Settings, or use ReShade mode.',
+			windowNotFound: 'iRacing window not found',
+			interrupted:
+				'The capture was interrupted: iRacing disconnected or stopped responding.',
+		},
+		overlay: {
+			car: 'Grid {index}/{total} · #{carNumber} {driverName}',
+			positioning: 'Finding the spot…',
+			capturing: 'Capturing…',
+			pressReshade: 'Press your ReShade screenshot key',
+			pressReshadeAgain:
+				'The camera moved. Press your ReShade screenshot key again',
+			cameraMoved: 'The camera moved. Putting it back…',
+			clearLap: {
+				before1: 'Another car is too close. Trying the lap before…',
+				after1: 'Another car is too close. Trying the lap after…',
+				before2: 'Another car is too close. Trying two laps before…',
+				after2: 'Another car is too close. Trying two laps after…',
+			},
+		},
+	},
+
+	// The banner shown over iRacing while a capture that needs the user, or takes
+	// a while, is running (the grid has its own lines above).
+	captureOverlay: {
+		screenshot: 'Screenshot',
+		pressReshade: 'Press your ReShade screenshot key in iRacing',
+		abortHint: 'Press {key} to abort',
 	},
 };
 

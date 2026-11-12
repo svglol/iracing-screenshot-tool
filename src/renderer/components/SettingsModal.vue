@@ -95,13 +95,47 @@
 						<p class="control">
 							<o-button
 								class="button is-primary settings-action"
-								:loading="bindingKey"
-								@click="bindScreenshotKeybind"
+								:loading="bindingKey === 'screenshot'"
+								:disabled="bindingKey === 'abort'"
+								@click="bindKeybind('screenshot')"
 							>
 								{{ $t('settings.editBind') }}
 							</o-button>
 						</p>
 					</o-field>
+					<span
+						v-if="keybindClash === 'screenshot'"
+						class="description settings-keybind-clash"
+						>{{ $t('settings.keybindClash') }}</span
+					>
+					<hr />
+					<o-field :label="$t('settings.abortKeybind')" />
+					<o-field addons class="settings-inline-field">
+						<o-input
+							expanded
+							disabled
+							type="text"
+							:model-value="abortKeybind"
+						/>
+						<p class="control">
+							<o-button
+								class="button is-primary settings-action"
+								:loading="bindingKey === 'abort'"
+								:disabled="bindingKey === 'screenshot'"
+								@click="bindKeybind('abort')"
+							>
+								{{ $t('settings.editBind') }}
+							</o-button>
+						</p>
+					</o-field>
+					<span
+						v-if="keybindClash === 'abort'"
+						class="description settings-keybind-clash"
+						>{{ $t('settings.keybindClash') }}</span
+					>
+					<span v-else class="description">{{
+						$t('settings.abortKeybindDescription')
+					}}</span>
 					<hr />
 					<o-field class="settings-toggle-row">
 						<o-switch
@@ -408,6 +442,21 @@ import {
 const { ipcRenderer, shell } = require('electron');
 const path = require('path');
 
+// Same keys in any order, "Ctrl" and "Control" alike: "Shift+Control+F1" is
+// "Control+Shift+F1".
+function sameKeybind(a: string, b: string): boolean {
+	const norm = (s: string) =>
+		String(s || '')
+			.split('+')
+			.map((part) => part.trim().toLowerCase())
+			.map((part) => (part === 'ctrl' ? 'control' : part))
+			.map((part) => (part === 'esc' ? 'escape' : part))
+			.filter(Boolean)
+			.sort()
+			.join('+');
+	return norm(a) !== '' && norm(a) === norm(b);
+}
+
 export default {
 	data() {
 		return {
@@ -419,7 +468,11 @@ export default {
 			localeOptions: SUPPORTED_LOCALES,
 			screenshotFolder: config.get('screenshotFolder'),
 			screenshotKeybind: config.get('screenshotKeybind'),
-			bindingKey: false,
+			abortKeybind: config.get('abortKeybind') || 'Escape',
+			// Which keybind is listening for keys, if any.
+			bindingKey: null as null | 'screenshot' | 'abort',
+			// Which keybind just refused a key the other one already uses.
+			keybindClash: null as null | 'screenshot' | 'abort',
 			cropTopLeft: config.get('cropTopLeft'),
 			disableTooltips: config.get('disableTooltips'),
 			screenWidth: config.get('defaultScreenWidth'),
@@ -870,44 +923,63 @@ export default {
 					console.log(err);
 				});
 		},
-		bindScreenshotKeybind() {
+		// Listens for the next key combination and stores it as the screenshot or
+		// the abort keybind. Each refuses the other's combination: the abort key is
+		// only registered while a capture runs, and main will not register it over
+		// the screenshot key, so a shared key would silently leave no abort key.
+		bindKeybind(which: 'screenshot' | 'abort') {
+			const field =
+				which === 'screenshot' ? 'screenshotKeybind' : 'abortKeybind';
+			const other =
+				which === 'screenshot' ? this.abortKeybind : this.screenshotKeybind;
+			const previous = this[field];
 			const keys = [];
 			const keysReleased = [];
-			this.bindingKey = true;
+			this.bindingKey = which;
+			this.keybindClash = null;
 
 			const onKeyDown = (e) => {
-				if (!this.bindingKey) {
+				if (this.bindingKey !== which) {
 					window.removeEventListener('keydown', onKeyDown);
 					return;
 				}
 
 				if (!keys.includes(e.key)) {
 					keys.push(e.key);
-					this.screenshotKeybind = keys.join('+');
+					this[field] = keys.join('+');
 				}
 			};
 
 			const onKeyUp = (e) => {
-				if (!this.bindingKey) {
+				if (this.bindingKey !== which) {
 					window.removeEventListener('keyup', onKeyUp);
 					return;
 				}
 
 				if (!keys.includes(e.key)) {
 					keys.push(e.key);
-					this.screenshotKeybind = keys.join('+');
+					this[field] = keys.join('+');
 				}
 
 				keysReleased.push(e.key);
 				if (keysReleased.length === keys.length) {
-					this.bindingKey = false;
-					ipcRenderer.send('screenshotKeybind-change', {
-						newValue: this.screenshotKeybind,
-						oldValue: config.get('screenshotKeybind'),
-					});
-					config.set('screenshotKeybind', this.screenshotKeybind);
+					this.bindingKey = null;
 					window.removeEventListener('keyup', onKeyUp);
 					window.removeEventListener('keydown', onKeyDown);
+					if (sameKeybind(this[field], other)) {
+						this[field] = previous;
+						this.keybindClash = which;
+						return;
+					}
+					if (which === 'screenshot') {
+						ipcRenderer.send('screenshotKeybind-change', {
+							newValue: this.screenshotKeybind,
+							oldValue: config.get('screenshotKeybind'),
+						});
+					}
+					// Main reads the abort key each time a capture starts, so storing
+					// it is all it takes.
+					config.set(field, this[field]);
 				}
 			};
 
@@ -922,6 +994,10 @@ export default {
 </script>
 
 <style scoped>
+.settings-keybind-clash {
+	color: #ff6b5b;
+}
+
 hr {
 	margin: 0;
 	margin-top: 0.25rem;

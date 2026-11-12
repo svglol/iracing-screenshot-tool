@@ -54,6 +54,13 @@ const schema = {
 		type: 'string',
 		default: 'Control+PrintScreen',
 	},
+	// Aborts a running capture grid or long exposure. Registered ONLY while one is
+	// running (main/abort-hotkey.ts), which is what makes plain Escape a safe
+	// default: no other app loses it the rest of the time.
+	abortKeybind: {
+		type: 'string',
+		default: 'Escape',
+	},
 	customFilenameFormat: {
 		type: 'boolean',
 		default: false,
@@ -164,6 +171,23 @@ const schema = {
 	longExposureCollapsed: {
 		type: 'boolean',
 		default: true,
+	},
+	// Whether the capture-grid panel is folded away in the sidebar. Collapsed by
+	// default, for the same reason as long exposure: a replay-driven mode that
+	// someone who came for one screenshot should not have to read past.
+	captureGridCollapsed: {
+		type: 'boolean',
+		default: true,
+	},
+	// Capture grid: the gap along the track, in metres, every other car must keep
+	// from the car being shot. A car crowded on the nearest lap is shot at the same
+	// spot on a nearby lap instead. 0 = do not check. Default and ceiling match
+	// main/capture-grid/clearance.ts.
+	captureGridMinGap: {
+		type: 'number',
+		default: 20,
+		minimum: 0,
+		maximum: 200,
 	},
 	// Whether the panel's Advanced group is unfolded. Separate from the panel fold
 	// so opening the panel does not drag seven tuning controls back onto the screen.

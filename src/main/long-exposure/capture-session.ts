@@ -45,13 +45,13 @@ import {
 import { summarizeFrameContent } from '../../utilities/long-exposure/frame-content';
 import { assessLongExposureVram } from '../../utilities/long-exposure/vram-budget';
 import type { Dimensions, VramInfo } from '../../utilities/vram-prediction';
-import type { PlaybackSnapshot, ReplayState } from './replay-control';
+import type { PlaybackSnapshot, ReplayState } from '../replay-control';
 import { t } from '../../utilities/i18n';
 import {
 	ReplayController,
 	capturePlaybackSnapshot,
 	tapeEndFrame,
-} from './replay-control';
+} from '../replay-control';
 import { createLogger } from '../../utilities/logger';
 
 const log = createLogger('long-exposure/session');
@@ -261,19 +261,40 @@ export interface CaptureSessionDeps {
 	// Cooperative abort. Checked between every step; unwinds through the same
 	// finally as any other exit, so the anchor is still restored.
 	signal?: { aborted: boolean };
-	onProgress?(update: {
-		// 'warming' replaces 'seeking' when the pass has an effects warm-up: the seek
-		// is the same, but the seconds of 1x playback after it would otherwise read
-		// as a seek that hangs.
-		phase: 'seeking' | 'warming' | 'accumulating' | 'resolving' | 'restoring';
-		accepted?: number;
-		rejected?: number;
-		progress?: number;
-		// Zero-based pass index and total, so a multi-pass capture can show "pass 3
-		// of 8" rather than appearing to restart. Both absent on a single-pass shot.
-		pass?: number;
-		passes?: number;
-	}): void;
+	onProgress?(update: LongExposureProgressUpdate): void;
+}
+
+export interface LongExposureProgressUpdate {
+	// 'warming' replaces 'seeking' when the pass has an effects warm-up: the seek
+	// is the same, but the seconds of 1x playback after it would otherwise read
+	// as a seek that hangs.
+	phase: 'seeking' | 'warming' | 'accumulating' | 'resolving' | 'restoring';
+	accepted?: number;
+	rejected?: number;
+	progress?: number;
+	// Zero-based pass index and total, so a multi-pass capture can show "pass 3
+	// of 8" rather than appearing to restart. Both absent on a single-pass shot.
+	pass?: number;
+	passes?: number;
+	// What the plan predicts ONE pass costs in wall clock, so a progress display
+	// can keep moving between updates instead of jumping at each one. On the
+	// per-pass phases only (seeking, warming, accumulating).
+	timing?: PassTiming;
+}
+
+export interface PassTiming {
+	// The effects warm-up (1x pre-roll plus brake), 0 when there is none. The
+	// seek itself is not predicted; the display adds its own allowance.
+	warmUpSeconds: number;
+	// The window played at the capture speed.
+	exposureSeconds: number;
+}
+
+function passTiming(plan: ResolvedPlan): PassTiming {
+	return {
+		warmUpSeconds: plan.predictedWarmUpSeconds,
+		exposureSeconds: plan.predictedWallClockSeconds,
+	};
 }
 
 const TONEMAP_CODES: Record<string, number> = {
@@ -707,6 +728,7 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 				plan.warmUpFrames > 0 && !warmUp.fellBack ? 'warming' : 'seeking',
 			pass,
 			passes,
+			timing: passTiming(plan),
 		});
 		const positioned = await positionForWindow({
 			deps,
@@ -1146,6 +1168,7 @@ async function accumulateWindow(
 			rejected: stats.rejected,
 			pass,
 			passes,
+			timing: passTiming(plan),
 			// Within this pass. `accepted` is cumulative across passes, deliberately:
 			// it is the count the shot is judged on.
 			progress:
