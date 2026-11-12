@@ -4,6 +4,7 @@ import {
 	carLapDistPct,
 	encodeCameraCarNumber,
 	groupByClass,
+	nameClass,
 	padCarNum,
 	parseTrackLengthMeters,
 	readGridDrivers,
@@ -22,6 +23,7 @@ function driver(
 		cameraNumber: carIdx,
 		classId: 1,
 		className: 'GT3',
+		carModel: 'Ferrari 296 GT3',
 		classColor: 0xff0000,
 		driverName: `Driver ${carIdx}`,
 		isPaceCar: false,
@@ -322,6 +324,120 @@ describe('buildGridRoster', () => {
 });
 
 describe('classes', () => {
+	// The fields an AI race at Fuji sent on 2026-11-12: CarClassShortName null for
+	// every car, the GT3 and hypercar classes told apart only by CarClassID.
+	const aiRaceDriver = (
+		carIdx: number,
+		classId: number,
+		full: string,
+		short: string
+	) => ({
+		CarIdx: carIdx,
+		CarClassID: classId,
+		CarClassShortName: null as string | null,
+		CarScreenName: full,
+		CarScreenNameShort: short,
+	});
+
+	it('names an unnamed multi-make class by the class code its models share', () => {
+		const drivers = readGridDrivers({
+			DriverInfo: {
+				Drivers: [
+					aiRaceDriver(
+						0,
+						2708,
+						'Aston Martin Vantage GT3 EVO',
+						'AMR Vantage GT3 EVO'
+					),
+					aiRaceDriver(
+						1,
+						2708,
+						'Lamborghini Huracan GT3 EVO',
+						'Lamborghini GT3'
+					),
+					aiRaceDriver(2, 2708, 'Ferrari 296 GT3', 'Ferrari 296 GT3'),
+					aiRaceDriver(
+						3,
+						2708,
+						'Chevrolet Corvette Z06 GT3.R',
+						'Corvette GT3.R'
+					),
+					aiRaceDriver(
+						4,
+						2708,
+						'Porsche 911 GT3 R (992)',
+						'Porsche 911 GT3 R (992)'
+					),
+				],
+			},
+		});
+		expect(new Set(drivers.map((d) => d.className))).toEqual(
+			new Set(['GT3'])
+		);
+		expect(drivers[1].carModel).toBe('Lamborghini GT3');
+	});
+
+	it('lists the models of an unnamed class that shares no class code', () => {
+		const drivers = readGridDrivers({
+			DriverInfo: {
+				Drivers: [
+					aiRaceDriver(
+						0,
+						4029,
+						'Aston Martin Valkyrie LMH',
+						'Valkyrie LMH'
+					),
+					aiRaceDriver(1, 4029, 'Ferrari 499P', 'Ferrari 499P'),
+					aiRaceDriver(
+						2,
+						4029,
+						'Aston Martin Valkyrie LMH',
+						'Valkyrie LMH'
+					),
+					aiRaceDriver(3, 4029, 'Porsche 963 GTP', 'Porsche 963'),
+				],
+			},
+		});
+		expect(drivers[3].className).toBe(
+			'Valkyrie LMH / Ferrari 499P / Porsche 963'
+		);
+	});
+
+	it('takes the class name from any car of the class that carries one', () => {
+		const drivers = readGridDrivers({
+			DriverInfo: {
+				Drivers: [
+					aiRaceDriver(0, 7, 'Ferrari 296 GT3', 'Ferrari 296 GT3'),
+					{
+						...aiRaceDriver(1, 7, 'BMW M4 GT3', 'BMW M4 GT3'),
+						CarClassShortName: 'GT3 Class',
+					},
+				],
+			},
+		});
+		expect(drivers.map((d) => d.className)).toEqual([
+			'GT3 Class',
+			'GT3 Class',
+		]);
+	});
+
+	it('does not take a model number or the maker for a class code', () => {
+		const model = (name: string) => ({ short: name, full: name });
+		// "296" is shared, but a number alone is a model, not a class.
+		expect(
+			nameClass(
+				'',
+				[model('Ferrari 296 GT3'), model('Ferrari 296 Challenge')],
+				1
+			)
+		).toBe('Ferrari 296 GT3 / Ferrari 296 Challenge');
+		// "BMW" is shared, but it is the maker.
+		expect(nameClass('', [model('BMW M4 GT3'), model('BMW M8 GTE')], 1)).toBe(
+			'BMW M4 GT3 / BMW M8 GTE'
+		);
+		expect(nameClass('', [], 9)).toBe('Class 9');
+	});
+
 	it('reads the class, falling back to the car name, then the id', () => {
 		const drivers = readGridDrivers({
 			DriverInfo: {

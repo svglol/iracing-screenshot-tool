@@ -70,7 +70,12 @@ import {
 	parseTrackLengthMeters,
 	readGridDrivers,
 	readGridTelemetry,
+	type GridCar,
 } from './capture-grid/roster';
+import {
+	DEFAULT_MIN_GAP_METERS,
+	MAX_GRID_MIN_GAP_METERS,
+} from './capture-grid/clearance';
 import {
 	classifyCameraGroup,
 	readCameraView,
@@ -80,9 +85,19 @@ import {
 	type GridPlan,
 	type GridProgress,
 	type GridShotOutcome,
+	type ShotCheck,
 } from './capture-grid/grid-session';
-import { GridOverlay } from './capture-grid/grid-overlay';
-import { executeRecipe } from './long-exposure/capture-session';
+import { CaptureOverlay, type OverlayText } from './capture-overlay';
+import {
+	AbortHotkey,
+	DEFAULT_ABORT_KEYBIND,
+	displayAccelerator,
+} from './abort-hotkey';
+import {
+	executeRecipe,
+	type LongExposureProgressUpdate,
+} from './long-exposure/capture-session';
+import { longExposureBarMotion } from './long-exposure/overlay-progress';
 import { writeLongExposure } from './long-exposure/output';
 import {
 	createDefaultRecipe,
@@ -1265,6 +1280,42 @@ function longExposureDefaults(live: ReplayState | null): LongExposureRecipe {
 	};
 }
 
+// The banner over iRacing while a capture runs — the grid, a long exposure, a
+// ReShade-mode screenshot. One instance: only one capture runs at a time, and
+// restoreScreenshotState closes it on every way out.
+const captureOverlay = new CaptureOverlay();
+
+function openCaptureOverlay(): void {
+	const bounds = getIracingWindowDetails();
+	captureOverlay.open({
+		x: bounds?.left ?? left ?? 0,
+		y: bounds?.top ?? top ?? 0,
+	});
+}
+
+// The abort key for a running grid or long exposure (see abort-hotkey.ts):
+// registered for the length of one capture, never longer. The banner names the
+// key only when it actually took.
+const abortHotkey = new AbortHotkey(globalShortcut);
+
+function armAbortHotkey(onPress: () => void): void {
+	const key = config.get('abortKeybind') || DEFAULT_ABORT_KEYBIND;
+	const armed = abortHotkey.arm(key, () => {
+		log.info('Abort key pressed', { key });
+		onPress();
+	}, [config.get('screenshotKeybind')]);
+	captureOverlay.setHint(
+		armed
+			? t('captureOverlay.abortHint', { key: displayAccelerator(key) })
+			: null
+	);
+}
+
+function disarmAbortHotkey(): void {
+	abortHotkey.disarm();
+	captureOverlay.setHint(null);
+}
+
 // Availability of the compute backend + whether a shot can be set up right now.
 // The renderer polls this to enable/disable the panel and explain why.
 ipcMain.handle('long-exposure:availability', () => {
@@ -1311,14 +1362,16 @@ ipcMain.handle('long-exposure:availability', () => {
 // Cooperative cancel. Does NOT itself restore anything — the running capture's
 // finally does that, which is the whole point of routing abort through the same
 // unwind path as success.
-ipcMain.handle('long-exposure:abort', () => {
+function abortLongExposure(): boolean {
 	if (longExposureSignal) {
 		longExposureSignal.aborted = true;
 		log.info('Long exposure abort requested');
 		return true;
 	}
 	return false;
-});
+}
+
+ipcMain.handle('long-exposure:abort', () => abortLongExposure());
 
 ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 	if (longExposureActive || takingScreenshot) {
@@ -1406,6 +1459,9 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 
 	const signal = { aborted: false };
 	longExposureSignal = signal;
+	longExposureOverlayPhase = null;
+	longExposureOverlayLast = null;
+	longExposureAccumulatingSince = null;
 	longExposureActive = true;
 	takingScreenshot = true;
 	originalWindowBounds = getIracingWindowDetails() || null;
@@ -1424,6 +1480,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 	}
 
 	try {
+		armAbortHotkey(() => abortLongExposure());
 		const outcome = await executeRecipe(recipe, {
 			replay: replayController,
 			native: getLongExposureApi(),
@@ -1450,8 +1507,10 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			delay,
 			now: () => Date.now(),
 			signal,
-			onProgress: (update) =>
-				broadcastToWindows('long-exposure:progress', update),
+			onProgress: (update) => {
+				broadcastToWindows('long-exposure:progress', update);
+				showLongExposureOverlay(update);
+			},
 		});
 
 		if (!outcome.ok || !outcome.image || !outcome.plan || !outcome.stats) {
@@ -1533,6 +1592,7 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		log.error('Long exposure failed', { error: message });
 		return { ok: false, failure: 'resolve-failed', message, warnings: [] };
 	} finally {
+		disarmAbortHotkey();
 		longExposureActive = false;
 		longExposureSignal = null;
 		// executeRecipe's own finally already restored the window and the cursor;
@@ -1547,6 +1607,89 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		focusAppWindow();
 	}
 });
+
+// The banner over iRacing during a long exposure, worded as the panel's own
+// progress line. Opened on the first update — by then the window has been
+// raised over ours, which is when the panel stops being visible.
+// Accumulation reports every frame; the banner does not need to.
+const LONG_EXPOSURE_OVERLAY_INTERVAL_MS = 200;
+let longExposureOverlayShownAt = 0;
+let longExposureOverlayPhase: string | null = null;
+// The last per-pass update, whose timing and pass count 'resolving' borrows.
+let longExposureOverlayLast: LongExposureProgressUpdate | null = null;
+// When the current pass started accumulating, so the bar's time left is
+// measured on the wall clock (see longExposureBarMotion). Keyed by pass.
+let longExposureAccumulatingSince: { pass: number; at: number } | null = null;
+
+function showLongExposureOverlay(update: LongExposureProgressUpdate): void {
+	// `takingScreenshot` drops when the window is put back: nothing after that
+	// may re-open the banner over our own window.
+	if (!takingScreenshot || update.phase === 'restoring') {
+		// The window is about to be put back; the banner goes with it.
+		return;
+	}
+	const now = Date.now();
+	// Before the throttle, so the start is the first update's time, not the
+	// first one that happened to be shown.
+	if (update.phase === 'accumulating') {
+		const passIndex = update.pass ?? 0;
+		if (longExposureAccumulatingSince?.pass !== passIndex) {
+			longExposureAccumulatingSince = { pass: passIndex, at: now };
+		}
+	}
+	if (
+		update.phase === longExposureOverlayPhase &&
+		now - longExposureOverlayShownAt < LONG_EXPOSURE_OVERLAY_INTERVAL_MS
+	) {
+		return;
+	}
+	longExposureOverlayPhase = update.phase;
+	longExposureOverlayShownAt = now;
+	openCaptureOverlay();
+	const pass =
+		typeof update.pass === 'number' && (update.passes ?? 0) > 1
+			? t('longExposure.progress.pass', {
+					current: String(update.pass + 1),
+					total: String(update.passes),
+				})
+			: '';
+	const subtitle =
+		update.phase === 'seeking'
+			? t('longExposure.progress.seeking', { pass })
+			: update.phase === 'warming'
+				? t('longExposure.progress.warming', { pass })
+				: update.phase === 'accumulating'
+					? t('longExposure.progress.accumulating', {
+							count: String(update.accepted ?? 0),
+							pass,
+						})
+					: update.phase === 'resolving'
+						? t('longExposure.progress.resolving')
+						: t('longExposure.progress.working');
+	// The bar glides through the whole capture on the plan's predicted timings
+	// (see overlay-progress.ts) rather than stepping on each update.
+	const motion = longExposureBarMotion(
+		update,
+		longExposureOverlayLast,
+		update.phase === 'accumulating' && longExposureAccumulatingSince
+			? now - longExposureAccumulatingSince.at
+			: null
+	);
+	if (update.timing) {
+		longExposureOverlayLast = update;
+	}
+	captureOverlay.show({
+		title: t('longExposure.title'),
+		subtitle,
+		...(motion
+			? {
+					progress: motion.from,
+					progressTo: motion.to,
+					progressMs: motion.ms,
+				}
+			: {}),
+	});
+}
 
 // Live preview of what a recipe would do, for the parameter UI: chosen playback
 // speed, predicted samples, and how long the user will be waiting. Pure — it never
@@ -1604,6 +1747,20 @@ let gridSkipRequested = false;
 const GRID_RESHADE_WAIT_MS = 15 * 60 * 1000;
 // Each grid saves into its own folder inside the screenshot folder.
 const GRID_FOLDER_FORMAT = '{track} grid {datetime}';
+
+// The minimum gap the renderer asked for, clamped; the stored setting when it
+// sent none. 0 turns the check off.
+function gridMinGapMeters(rawOptions: unknown): number {
+	const asked = (rawOptions as { minGapMeters?: unknown } | null)
+		?.minGapMeters;
+	const value =
+		typeof asked === 'number' && Number.isFinite(asked)
+			? asked
+			: Number(config.get('captureGridMinGap'));
+	return Number.isFinite(value)
+		? Math.max(0, Math.min(MAX_GRID_MIN_GAP_METERS, value))
+		: DEFAULT_MIN_GAP_METERS;
+}
 
 // The still path's request, built in main from the same settings the sidebar
 // reads: the Resolution control sized against iRacing's baseline window, and
@@ -1673,6 +1830,7 @@ ipcMain.handle('capture-grid:roster', () => {
 		classes: groupByClass(live.roster.cars).map((c) => ({
 			classId: c.classId,
 			className: c.className,
+			carModels: c.carModels,
 			color: classColorHex(c.classColor),
 			cars: c.cars.map((car) => ({
 				carIdx: car.carIdx,
@@ -1687,15 +1845,17 @@ ipcMain.handle('capture-grid:roster', () => {
 	};
 });
 
-ipcMain.handle('capture-grid:abort', () => {
+function abortGrid(): boolean {
 	if (gridSignal) {
 		gridSignal.aborted = true;
 		// A ReShade-mode grid is parked in a wait for the user's key; cancel it so
 		// the abort takes effect now, not when the key is eventually pressed.
 		clearPendingReshadeWait('Capture grid aborted');
 	}
-	return { ok: gridSignal !== null };
-});
+	return gridSignal !== null;
+}
+
+ipcMain.handle('capture-grid:abort', () => ({ ok: abortGrid() }));
 
 ipcMain.handle('capture-grid:skip', () => {
 	if (gridSignal) {
@@ -1705,343 +1865,438 @@ ipcMain.handle('capture-grid:skip', () => {
 	return { ok: gridSignal !== null };
 });
 
-ipcMain.handle('capture-grid:start', async (_event, rawSelection: unknown) => {
-	const refuse = (message: string) => {
-		log.info('Capture grid refused', { message });
-		return { ok: false, message, aborted: false, results: [], folder: null };
-	};
-
-	if (gridSignal || longExposureActive || takingScreenshot) {
-		return refuse(t('captureGrid.errors.busy'));
-	}
-	const replayState = replayController.state();
-	if (!iracing.telemetry || !replayState) {
-		return refuse(t('captureGrid.errors.noTelemetry'));
-	}
-
-	// The selection is CarIdx values. Read against a roster built NOW, so a car
-	// that left the track since the picker was drawn is simply not in it.
-	const selection = new Set(
-		Array.isArray(rawSelection)
-			? rawSelection.filter((n): n is number => Number.isInteger(n))
-			: []
-	);
-	const live = readLiveGrid();
-	const view = live.view;
-	if (
-		live.roster.referencePct === null ||
-		!view ||
-		view.carIdx === null ||
-		view.group === null
-	) {
-		return refuse(t('captureGrid.errors.noReference'));
-	}
-	const cars = live.roster.cars.filter((car) => selection.has(car.carIdx));
-	if (cars.length === 0) {
-		return refuse(t('captureGrid.errors.nothingSelected'));
-	}
-
-	// Pre-flight, all of it before the sim is touched — the same refusals the
-	// still path and long exposure make, in the same words.
-	const reshade = config.get('reshade') === true;
-	let reshadeFolder: string | null = null;
-	if (reshade) {
-		const reshadeIniPath = config.get('reshadeFile');
-		try {
-			const ini = loadIniFile.sync(reshadeIniPath) as ReshadeIni;
-			reshadeFolder = getReshadeScreenshotFolder(ini, reshadeIniPath).folder;
-		} catch (error) {
-			// An Error carrying the user-facing sentence (or the raw error when it
-			// is not a recognised ini problem).
-			const described = describeReshadeIniError(error, reshadeIniPath);
-			return refuse((described as Error)?.message || String(described));
-		}
-	} else {
-		// Standard mode shoots through WGC only, as long exposure does: the
-		// getUserMedia fallback is a round trip through the worker window whose
-		// completion restores the window — between cars.
-		const backend = decideCaptureBackend({
-			reshade: false,
-			nativeCapture: config.get('nativeCapture'),
-			wgcAvailable: isWgcAvailable(),
-		});
-		if (backend !== 'wgc') {
-			return refuse(t('captureGrid.errors.needsNativeCapture'));
-		}
-		const blocked = currentCaptureBlock(false);
-		if (blocked) {
-			return refuse(captureBlockMessage(blocked.block, blocked.hresult));
-		}
-		const fullscreen = getIracingExclusiveFullscreenState();
-		lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
-		if (fullscreen && fullscreen.exclusiveFullscreen) {
-			return refuse(EXCLUSIVE_FULLSCREEN_MESSAGE());
-		}
-	}
-
-	const data = gridCaptureRequest();
-	const outputDir = path.join(
-		path.resolve(config.get('screenshotFolder')),
-		resolveFilenameFormat(
-			GRID_FOLDER_FORMAT,
-			iracing.sessionInfo,
-			iracing.telemetry
-		)
-	);
-	const viewDriver = live.drivers.find((d) => d.carIdx === view.carIdx);
-	const plan: GridPlan = {
-		cars,
-		referencePct: live.roster.referencePct,
-		snapshot: capturePlaybackSnapshot(replayState),
-		view,
-		viewCameraNumber: viewDriver?.cameraNumber ?? null,
-		tapeEndFrame: tapeEndFrame(replayState),
-		trackLengthMeters: parseTrackLengthMeters(
-			(live.session as { WeekendInfo?: { TrackLength?: unknown } } | null)
-				?.WeekendInfo?.TrackLength
-		),
-	};
-
-	log.info('Capture grid starting', {
-		mode: reshade ? 'reshade' : 'standard',
-		cars: cars.length,
-		referenceCarIdx: live.roster.referenceCarIdx,
-		referencePct: live.roster.referencePct,
-		camera: view,
-		cameraKind: classifyCameraGroup(live.session, view.group),
-		request: data,
-		outputDir,
-	});
-
-	const signal = { aborted: false };
-	gridSignal = signal;
-	gridSkipRequested = false;
-	takingScreenshot = true;
-	originalWindowBounds = getIracingWindowDetails() || null;
-	parseCameraState(
-		(iracing.telemetry?.values as { CamCameraState?: string[] })
-			?.CamCameraState
-	);
-	try {
-		iracing.camControls.setState(
-			cameraState | iracing.Consts.CameraState.UIHidden
-		);
-	} catch (error) {
-		log.debug('Could not hide the iRacing UI for the grid', {
-			error: (error as Error)?.message || String(error),
-		});
-	}
-
-	const overlay = new GridOverlay();
-	let windowId: number | undefined;
-
-	const label = (index: number, carNumber: string, driverName: string) =>
-		t('captureGrid.overlay.car', {
-			index: String(index + 1),
-			total: String(cars.length),
-			carNumber,
-			driverName,
-		});
-
-	const onProgress = (progress: GridProgress) => {
-		const { phase, index, total, car, result } = progress;
-		broadcastToWindows('capture-grid:progress', {
-			phase,
-			index,
-			total,
-			carIdx: car.carIdx,
-			carNumber: car.carNumber,
-			driverName: car.driverName,
-			result: result ?? null,
-		});
-		if (phase === 'positioning') {
-			overlay.show({
-				title: label(index, car.carNumber, car.driverName),
-				subtitle: t('captureGrid.overlay.positioning'),
-			});
-		} else if (phase === 'capturing') {
-			overlay.show({
-				title: label(index, car.carNumber, car.driverName),
-				subtitle: reshade
-					? t('captureGrid.overlay.pressReshade')
-					: t('captureGrid.overlay.capturing'),
-				ask: reshade,
-			});
-		}
-	};
-
-	const shootWgc = async (): Promise<GridShotOutcome> => {
-		if (windowId === undefined) {
-			return { ok: false, reason: 'no-window', fatal: true };
-		}
-		const grab = await grabWgcFrame(windowId);
-		if (grab === 'aborted') {
-			// The disconnect/watchdog path already restored and reported.
+ipcMain.handle(
+	'capture-grid:start',
+	async (_event, rawSelection: unknown, rawOptions: unknown) => {
+		const refuse = (message: string) => {
+			log.info('Capture grid refused', { message });
 			return {
 				ok: false,
-				reason: t('captureGrid.errors.interrupted'),
-				fatal: true,
+				message,
+				aborted: false,
+				results: [],
+				folder: null,
 			};
-		}
-		if (grab === 'fallback') {
-			return {
-				ok: false,
-				reason: `wgc-${lastWgcAttempt.fallbackReason || 'no-frame'}`,
-			};
-		}
-		const saved = await saveWgcFrame(grab.frame, data, {
-			screenshotDir: outputDir,
-		});
-		if (saved.committed) {
-			return { ok: true, path: saved.savedPath };
-		}
-		return {
-			ok: false,
-			reason: `save-failed: ${(saved.error as Error)?.message || String(saved.error)}`,
 		};
-	};
 
-	const shootReshade = async (): Promise<GridShotOutcome> => {
+		if (gridSignal || longExposureActive || takingScreenshot) {
+			return refuse(t('captureGrid.errors.busy'));
+		}
+		const replayState = replayController.state();
+		if (!iracing.telemetry || !replayState) {
+			return refuse(t('captureGrid.errors.noTelemetry'));
+		}
+
+		// The selection is CarIdx values. Read against a roster built NOW, so a car
+		// that left the track since the picker was drawn is simply not in it.
+		const selection = new Set(
+			Array.isArray(rawSelection)
+				? rawSelection.filter((n): n is number => Number.isInteger(n))
+				: []
+		);
+		const live = readLiveGrid();
+		const view = live.view;
+		if (
+			live.roster.referencePct === null ||
+			!view ||
+			view.carIdx === null ||
+			view.group === null
+		) {
+			return refuse(t('captureGrid.errors.noReference'));
+		}
+		const cars = live.roster.cars.filter((car) => selection.has(car.carIdx));
+		if (cars.length === 0) {
+			return refuse(t('captureGrid.errors.nothingSelected'));
+		}
+
+		// Pre-flight, all of it before the sim is touched — the same refusals the
+		// still path and long exposure make, in the same words.
+		const reshade = config.get('reshade') === true;
+		let reshadeFolder: string | null = null;
+		if (reshade) {
+			const reshadeIniPath = config.get('reshadeFile');
+			try {
+				const ini = loadIniFile.sync(reshadeIniPath) as ReshadeIni;
+				reshadeFolder = getReshadeScreenshotFolder(
+					ini,
+					reshadeIniPath
+				).folder;
+			} catch (error) {
+				// An Error carrying the user-facing sentence (or the raw error when it
+				// is not a recognised ini problem).
+				const described = describeReshadeIniError(error, reshadeIniPath);
+				return refuse((described as Error)?.message || String(described));
+			}
+		} else {
+			// Standard mode shoots through WGC only, as long exposure does: the
+			// getUserMedia fallback is a round trip through the worker window whose
+			// completion restores the window — between cars.
+			const backend = decideCaptureBackend({
+				reshade: false,
+				nativeCapture: config.get('nativeCapture'),
+				wgcAvailable: isWgcAvailable(),
+			});
+			if (backend !== 'wgc') {
+				return refuse(t('captureGrid.errors.needsNativeCapture'));
+			}
+			const blocked = currentCaptureBlock(false);
+			if (blocked) {
+				return refuse(captureBlockMessage(blocked.block, blocked.hresult));
+			}
+			const fullscreen = getIracingExclusiveFullscreenState();
+			lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
+			if (fullscreen && fullscreen.exclusiveFullscreen) {
+				return refuse(EXCLUSIVE_FULLSCREEN_MESSAGE());
+			}
+		}
+
+		const data = gridCaptureRequest();
+		const outputDir = path.join(
+			path.resolve(config.get('screenshotFolder')),
+			resolveFilenameFormat(
+				GRID_FOLDER_FORMAT,
+				iracing.sessionInfo,
+				iracing.telemetry
+			)
+		);
+		const viewDriver = live.drivers.find((d) => d.carIdx === view.carIdx);
+		const cameraKind = classifyCameraGroup(live.session, view.group);
+		const plan: GridPlan = {
+			cars,
+			referencePct: live.roster.referencePct,
+			snapshot: capturePlaybackSnapshot(replayState),
+			view,
+			viewCameraNumber: viewDriver?.cameraNumber ?? null,
+			// The camera number is held only where it means something: on a TV group
+			// iRacing's director picks it per car.
+			holdCamera: cameraKind === 'car',
+			tapeEndFrame: tapeEndFrame(replayState),
+			trackLengthMeters: parseTrackLengthMeters(
+				(live.session as { WeekendInfo?: { TrackLength?: unknown } } | null)
+					?.WeekendInfo?.TrackLength
+			),
+			minGapMeters: gridMinGapMeters(rawOptions),
+		};
+
+		log.info('Capture grid starting', {
+			mode: reshade ? 'reshade' : 'standard',
+			cars: cars.length,
+			referenceCarIdx: live.roster.referenceCarIdx,
+			referencePct: live.roster.referencePct,
+			camera: view,
+			cameraKind,
+			minGapMeters: plan.minGapMeters,
+			request: data,
+			outputDir,
+		});
+
+		const signal = { aborted: false };
+		gridSignal = signal;
 		gridSkipRequested = false;
+		armAbortHotkey(() => abortGrid());
+		takingScreenshot = true;
+		originalWindowBounds = getIracingWindowDetails() || null;
+		parseCameraState(
+			(iracing.telemetry?.values as { CamCameraState?: string[] })
+				?.CamCameraState
+		);
 		try {
-			// Called only now, with the car in place: the wait's baseline is taken
-			// here, so a key pressed while the replay was still seeking is not
-			// filed as this car.
-			const file = await waitForReshadeScreenshot(
-				reshadeFolder as string,
-				GRID_RESHADE_WAIT_MS
+			iracing.camControls.setState(
+				cameraState | iracing.Consts.CameraState.UIHidden
 			);
-			const { data: raw, info } = await sharp(file)
-				.ensureAlpha()
-				.raw()
-				.toBuffer({ resolveWithObject: true });
-			const saved = await saveWgcFrame(
-				{ data: raw, width: info.width, height: info.height },
-				data,
-				{ screenshotDir: outputDir }
+		} catch (error) {
+			log.debug('Could not hide the iRacing UI for the grid', {
+				error: (error as Error)?.message || String(error),
+			});
+		}
+
+		const overlay = captureOverlay;
+		let windowId: number | undefined;
+
+		const label = (index: number, carNumber: string, driverName: string) =>
+			t('captureGrid.overlay.car', {
+				index: String(index + 1),
+				total: String(cars.length),
+				carNumber,
+				driverName,
+			});
+
+		const clearLapText = (lapOffset: number | undefined) =>
+			t(
+				lapOffset === -2
+					? 'captureGrid.overlay.clearLap.before2'
+					: lapOffset === 2
+						? 'captureGrid.overlay.clearLap.after2'
+						: lapOffset === 1
+							? 'captureGrid.overlay.clearLap.after1'
+							: 'captureGrid.overlay.clearLap.before1'
 			);
+
+		const onProgress = (progress: GridProgress) => {
+			const { phase, index, total, car, result, lapOffset, retry } =
+				progress;
+			broadcastToWindows('capture-grid:progress', {
+				phase,
+				index,
+				total,
+				carIdx: car.carIdx,
+				carNumber: car.carNumber,
+				driverName: car.driverName,
+				lapOffset: lapOffset ?? null,
+				retry: retry === true,
+				result: result ?? null,
+			});
+			const title = label(index, car.carNumber, car.driverName);
+			// The bar shows how far through the grid this car is.
+			const progressFraction = total > 0 ? index / total : 0;
+			let text: OverlayText | null = null;
+			if (phase === 'positioning') {
+				text = { title, subtitle: t('captureGrid.overlay.positioning') };
+			} else if (phase === 'finding-clear-lap') {
+				text = { title, subtitle: clearLapText(lapOffset) };
+			} else if (phase === 'restoring-camera') {
+				text = {
+					title,
+					subtitle: t('captureGrid.overlay.cameraMoved'),
+					warn: true,
+				};
+			} else if (phase === 'capturing') {
+				text = {
+					title,
+					subtitle: reshade
+						? retry
+							? t('captureGrid.overlay.pressReshadeAgain')
+							: t('captureGrid.overlay.pressReshade')
+						: t('captureGrid.overlay.capturing'),
+					ask: reshade,
+				};
+			}
+			if (text) {
+				overlay.show({ ...text, progress: progressFraction });
+			}
+		};
+
+		// Returned instead of saving when the camera or replay moved while the shot
+		// was taken; the session puts it back and shoots again.
+		const cameraMoved: GridShotOutcome = {
+			ok: false,
+			reason: 'camera-moved',
+			retry: true,
+		};
+
+		const shootWgc = async (
+			_car: GridCar,
+			_index: number,
+			check: ShotCheck
+		): Promise<GridShotOutcome> => {
+			if (windowId === undefined) {
+				return { ok: false, reason: 'no-window', fatal: true };
+			}
+			const grab = await grabWgcFrame(windowId);
+			if (grab === 'aborted') {
+				// The disconnect/watchdog path already restored and reported.
+				return {
+					ok: false,
+					reason: t('captureGrid.errors.interrupted'),
+					fatal: true,
+				};
+			}
+			if (grab === 'fallback') {
+				return {
+					ok: false,
+					reason: `wgc-${lastWgcAttempt.fallbackReason || 'no-frame'}`,
+				};
+			}
+			// Checked before anything is written: a refused frame never reaches the
+			// folder or the gallery.
+			if (!check.isClean()) {
+				return cameraMoved;
+			}
+			const saved = await saveWgcFrame(grab.frame, data, {
+				screenshotDir: outputDir,
+			});
 			if (saved.committed) {
-				log.info('Capture grid ReShade shot saved', {
-					source: file,
-					file: saved.savedPath,
-				});
 				return { ok: true, path: saved.savedPath };
 			}
 			return {
 				ok: false,
 				reason: `save-failed: ${(saved.error as Error)?.message || String(saved.error)}`,
 			};
+		};
+
+		const shootReshade = async (
+			_car: GridCar,
+			_index: number,
+			check: ShotCheck
+		): Promise<GridShotOutcome> => {
+			gridSkipRequested = false;
+			try {
+				// Called only now, with the car in place: the wait's baseline is taken
+				// here, so a key pressed while the replay was still seeking is not
+				// filed as this car.
+				const file = await waitForReshadeScreenshot(
+					reshadeFolder as string,
+					GRID_RESHADE_WAIT_MS
+				);
+				// ReShade wrote the file when the key was pressed (plus the encode), so
+				// its write time says whether the camera was where it should be then.
+				let writtenAt: number | undefined;
+				try {
+					writtenAt = fs.statSync(file).mtimeMs;
+				} catch {
+					writtenAt = undefined;
+				}
+				if (!check.isClean(writtenAt)) {
+					log.info('Capture grid ReShade shot refused: the camera moved', {
+						source: file,
+					});
+					return cameraMoved;
+				}
+				const { data: raw, info } = await sharp(file)
+					.ensureAlpha()
+					.raw()
+					.toBuffer({ resolveWithObject: true });
+				const saved = await saveWgcFrame(
+					{ data: raw, width: info.width, height: info.height },
+					data,
+					{ screenshotDir: outputDir }
+				);
+				if (saved.committed) {
+					log.info('Capture grid ReShade shot saved', {
+						source: file,
+						file: saved.savedPath,
+					});
+					return { ok: true, path: saved.savedPath };
+				}
+				return {
+					ok: false,
+					reason: `save-failed: ${(saved.error as Error)?.message || String(saved.error)}`,
+				};
+			} catch (error) {
+				if (signal.aborted) {
+					return { ok: false, reason: 'aborted' };
+				}
+				if (gridSkipRequested) {
+					return { ok: false, reason: 'skipped', skippedByUser: true };
+				}
+				// The wait timed out or the folder watch failed: nobody is pressing the
+				// key, so stop rather than hold iRacing resized for another car.
+				return {
+					ok: false,
+					reason: (error as Error)?.message || String(error),
+					fatal: true,
+				};
+			}
+		};
+
+		try {
+			const outcome = await runGrid(plan, {
+				replay: replayController,
+				search: {
+					readSample: (carIdx) => {
+						const values =
+							(iracing.telemetry?.values as Record<string, unknown>) ||
+							null;
+						const state = readReplayState(values);
+						if (!state) {
+							return null;
+						}
+						return {
+							frame: state.replayFrameNum,
+							pct: carLapDistPct(readGridTelemetry(values), carIdx),
+						};
+					},
+					seekAbsolute: (frame) => replayController.seekAbsolute(frame),
+					delay: (ms) => delay(ms),
+					now: () => Date.now(),
+				},
+				readTelemetry: () =>
+					iracing.telemetry
+						? readGridTelemetry(
+								iracing.telemetry.values as Record<string, unknown>
+							)
+						: null,
+				camera: {
+					readView: () =>
+						readCameraView(
+							(iracing.telemetry?.values as Record<string, unknown>) ||
+								null
+						),
+					switchCamera: (carNumber, group, camera) =>
+						iracing.sdk.changeCameraNumber(carNumber, group, camera),
+					delay: (ms) => delay(ms),
+					now: () => Date.now(),
+				},
+				prepare: async () => {
+					windowId = await resizeIracingWindowAsync(
+						data.width,
+						data.height,
+						left,
+						top
+					);
+					if (windowId === undefined) {
+						return {
+							ok: false,
+							message: t('captureGrid.errors.windowNotFound'),
+						};
+					}
+					if (!reshade) {
+						// Re-sampled after the raise, where attribution can succeed — the
+						// same reason long exposure samples here.
+						const raised = getIracingExclusiveFullscreenState();
+						lastCaptureFullscreenState = raised ? raised.state : null;
+						if (raised && raised.exclusiveFullscreen) {
+							return {
+								ok: false,
+								message: EXCLUSIVE_FULLSCREEN_MESSAGE(),
+							};
+						}
+					}
+					openCaptureOverlay();
+					return { ok: true };
+				},
+				shoot: reshade ? shootReshade : shootWgc,
+				restoreWindow: () => {
+					overlay.close();
+					restoreScreenshotState();
+					focusAppWindow();
+				},
+				delay: (ms) => delay(ms),
+				signal,
+				onProgress,
+			});
+
+			return {
+				ok: outcome.ok,
+				message: outcome.message,
+				aborted: outcome.aborted,
+				results: outcome.results,
+				folder: outcome.results.some((r) => r.status === 'shot')
+					? outputDir
+					: null,
+				restoredExactly: outcome.restore?.landedExactly ?? false,
+			};
 		} catch (error) {
-			if (signal.aborted) {
-				return { ok: false, reason: 'aborted' };
-			}
-			if (gridSkipRequested) {
-				return { ok: false, reason: 'skipped', skippedByUser: true };
-			}
-			// The wait timed out or the folder watch failed: nobody is pressing the
-			// key, so stop rather than hold iRacing resized for another car.
+			const message = (error as Error)?.message || String(error);
+			log.error('Capture grid failed', { error: message });
 			return {
 				ok: false,
-				reason: (error as Error)?.message || String(error),
-				fatal: true,
+				message,
+				aborted: false,
+				results: [],
+				folder: null,
 			};
+		} finally {
+			disarmAbortHotkey();
+			gridSignal = null;
+			gridSkipRequested = false;
+			overlay.close();
+			// runGrid's own finally restored everything; this is the backstop for a
+			// throw before that could run. Idempotent.
+			restoreScreenshotState();
 		}
-	};
-
-	try {
-		const outcome = await runGrid(plan, {
-			replay: replayController,
-			search: {
-				readSample: (carIdx) => {
-					const values =
-						(iracing.telemetry?.values as Record<string, unknown>) ||
-						null;
-					const state = readReplayState(values);
-					if (!state) {
-						return null;
-					}
-					return {
-						frame: state.replayFrameNum,
-						pct: carLapDistPct(readGridTelemetry(values), carIdx),
-					};
-				},
-				seekAbsolute: (frame) => replayController.seekAbsolute(frame),
-				delay: (ms) => delay(ms),
-				now: () => Date.now(),
-			},
-			camera: {
-				readView: () =>
-					readCameraView(
-						(iracing.telemetry?.values as Record<string, unknown>) || null
-					),
-				switchCamera: (carNumber, group, camera) =>
-					iracing.sdk.changeCameraNumber(carNumber, group, camera),
-				delay: (ms) => delay(ms),
-				now: () => Date.now(),
-			},
-			prepare: async () => {
-				windowId = await resizeIracingWindowAsync(
-					data.width,
-					data.height,
-					left,
-					top
-				);
-				if (windowId === undefined) {
-					return {
-						ok: false,
-						message: t('captureGrid.errors.windowNotFound'),
-					};
-				}
-				if (!reshade) {
-					// Re-sampled after the raise, where attribution can succeed — the
-					// same reason long exposure samples here.
-					const raised = getIracingExclusiveFullscreenState();
-					lastCaptureFullscreenState = raised ? raised.state : null;
-					if (raised && raised.exclusiveFullscreen) {
-						return { ok: false, message: EXCLUSIVE_FULLSCREEN_MESSAGE() };
-					}
-				}
-				const bounds = getIracingWindowDetails();
-				overlay.open({
-					x: bounds?.left ?? left ?? 0,
-					y: bounds?.top ?? top ?? 0,
-				});
-				return { ok: true };
-			},
-			shoot: reshade ? shootReshade : shootWgc,
-			restoreWindow: () => {
-				overlay.close();
-				restoreScreenshotState();
-				focusAppWindow();
-			},
-			delay: (ms) => delay(ms),
-			signal,
-			onProgress,
-		});
-
-		return {
-			ok: outcome.ok,
-			message: outcome.message,
-			aborted: outcome.aborted,
-			results: outcome.results,
-			folder: outcome.results.some((r) => r.status === 'shot')
-				? outputDir
-				: null,
-			restoredExactly: outcome.restore?.landedExactly ?? false,
-		};
-	} catch (error) {
-		const message = (error as Error)?.message || String(error);
-		log.error('Capture grid failed', { error: message });
-		return { ok: false, message, aborted: false, results: [], folder: null };
-	} finally {
-		gridSignal = null;
-		gridSkipRequested = false;
-		overlay.close();
-		// runGrid's own finally restored everything; this is the backstop for a
-		// throw before that could run. Idempotent.
-		restoreScreenshotState();
 	}
-});
+);
 
 ipcMain.handle('capture-grid:open-folder', async (_event, folder: unknown) => {
 	// Only ever a folder inside the screenshot folder — the renderer passes back
@@ -2732,6 +2987,16 @@ app.on('ready', async () => {
 				width: data.width,
 				height: data.height,
 				handle: id,
+			});
+
+			// iRacing is now in front of our window, which holds the only hint that
+			// the app is waiting for the key. Closed by restoreScreenshotState on
+			// every exit — the file arriving, a timeout, a recovery.
+			openCaptureOverlay();
+			captureOverlay.show({
+				title: t('captureOverlay.screenshot'),
+				subtitle: t('captureOverlay.pressReshade'),
+				ask: true,
 			});
 
 			const reshadeFile = await waitForReshadeScreenshot(
@@ -3511,6 +3776,9 @@ function scheduleCaptureAbortOnDisconnect(): void {
 }
 
 function restoreScreenshotState(): void {
+	// Every capture that shows the banner ends here, including the watchdog and
+	// disconnect recoveries — so this is where it is guaranteed to go away.
+	captureOverlay.close();
 	clearCaptureWatchdog();
 	cancelPendingCaptureAbort();
 	// Cancel any in-flight ReShade wait so a watchdog / disconnect-abort recovery

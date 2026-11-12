@@ -107,9 +107,11 @@
 									:style="{ background: cls.color || 'transparent' }"
 									aria-hidden="true"
 								></span>
-								<span class="capture-grid__class-name">{{
-									cls.className
-								}}</span>
+								<span
+									class="capture-grid__class-name"
+									:title="(cls.carModels || []).join('\n')"
+									>{{ cls.className }}</span
+								>
 								<span class="capture-grid__count"
 									>{{ classSelectedCount(cls) }}/{{
 										cls.cars.length
@@ -156,6 +158,25 @@
 				<p v-if="unavailableText" class="capture-grid__muted">
 					{{ unavailableText }}
 				</p>
+
+				<!-- How much room each car must have. A plain input: one number, and
+				     the hint says what 0 does. -->
+				<label
+					class="capture-grid__gap"
+					:title="$t('captureGrid.minGapHint')"
+				>
+					<span>{{ $t('captureGrid.minGap') }}</span>
+					<input
+						v-model="minGapDraft"
+						type="number"
+						min="0"
+						max="200"
+						step="5"
+						:disabled="running"
+						@change="commitMinGap"
+					/>
+					<span>{{ $t('captureGrid.minGapUnit') }}</span>
+				</label>
 			</template>
 
 			<NoticeCard :notices="notices" />
@@ -218,6 +239,16 @@ const { ipcRenderer } = require('electron');
 // How often the picker re-reads the roster while it is open and idle. Race
 // positions, pit status and the reference car all move with the replay.
 const ROSTER_POLL_MS = 1500;
+// Mirrors main/capture-grid/clearance.ts and the config schema.
+const DEFAULT_MIN_GAP_METERS = 20;
+const MAX_MIN_GAP_METERS = 200;
+
+function storedMinGap(): number {
+	const value = Number(config.get('captureGridMinGap'));
+	return Number.isFinite(value)
+		? Math.max(0, Math.min(MAX_MIN_GAP_METERS, value))
+		: DEFAULT_MIN_GAP_METERS;
+}
 
 interface GridCarRow {
 	carIdx: number;
@@ -230,6 +261,7 @@ interface GridCarRow {
 interface GridClassRow {
 	classId: number;
 	className: string;
+	carModels?: string[];
 	color: string | null;
 	cars: GridCarRow[];
 }
@@ -252,6 +284,11 @@ export default {
 	data() {
 		return {
 			collapsed: config.get('captureGridCollapsed') !== false,
+			minGapMeters: storedMinGap(),
+			// What the box holds while it is being typed in. Kept apart from the
+			// committed value so the panel's own re-renders (the roster refreshes
+			// every 1.5 s) cannot write the saved number back over a half-typed one.
+			minGapDraft: String(storedMinGap()),
 			roster: null as null | {
 				connected: boolean;
 				running: boolean;
@@ -387,6 +424,12 @@ export default {
 					? this.$t('captureGrid.progress.waitingReshade', params)
 					: this.$t('captureGrid.progress.capturing', params);
 			}
+			if (p.phase === 'finding-clear-lap') {
+				return this.$t('captureGrid.progress.findingClearLap', params);
+			}
+			if (p.phase === 'restoring-camera') {
+				return this.$t('captureGrid.progress.restoringCamera', params);
+			}
 			return this.$t('captureGrid.progress.positioning', params);
 		},
 		summaryText(): string {
@@ -405,6 +448,9 @@ export default {
 				? this.$t('captureGrid.summaryAborted', params)
 				: this.$t('captureGrid.summary', params);
 		},
+		// Only the cars missing from the folder are listed. How each shot car was
+		// placed (another lap, crowding, camera restores) goes to the log file
+		// ("Grid car finished"), not the panel.
 		failures(): Array<{ carIdx: number; text: string }> {
 			return (this.lastResult?.results ?? [])
 				.filter((r) => r.status === 'failed')
@@ -438,6 +484,20 @@ export default {
 		// Bound by Vue, so the same function reference is added and removed.
 		handleProgress(_event: unknown, progress: unknown) {
 			this.progress = progress as typeof this.progress;
+		},
+		// On change (Enter, blur, or a spinner click). An emptied or unreadable box
+		// keeps the last good value instead of reading as 0, which means "off".
+		commitMinGap() {
+			const text = String(this.minGapDraft).trim();
+			const value = Number(text);
+			if (text !== '' && Number.isFinite(value)) {
+				this.minGapMeters = Math.max(
+					0,
+					Math.min(MAX_MIN_GAP_METERS, Math.round(value))
+				);
+				config.set('captureGridMinGap', this.minGapMeters);
+			}
+			this.minGapDraft = String(this.minGapMeters);
 		},
 		toggleCollapsed() {
 			this.collapsed = !this.collapsed;
@@ -522,7 +582,8 @@ export default {
 			try {
 				this.lastResult = await ipcRenderer.invoke(
 					'capture-grid:start',
-					this.selectedCars.map((car) => car.carIdx)
+					this.selectedCars.map((car) => car.carIdx),
+					{ minGapMeters: this.minGapMeters }
 				);
 			} catch (error) {
 				this.lastResult = {
@@ -707,7 +768,17 @@ export default {
 	border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
+.capture-grid__class-row .capture-grid__check {
+	flex: 1 1 auto;
+}
+
+/* A class iRacing leaves unnamed can be labelled with its model list, which
+   would otherwise push the count off the row. The full list is the tooltip. */
 .capture-grid__class-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-weight: 600;
 }
 
@@ -747,5 +818,24 @@ export default {
 .capture-grid__failures {
 	margin: 0.25rem 0 0.35rem 1rem;
 	list-style: disc;
+}
+
+.capture-grid__gap {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin: 0 0 0.45rem;
+	font-size: 0.78rem;
+	color: rgba(255, 255, 255, 0.65);
+}
+
+.capture-grid__gap input {
+	width: 4rem;
+	padding: 0.1rem 0.3rem;
+	font: inherit;
+	color: #fff;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 3px;
 }
 </style>

@@ -203,6 +203,8 @@ describe('CaptureGridPanel', () => {
 		await flushPromises();
 		const start = invoked.find((c) => c.channel === 'capture-grid:start');
 		expect(start?.args[0]).toEqual([1, 2]);
+		// Nothing stored (the config stub): the default gap.
+		expect(start?.args[1]).toEqual({ minGapMeters: 20 });
 		expect(w.text()).toContain('1 shot, 1 failed, 0 skipped');
 		expect(w.text()).toContain('#89 Second Driver: the car is not moving');
 		expect(w.text()).toContain('Open folder');
@@ -228,6 +230,80 @@ describe('CaptureGridPanel', () => {
 		expect(w.text()).toContain('TV or scenic camera');
 		expect(w.text()).toContain('Put the camera on a car that is on track');
 		expect(startButton(w).attributes('disabled')).toBeDefined();
+	});
+
+	test('sends the gap the user set; per-car placement stays out of the panel', async () => {
+		const w = await mountOpen();
+		await w.find('.capture-grid__gap input').setValue('35');
+		await w.find('.capture-grid__gap input').trigger('change');
+		const shot = (carIdx: number, extra: Record<string, unknown>) => ({
+			carIdx,
+			carNumber: String(carIdx),
+			driverName: `Driver ${carIdx}`,
+			status: 'shot',
+			reason: null,
+			lapOffset: 0,
+			gapMeters: 50,
+			crowded: false,
+			cameraRestores: 0,
+			...extra,
+		});
+		invokeResults['capture-grid:start'] = {
+			ok: true,
+			message: null,
+			aborted: false,
+			folder: 'C:/shots/grid',
+			results: [
+				shot(1, {}),
+				shot(2, { lapOffset: -1 }),
+				shot(3, { crowded: true, gapMeters: 3.24 }),
+				shot(4, { cameraRestores: 1 }),
+			],
+		};
+		await startButton(w).trigger('click');
+		await flushPromises();
+		const start = invoked.find((c) => c.channel === 'capture-grid:start');
+		expect(start?.args[1]).toEqual({ minGapMeters: 35 });
+		// That goes to the log file; the panel says only how many were shot.
+		expect(w.text()).toContain('4 shot, 0 failed, 0 skipped');
+		expect(w.findAll('.capture-grid__result li')).toHaveLength(0);
+		expect(w.text()).not.toContain('Driver 3');
+	});
+
+	test('a gap being typed survives a re-render before it is committed', async () => {
+		// The roster refreshes every 1.5 s and re-renders the panel; a gap the
+		// user is still typing (no change event yet) must not snap back.
+		const w = await mountOpen();
+		const input = w.find('.capture-grid__gap input');
+		(input.element as HTMLInputElement).value = '45';
+		await input.trigger('input');
+		w.vm.$forceUpdate();
+		await flushPromises();
+		expect((input.element as HTMLInputElement).value).toBe('45');
+		await input.trigger('change');
+		invokeResults['capture-grid:start'] = {
+			ok: true,
+			message: null,
+			aborted: false,
+			folder: null,
+			results: [],
+		};
+		await startButton(w).trigger('click');
+		await flushPromises();
+		const start = invoked.find((c) => c.channel === 'capture-grid:start');
+		expect(start?.args[1]).toEqual({ minGapMeters: 45 });
+	});
+
+	test('an emptied or out-of-range gap is clamped when committed', async () => {
+		const w = await mountOpen();
+		const input = w.find('.capture-grid__gap input');
+		await input.setValue('500');
+		await input.trigger('change');
+		expect((input.element as HTMLInputElement).value).toBe('200');
+		await input.setValue('');
+		await input.trigger('change');
+		// Emptying the box keeps the last good value rather than turning it off.
+		expect((input.element as HTMLInputElement).value).toBe('200');
 	});
 
 	test('shows the refusal main returned', async () => {

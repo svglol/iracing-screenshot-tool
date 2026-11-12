@@ -74,11 +74,36 @@ export interface CameraTarget {
 	cameraNumber: number;
 }
 
+// Options for what counts as "switched". By default only the car is confirmed.
+// The grid's camera lock also confirms the group, and on a car-mounted group the
+// camera number: putting back a camera the user moved to another group while it
+// stayed on the same car must not count as done before it is.
+export interface CameraSwitchOptions {
+	signal?: { aborted: boolean };
+	timeoutMs?: number;
+	requireGroup?: boolean;
+	requireCamera?: boolean;
+}
+
+export function viewMatches(
+	view: CameraView | null,
+	carIdx: number,
+	shot: { group: number; camera: number },
+	opts: Pick<CameraSwitchOptions, 'requireGroup' | 'requireCamera'> = {}
+): boolean {
+	return (
+		view !== null &&
+		view.carIdx === carIdx &&
+		(!opts.requireGroup || view.group === shot.group) &&
+		(!opts.requireCamera || view.camera === shot.camera)
+	);
+}
+
 export async function switchCameraToCar(
 	deps: CameraControlDeps,
 	target: CameraTarget,
 	shot: { group: number; camera: number },
-	opts: { signal?: { aborted: boolean }; timeoutMs?: number } = {}
+	opts: CameraSwitchOptions = {}
 ): Promise<CameraSwitchResult> {
 	const started = deps.now();
 	const timeoutMs = opts.timeoutMs ?? CAMERA_SWITCH_TIMEOUT_MS;
@@ -119,7 +144,7 @@ export async function switchCameraToCar(
 		const view = safeRead(deps);
 		if (view) {
 			last = view;
-			if (view.carIdx === target.carIdx) {
+			if (viewMatches(view, target.carIdx, shot, opts)) {
 				return done({ switched: true, view });
 			}
 		}

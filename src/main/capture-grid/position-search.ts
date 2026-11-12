@@ -107,7 +107,21 @@ export interface PositionSearchOptions {
 	// chose — not to wherever the previous car's search left the replay — without
 	// spending a seek per car to go back first.
 	start?: { frame: number; pct: number };
+	// Whole laps past (positive) or before (negative) the nearest crossing. The
+	// grid uses it to look for the same spot on another lap when another car is
+	// too close on the nearest one. 0 = the nearest crossing.
+	lapOffset?: number;
+	// Whether a crossing off the tape may be swapped for the one a lap the other
+	// way. True by default; a lap-offset search turns it off, because the lap the
+	// other way is one the grid has already looked at.
+	allowOtherCrossing?: boolean;
 	signal?: { aborted: boolean };
+}
+
+// The seek budget for a search `lapOffset` laps away: the usual budget plus the
+// capped steps a full lap takes at the believed pace.
+export function seekBudget(lapOffset: number): number {
+	return MAX_SEEKS + Math.ceil(Math.abs(lapOffset) / MAX_STEP_LAPS);
 }
 
 export type PositionSearchFailure =
@@ -154,6 +168,9 @@ export async function searchCarPosition(
 	opts: PositionSearchOptions
 ): Promise<PositionSearchResult> {
 	const { carIdx, signal } = opts;
+	const lapOffset = Math.trunc(opts.lapOffset ?? 0);
+	const maxSeeks = seekBudget(lapOffset);
+	const allowOtherCrossing = opts.allowOtherCrossing ?? true;
 	const lastFrame =
 		opts.tapeEndFrame !== null && Number.isFinite(opts.tapeEndFrame)
 			? Math.max(0, Math.floor(opts.tapeEndFrame))
@@ -176,7 +193,12 @@ export async function searchCarPosition(
 			reason: null,
 			...fields,
 		};
-		const logFields = { carIdx, targetPct: opts.targetPct, ...out };
+		const logFields = {
+			carIdx,
+			targetPct: opts.targetPct,
+			lapOffset,
+			...out,
+		};
 		if (out.found) {
 			log.info('Grid position found', logFields);
 		} else {
@@ -201,7 +223,7 @@ export async function searchCarPosition(
 	current = { frame: first.frame, pct: first.pct, unwrapped: first.pct };
 
 	// The crossing nearest the start, in unwrapped laps.
-	let target = first.pct + wrapLaps(opts.targetPct - first.pct);
+	let target = first.pct + wrapLaps(opts.targetPct - first.pct) + lapOffset;
 	const errorAt = (reading: Reading) => target - reading.unwrapped;
 
 	const estLap = firstGuessLapSeconds(opts);
@@ -249,7 +271,7 @@ export async function searchCarPosition(
 		if (signal?.aborted) {
 			return result({ reason: 'aborted' });
 		}
-		if (seeks >= MAX_SEEKS) {
+		if (seeks >= maxSeeks) {
 			return result({
 				errorLaps: errorAt(current),
 				reason: 'did-not-converge',
@@ -271,7 +293,7 @@ export async function searchCarPosition(
 		if (toFrame === current.frame) {
 			// Pinned against the start or end of the tape with the target beyond
 			// it. Take the crossing a lap the other way, once.
-			if (usedOtherCrossing) {
+			if (usedOtherCrossing || !allowOtherCrossing) {
 				return result({ errorLaps: error, reason: 'out-of-tape' });
 			}
 			usedOtherCrossing = true;
@@ -313,7 +335,7 @@ export async function searchCarPosition(
 	// the target lies and move while that is strictly closer.
 	for (;;) {
 		const error = errorAt(current);
-		if (error === 0 || signal?.aborted || seeks >= MAX_SEEKS) {
+		if (error === 0 || signal?.aborted || seeks >= maxSeeks) {
 			break;
 		}
 		const neighbour = current.frame + (error > 0 ? 1 : -1);

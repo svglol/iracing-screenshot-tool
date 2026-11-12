@@ -91,6 +91,10 @@ const tr: Catalog = {
 		selectFolder: 'Klasör Seç',
 		screenshotKeybind: 'Ekran Görüntüsü Kısayolu',
 		editBind: 'Kısayolu Düzenle',
+		abortKeybind: 'Abort Keybind',
+		abortKeybindDescription:
+			'Stops a running capture grid or long exposure. Only active while one is running.',
+		keybindClash: 'The other keybind already uses this key. Pick another.',
 
 		customFilenameFormat: 'Özel Dosya Adı Biçimi',
 		customFilenameFormatDescription:
@@ -642,7 +646,15 @@ const tr: Catalog = {
 				'Car {index} of {total}: #{carNumber} {driverName}, capturing',
 			waitingReshade:
 				'Car {index} of {total}: #{carNumber} {driverName}. Press your ReShade key in iRacing',
+			findingClearLap:
+				'Car {index} of {total}: #{carNumber} {driverName}, another car is too close, trying another lap',
+			restoringCamera:
+				'Car {index} of {total}: #{carNumber} {driverName}, the camera moved, putting it back',
 		},
+		minGap: 'Minimum gap to other cars',
+		minGapUnit: 'm',
+		minGapHint:
+			'A car with another car closer than this along the track is shot at the same spot on a nearby lap. 0 turns this off.',
 		summary: '{shot} shot, {failed} failed, {skipped} skipped',
 		summaryAborted:
 			'Aborted: {shot} shot, {failed} failed, {skipped} skipped',
@@ -651,7 +663,9 @@ const tr: Catalog = {
 			cameraWrongCar:
 				'the camera went to a different car (duplicate car number?)',
 			cameraTimeout: 'the camera did not switch to this car',
-			cameraLostAfterSeek: 'the camera left this car while the replay moved',
+			cameraLost: 'the camera could not be put back on this car',
+			cameraKeptMoving:
+				'the camera kept moving while this car was being shot',
 			positionNotMoving: 'the car is not moving',
 			positionOutOfTape: 'that spot is not in the recorded replay',
 			positionDidNotConverge: 'could not find the spot',
@@ -675,7 +689,24 @@ const tr: Catalog = {
 			positioning: 'Finding the spot…',
 			capturing: 'Capturing…',
 			pressReshade: 'Press your ReShade screenshot key',
+			pressReshadeAgain:
+				'The camera moved. Press your ReShade screenshot key again',
+			cameraMoved: 'The camera moved. Putting it back…',
+			clearLap: {
+				before1: 'Another car is too close. Trying the lap before…',
+				after1: 'Another car is too close. Trying the lap after…',
+				before2: 'Another car is too close. Trying two laps before…',
+				after2: 'Another car is too close. Trying two laps after…',
+			},
 		},
+	},
+
+	// The banner shown over iRacing while a capture that needs the user, or takes
+	// a while, is running (the grid has its own lines above).
+	captureOverlay: {
+		screenshot: 'Screenshot',
+		pressReshade: 'Press your ReShade screenshot key in iRacing',
+		abortHint: 'Press {key} to abort',
 	},
 };
 

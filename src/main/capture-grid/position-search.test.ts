@@ -294,6 +294,33 @@ describe('searchCarPosition', () => {
 		expect(r.frame).toBe(100 + 0.95 * LAP_FRAMES);
 	});
 
+	it('finds the same spot whole laps away with a lap offset', async () => {
+		const start = 20_000;
+		for (const lapOffset of [-2, -1, 1, 2]) {
+			const tape = makeTape({ startFrame: start, laps: steady(start, 0.3) });
+			const r = await tape.search({
+				targetPct: 0.3,
+				lapOffset,
+				allowOtherCrossing: false,
+			});
+			expect(r.found).toBe(true);
+			expect(r.frame).toBe(start + lapOffset * LAP_FRAMES);
+			expect(tape.currentFrame()).toBe(r.frame);
+		}
+	});
+
+	it('reports a lap offset off the tape instead of swapping it for another lap', async () => {
+		const tape = makeTape({ startFrame: 2_000, laps: steady(2_000, 0.3) });
+		const r = await tape.search({
+			targetPct: 0.3,
+			lapOffset: -1,
+			allowOtherCrossing: false,
+		});
+		expect(r.found).toBe(false);
+		expect(r.reason).toBe('out-of-tape');
+		expect(r.usedOtherCrossing).toBe(false);
+	});
+
 	it('reports out-of-tape when neither crossing is recorded', async () => {
 		const tape = makeTape({
 			startFrame: 100,

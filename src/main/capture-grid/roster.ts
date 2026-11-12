@@ -26,11 +26,13 @@ export interface GridDriver {
 	// gives nothing usable; such a car cannot be switched to.
 	cameraNumber: number | null;
 	driverName: string;
-	// The car's class, for the picker's grouping. Name falls back to the car's
-	// short name, then the id, because single-make sessions can leave the class
-	// short name empty.
+	// The car's class, for the picker's grouping. The name is the same for every
+	// car of the class — see nameClass for where it comes from when iRacing gives
+	// none, which AI races and single-make sessions do.
 	classId: number;
 	className: string;
+	// The car model's display name ("Ferrari 296 GT3").
+	carModel: string;
 	// 0xRRGGBB as iRacing sends it, or null.
 	classColor: number | null;
 	isPaceCar: boolean;
@@ -93,6 +95,60 @@ function str(value: unknown): string {
 // roster can explain why it was left out.
 type YamlRecord = Record<string, unknown> | null | undefined;
 
+// A token that reads as a racing class code: "GT3", "GT4", "LMP2", "TCR",
+// "GTP". Upper case and digits only, at least one letter. Pure numbers ("296",
+// "963") are model numbers, not classes.
+const CLASS_CODE = /^(?=[0-9]*[A-Z])[A-Z0-9]{2,5}$/;
+
+// One car model as the session describes it.
+interface CarModelName {
+	short: string;
+	full: string;
+}
+
+// The name of a class iRacing left unnamed. Measured on hardware 2026-11-12: an
+// AI race (GT3 + hypercar) sent CarClassShortName as null for every car, and the
+// old fallback — the first car's own name — labelled the GT3 class "AMR Vantage
+// GT3 EVO" and the hypercar class "Valkyrie LMH". The session holds no class
+// name anywhere, so it is inferred from the class's models:
+//   one model                → that model ("Porsche 911 GT3 Cup (992)")
+//   a code every model shares → the code ("GT3"), from the full names minus the
+//                                first word, which is the maker ("Aston Martin…")
+//   neither                  → the models themselves, in roster order
+export function nameClass(
+	explicit: string,
+	models: readonly CarModelName[],
+	classId: number
+): string {
+	const name = explicit.trim();
+	if (name) {
+		return name;
+	}
+	const distinct = [...new Map(models.map((m) => [m.short || m.full, m]))];
+	if (distinct.length === 0) {
+		return `Class ${classId}`;
+	}
+	if (distinct.length === 1) {
+		return distinct[0][0];
+	}
+	const codes = distinct.map(
+		([, m]) =>
+			new Set(
+				(m.full || m.short)
+					.split(/[^A-Za-z0-9]+/)
+					.filter(Boolean)
+					.slice(1)
+					.filter((t) => CLASS_CODE.test(t))
+			)
+	);
+	const shared = [...codes[0]].filter((code) =>
+		codes.every((set) => set.has(code))
+	);
+	return shared.length > 0
+		? shared.join(' ')
+		: distinct.map(([label]) => label).join(' / ');
+}
+
 export function readGridDrivers(sessionData: unknown): GridDriver[] {
 	const driverInfo = (sessionData as YamlRecord)?.DriverInfo as YamlRecord;
 	const drivers = driverInfo?.Drivers;
@@ -104,6 +160,13 @@ export function readGridDrivers(sessionData: unknown): GridDriver[] {
 	const paceCarIdx = num(driverInfo?.PaceCarIdx);
 
 	const out: GridDriver[] = [];
+	// Per class: the first non-empty class name any of its cars carries, and its
+	// models. Every driver counts, on track or not, so a class's name does not
+	// change as cars retire.
+	const classInfo = new Map<
+		number,
+		{ explicit: string; models: CarModelName[] }
+	>();
 	for (const raw of drivers) {
 		const d = raw as YamlRecord;
 		const carIdx = num(d?.CarIdx);
@@ -113,15 +176,27 @@ export function readGridDrivers(sessionData: unknown): GridDriver[] {
 		const estLapTime = num(d?.CarClassEstLapTime);
 		const carNumber = str(d?.CarNumber);
 		const classId = num(d?.CarClassID) ?? -1;
+		const model: CarModelName = {
+			short: str(d?.CarScreenNameShort).trim(),
+			full: str(d?.CarScreenName).trim(),
+		};
+		let info = classInfo.get(classId);
+		if (!info) {
+			info = { explicit: '', models: [] };
+			classInfo.set(classId, info);
+		}
+		info.explicit ||= str(d?.CarClassShortName).trim();
+		if (model.short || model.full) {
+			info.models.push(model);
+		}
 		out.push({
 			carIdx,
 			carNumber,
 			cameraNumber: encodeCameraCarNumber(carNumber, num(d?.CarNumberRaw)),
 			classId,
-			className:
-				str(d?.CarClassShortName).trim() ||
-				str(d?.CarScreenNameShort).trim() ||
-				`Class ${classId}`,
+			// Filled in below, once every car of the class has been seen.
+			className: '',
+			carModel: model.short || model.full,
 			classColor: num(d?.CarClassColor),
 			driverName: str(d?.UserName),
 			isPaceCar:
@@ -136,6 +211,15 @@ export function readGridDrivers(sessionData: unknown): GridDriver[] {
 					? estLapTime
 					: null,
 		});
+	}
+	const names = new Map(
+		[...classInfo].map(([id, info]) => [
+			id,
+			nameClass(info.explicit, info.models, id),
+		])
+	);
+	for (const driver of out) {
+		driver.className = names.get(driver.classId) ?? `Class ${driver.classId}`;
 	}
 	return out;
 }
@@ -165,6 +249,9 @@ export interface GridTelemetry {
 	racePosition: readonly number[] | null;
 	lapCompleted: readonly number[] | null;
 	onPitRoad: readonly boolean[] | null;
+	// Seconds; iRacing writes -1 (or 0) when there is none yet.
+	lastLapTime?: readonly number[] | null;
+	bestLapTime?: readonly number[] | null;
 }
 
 function numArray(value: unknown): number[] | null {
@@ -183,7 +270,30 @@ export function readGridTelemetry(
 		onPitRoad: Array.isArray(values?.CarIdxOnPitRoad)
 			? (values?.CarIdxOnPitRoad as unknown[]).map((v) => v === true)
 			: null,
+		lastLapTime: numArray(values?.CarIdxLastLapTime),
+		bestLapTime: numArray(values?.CarIdxBestLapTime),
 	};
+}
+
+// A car's own lap time at this frame, for sizing a search a whole lap away: the
+// last lap, else the best, else null. Same plausibility window as the class
+// estimate, which the AI race of 2026-11-11 showed cannot be trusted blindly.
+export function carLapTimeSec(
+	telemetry: GridTelemetry,
+	carIdx: number
+): number | null {
+	for (const times of [telemetry.lastLapTime, telemetry.bestLapTime]) {
+		const value = times?.[carIdx];
+		if (
+			typeof value === 'number' &&
+			Number.isFinite(value) &&
+			value >= MIN_PLAUSIBLE_LAP_SEC &&
+			value <= MAX_PLAUSIBLE_LAP_SEC
+		) {
+			return value;
+		}
+	}
+	return null;
 }
 
 // A car's distance around the lap at this frame, or null when it is not on the
@@ -218,6 +328,7 @@ export interface GridCar {
 	classId: number;
 	className: string;
 	classColor: number | null;
+	carModel: string;
 	estLapTimeSec: number | null;
 	// Race position at the starting moment; null before the green flag, or for a
 	// car the sim has not classified.
@@ -324,6 +435,7 @@ export function buildGridRoster(
 			classId: driver.classId,
 			className: driver.className,
 			classColor: driver.classColor,
+			carModel: driver.carModel,
 			driverName: driver.driverName,
 			estLapTimeSec: driver.estLapTimeSec,
 			// iRacing reports 0 for "no position yet".
@@ -353,6 +465,8 @@ export interface GridClass {
 	classId: number;
 	className: string;
 	classColor: number | null;
+	// The distinct models in the class, in roster order.
+	carModels: string[];
 	cars: GridCar[];
 }
 
@@ -368,11 +482,15 @@ export function groupByClass(cars: readonly GridCar[]): GridClass[] {
 				classId: car.classId,
 				className: car.className,
 				classColor: car.classColor,
+				carModels: [],
 				cars: [],
 			};
 			classes.set(car.classId, group);
 		}
 		group.cars.push(car);
+		if (car.carModel && !group.carModels.includes(car.carModel)) {
+			group.carModels.push(car.carModel);
+		}
 	}
 	return [...classes.values()];
 }

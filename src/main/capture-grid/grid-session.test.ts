@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runGrid, type GridPlan, type GridShotOutcome } from './grid-session';
+import {
+	MAX_SHOT_ATTEMPTS,
+	runGrid,
+	type GridPlan,
+	type GridShotOutcome,
+	type ShotCheck,
+} from './grid-session';
 import {
 	ReplayController,
 	capturePlaybackSnapshot,
@@ -83,6 +89,25 @@ function makeWorld(opts: WorldOptions) {
 				delay,
 				now,
 			},
+			// Every car's distance at the current frame, in 64 SDK-sized slots.
+			readTelemetry: () => {
+				const lapDistPct = new Array(64).fill(-1);
+				const trackSurface = new Array(64).fill(-1);
+				for (const idx of Object.keys(opts.cars).map(Number)) {
+					lapDistPct[idx] = pctOf(idx, frame);
+					trackSurface[idx] = 3;
+				}
+				return {
+					camCarIdx: cam.carIdx,
+					lapDistPct,
+					trackSurface,
+					racePosition: null,
+					lapCompleted: null,
+					onPitRoad: new Array(64).fill(false),
+					lastLapTime: new Array(64).fill(LAP / 60),
+					bestLapTime: null,
+				};
+			},
 			camera: {
 				readView: () => ({ ...cam }),
 				switchCamera: (n: number, group: number, camera: number) => {
@@ -123,6 +148,7 @@ function car(
 		classId: 1,
 		className: 'GT3',
 		classColor: null,
+		carModel: 'Ferrari 296 GT3',
 		estLapTimeSec: 90,
 		racePosition: carIdx,
 		onPitRoad: false,
@@ -141,20 +167,33 @@ function setup(
 		shoot?: (
 			c: GridCar,
 			index: number,
-			world: ReturnType<typeof makeWorld>
+			world: ReturnType<typeof makeWorld>,
+			check: ShotCheck
 		) => GridShotOutcome;
+		// Cars on track but not in the grid, as unwrapped-laps functions.
+		traffic?: Record<number, (frame: number) => number>;
+		minGapMeters?: number;
+		holdCamera?: boolean;
 		prepare?: () => { ok: true } | { ok: false; message: string };
 		gridCars?: GridCar[];
 		referencePct?: number;
 	} = {}
 ) {
 	const world = makeWorld({
-		cars: Object.fromEntries(
-			Object.entries(cars).map(([idx, pct]) => [idx, steady(pct)])
-		),
 		...opts,
+		cars: {
+			...Object.fromEntries(
+				Object.entries(cars).map(([idx, pct]) => [idx, steady(pct)])
+			),
+			...opts.traffic,
+		},
 	});
-	const shots: Array<{ carIdx: number; frame: number; camCar: number }> = [];
+	const shots: Array<{
+		carIdx: number;
+		frame: number;
+		camCar: number;
+		group: number;
+	}> = [];
 	const signal = { aborted: false };
 	const restoreWindow = vi.fn(() => world.events.push('window'));
 	const plan: GridPlan = {
@@ -167,22 +206,25 @@ function setup(
 		snapshot: world.snapshot(),
 		view: { ...world.cam },
 		viewCameraNumber: world.cam.carIdx,
+		holdCamera: opts.holdCamera ?? true,
 		tapeEndFrame: TAPE_END,
 		trackLengthMeters: 4500,
+		minGapMeters: opts.minGapMeters ?? 0,
 	};
 	const run = () =>
 		runGrid(plan, {
 			...world.deps,
 			signal,
 			prepare: async () => opts.prepare?.() ?? { ok: true },
-			shoot: async (c, index) => {
+			shoot: async (c, index, check) => {
 				shots.push({
 					carIdx: c.carIdx,
 					frame: world.frame(),
 					camCar: world.cam.carIdx,
+					group: world.cam.group,
 				});
 				return (
-					opts.shoot?.(c, index, world) ?? {
+					opts.shoot?.(c, index, world, check) ?? {
 						ok: true,
 						path: `shot-${c.carIdx}.png`,
 					}
@@ -375,6 +417,202 @@ describe('runGrid', () => {
 		);
 		const out = await g.run();
 		expect(out.results.map((r) => r.status)).toEqual(['shot', 'shot']);
-		expect(g.shots[0]).toEqual({ carIdx: 1, frame: ANCHOR, camCar: 1 });
+		expect(g.shots[0]).toEqual({
+			carIdx: 1,
+			frame: ANCHOR,
+			camCar: 1,
+			group: 22,
+		});
+	});
+});
+
+describe('runGrid: room around the car', () => {
+	// 4500 m track: one metre is 1/4500 of a lap.
+	const M = 1 / 4500;
+	// Car 2 reaches 0.30 at ANCHOR + 0.05 lap.
+	const CAR2_AT_REF = ANCHOR + 0.05 * LAP;
+
+	it('takes the same spot on another lap when a car is too close on the nearest', async () => {
+		// Car 5 is 2 m behind car 2 at the nearest crossing, but laps faster, so a
+		// lap either way it is far off.
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{
+				minGapMeters: 20,
+				traffic: { 5: (f) => 0.3 - 2 * M + (f - CAR2_AT_REF) / 5000 },
+			}
+		);
+		const out = await g.run();
+		const car2 = out.results[1];
+		expect(car2).toMatchObject({
+			status: 'shot',
+			lapOffset: -1,
+			crowded: false,
+		});
+		expect(car2.gapMeters).toBeGreaterThan(20);
+		// The lap before: one lap of car 2's frames earlier, still at 0.30.
+		expect(g.shots[1].frame).toBe(CAR2_AT_REF - LAP);
+		expect(g.world.pctOf(2, g.shots[1].frame)).toBeCloseTo(0.3, 3);
+	});
+
+	it('shoots the nearest lap, marked crowded, when no lap tried is clear', async () => {
+		// Car 5 sits 1 m behind car 2 for the whole tape.
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{ minGapMeters: 20, traffic: { 5: (f) => steady(0.25)(f) - M } }
+		);
+		const out = await g.run();
+		expect(out.results[1]).toMatchObject({
+			status: 'shot',
+			lapOffset: 0,
+			crowded: true,
+		});
+		expect(out.results[1].gapMeters).toBeCloseTo(1, 0);
+		// Put back on the nearest crossing after the other laps were tried.
+		expect(g.shots[1].frame).toBe(CAR2_AT_REF);
+	});
+
+	it('does not look for room when the minimum gap is 0', async () => {
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{ minGapMeters: 0, traffic: { 5: (f) => steady(0.25)(f) - M } }
+		);
+		const out = await g.run();
+		expect(out.results[1]).toMatchObject({ lapOffset: 0, crowded: false });
+		expect(g.shots[1].frame).toBe(CAR2_AT_REF);
+	});
+});
+
+describe('runGrid: holding the camera', () => {
+	const cleanOrRetry = (check: ShotCheck): GridShotOutcome =>
+		check.isClean()
+			? { ok: true, path: 'x' }
+			: { ok: false, reason: 'camera-moved', retry: true };
+
+	it('refuses a shot taken after the camera moved, puts it back and shoots again', async () => {
+		let moved = false;
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{
+				shoot: (c, _i, world, check) => {
+					if (c.carIdx === 2 && !moved) {
+						// A key brushed in iRacing: another camera group.
+						moved = true;
+						world.cam.group = 9;
+					}
+					return cleanOrRetry(check);
+				},
+			}
+		);
+		const out = await g.run();
+		expect(out.results[1]).toMatchObject({ status: 'shot' });
+		expect(out.results[1].cameraRestores).toBeGreaterThanOrEqual(1);
+		expect(g.shots.filter((s) => s.carIdx === 2)).toHaveLength(2);
+		expect(g.world.cam.group).toBe(22);
+	});
+
+	it('puts the camera back when it moved while the car was being positioned', async () => {
+		const g = setup({ 1: 0.3, 2: 0.25 });
+		// A camera change lands during car 2's search, after its switch.
+		const seek = g.world.deps.search.seekAbsolute;
+		let moved = false;
+		g.world.deps.search.seekAbsolute = (f: number) => {
+			seek(f);
+			if (g.world.cam.carIdx === 2 && !moved) {
+				moved = true;
+				g.world.cam.group = 9;
+			}
+		};
+		const out = await g.run();
+		expect(out.results[1]).toMatchObject({
+			status: 'shot',
+			cameraRestores: 1,
+		});
+		// Shot once, already on the right group: put back BEFORE the shot.
+		const car2Shots = g.shots.filter((s) => s.carIdx === 2);
+		expect(car2Shots).toHaveLength(1);
+		expect(car2Shots[0].group).toBe(22);
+	});
+
+	it('puts the replay back when it was scrubbed during the shot', async () => {
+		let scrubbed = false;
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{
+				shoot: (c, _i, world, check) => {
+					if (c.carIdx === 2 && !scrubbed) {
+						scrubbed = true;
+						world.deps.search.seekAbsolute(world.frame() + 600);
+					}
+					return cleanOrRetry(check);
+				},
+			}
+		);
+		const out = await g.run();
+		expect(out.results[1].status).toBe('shot');
+		const car2Shots = g.shots.filter((s) => s.carIdx === 2);
+		expect(car2Shots).toHaveLength(2);
+		expect(car2Shots[1].frame).toBe(ANCHOR + 0.05 * LAP);
+	});
+
+	it('does not hold the camera number on a TV group', async () => {
+		// The director picks a different camera per car; that is not a drift.
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{
+				holdCamera: false,
+				shoot: (_c, _i, world, check) => {
+					world.cam.camera = 7;
+					return cleanOrRetry(check);
+				},
+			}
+		);
+		const out = await g.run();
+		expect(out.results.map((r) => r.status)).toEqual(['shot', 'shot']);
+		expect(out.results.map((r) => r.cameraRestores)).toEqual([0, 0]);
+	});
+
+	it('holds the camera number on a car-mounted group', async () => {
+		let moved = false;
+		const g = setup(
+			{ 1: 0.3, 2: 0.25 },
+			{
+				holdCamera: true,
+				shoot: (c, _i, world, check) => {
+					if (c.carIdx === 2 && !moved) {
+						moved = true;
+						world.cam.camera = 7;
+					}
+					return cleanOrRetry(check);
+				},
+			}
+		);
+		const out = await g.run();
+		expect(out.results[1]).toMatchObject({ status: 'shot' });
+		expect(out.results[1].cameraRestores).toBeGreaterThanOrEqual(1);
+		expect(g.world.cam.camera).toBe(1);
+	});
+
+	it('gives up on a car whose camera keeps moving', async () => {
+		const g = setup(
+			{ 1: 0.3, 2: 0.25, 3: 0.4 },
+			{
+				shoot: (c, _i, world, check) => {
+					if (c.carIdx === 2) {
+						world.cam.group = 9;
+					}
+					return cleanOrRetry(check);
+				},
+			}
+		);
+		const out = await g.run();
+		expect(out.results.map((r) => [r.carIdx, r.status, r.reason])).toEqual([
+			[1, 'shot', null],
+			[2, 'failed', 'camera-kept-moving'],
+			[3, 'shot', null],
+		]);
+		expect(g.shots.filter((s) => s.carIdx === 2)).toHaveLength(
+			MAX_SHOT_ATTEMPTS
+		);
 	});
 });
