@@ -1,6 +1,8 @@
 import {
 	decideCaptureBlock,
 	captureBlockMessage,
+	decideIracingWindowRefusal,
+	iracingWindowRefusalMessage,
 	decideCaptureBackend,
 	classifyWgcResult,
 	decideLongExposureAvailability,
@@ -353,5 +355,114 @@ describe('captureBlockMessage', () => {
 			'0x80070005'
 		);
 		expect(captureBlockMessage('denied', null)).toContain('unknown');
+	});
+
+	test('elevated-both tells the user to change both programs', () => {
+		const message = captureBlockMessage('elevated-both', '0x80070005');
+		expect(message).toContain('iRacing is running as administrator too');
+		expect(message).toContain('start both normally');
+	});
+});
+
+describe('decideCaptureBlock with iRacing elevated too', () => {
+	const refused = { allowed: false, hresult: '0x80070005' };
+
+	test('both elevated is its own block: unticking ours alone is not enough', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: false,
+				permission: refused,
+				elevated: true,
+				iracingElevated: true,
+			})
+		).toBe('elevated-both');
+	});
+
+	test('a normal or unreadable iRacing keeps the plain elevated advice', () => {
+		for (const iracingElevated of [false, null, undefined]) {
+			expect(
+				decideCaptureBlock({
+					reshade: false,
+					permission: refused,
+					elevated: true,
+					iracingElevated,
+				})
+			).toBe('elevated');
+		}
+	});
+
+	test('ReShade stays exempt', () => {
+		expect(
+			decideCaptureBlock({
+				reshade: true,
+				permission: refused,
+				elevated: true,
+				iracingElevated: true,
+			})
+		).toBeNull();
+	});
+});
+
+describe('decideIracingWindowRefusal', () => {
+	test('an iRacing with more rights is refused, even when the probe could not ask', () => {
+		for (const accessDenied of [true, false, null]) {
+			expect(
+				decideIracingWindowRefusal({
+					accessDenied,
+					verdict: 'iracing-higher',
+				})
+			).toBe('iracing-elevated');
+		}
+	});
+
+	test('a refused resize with no more rights on iRacing blames something else', () => {
+		expect(
+			decideIracingWindowRefusal({ accessDenied: true, verdict: 'same' })
+		).toBe('not-rights');
+		expect(
+			decideIracingWindowRefusal({
+				accessDenied: true,
+				verdict: 'tool-higher',
+			})
+		).toBe('not-rights');
+	});
+
+	test('a refused resize with unreadable rights names both causes', () => {
+		expect(
+			decideIracingWindowRefusal({ accessDenied: true, verdict: 'unknown' })
+		).toBe('unknown-rights');
+	});
+
+	test('nothing refused, nothing known against: proceed', () => {
+		for (const verdict of ['same', 'tool-higher', 'unknown'] as const) {
+			for (const accessDenied of [false, null]) {
+				expect(
+					decideIracingWindowRefusal({ accessDenied, verdict })
+				).toBeNull();
+			}
+		}
+	});
+});
+
+describe('iracingWindowRefusalMessage', () => {
+	test('names an elevated launcher when there is one', () => {
+		expect(
+			iracingWindowRefusalMessage('iracing-elevated', 'SimHubWPF.exe')
+		).toContain('because SimHubWPF.exe, which started it');
+		expect(iracingWindowRefusalMessage('iracing-elevated')).toContain(
+			'iRacingSim64DX11.exe'
+		);
+	});
+
+	test('a refusal that is not about rights does not claim administrator', () => {
+		const message = iracingWindowRefusalMessage('not-rights');
+		expect(message).toContain('does not run with more rights');
+		expect(message).not.toContain('is running as administrator');
+	});
+
+	test('unknown rights gives the usual cause and the other one', () => {
+		const message = iracingWindowRefusalMessage('unknown-rights');
+		expect(message).toContain('The usual cause');
+		expect(message).toContain('anti-cheat');
 	});
 });

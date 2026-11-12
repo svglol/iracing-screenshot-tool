@@ -896,6 +896,21 @@ describe('executeRecipe — the restore guarantee holds on every failure path', 
 		expectAnchorRestored(harness.events);
 	});
 
+	// Field case 2026-11-12: iRacing ran as administrator, the resize was refused
+	// and every seek was dropped, ending in "seek-failed". Main's probe refuses
+	// first; a refused resize is the backstop, and it stops before any seek.
+	it('refuses when Windows will not move an administrator iRacing', async () => {
+		const harness = makeHarness();
+		harness.deps.resizeWindow = async () => 'access-denied';
+		harness.deps.accessDeniedMessage = () =>
+			'iRacing is running as administrator';
+		const outcome = await executeRecipe(recipe(), harness.deps);
+		expect(outcome.failure).toBe('iracing-window-refused');
+		expect(outcome.message).toBe('iRacing is running as administrator');
+		expect(harness.nativeCalls).not.toContain('begin');
+		expectAnchorRestored(harness.events);
+	});
+
 	// #10, re-sampled after the resize raised iRacing. Main's own pre-flight runs
 	// while OUR window is foreground, so its attribution can never succeed on this
 	// path — this is the sample that can actually refuse.

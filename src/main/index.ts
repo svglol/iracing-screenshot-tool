@@ -29,7 +29,14 @@ import {
 	getIracingWindowDetails,
 	getIracingWindowSizeNative,
 	getIracingExclusiveFullscreenState,
+	isIracingWindowAccessDenied,
+	getIracingProcessRights,
+	integrityName,
+	runsAsAdministrator,
 	QUNS_RUNNING_D3D_FULL_SCREEN,
+	type IracingResize,
+	type IracingRightsReport,
+	type ProcessRights,
 } from './window-utils';
 import { getVramInfo } from './vram-utils';
 import {
@@ -38,6 +45,8 @@ import {
 	decideLongExposureAvailability,
 	decideCaptureBlock,
 	captureBlockMessage,
+	decideIracingWindowRefusal,
+	iracingWindowRefusalMessage,
 	type CaptureBlock,
 } from './capture-decisions';
 import {
@@ -534,6 +543,16 @@ function getCaptureBackendDiagnostics(): Record<string, unknown> {
 					return null;
 				}
 			})(),
+			// iRacing's rights against ours, and its launcher's: a higher iRacing
+			// refuses our resize and drops the SDK's commands (field 2026-11-12).
+			// Null when iRacing is not running.
+			iracingRights: (() => {
+				try {
+					return summarizeRights(getIracingProcessRights());
+				} catch {
+					return null;
+				}
+			})(),
 		},
 	};
 }
@@ -546,12 +565,106 @@ function currentCaptureBlock(
 	reshade: boolean
 ): { block: CaptureBlock; hresult: string | null } | null {
 	const permission = getCapturePermission();
+	const elevated = getProcessElevation();
+	// iRacing's rights only matter for the advice when we are refused AND
+	// elevated, so its token is read only then (the sidebar polls this).
+	const iracingRights =
+		!reshade && elevated === true && permission && !permission.allowed
+			? getIracingProcessRights()
+			: null;
 	const block = decideCaptureBlock({
 		reshade,
 		permission,
-		elevated: getProcessElevation(),
+		elevated,
+		iracingElevated: iracingRights
+			? runsAsAdministrator(iracingRights.iracing)
+			: null,
 	});
 	return block ? { block, hresult: permission?.hresult ?? null } : null;
+}
+
+// The rights picture (window-utils getIracingProcessRights), compact for logs.
+function summarizeRights(rights: IracingRightsReport | null) {
+	if (!rights) {
+		return null;
+	}
+	const one = (r: ProcessRights) => ({
+		elevated: r.elevated,
+		integrity: integrityName(r.integrity),
+		error: r.error,
+	});
+	return {
+		verdict: rights.verdict,
+		tool: one(rights.self),
+		iracing: one(rights.iracing),
+		launcher: rights.launcher
+			? { name: rights.launcher.name, ...one(rights.launcher) }
+			: null,
+	};
+}
+
+// Why this tool cannot drive iRacing's window, as the sentence to show, or null
+// (decideIracingWindowRefusal). Windows refuses our resize of a window whose
+// process has more rights, and silently drops the SDK's broadcast commands —
+// the UI hide, replay seeks, camera switches — so nothing but a desktop-size
+// grab could work (field cases 2026-10-09, 2026-11-12). Refused in both capture
+// modes: ReShade captures inside iRacing, but still needs the resize.
+// `accessDenied` is the resize probe's answer, or true after a refused resize.
+function iracingWindowRefusalFor(accessDenied: boolean | null): string | null {
+	const rights = getIracingProcessRights();
+	const refusal = decideIracingWindowRefusal({
+		accessDenied,
+		verdict: rights?.verdict ?? 'unknown',
+	});
+	if (!refusal) {
+		return null;
+	}
+	log.warn('iRacing window cannot be driven', {
+		refusal,
+		accessDenied,
+		rights: summarizeRights(rights),
+	});
+	// Name the launcher only when it is what handed iRacing its rights.
+	const launcher =
+		refusal === 'iracing-elevated' &&
+		rights?.launcher &&
+		runsAsAdministrator(rights.launcher) === true
+			? rights.launcher.name
+			: null;
+	return iracingWindowRefusalMessage(refusal, launcher);
+}
+
+// The pre-flight: asks Windows without moving anything. Fail-open.
+function iracingWindowRefusal(): string | null {
+	return iracingWindowRefusalFor(isIracingWindowAccessDenied());
+}
+
+// After a resize Windows refused: the backstop for when the probe could not ask
+// (a minimised or maximised window).
+function refusedResizeMessage(): string {
+	return iracingWindowRefusalFor(true) ?? t('capture.iracingWindowRefused');
+}
+
+// Logs what a resize did, and whether Windows refused it.
+function logWindowResize(
+	resized: IracingResize,
+	width: number,
+	height: number
+): boolean {
+	if (resized.accessDenied) {
+		log.warn('iRacing window resize refused', {
+			width,
+			height,
+			handle: resized.handle,
+		});
+		return false;
+	}
+	log.info('iRacing window resized', {
+		width,
+		height,
+		handle: resized.handle,
+	});
+	return true;
 }
 
 function buildMainScreenshotDiagnostics() {
@@ -1439,6 +1552,19 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 		};
 	}
 
+	// Every seek would be dropped on the way to an administrator iRacing, and the
+	// run would end several seconds later in "the replay did not reach frame N".
+	const windowRefusal = iracingWindowRefusal();
+	if (windowRefusal) {
+		log.warn('Long exposure rejected', { reason: 'iracing-window-refused' });
+		return {
+			ok: false,
+			failure: 'iracing-window-refused',
+			message: windowRefusal,
+			warnings: [],
+		};
+	}
+
 	const fullscreen = getIracingExclusiveFullscreenState();
 	lastCaptureFullscreenState = fullscreen ? fullscreen.state : null;
 	if (fullscreen && fullscreen.exclusiveFullscreen) {
@@ -1486,8 +1612,21 @@ ipcMain.handle('long-exposure:capture', async (event, rawRecipe: unknown) => {
 			native: getLongExposureApi(),
 			backendName: getLongExposureAvailability().backend,
 			backendUnavailableReason: getLongExposureAvailability().reason,
-			resizeWindow: async (renderWidth, renderHeight) =>
-				resizeIracingWindowAsync(renderWidth, renderHeight, left, top),
+			resizeWindow: async (renderWidth, renderHeight) => {
+				const resized = await resizeIracingWindowAsync(
+					renderWidth,
+					renderHeight,
+					left,
+					top
+				);
+				if (resized === undefined) {
+					return undefined;
+				}
+				return logWindowResize(resized, renderWidth, renderHeight)
+					? resized.handle
+					: 'access-denied';
+			},
+			accessDeniedMessage: () => refusedResizeMessage(),
 			// Reuse the still path's restore exactly, so a long exposure leaves
 			// iRacing in the same state a normal screenshot would.
 			restoreWindow: () => restoreScreenshotState(),
@@ -1912,6 +2051,15 @@ ipcMain.handle(
 		// Pre-flight, all of it before the sim is touched — the same refusals the
 		// still path and long exposure make, in the same words.
 		const reshade = config.get('reshade') === true;
+		// Either mode: every camera switch and seek is a broadcast command, which
+		// Windows drops on the way to an administrator iRacing.
+		const windowRefusal = iracingWindowRefusal();
+		if (windowRefusal) {
+			log.warn('Capture grid rejected', {
+				reason: 'iracing-window-refused',
+			});
+			return refuse(windowRefusal);
+		}
 		let reshadeFolder: string | null = null;
 		if (reshade) {
 			const reshadeIniPath = config.get('reshadeFile');
@@ -2228,18 +2376,22 @@ ipcMain.handle(
 					now: () => Date.now(),
 				},
 				prepare: async () => {
-					windowId = await resizeIracingWindowAsync(
+					const resized = await resizeIracingWindowAsync(
 						data.width,
 						data.height,
 						left,
 						top
 					);
-					if (windowId === undefined) {
+					if (resized === undefined) {
 						return {
 							ok: false,
 							message: t('captureGrid.errors.windowNotFound'),
 						};
 					}
+					if (!logWindowResize(resized, data.width, data.height)) {
+						return { ok: false, message: refusedResizeMessage() };
+					}
+					windowId = resized.handle;
 					if (!reshade) {
 						// Re-sampled after the raise, where attribution can succeed — the
 						// same reason long exposure samples here.
@@ -2596,6 +2748,15 @@ app.on('ready', async () => {
 		// App-facing lifecycle transition record (the low-level SDK start is logged
 		// as 'SDK startSDK' in iracing-sdk.ts) — obs-lifecycle-telemetry#1.
 		log.info('iRacing connected');
+		// Once per connection: answers "is iRacing running as administrator, and
+		// what started it" from the log alone.
+		try {
+			log.info('iRacing process rights', {
+				rights: summarizeRights(getIracingProcessRights()),
+			});
+		} catch {
+			// Diagnostic only.
+		}
 		cancelPendingCaptureAbort();
 		if (mainWindow && !mainWindow.isDestroyed()) {
 			mainWindow.webContents.send('iracing-connected', '');
@@ -2662,6 +2823,19 @@ app.on('ready', async () => {
 			log.info('Screenshot rejected', { reason: 'worker-not-ready' });
 			reportScreenshotError('Screenshot worker is still loading', {
 				context: 'resize-screenshot:worker-ready',
+				meta: { request: data },
+			});
+			return;
+		}
+
+		// iRacing running as administrator: the resize would be refused and the
+		// shot come out at the window's current size whatever was picked (both
+		// field logs), in either capture mode. Before anything is touched.
+		const windowRefusal = iracingWindowRefusal();
+		if (windowRefusal) {
+			log.warn('Screenshot rejected', { reason: 'iracing-window-refused' });
+			reportScreenshotError(windowRefusal, {
+				context: 'resize-screenshot:iracing-window-refused',
 				meta: { request: data },
 			});
 			return;
@@ -2863,7 +3037,7 @@ app.on('ready', async () => {
 						nativeCapture: config.get('nativeCapture'),
 						wgcAvailable: isWgcAvailable(),
 					}) === 'wgc';
-				const [id, windowSources] = await Promise.all([
+				const [resized, windowSources] = await Promise.all([
 					resizeIracingWindowAsync(data.width, data.height, left, top),
 					useNativeCapture
 						? Promise.resolve<Electron.DesktopCapturerSource[]>([])
@@ -2874,7 +3048,7 @@ app.on('ready', async () => {
 							}),
 				]);
 
-				if (id === undefined) {
+				if (resized === undefined) {
 					log.info('iRacing window not found');
 					restoreScreenshotState();
 					reportScreenshotError('iRacing window not found', {
@@ -2887,11 +3061,15 @@ app.on('ready', async () => {
 					return;
 				}
 
-				log.info('iRacing window resized', {
-					width: data.width,
-					height: data.height,
-					handle: id,
-				});
+				if (!logWindowResize(resized, data.width, data.height)) {
+					restoreScreenshotState();
+					reportScreenshotError(refusedResizeMessage(), {
+						context: 'resize-screenshot:iracing-window-refused',
+						meta: { request: data },
+					});
+					return;
+				}
+				const id = resized.handle;
 
 				if (useNativeCapture) {
 					// Arm the same recovery watchdog the worker path uses: if the WGC
@@ -2963,14 +3141,14 @@ app.on('ready', async () => {
 			// Raising pre-capture resize INSIDE the try so a rejection here recovers
 			// via the catch instead of wedging: it previously sat outside the ReShade
 			// try/catch, so a reject latched takingScreenshot true with no recovery.
-			const id = await resizeIracingWindowAsync(
+			const resized = await resizeIracingWindowAsync(
 				data.width,
 				data.height,
 				left,
 				top
 			);
 
-			if (id === undefined) {
+			if (resized === undefined) {
 				log.info('iRacing window not found');
 				restoreScreenshotState();
 				reportScreenshotError('iRacing window not found', {
@@ -2983,11 +3161,14 @@ app.on('ready', async () => {
 				return;
 			}
 
-			log.info('iRacing window resized', {
-				width: data.width,
-				height: data.height,
-				handle: id,
-			});
+			if (!logWindowResize(resized, data.width, data.height)) {
+				restoreScreenshotState();
+				reportScreenshotError(refusedResizeMessage(), {
+					context: 'resize-screenshot:iracing-window-refused',
+					meta: { request: data },
+				});
+				return;
+			}
 
 			// iRacing is now in front of our window, which holds the only hint that
 			// the app is waiting for the key. Closed by restoreScreenshotState on
@@ -3790,21 +3971,22 @@ function restoreScreenshotState(): void {
 		return;
 	}
 
+	let restored: IracingResize | undefined;
 	if (config.get('manualWindowRestore')) {
-		resize(width, height, left, top);
+		restored = resize(width, height, left, top);
 	} else if (
 		originalWindowBounds &&
 		originalWindowBounds.width > 0 &&
 		originalWindowBounds.height > 0
 	) {
-		resize(
+		restored = resize(
 			originalWindowBounds.width,
 			originalWindowBounds.height,
 			originalWindowBounds.left,
 			originalWindowBounds.top
 		);
 	} else {
-		resize(width, height, left, top);
+		restored = resize(width, height, left, top);
 	}
 
 	originalWindowBounds = null;
@@ -3822,7 +4004,15 @@ function restoreScreenshotState(): void {
 	}
 
 	takingScreenshot = false;
-	log.info('iRacing window restored');
+	// Only claim what happened: a refused restore was said to succeed in both
+	// field logs, right after the SetWindowPos warning that contradicted it.
+	if (restored === undefined) {
+		log.info('iRacing window not restored: window not found');
+	} else if (restored.accessDenied) {
+		log.warn('iRacing window restore refused');
+	} else {
+		log.info('iRacing window restored');
+	}
 }
 
 interface ReshadeFileInfo {
@@ -4035,7 +4225,7 @@ function resize(
 	targetHeight: number,
 	targetLeft: number,
 	targetTop: number
-): number | undefined {
+): IracingResize | undefined {
 	return resizeIracingWindow(targetWidth, targetHeight, targetLeft, targetTop);
 }
 
