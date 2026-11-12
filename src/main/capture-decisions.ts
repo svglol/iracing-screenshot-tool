@@ -5,6 +5,8 @@
 // used to inline the same expressions; capture-decisions.test.ts locks the logic.
 
 import { t } from '../utilities/i18n';
+// Type only: erased at compile time, so the koffi module is never loaded here.
+import type { RightsVerdict } from './window-utils';
 
 // Which capture backend a request uses.
 export type CaptureBackend = 'reshade' | 'wgc' | 'getUserMedia';
@@ -233,7 +235,10 @@ export function classifyWgcResult(
 // can't be captured, not that we can't: field case 2026-09-28, Windows 11 23H2
 // (22631), un-elevated — the taskbar probe returned 0x80070057 "Could not capture
 // the given window." and v3.4.0 blocked every still, where v3.3.0 captured.
-export type CaptureBlock = 'elevated' | 'denied';
+// 'elevated-both' — as 'elevated', and iRacing runs as administrator too. The
+//   'elevated' advice (untick it on the tool) would then trade this block for
+//   the refused resize below, so both have to change.
+export type CaptureBlock = 'elevated' | 'elevated-both' | 'denied';
 
 export const CAPTURE_ACCESS_DENIED = '0x80070005';
 
@@ -241,12 +246,15 @@ export interface CaptureBlockInputs {
 	reshade: boolean;
 	permission: { allowed: boolean; hresult: string | null } | null;
 	elevated: boolean | null;
+	// Whether iRacing runs as administrator, when its token could be read.
+	iracingElevated?: boolean | null;
 }
 
 export function decideCaptureBlock({
 	reshade,
 	permission,
 	elevated,
+	iracingElevated = null,
 }: CaptureBlockInputs): CaptureBlock | null {
 	if (
 		reshade ||
@@ -256,7 +264,10 @@ export function decideCaptureBlock({
 	) {
 		return null;
 	}
-	return elevated === true ? 'elevated' : 'denied';
+	if (elevated !== true) {
+		return 'denied';
+	}
+	return iracingElevated === true ? 'elevated-both' : 'elevated';
 }
 
 // The user-facing sentence for a block. Functions, not constants: see
@@ -265,7 +276,61 @@ export function captureBlockMessage(
 	block: CaptureBlock,
 	hresult: string | null
 ): string {
-	return block === 'elevated'
-		? t('capture.blockedElevated')
-		: t('capture.blockedDenied', { hresult: hresult || 'unknown' });
+	if (block === 'elevated') {
+		return t('capture.blockedElevated');
+	}
+	if (block === 'elevated-both') {
+		return t('capture.blockedElevatedBoth');
+	}
+	return t('capture.blockedDenied', { hresult: hresult || 'unknown' });
+}
+
+// Why this tool cannot drive iRacing's window — the resize, and the SDK's
+// broadcast commands (UI hide, replay seeks, camera switches) — or null.
+// Field cases 2026-10-09 and 2026-11-12: every resize refused with
+// ERROR_ACCESS_DENIED, and the replay never moved.
+// 'iracing-elevated'  — iRacing's token has more rights than ours: UIPI, by
+//   construction. Refused even when the resize probe could not ask (a
+//   minimised or maximised window), since UIPI does not depend on the window.
+// 'not-rights'        — refused although iRacing has no more rights than us
+//   (same level, or ours higher): something else is blocking it.
+// 'unknown-rights'    — refused, and iRacing's token could not be read (a
+//   protected process, as anti-cheat can make it), so either cause.
+export type IracingWindowRefusal =
+	| 'iracing-elevated'
+	| 'not-rights'
+	| 'unknown-rights';
+
+export function decideIracingWindowRefusal({
+	accessDenied,
+	verdict,
+}: {
+	// The resize probe: true refused, false allowed, null could not ask.
+	accessDenied: boolean | null;
+	verdict: RightsVerdict;
+}): IracingWindowRefusal | null {
+	if (verdict === 'iracing-higher') {
+		return 'iracing-elevated';
+	}
+	if (accessDenied !== true) {
+		return null;
+	}
+	return verdict === 'unknown' ? 'unknown-rights' : 'not-rights';
+}
+
+// The sentence for a refusal. `launcher` names the process that started an
+// administrator iRacing when that process runs as administrator itself — the
+// usual way iRacing ends up elevated without its own setting ticked.
+export function iracingWindowRefusalMessage(
+	refusal: IracingWindowRefusal,
+	launcher: string | null = null
+): string {
+	if (refusal === 'iracing-elevated') {
+		return launcher
+			? t('capture.iracingElevatedBy', { launcher })
+			: t('capture.iracingElevated');
+	}
+	return refusal === 'not-rights'
+		? t('capture.iracingWindowBlocked')
+		: t('capture.iracingWindowRefused');
 }

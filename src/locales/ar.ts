@@ -525,8 +525,18 @@ const ar: Catalog = {
 			'هناك تطبيق يعمل في وضع ملء الشاشة الحصري، وهو ما ينتج لقطة سوداء. فإذا كان iRacing في وضع ملء الشاشة، فاضبط Display > Full Screen على OFF (استخدم Borderless أو Windowed) وحاول مرة أخرى.',
 		blockedElevated:
 			'يمنع Windows التقاط الشاشة طالما أن iRacing Screenshot Tool يعمل بصلاحيات المسؤول. أغلق الأداة، وانقر بزر الماوس الأيمن على iRacing Screenshot Tool.exe ثم اختر خصائص > التوافق، وألغِ تحديد "تشغيل هذا البرنامج بصفته مسؤولًا" (وفعّل أيضًا "تغيير الإعداد لكل المستخدمين")، ثم شغّل الأداة بشكل عادي.',
+		blockedElevatedBoth:
+			'Windows blocks screen capture while the iRacing Screenshot Tool runs as administrator, and iRacing is running as administrator too. Close both. For each of them, and for anything that launches iRacing, right-click it > Properties > Compatibility and untick “Run this program as an administrator” (check “Change settings for all users” too). Then start both normally.',
 		blockedDenied:
 			'يرفض Windows التقاط الشاشة لهذا التطبيق ({hresult}). قد يكون السبب إعداد خصوصية أو سياسة شركة أو برنامج حماية على هذا الجهاز. وضع التوافق مع ReShade غير متأثر بذلك.',
+		iracingElevated:
+			'iRacing is running as administrator, so Windows stops this tool from resizing its window and from controlling the replay and camera. Close iRacing, right-click its shortcut or iRacingSim64DX11.exe > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), and on the shortcut also check Shortcut > Advanced. Do the same for any launcher that starts iRacing. Then start iRacing normally, and keep running this tool without administrator rights.',
+		iracingElevatedBy:
+			'iRacing is running as administrator because {launcher}, which started it, runs as administrator, so Windows stops this tool from resizing iRacing’s window and from controlling the replay and camera. Close {launcher} and iRacing, right-click {launcher} > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), and on its shortcut also check Shortcut > Advanced. Then start them normally.',
+		iracingWindowBlocked:
+			'Windows refuses to let this tool resize iRacing’s window or control its replay and camera, although iRacing does not run with more rights than this tool. Security or anti-cheat software may be blocking it.',
+		iracingWindowRefused:
+			'Windows refuses to let this tool resize iRacing’s window or control its replay and camera. The usual cause is iRacing, or whatever starts it, running as administrator: right-click it > Properties > Compatibility, untick “Run this program as an administrator” (check “Change settings for all users” too), and on its shortcut also check Shortcut > Advanced. Security or anti-cheat software can also cause this.',
 		reshadeIniMissing:
 			'لم يُعثر على إعدادات ReShade في {path}. من الإعدادات، اختر ملف ReShade.ini الخاص بك — يوجد بجانب iRacingSim64DX11.exe مباشرة، داخل المجلد الذي ثُبّت فيه ReShade — أو أوقف تشغيل وضع التوافق مع ReShade.',
 		reshadeIniUnreadable:

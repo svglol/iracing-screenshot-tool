@@ -19,6 +19,18 @@ import {
 	getIracingExclusiveFullscreenState,
 	isExclusiveFullscreenState,
 	QUNS_RUNNING_D3D_FULL_SCREEN,
+	classifyAccessProbe,
+	ERROR_ACCESS_DENIED,
+	isIracingWindowAccessDenied,
+	parseIntegrityRid,
+	integrityName,
+	compareProcessRights,
+	runsAsAdministrator,
+	getProcessRights,
+	getIracingProcessRights,
+	INTEGRITY_HIGH,
+	INTEGRITY_MEDIUM,
+	type ProcessRights,
 } from './window-utils';
 
 // SetWindowPos uFlags (mirrors the private constants in window-utils.ts)
@@ -198,6 +210,152 @@ describe('getIracingWindowSizeNative (koffi-only baseline)', () => {
 			expect(size.height).toBeGreaterThan(0);
 			expect(Number.isFinite(size.width)).toBe(true);
 			expect(Number.isFinite(size.height)).toBe(true);
+		}
+	);
+});
+
+// ---------------------------------------------------------------------------
+// iRacing running as administrator — the access probe's verdict
+// ---------------------------------------------------------------------------
+describe('classifyAccessProbe', () => {
+	test('a resize Windows allowed is not denied', () => {
+		expect(classifyAccessProbe(true, 0)).toBe(false);
+		// GetLastError is stale on success and must not be read as a refusal.
+		expect(classifyAccessProbe(true, ERROR_ACCESS_DENIED)).toBe(false);
+	});
+
+	test('ERROR_ACCESS_DENIED is the UIPI refusal (both field logs: lastError 5)', () => {
+		expect(ERROR_ACCESS_DENIED).toBe(5);
+		expect(classifyAccessProbe(false, 5)).toBe(true);
+	});
+
+	test('any other failure is unknown, so nothing is refused on it', () => {
+		// 0 = koffi lost GetLastError; 1400 = ERROR_INVALID_WINDOW_HANDLE.
+		expect(classifyAccessProbe(false, 0)).toBeNull();
+		expect(classifyAccessProbe(false, 1400)).toBeNull();
+	});
+});
+
+describe('isIracingWindowAccessDenied (native FFI smoke)', () => {
+	test.runIf(process.platform === 'win32')(
+		'returns null when iRacing is absent, a boolean otherwise, never throws',
+		() => {
+			const denied = isIracingWindowAccessDenied();
+			expect(denied === null || typeof denied === 'boolean').toBe(true);
+		}
+	);
+});
+
+// ---------------------------------------------------------------------------
+// Process rights
+// ---------------------------------------------------------------------------
+describe('parseIntegrityRid', () => {
+	// TOKEN_MANDATORY_LABEL buffers read on the dev machine (2026-11-12): the
+	// label's SID pointer (8 bytes), Attributes (4) + padding, then S-1-16-<rid>.
+	const medium = Buffer.from(
+		'80537571ca0100006000000000000000010100000000001000200000',
+		'hex'
+	);
+	const high = Buffer.from(
+		'e04c8671ca0100006000000000000000010100000000001000300000',
+		'hex'
+	);
+
+	test('reads the RID of a real normal and a real elevated process', () => {
+		expect(parseIntegrityRid(medium, medium.length)).toBe(INTEGRITY_MEDIUM);
+		expect(parseIntegrityRid(high, high.length)).toBe(INTEGRITY_HIGH);
+	});
+
+	test('only within the length Windows reported', () => {
+		expect(parseIntegrityRid(high, 20)).toBeNull();
+		expect(parseIntegrityRid(Buffer.alloc(28), 28)).toBeNull();
+	});
+});
+
+describe('integrityName', () => {
+	test('names the levels', () => {
+		expect(integrityName(0x1000)).toBe('low');
+		expect(integrityName(0x2000)).toBe('medium');
+		expect(integrityName(0x2100)).toBe('medium');
+		expect(integrityName(0x3000)).toBe('high');
+		expect(integrityName(0x4000)).toBe('system');
+		expect(integrityName(null)).toBeNull();
+	});
+});
+
+describe('compareProcessRights', () => {
+	const rights = (
+		elevated: boolean | null,
+		integrity: number | null
+	): ProcessRights => ({ elevated, integrity, error: null });
+	const normal = rights(false, INTEGRITY_MEDIUM);
+	const admin = rights(true, INTEGRITY_HIGH);
+	const unreadable: ProcessRights = {
+		elevated: null,
+		integrity: null,
+		error: 'open-token:5',
+	};
+
+	test('all four combinations of tool and iRacing', () => {
+		expect(compareProcessRights(normal, normal)).toBe('same');
+		expect(compareProcessRights(normal, admin)).toBe('iracing-higher');
+		expect(compareProcessRights(admin, normal)).toBe('tool-higher');
+		expect(compareProcessRights(admin, admin)).toBe('same');
+	});
+
+	test('integrity decides over the elevated flag (UIPI compares levels)', () => {
+		// Elevated by flag but at the same level: UIPI lets the calls through.
+		expect(compareProcessRights(normal, rights(true, INTEGRITY_MEDIUM))).toBe(
+			'same'
+		);
+	});
+
+	test('the flags stand in for an unreadable level', () => {
+		expect(compareProcessRights(normal, rights(true, null))).toBe(
+			'iracing-higher'
+		);
+	});
+
+	test('an unreadable iRacing is unknown, never "same"', () => {
+		expect(compareProcessRights(normal, unreadable)).toBe('unknown');
+	});
+
+	test('runsAsAdministrator reads the flag, else the level', () => {
+		expect(runsAsAdministrator(admin)).toBe(true);
+		expect(runsAsAdministrator(rights(null, INTEGRITY_HIGH))).toBe(true);
+		expect(runsAsAdministrator(rights(null, INTEGRITY_MEDIUM))).toBe(false);
+		expect(runsAsAdministrator(unreadable)).toBeNull();
+	});
+});
+
+describe('process rights (native FFI smoke)', () => {
+	test.runIf(process.platform === 'win32')(
+		'reads this process the way it reads iRacing',
+		() => {
+			const self = getProcessRights(process.pid);
+			if (self === null) {
+				return; // koffi unavailable
+			}
+			expect(self.error).toBeNull();
+			expect(typeof self.elevated).toBe('boolean');
+			// Whatever this machine runs the tests as, the flag and the level agree.
+			expect(self.integrity).toBe(
+				self.elevated ? INTEGRITY_HIGH : INTEGRITY_MEDIUM
+			);
+		}
+	);
+
+	test.runIf(process.platform === 'win32')(
+		'iRacing: null when absent, a well-formed report otherwise',
+		() => {
+			const report = getIracingProcessRights();
+			if (report === null) {
+				return;
+			}
+			expect(report.iracing.pid).toBeGreaterThan(0);
+			expect(['same', 'iracing-higher', 'tool-higher', 'unknown']).toContain(
+				report.verdict
+			);
 		}
 	);
 });

@@ -421,9 +421,11 @@ export default {
 					text:
 						this.captureBlock.block === 'elevated'
 							? this.$t('capture.blockedElevated')
-							: this.$t('capture.blockedDenied', {
-									hresult: this.captureBlock.hresult || 'unknown',
-								}),
+							: this.captureBlock.block === 'elevated-both'
+								? this.$t('capture.blockedElevatedBoth')
+								: this.$t('capture.blockedDenied', {
+										hresult: this.captureBlock.hresult || 'unknown',
+									}),
 				});
 			}
 

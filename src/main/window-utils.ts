@@ -37,6 +37,11 @@ const HWND_NOTOPMOST = -2;
 const SW_RESTORE = 9;
 const GW_OWNER = 4;
 const TH32CS_SNAPPROCESS = 0x00000002;
+const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+const TOKEN_QUERY = 0x0008;
+// TOKEN_INFORMATION_CLASS values.
+const TOKEN_INTEGRITY_LEVEL = 25;
+const TOKEN_ELEVATION = 20;
 
 // shell32 SHQueryUserNotificationState (#10 exclusive-fullscreen detection).
 // S_OK means the read is valid; QUNS_RUNNING_D3D_FULL_SCREEN (3) is the ONLY
@@ -103,6 +108,153 @@ export function resolveResizePlacement(raise: boolean): {
 	};
 }
 
+// ---------------------------------------------------------------------------
+// iRacing running as administrator
+//
+// Field cases 2026-10-09 and 2026-11-12: iRacing itself ran elevated while this
+// tool did not. Windows' UIPI then refuses every SetWindowPos on iRacing's
+// window with ERROR_ACCESS_DENIED (5), so captures came out at the desktop size
+// whatever resolution was picked. Worse, the SDK's replay and camera commands
+// are broadcast window messages (irsdk SendNotifyMessage(HWND_BROADCAST, ...)),
+// which UIPI drops silently on the way to a higher-integrity window: long
+// exposure's seeks "did not land" with the replay never having moved. Telemetry
+// still reads (shared memory), so the tool looked connected throughout.
+// ---------------------------------------------------------------------------
+export const ERROR_ACCESS_DENIED = 5;
+
+// What a resize reports back. `accessDenied` is the UIPI refusal above: the
+// window was found but did not move. Any other failure is logged and treated as
+// done, as before (geometry the compositor clamped, a stale handle).
+export interface IracingResize {
+	handle: number;
+	accessDenied: boolean;
+}
+
+// The access probe's verdict from one SetWindowPos: true = refused by UIPI,
+// false = allowed, null = failed for some other reason (unknown, fail open).
+export function classifyAccessProbe(
+	ok: boolean,
+	lastError: number
+): boolean | null {
+	if (ok) {
+		return false;
+	}
+	return lastError === ERROR_ACCESS_DENIED ? true : null;
+}
+
+// ---------------------------------------------------------------------------
+// Process rights: who runs with more rights, iRacing or this tool?
+//
+// Windows decides UIPI (the refused resize, the dropped SDK broadcasts) by
+// INTEGRITY LEVEL, so that is what is compared; the elevated flag is kept for
+// the log and as a fallback. Both are read from the process token, which a
+// normal-rights process can open on an elevated process of the same user
+// (PROCESS_QUERY_LIMITED_INFORMATION + TOKEN_QUERY; checked on the dev machine
+// 2026-11-12 against elevated vendor helpers). A protected process refuses the
+// token (audiodg: open-token:5) — anti-cheat could do the same to iRacing,
+// which is itself worth logging.
+// ---------------------------------------------------------------------------
+
+// Mandatory-label RIDs (winnt.h SECURITY_MANDATORY_*_RID).
+export const INTEGRITY_MEDIUM = 0x2000;
+export const INTEGRITY_HIGH = 0x3000;
+
+export interface ProcessRights {
+	elevated: boolean | null;
+	// The mandatory-label RID: 0x2000 normal, 0x3000 administrator.
+	integrity: number | null;
+	// Why it could not be read ('open-process:5', 'open-token:5'), else null.
+	error: string | null;
+}
+
+export type RightsVerdict =
+	| 'same'
+	| 'iracing-higher'
+	| 'tool-higher'
+	| 'unknown';
+
+export interface IracingRightsReport {
+	self: ProcessRights;
+	iracing: ProcessRights & { pid: number };
+	// The process that started iRacing, when it is still running: an elevated
+	// launcher hands its rights to the sim. Null when it has exited.
+	launcher: (ProcessRights & { pid: number; name: string }) | null;
+	verdict: RightsVerdict;
+}
+
+export function integrityName(rid: number | null): string | null {
+	if (rid === null) {
+		return null;
+	}
+	if (rid < 0x1000) {
+		return 'untrusted';
+	}
+	if (rid < INTEGRITY_MEDIUM) {
+		return 'low';
+	}
+	if (rid < INTEGRITY_HIGH) {
+		return 'medium';
+	}
+	return rid < 0x4000 ? 'high' : 'system';
+}
+
+// The RID out of a TOKEN_MANDATORY_LABEL buffer. The label's SID pointer points
+// back into the same buffer, so rather than chase it, find the SID itself:
+// S-1-16-<rid> is revision 1, one sub-authority, authority {0,0,0,0,0,16}.
+export function parseIntegrityRid(
+	buffer: Buffer,
+	length: number
+): number | null {
+	const end = Math.min(length, buffer.length) - 12;
+	for (let i = 0; i <= end; i += 1) {
+		if (
+			buffer[i] === 1 &&
+			buffer[i + 1] === 1 &&
+			buffer[i + 2] === 0 &&
+			buffer[i + 3] === 0 &&
+			buffer[i + 4] === 0 &&
+			buffer[i + 5] === 0 &&
+			buffer[i + 6] === 0 &&
+			buffer[i + 7] === 16
+		) {
+			return buffer.readUInt32LE(i + 8);
+		}
+	}
+	return null;
+}
+
+// Integrity decides UIPI, so it wins when both are known; the elevated flags
+// stand in when a level could not be read.
+export function compareProcessRights(
+	self: ProcessRights,
+	iracing: ProcessRights
+): RightsVerdict {
+	if (self.integrity !== null && iracing.integrity !== null) {
+		if (self.integrity === iracing.integrity) {
+			return 'same';
+		}
+		return iracing.integrity > self.integrity
+			? 'iracing-higher'
+			: 'tool-higher';
+	}
+	if (self.elevated !== null && iracing.elevated !== null) {
+		if (self.elevated === iracing.elevated) {
+			return 'same';
+		}
+		return iracing.elevated ? 'iracing-higher' : 'tool-higher';
+	}
+	return 'unknown';
+}
+
+// Whether a process runs as administrator, for the messages: the flag when
+// known, else read off the level.
+export function runsAsAdministrator(rights: ProcessRights): boolean | null {
+	if (rights.elevated !== null) {
+		return rights.elevated;
+	}
+	return rights.integrity === null ? null : rights.integrity >= INTEGRITY_HIGH;
+}
+
 // Thrown by the native layer when the iRacing PROCESS is found but no matching
 // top-level window resolves. That is distinct from "iRacing not running" (no
 // process): the process being present means the window really should exist, so
@@ -137,7 +289,10 @@ interface NativeApi {
 		left: number,
 		top: number,
 		raise: boolean
-	): number | undefined;
+	): IracingResize | undefined;
+	probeWindowAccess(): boolean | null;
+	getIracingRights(): IracingRightsReport | undefined;
+	readRights(pid: number): ProcessRights;
 	getExclusiveFullscreenState(): ExclusiveFullscreenState;
 }
 
@@ -285,6 +440,34 @@ function createNativeApi(): NativeApi | null {
 		);
 		const GetLastError = kernel32.func('uint32_t __stdcall GetLastError()');
 
+		// Process rights (see ProcessRights). Bound on their own: a failure here
+		// leaves the rights unknown and must not take the resize path down with
+		// it. BOOL parameters are declared int: BOOL is 4 bytes, koffi's bool is
+		// C's 1-byte bool.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		let rightsFns: Record<string, any> | null = null;
+		try {
+			const advapi32 = koffi.load('advapi32.dll');
+			rightsFns = {
+				OpenProcess: kernel32.func(
+					'HANDLE __stdcall OpenProcess(uint32_t dwDesiredAccess, int bInheritHandle, uint32_t dwProcessId)'
+				),
+				GetProcessTimes: kernel32.func(
+					'int __stdcall GetProcessTimes(HANDLE hProcess, _Out_ uint64_t *lpCreationTime, _Out_ uint64_t *lpExitTime, _Out_ uint64_t *lpKernelTime, _Out_ uint64_t *lpUserTime)'
+				),
+				OpenProcessToken: advapi32.func(
+					'int __stdcall OpenProcessToken(HANDLE ProcessHandle, uint32_t DesiredAccess, _Out_ HANDLE *TokenHandle)'
+				),
+				GetTokenInformation: advapi32.func(
+					'int __stdcall GetTokenInformation(HANDLE TokenHandle, int TokenInformationClass, _Out_ uint8_t *TokenInformation, uint32_t TokenInformationLength, _Out_ uint32_t *ReturnLength)'
+				),
+			};
+		} catch (error) {
+			log.warn('Process-rights FFI unavailable', {
+				error: (error as Error)?.message || String(error),
+			});
+		}
+
 		// CreateToolhelp32Snapshot returns INVALID_HANDLE_VALUE ((HANDLE)-1), not
 		// NULL, on failure. koffi.address() may surface that as the unsigned or the
 		// signed representation depending on version, so reject both plus null.
@@ -317,6 +500,129 @@ function createNativeApi(): NativeApi | null {
 				return undefined;
 			} finally {
 				CloseHandle(snapshot);
+			}
+		};
+
+		// Every process as (pid, parent, image name), from one snapshot.
+		const listProcesses = (): {
+			pid: number;
+			parentPid: number;
+			exe: string;
+		}[] => {
+			const snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+			if (isBadHandle(snapshot)) {
+				return [];
+			}
+			try {
+				const out: { pid: number; parentPid: number; exe: string }[] = [];
+				const entry: {
+					dwSize: number;
+					th32ProcessID?: number;
+					th32ParentProcessID?: number;
+					szExeFile?: string;
+				} = { dwSize: koffi.sizeof(PROCESSENTRY32W) };
+				let ok = Process32FirstW(snapshot, entry);
+				while (ok) {
+					out.push({
+						pid: entry.th32ProcessID ?? 0,
+						parentPid: entry.th32ParentProcessID ?? 0,
+						exe: entry.szExeFile ?? '',
+					});
+					ok = Process32NextW(snapshot, entry);
+				}
+				return out;
+			} finally {
+				CloseHandle(snapshot);
+			}
+		};
+
+		// A process's rights, plus when it started (FILETIME ticks) so a parent
+		// PID can be told from a recycled one.
+		const readProcess = (
+			pid: number
+		): { rights: ProcessRights; created: bigint | number | null } => {
+			if (!rightsFns) {
+				return {
+					rights: {
+						elevated: null,
+						integrity: null,
+						error: 'unavailable',
+					},
+					created: null,
+				};
+			}
+			const {
+				OpenProcess,
+				GetProcessTimes,
+				OpenProcessToken,
+				GetTokenInformation,
+			} = rightsFns;
+			const proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+			if (!proc || koffi.address(proc) === 0n) {
+				return {
+					rights: {
+						elevated: null,
+						integrity: null,
+						error: `open-process:${GetLastError() >>> 0}`,
+					},
+					created: null,
+				};
+			}
+			try {
+				const created = [0];
+				const unused = [0];
+				const created0 = GetProcessTimes(
+					proc,
+					created,
+					unused,
+					unused,
+					unused
+				)
+					? created[0]
+					: null;
+				const tokenOut: unknown[] = [null];
+				if (!OpenProcessToken(proc, TOKEN_QUERY, tokenOut)) {
+					return {
+						rights: {
+							elevated: null,
+							integrity: null,
+							error: `open-token:${GetLastError() >>> 0}`,
+						},
+						created: created0,
+					};
+				}
+				const token = tokenOut[0];
+				try {
+					const length = [0];
+					const elevation = Buffer.alloc(4);
+					const elevated = GetTokenInformation(
+						token,
+						TOKEN_ELEVATION,
+						elevation,
+						elevation.length,
+						length
+					)
+						? elevation.readUInt32LE(0) !== 0
+						: null;
+					const label = Buffer.alloc(128);
+					const integrity = GetTokenInformation(
+						token,
+						TOKEN_INTEGRITY_LEVEL,
+						label,
+						label.length,
+						length
+					)
+						? parseIntegrityRid(label, length[0])
+						: null;
+					return {
+						rights: { elevated, integrity, error: null },
+						created: created0,
+					};
+				} finally {
+					CloseHandle(token);
+				}
+			} finally {
+				CloseHandle(proc);
 			}
 		};
 
@@ -416,7 +722,7 @@ function createNativeApi(): NativeApi | null {
 				left: number,
 				top: number,
 				raise: boolean
-			): number | undefined {
+			): IracingResize | undefined {
 				const hwnd = findWindow();
 				if (!hwnd) {
 					return undefined;
@@ -437,18 +743,20 @@ function createNativeApi(): NativeApi | null {
 					height,
 					flags
 				);
+				// Read at once, before any other call can overwrite it. Best-effort —
+				// koffi may not preserve GetLastError across the call, so 0 means
+				// 'unknown' — but both field logs carried a steady 5.
+				const lastError = ok ? 0 : GetLastError() >>> 0;
 				if (!ok) {
-					// Observability-only: a failed pre-capture resize (stale HWND,
-					// compositor-rejected geometry) otherwise vanished silently.
-					// lastError is best-effort — koffi may not preserve GetLastError
-					// across the call, so treat 0 as 'unknown'.
+					// A failed resize (stale HWND, compositor-rejected geometry, or
+					// iRacing running as administrator) otherwise vanished silently.
 					log.warn('SetWindowPos failed', {
 						raise,
 						width,
 						height,
 						left,
 						top,
-						lastError: GetLastError() >>> 0,
+						lastError,
 					});
 				}
 				if (raise) {
@@ -460,7 +768,83 @@ function createNativeApi(): NativeApi | null {
 				// Win32 USER handles are 32-bit-significant even in x64 processes, so
 				// Number() is lossless here and matches the PowerShell fallback's
 				// numeric return (index.ts String()s it to match source ids).
-				return Number(koffi.address(hwnd));
+				return {
+					handle: Number(koffi.address(hwnd)),
+					accessDenied: classifyAccessProbe(ok, lastError) === true,
+				};
+			},
+
+			// Whether Windows lets us move iRacing's window, asked without changing
+			// anything: put it exactly where it already is, with the quiet restore
+			// flags (no activation, no Z-order change). That is the very call that
+			// failed with 5 in the field logs — the restore of a window whose resize
+			// had been refused, to the size it already had — so it is refused under
+			// the same condition. Minimised or maximised windows report geometry
+			// that is not safe to re-apply (off-screen sentinels; a maximised rect
+			// that would un-maximise it), so those are not probed: null, unknown.
+			probeWindowAccess(): boolean | null {
+				const hwnd = findWindow();
+				if (!hwnd || IsIconic(hwnd) || IsZoomed(hwnd)) {
+					return null;
+				}
+				const rect = {} as {
+					left: number;
+					top: number;
+					right: number;
+					bottom: number;
+				};
+				if (!GetWindowRect(hwnd, rect)) {
+					return null;
+				}
+				const { insertAfter, flags } = resolveResizePlacement(false);
+				const ok = SetWindowPos(
+					hwnd,
+					insertAfter,
+					rect.left,
+					rect.top,
+					rect.right - rect.left,
+					rect.bottom - rect.top,
+					flags
+				);
+				return classifyAccessProbe(ok, ok ? 0 : GetLastError() >>> 0);
+			},
+
+			readRights(pid: number): ProcessRights {
+				return readProcess(pid).rights;
+			},
+
+			getIracingRights(): IracingRightsReport | undefined {
+				const processes = listProcesses();
+				const sim = processes.find((p) => matchesIracingExe(p.exe));
+				if (!sim) {
+					return undefined;
+				}
+				const self = readProcess(process.pid).rights;
+				const iracing = readProcess(sim.pid);
+				let launcher: IracingRightsReport['launcher'] = null;
+				const parent = processes.find((p) => p.pid === sim.parentPid);
+				if (parent) {
+					const read = readProcess(parent.pid);
+					// A PID is recycled once its process exits: a "parent" started
+					// after iRacing is a stranger. Unknown times are taken on trust.
+					const recycled =
+						read.created !== null &&
+						iracing.created !== null &&
+						read.created > iracing.created;
+					if (!recycled) {
+						launcher = {
+							pid: parent.pid,
+							name: parent.exe,
+							...read.rights,
+						};
+					}
+				}
+				return {
+					self,
+					iracing: { pid: sim.pid, ...iracing.rights },
+					launcher,
+					verdict: compareProcessRights(self, iracing.rights),
+				};
 			},
 
 			getExclusiveFullscreenState(): ExclusiveFullscreenState {
@@ -575,13 +959,75 @@ export function getIracingExclusiveFullscreenState(): ExclusiveFullscreenState |
 	}
 }
 
+// Whether iRacing runs as administrator, read off whether Windows lets us move
+// its window (see probeWindowAccess). True = refused, false = allowed, null =
+// unknown: native unavailable, iRacing not running, its window minimised or
+// maximised, or a refusal for another reason. Native only — never spawns
+// PowerShell — and fail-open: callers refuse only on true.
+export function isIracingWindowAccessDenied(): boolean | null {
+	const native = getNativeApi();
+	if (!native) {
+		return null;
+	}
+	try {
+		return native.probeWindowAccess();
+	} catch (error) {
+		// Same policy as getIracingWindowSizeNative.
+		if (!(error instanceof IracingWindowUnresolvedError)) {
+			disableNative('isIracingWindowAccessDenied', error);
+		}
+		return null;
+	}
+}
+
+// iRacing's rights against ours, and its launcher's (see IracingRightsReport).
+// Null when native is unavailable or iRacing is not running. Native only; never
+// throws. A snapshot plus a few token reads — cheap enough to ask per capture.
+export function getIracingProcessRights(): IracingRightsReport | null {
+	const native = getNativeApi();
+	if (!native) {
+		return null;
+	}
+	try {
+		return native.getIracingRights() ?? null;
+	} catch (error) {
+		// Diagnostic only: a fault here must not switch off the native resize.
+		log.warn('Reading process rights failed', {
+			error: (error as Error)?.message || String(error),
+		});
+		return null;
+	}
+}
+
+// One process's rights by PID (native only). Null when native is unavailable.
+export function getProcessRights(pid: number): ProcessRights | null {
+	const native = getNativeApi();
+	if (!native) {
+		return null;
+	}
+	try {
+		return native.readRights(pid);
+	} catch (error) {
+		log.warn('Reading process rights failed', {
+			pid,
+			error: (error as Error)?.message || String(error),
+		});
+		return null;
+	}
+}
+
+// The PowerShell fallbacks cannot tell a refused resize from a done one.
+function fromPowerShell(handle: number | undefined): IracingResize | undefined {
+	return handle === undefined ? undefined : { handle, accessDenied: false };
+}
+
 // Restore / reposition path (via resize() in index.ts): quiet, no focus change.
 export function resizeIracingWindow(
 	width: number,
 	height: number,
 	left: number,
 	top: number
-): number | undefined {
+): IracingResize | undefined {
 	const native = getNativeApi();
 	if (native) {
 		try {
@@ -590,7 +1036,9 @@ export function resizeIracingWindow(
 			shouldKeepNativeAfter('resizeIracingWindow', error);
 		}
 	}
-	return resizeIracingWindowViaPowerShell(width, height, left, top);
+	return fromPowerShell(
+		resizeIracingWindowViaPowerShell(width, height, left, top)
+	);
 }
 
 // Pre-capture path: size to the target resolution and raise for the grab. Used
@@ -601,7 +1049,7 @@ export function resizeIracingWindowAsync(
 	height: number,
 	left: number,
 	top: number
-): Promise<number | undefined> {
+): Promise<IracingResize | undefined> {
 	const native = getNativeApi();
 	if (native) {
 		try {
@@ -610,7 +1058,9 @@ export function resizeIracingWindowAsync(
 			shouldKeepNativeAfter('resizeIracingWindowAsync', error);
 		}
 	}
-	return resizeIracingWindowAsyncViaPowerShell(width, height, left, top);
+	return resizeIracingWindowAsyncViaPowerShell(width, height, left, top).then(
+		fromPowerShell
+	);
 }
 
 // ---------------------------------------------------------------------------

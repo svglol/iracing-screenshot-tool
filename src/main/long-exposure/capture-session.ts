@@ -83,6 +83,10 @@ export type LongExposureFailure =
 	// Windows refuses screen capture to this process (e.g. it runs as
 	// administrator) — decided before playback, see decideCaptureBlock.
 	| 'capture-blocked'
+	// Windows will not let this tool drive iRacing's window: the resize is
+	// refused and every replay command dropped (field case 2026-11-12: the
+	// seeks "did not land"). Usually iRacing runs as administrator.
+	| 'iracing-window-refused'
 	| 'seek-failed'
 	| 'playback-stalled'
 	| 'no-samples'
@@ -241,8 +245,15 @@ export interface CaptureSessionDeps {
 	backendName: string | null;
 	backendUnavailableReason: string | null;
 	// Resize iRacing's window to the render size and raise it. Resolves to the
-	// window handle, or undefined when the window can't be found.
-	resizeWindow(width: number, height: number): Promise<number | undefined>;
+	// window handle, undefined when the window can't be found, or 'access-denied'
+	// when Windows refused to move it (iRacing running as administrator).
+	resizeWindow(
+		width: number,
+		height: number
+	): Promise<number | 'access-denied' | undefined>;
+	// The sentence for an 'access-denied' resize. Main owns the wording (shared
+	// with the still path), as with exclusiveFullscreenRefusal.
+	accessDeniedMessage?(): string;
 	// Put iRacing's window back the way the user had it.
 	restoreWindow(): void;
 	// #10 exclusive-fullscreen check, re-sampled AFTER the window is raised. Returns
@@ -622,6 +633,18 @@ async function runCapture(args: RunCaptureArgs): Promise<LongExposureOutcome> {
 			...base(),
 			failure: 'window-unavailable',
 			message: t('longExposureCapture.windowNotFound'),
+		};
+	}
+	if (hwnd === 'access-denied') {
+		// The pre-flight in main asks first; this is the backstop for when it
+		// could not (a minimised or maximised window). Nothing was moved, and the
+		// `finally` in `executeRecipe` restores the rest.
+		return {
+			...base(),
+			failure: 'iracing-window-refused',
+			message:
+				deps.accessDeniedMessage?.() ??
+				t('longExposureCapture.windowNotFound'),
 		};
 	}
 	if (aborted()) {
