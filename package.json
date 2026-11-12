@@ -104,7 +104,7 @@
         "eslint-plugin-vue": "^10.9.0",
         "fast-glob": "^3.2.2",
         "globals": "^15.15.0",
-        "happy-dom": "^20.10.6",
+        "happy-dom": "^21.0.4",
         "jimp": "^1.6.1",
         "neostandard": "^0.13.0",
         "np": "^11.2.0",
