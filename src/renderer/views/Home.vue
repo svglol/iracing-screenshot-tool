@@ -47,7 +47,7 @@
 		</div>
 
 		<div class="column">
-			<div v-if="currentURL !== ''" class="gallery-column">
+			<div v-if="showGallery" class="gallery-column">
 				<div
 					class="columns is-gapless"
 					style="
@@ -122,6 +122,122 @@
 					</div>
 				</div>
 
+				<!-- Folder navigation. Only shown where there is somewhere to go, so a
+				     flat screenshot folder looks exactly as before. -->
+				<nav
+					v-if="showFolderBar"
+					class="gallery-folders"
+					:aria-label="$t('gallery.folders.label')"
+				>
+					<button
+						type="button"
+						class="gallery-folders__icon-btn"
+						:disabled="atRoot"
+						:title="$t('gallery.folders.up')"
+						:aria-label="$t('gallery.folders.up')"
+						@click="goUpFolder"
+					>
+						<font-awesome-icon :icon="['fas', 'arrow-up']" />
+					</button>
+
+					<ol class="gallery-folders__crumbs">
+						<li
+							v-for="(crumb, i) in crumbs"
+							:key="crumb.path"
+							class="gallery-folders__crumb"
+						>
+							<font-awesome-icon
+								v-if="i > 0"
+								class="gallery-folders__sep"
+								:icon="['fas', 'chevron-right']"
+								aria-hidden="true"
+							/>
+							<span
+								v-if="i === crumbs.length - 1"
+								class="gallery-folders__current"
+								aria-current="location"
+								:title="crumb.path"
+								>{{ crumb.label }}</span
+							>
+							<button
+								v-else
+								type="button"
+								class="gallery-folders__crumb-btn"
+								:title="crumb.path"
+								@click="openGalleryFolder(crumb.path)"
+							>
+								{{ crumb.label }}
+							</button>
+						</li>
+					</ol>
+
+					<div
+						v-if="subfolders.length > 0"
+						ref="folderMenu"
+						class="gallery-folders__menu"
+						@keydown="onFolderMenuKey"
+					>
+						<button
+							ref="folderMenuButton"
+							type="button"
+							class="gallery-folders__menu-btn"
+							aria-haspopup="menu"
+							:aria-expanded="folderMenuOpen ? 'true' : 'false'"
+							@click="toggleFolderMenu"
+						>
+							<font-awesome-icon :icon="['fas', 'folder']" />
+							<span>{{
+								$t('gallery.folders.subfolders', {
+									count: String(subfolders.length),
+								})
+							}}</span>
+							<font-awesome-icon
+								class="gallery-folders__caret"
+								:class="{ 'is-open': folderMenuOpen }"
+								:icon="['fas', 'chevron-down']"
+								aria-hidden="true"
+							/>
+						</button>
+						<ul
+							v-if="folderMenuOpen"
+							class="gallery-folders__list"
+							role="menu"
+							:aria-label="$t('gallery.folders.subfoldersLabel')"
+						>
+							<li
+								v-for="folder in subfolders"
+								:key="folder.fullPath"
+								role="none"
+							>
+								<button
+									type="button"
+									role="menuitem"
+									class="gallery-folders__item"
+									:title="folder.name"
+									@click="openGalleryFolder(folder.fullPath)"
+								>
+									<font-awesome-icon
+										:icon="['fas', 'folder']"
+										aria-hidden="true"
+									/>
+									<span>{{ folder.name }}</span>
+								</button>
+							</li>
+						</ul>
+					</div>
+
+					<button
+						v-if="!atRoot"
+						type="button"
+						class="gallery-folders__restore"
+						:title="rootFolder"
+						@click="restoreRootFolder"
+					>
+						<font-awesome-icon :icon="['fas', 'house']" />
+						<span>{{ $t('gallery.folders.backToRoot') }}</span>
+					</button>
+				</nav>
+
 				<div id="carousel" class="gallery-virtual">
 					<figure
 						class="gallery-virtual__preview"
@@ -135,26 +251,81 @@
 							:src="activeItem.file"
 							:draggable="false"
 						/>
+						<div v-else class="gallery-empty">
+							<font-awesome-icon
+								class="gallery-empty__icon"
+								:icon="['fas', 'images']"
+								aria-hidden="true"
+							/>
+							<p>{{ $t('gallery.folders.empty') }}</p>
+							<button
+								v-if="!atRoot"
+								type="button"
+								class="gallery-folders__restore"
+								@click="restoreRootFolder"
+							>
+								<font-awesome-icon :icon="['fas', 'house']" />
+								<span>{{ $t('gallery.folders.backToRoot') }}</span>
+							</button>
+						</div>
 					</figure>
 
 					<div
 						class="gallery-virtual__strip"
 						@wheel.prevent="onStripWheel"
 					>
-						<figure
-							v-for="(item, i) in visibleItems"
-							:key="item.file"
-							class="gallery-virtual__thumb"
-							:class="{
-								'gallery-virtual__thumb--active':
-									windowStart + i === selected,
-							}"
-							:draggable="false"
-							@click="selectIndex(windowStart + i)"
-							@contextmenu.prevent.stop="handleClick($event, item)"
-						>
-							<img v-lazy="getImageUrl(item)" :draggable="false" />
-						</figure>
+						<template v-for="(item, i) in visibleItems" :key="item.key">
+							<!-- A folder: its newest image under its name; opens on click. -->
+							<figure
+								v-if="item.kind === 'folder'"
+								class="gallery-virtual__thumb gallery-virtual__thumb--folder"
+								role="button"
+								tabindex="0"
+								:data-folder-path="item.folderPath"
+								:title="item.name"
+								:aria-label="
+									$t('gallery.folders.open', { name: item.name })
+								"
+								:draggable="false"
+								@click="selectIndex(windowStart + i)"
+								@keydown.enter.prevent="selectIndex(windowStart + i)"
+								@keydown.space.prevent="selectIndex(windowStart + i)"
+								@contextmenu.prevent.stop
+							>
+								<img
+									v-if="item.thumb"
+									v-lazy="getImageUrl(item)"
+									:draggable="false"
+									alt=""
+								/>
+								<div v-else class="gallery-virtual__folder-blank">
+									<font-awesome-icon
+										:icon="['fas', 'folder']"
+										aria-hidden="true"
+									/>
+								</div>
+								<figcaption class="gallery-virtual__folder-name">
+									<font-awesome-icon
+										:icon="['fas', 'folder']"
+										aria-hidden="true"
+									/>
+									<span>{{ item.name }}</span>
+								</figcaption>
+							</figure>
+							<figure
+								v-else
+								class="gallery-virtual__thumb"
+								:class="{
+									'gallery-virtual__thumb--active':
+										windowStart + i === selected,
+								}"
+								:draggable="false"
+								@click="selectIndex(windowStart + i)"
+								@contextmenu.prevent.stop="handleClick($event, item)"
+							>
+								<img v-lazy="getImageUrl(item)" :draggable="false" />
+							</figure>
+						</template>
 					</div>
 				</div>
 
@@ -174,6 +345,18 @@ import SideBar from '../components/SideBar.vue';
 import PromoCard from '../components/PromoCard.vue';
 import ChangelogModal from '../components/ChangelogModal.vue';
 import config from '../../utilities/config';
+import {
+	FOLDER_CACHE_DIR,
+	SOURCE_MARKER,
+	ensureThumbnailDir,
+	folderCrumbs,
+	galleryThumbnailPath,
+	isInsideFolder,
+	mergeGalleryEntries,
+	samePath,
+	thumbnailDirFor,
+	type GalleryFolderEntry,
+} from '../../utilities/gallery-paths';
 import { useOruga } from '@oruga-ui/oruga-next';
 import { version, repository } from '../../../package.json';
 
@@ -235,7 +418,10 @@ const SUPPORTED_GALLERY_EXTENSIONS = new Set([
 	'.webp',
 ]);
 
-let dir = normalizeFolder(config.get('screenshotFolder'));
+// The configured screenshot folder, and the folder the gallery is showing — the
+// root or any folder below it. Both keep a trailing separator.
+let rootDir = normalizeFolder(config.get('screenshotFolder'));
+let dir = rootDir;
 
 function normalizeFolder(folder) {
 	const resolved = path.resolve(folder || '.');
@@ -258,9 +444,10 @@ function getCacheDir() {
 	return path.join(userDataPath, 'Cache');
 }
 
+// Folder-aware, and shared with main's WGC save path (gallery-paths.ts): the
+// root's thumbnails stay where they always were, a subfolder's are keyed by it.
 function getThumbnailPath(filePath) {
-	const fileName = path.parse(filePath).name;
-	return path.join(getCacheDir(), `${fileName}.webp`);
+	return galleryThumbnailPath(getCacheDir(), rootDir, filePath);
 }
 
 function copyImageToClipboard(filePath) {
@@ -268,6 +455,40 @@ function copyImageToClipboard(filePath) {
 	if (!image.isEmpty()) {
 		clipboard.writeImage(image);
 	}
+}
+
+// How many folders Backspace can walk back through.
+const MAX_FOLDER_HISTORY = 50;
+
+// Whether a key event is going into something the user types in, where
+// Backspace deletes text and must not navigate.
+function isTextEntry(target: EventTarget | null): boolean {
+	const el = target as HTMLElement | null;
+	if (!el || !el.tagName) {
+		return false;
+	}
+	if (el.isContentEditable) {
+		return true;
+	}
+	const tag = el.tagName.toLowerCase();
+	if (tag === 'textarea' || tag === 'select') {
+		return true;
+	}
+	if (tag !== 'input') {
+		return false;
+	}
+	const type = (el as HTMLInputElement).type.toLowerCase();
+	return ![
+		'button',
+		'checkbox',
+		'radio',
+		'range',
+		'submit',
+		'reset',
+		'color',
+		'file',
+		'image',
+	].includes(type);
 }
 
 function normalizeComparePath(filePath) {
@@ -287,28 +508,76 @@ async function ensureThumbnail(sourceFile, thumbFile) {
 		.toFile(thumbFile);
 }
 
-async function listGalleryEntries() {
-	ensureDirectory(dir);
-	ensureDirectory(getCacheDir());
-
-	let files = [];
-
+// A subfolder's newest image (the cover its strip tile shows), or null.
+async function newestImageIn(folder) {
+	let names = [];
 	try {
-		files = await fs.promises.readdir(dir);
+		names = await fs.promises.readdir(folder);
 	} catch (error) {
 		console.log(error);
-		return [];
+		return null;
+	}
+	const stamped = await Promise.all(
+		names
+			.filter((name) =>
+				SUPPORTED_GALLERY_EXTENSIONS.has(path.extname(name).toLowerCase())
+			)
+			.map(async (name) => {
+				const fullPath = path.join(folder, name);
+				try {
+					const stats = await fs.promises.stat(fullPath);
+					return stats.isFile()
+						? { fullPath, modified: stats.mtimeMs }
+						: null;
+				} catch {
+					return null;
+				}
+			})
+	);
+	let newest = null;
+	for (const entry of stamped) {
+		if (entry && (!newest || entry.modified > newest.modified)) {
+			newest = entry;
+		}
+	}
+	return newest;
+}
+
+// The images (newest first) and the subfolders of the folder being shown —
+// each subfolder with its newest image, and sorted by it, newest first.
+async function listGalleryEntries() {
+	if (samePath(dir, rootDir)) {
+		// The screenshot folder may not exist yet on a first run; a subfolder that
+		// is gone is NOT recreated — the caller falls back to the root.
+		ensureDirectory(dir);
+	}
+	ensureDirectory(getCacheDir());
+	ensureThumbnailDir(fs, getCacheDir(), rootDir, dir);
+
+	let dirents = [];
+
+	try {
+		dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+	} catch (error) {
+		console.log(error);
+		return { images: [], folders: [], missing: true };
 	}
 
 	const entries = await Promise.all(
-		files.map(async (fileName) => {
-			const fullPath = path.join(dir, fileName);
+		dirents.map(async (dirent) => {
+			const fullPath = path.join(dir, dirent.name);
+			const isFolder = dirent.isDirectory();
+			const extension = path.extname(dirent.name).toLowerCase();
+			if (!isFolder && !SUPPORTED_GALLERY_EXTENSIONS.has(extension)) {
+				return null;
+			}
 			try {
 				const stats = await fs.promises.stat(fullPath);
 				return {
 					fullPath,
+					name: dirent.name,
+					isFolder,
 					modified: stats.mtimeMs,
-					extension: path.extname(fileName).toLowerCase(),
 				};
 			} catch (error) {
 				console.log(error);
@@ -317,21 +586,77 @@ async function listGalleryEntries() {
 		})
 	);
 
-	return entries
+	const present = entries
 		.filter(Boolean)
-		.filter((entry) => SUPPORTED_GALLERY_EXTENSIONS.has(entry.extension))
 		.sort((a, b) => b.modified - a.modified);
+	const folders: GalleryFolderEntry[] = await Promise.all(
+		present
+			.filter((entry) => entry.isFolder)
+			.map(async ({ fullPath, name, modified }) => {
+				const cover = await newestImageIn(fullPath);
+				return {
+					fullPath,
+					name,
+					cover: cover ? cover.fullPath : null,
+					coverModified: cover ? cover.modified : null,
+					modified,
+				};
+			})
+	);
+	return {
+		images: present.filter((entry) => !entry.isFolder),
+		folders: mergeGalleryEntries([], folders).map((m) => m.entry),
+		missing: false,
+	};
 }
 
-async function cleanupThumbnailCache() {
-	// Build the keep set from ALL source images in the screenshot folder (every
-	// extension the gallery surfaces — not just .png — so thumbs for .jpg/.webp
+// One image in the strip (and the preview).
+function imageItem(filePath) {
+	const thumbFsPath = getThumbnailPath(filePath);
+	return {
+		kind: 'image',
+		key: filePath,
+		file: toDisplayPath(filePath),
+		// Always start blank; ensureWindowThumbnails fills in cached or
+		// freshly-resized thumbs for items in the active window. For already-
+		// cached items, ensureThumbnail returns early without doing sharp work,
+		// so cached thumbs surface near-instantly once the window includes them.
+		thumb: EMPTY_IMAGE,
+		thumbDisplayPath: toDisplayPath(thumbFsPath),
+		thumbFsPath,
+		sourcePath: filePath,
+	};
+}
+
+// A subfolder in the strip: its newest image as the cover (thumbnailed into
+// that folder's own cache, where the folder will look for it once opened), or
+// just a folder icon when it holds no images. Clicking it opens it.
+function folderItem(folder: GalleryFolderEntry) {
+	const thumbFsPath = folder.cover ? getThumbnailPath(folder.cover) : null;
+	return {
+		kind: 'folder',
+		key: `folder:${folder.fullPath}`,
+		file: '',
+		name: folder.name,
+		folderPath: folder.fullPath,
+		thumb: thumbFsPath ? EMPTY_IMAGE : null,
+		thumbDisplayPath: thumbFsPath ? toDisplayPath(thumbFsPath) : null,
+		thumbFsPath,
+		sourcePath: folder.cover,
+	};
+}
+
+async function cleanupThumbnailCache(folder) {
+	// Build the keep set from ALL source images in the folder (every extension
+	// the gallery surfaces — not just .png — so thumbs for .jpg/.webp
 	// screenshots aren't garbage-collected on every load). The cache is
 	// decoupled from the visible window: thumbs for items currently outside the
 	// strip's window are still valid and useful as the user navigates further
-	// into the gallery.
+	// into the gallery. Only THIS folder's thumbnail directory is swept — other
+	// folders' thumbnails live elsewhere and are left alone.
 	try {
-		const dirFiles = await fs.promises.readdir(dir);
+		const thumbDir = thumbnailDirFor(getCacheDir(), rootDir, folder);
+		const dirFiles = await fs.promises.readdir(folder);
 		const keep = new Set(
 			dirFiles
 				.filter((fileName) =>
@@ -340,11 +665,13 @@ async function cleanupThumbnailCache() {
 					)
 				)
 				.map((fileName) =>
-					normalizeComparePath(getThumbnailPath(path.join(dir, fileName)))
+					normalizeComparePath(
+						getThumbnailPath(path.join(folder, fileName))
+					)
 				)
 		);
 
-		const cacheFiles = await fs.promises.readdir(getCacheDir());
+		const cacheFiles = await fs.promises.readdir(thumbDir);
 
 		await Promise.all(
 			cacheFiles.map(async (fileName) => {
@@ -352,15 +679,55 @@ async function cleanupThumbnailCache() {
 					return;
 				}
 
-				const fullPath = path.join(getCacheDir(), fileName);
+				const fullPath = path.join(thumbDir, fileName);
 				if (!keep.has(normalizeComparePath(fullPath))) {
 					await fs.promises.unlink(fullPath);
 				}
 			})
 		);
+
+		if (samePath(folder, rootDir)) {
+			await pruneOrphanFolderCaches();
+		}
 	} catch (error) {
 		console.log(error);
 	}
+}
+
+// Drop the thumbnail directories of folders that no longer exist (a deleted
+// grid folder), found through the marker each one carries.
+async function pruneOrphanFolderCaches() {
+	const base = path.join(getCacheDir(), FOLDER_CACHE_DIR);
+	let keys = [];
+	try {
+		keys = await fs.promises.readdir(base);
+	} catch {
+		return;
+	}
+	await Promise.all(
+		keys.map(async (key) => {
+			const cacheFolder = path.join(base, key);
+			let source = '';
+			try {
+				source = (
+					await fs.promises.readFile(
+						path.join(cacheFolder, SOURCE_MARKER),
+						'utf8'
+					)
+				).trim();
+			} catch {
+				source = '';
+			}
+			if (source && fs.existsSync(source)) {
+				return;
+			}
+			try {
+				await fs.promises.rm(cacheFolder, { recursive: true, force: true });
+			} catch (error) {
+				console.log(error);
+			}
+		})
+	);
 }
 
 export default {
@@ -376,6 +743,19 @@ export default {
 			fileSize: '',
 			selected: 0,
 			galleryLoadId: 0,
+			// Mirrors of the module-level `rootDir` / `dir`, for the template.
+			rootFolder: rootDir,
+			currentFolder: dir,
+			subfolders: [] as { fullPath: string; name: string }[],
+			folderMenuOpen: false,
+			onDocumentPointer: null as ((event: Event) => void) | null,
+			// Where Backspace goes: the folders left, most recent last, each with the
+			// image that was selected there.
+			folderHistory: [] as { folder: string; file: string | null }[],
+			onGalleryKey: null as ((event: KeyboardEvent) => void) | null,
+			// False while another page is showing — Home is kept alive, so its
+			// listeners outlive the visit.
+			galleryVisible: true,
 			generatingThumbs: new Set<string>(),
 			// Held so beforeUnmount can tear them down — otherwise an HMR reload (or
 			// any future remount) stacks duplicate 'screenshot-response' handlers
@@ -403,8 +783,26 @@ export default {
 				{ name: this.$t('gallery.menu.delete'), slug: 'delete' },
 			];
 		},
+		// The image in the preview. The strip also holds folders; the selection
+		// never rests on one, but an index that does shows nothing.
 		activeItem(): any | null {
-			return this.items[this.selected] || null;
+			const item = this.items[this.selected];
+			return item && item.kind !== 'folder' ? item : null;
+		},
+		atRoot(): boolean {
+			return samePath(this.currentFolder, this.rootFolder);
+		},
+		crumbs(): { label: string; path: string }[] {
+			return folderCrumbs(this.rootFolder, this.currentFolder);
+		},
+		// The folder bar appears only where there is somewhere to go: inside a
+		// subfolder, or at a root that has some. A flat screenshot folder looks
+		// exactly as it always has.
+		showFolderBar(): boolean {
+			return !this.atRoot || this.subfolders.length > 0;
+		},
+		showGallery(): boolean {
+			return this.currentURL !== '' || this.showFolderBar;
 		},
 		windowStart(): number {
 			if (this.items.length === 0) return 0;
@@ -470,17 +868,25 @@ export default {
 				return;
 			}
 
-			const thumbPath = getThumbnailPath(filePath);
+			// A shot saved somewhere other than the folder on show (a capture grid
+			// writes into its own folder; a plain shot lands in the root while a
+			// subfolder is open): go to its folder, so the shot just taken is the
+			// one on screen — as it always has been.
+			const fileFolder = path.dirname(filePath);
+			if (
+				!samePath(fileFolder, dir) &&
+				isInsideFolder(rootDir, fileFolder)
+			) {
+				copyImageToClipboard(filePath);
+				await this.openGalleryFolder(fileFolder, filePath);
+				return;
+			}
+
 			ensureDirectory(getCacheDir());
-			const item = {
-				file: toDisplayPath(filePath),
-				thumb: fs.existsSync(thumbPath)
-					? toDisplayPath(thumbPath)
-					: EMPTY_IMAGE,
-				thumbDisplayPath: toDisplayPath(thumbPath),
-				thumbFsPath: thumbPath,
-				sourcePath: filePath,
-			};
+			const item = imageItem(filePath);
+			if (fs.existsSync(item.thumbFsPath)) {
+				item.thumb = item.thumbDisplayPath;
+			}
 
 			this.items.unshift(item);
 			copyImageToClipboard(filePath);
@@ -497,10 +903,59 @@ export default {
 		this.configFolderDisposer = config.onDidChange(
 			'screenshotFolder',
 			(newValue) => {
-				dir = normalizeFolder(newValue);
+				// A new screenshot folder starts the gallery over at its top.
+				rootDir = normalizeFolder(newValue);
+				dir = rootDir;
+				this.rootFolder = rootDir;
+				this.currentFolder = dir;
+				this.folderHistory = [];
+				this.closeFolderMenu();
 				void this.loadGallery();
 			}
 		);
+
+		// The folder menu closes on any press outside it, and on Escape.
+		this.onDocumentPointer = (event: Event) => {
+			if (!this.folderMenuOpen) {
+				return;
+			}
+			if (event instanceof KeyboardEvent) {
+				if (event.key === 'Escape') {
+					this.closeFolderMenu(true);
+				}
+				return;
+			}
+			const menu = this.$refs.folderMenu as HTMLElement | undefined;
+			if (menu && !menu.contains(event.target as Node)) {
+				this.closeFolderMenu();
+			}
+		};
+		document.addEventListener('pointerdown', this.onDocumentPointer);
+		document.addEventListener('keydown', this.onDocumentPointer);
+
+		// Backspace: back to the folder the gallery came from, like a browser's
+		// Back. Never while typing, and never from another page.
+		this.onGalleryKey = (event: KeyboardEvent) => {
+			if (
+				event.key !== 'Backspace' ||
+				event.defaultPrevented ||
+				event.altKey ||
+				event.ctrlKey ||
+				event.metaKey ||
+				event.shiftKey ||
+				!this.galleryVisible ||
+				!this.showGallery ||
+				isTextEntry(event.target)
+			) {
+				return;
+			}
+			if (this.folderHistory.length === 0 && this.atRoot) {
+				return;
+			}
+			event.preventDefault();
+			void this.goBackFolder();
+		};
+		document.addEventListener('keydown', this.onGalleryKey);
 
 		// First launch lands on the Help page; an updated version surfaces the
 		// changelog once. (Moved from the old sidebar Settings toolbar.)
@@ -523,6 +978,20 @@ export default {
 			);
 		}
 		this.configFolderDisposer?.();
+		if (this.onDocumentPointer) {
+			document.removeEventListener('pointerdown', this.onDocumentPointer);
+			document.removeEventListener('keydown', this.onDocumentPointer);
+		}
+		if (this.onGalleryKey) {
+			document.removeEventListener('keydown', this.onGalleryKey);
+		}
+	},
+	activated() {
+		this.galleryVisible = true;
+	},
+	deactivated() {
+		this.galleryVisible = false;
+		this.closeFolderMenu();
 	},
 	methods: {
 		async loadReleases(showChangelogOnLoad) {
@@ -546,19 +1015,153 @@ export default {
 		screenshot(data) {
 			ipcRenderer.send('resize-screenshot', data);
 		},
+		// Show `folder` (the screenshot folder or one below it), optionally with
+		// `selectFile` selected; otherwise its newest image. The folder left is
+		// remembered for Backspace unless `remember` is false (going back itself,
+		// or falling back from a folder that vanished).
+		async openGalleryFolder(
+			folder: string,
+			selectFile: string | null = null,
+			remember = true
+		) {
+			const target = path.resolve(folder);
+			if (!isInsideFolder(rootDir, target)) {
+				return;
+			}
+			if (remember && !samePath(target, dir)) {
+				this.folderHistory.push({
+					folder: dir,
+					file: this.currentURL ? toFsPath(this.currentURL) : null,
+				});
+				if (this.folderHistory.length > MAX_FOLDER_HISTORY) {
+					this.folderHistory.shift();
+				}
+			}
+			this.closeFolderMenu();
+			dir = normalizeFolder(target);
+			this.currentFolder = dir;
+			this.currentURL = selectFile ? toDisplayPath(selectFile) : '';
+			this.selected = 0;
+			await this.loadGallery();
+		},
+		goUpFolder() {
+			if (this.atRoot) {
+				return;
+			}
+			void this.openGalleryFolder(path.dirname(path.resolve(dir)));
+		},
+		restoreRootFolder() {
+			void this.openGalleryFolder(rootDir);
+		},
+		// Back to the folder the gallery came from, with the image that was
+		// selected there, and the tile that was clicked focused so it is clear
+		// where you are. Nothing to go back to: up one folder.
+		async goBackFolder() {
+			const left = path.resolve(dir);
+			let entry = this.folderHistory.pop();
+			// Skip folders deleted or renamed since, and the one already on show.
+			while (
+				entry &&
+				(!fs.existsSync(entry.folder) ||
+					!isInsideFolder(rootDir, entry.folder) ||
+					samePath(entry.folder, dir))
+			) {
+				entry = this.folderHistory.pop();
+			}
+			if (entry) {
+				await this.openGalleryFolder(
+					entry.folder,
+					entry.file && fs.existsSync(entry.file) ? entry.file : null,
+					false
+				);
+			} else if (!this.atRoot) {
+				await this.openGalleryFolder(
+					path.dirname(path.resolve(dir)),
+					null,
+					false
+				);
+			} else {
+				return;
+			}
+			await this.$nextTick();
+			const tile = Array.from(
+				document.querySelectorAll<HTMLElement>('[data-folder-path]')
+			).find((el) => samePath(el.dataset.folderPath ?? '', left));
+			tile?.focus();
+		},
+		toggleFolderMenu() {
+			this.folderMenuOpen = !this.folderMenuOpen;
+			if (this.folderMenuOpen) {
+				void this.$nextTick(() => {
+					const first = (
+						this.$refs.folderMenu as HTMLElement | undefined
+					)?.querySelector('[role="menuitem"]') as HTMLElement | null;
+					first?.focus();
+				});
+			}
+		},
+		closeFolderMenu(returnFocus = false) {
+			if (!this.folderMenuOpen) {
+				return;
+			}
+			this.folderMenuOpen = false;
+			if (returnFocus) {
+				(this.$refs.folderMenuButton as HTMLElement | undefined)?.focus();
+			}
+		},
+		// Arrow keys move through the open folder menu.
+		onFolderMenuKey(event: KeyboardEvent) {
+			if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+				return;
+			}
+			event.preventDefault();
+			const items = Array.from(
+				(this.$refs.folderMenu as HTMLElement).querySelectorAll(
+					'[role="menuitem"]'
+				)
+			) as HTMLElement[];
+			const at = items.indexOf(document.activeElement as HTMLElement);
+			const next =
+				event.key === 'ArrowDown'
+					? Math.min(items.length - 1, at + 1)
+					: Math.max(0, at - 1);
+			items[next]?.focus();
+		},
+		// A click in the strip: an image is selected, a folder is opened.
 		selectIndex(absIdx: number) {
-			if (absIdx < 0 || absIdx >= this.items.length) return;
+			const item = this.items[absIdx];
+			if (!item) return;
+			if (item.kind === 'folder') {
+				void this.openGalleryFolder(item.folderPath);
+				return;
+			}
 			this.selected = absIdx;
 		},
+		// The wheel steps from image to image, over any folders between them.
 		onStripWheel(event: WheelEvent) {
-			const delta = (event.deltaY || 0) > 0 ? 1 : -1;
-			const next = Math.max(
-				0,
-				Math.min(this.items.length - 1, this.selected + delta)
-			);
-			if (next !== this.selected) {
-				this.selected = next;
+			const step = (event.deltaY || 0) > 0 ? 1 : -1;
+			for (
+				let next = this.selected + step;
+				next >= 0 && next < this.items.length;
+				next += step
+			) {
+				if (this.items[next].kind !== 'folder') {
+					this.selected = next;
+					return;
+				}
 			}
+		},
+		// The image nearest `index` (itself, then outwards, later ones first), or
+		// -1 when the strip holds no images.
+		nearestImageIndex(index: number): number {
+			for (let d = 0; d < this.items.length; d++) {
+				for (const i of [index + d, index - d]) {
+					if (this.items[i] && this.items[i].kind !== 'folder') {
+						return i;
+					}
+				}
+			}
+			return -1;
 		},
 		openExternally() {
 			shell.openPath(toFsPath(this.currentURL));
@@ -610,21 +1213,14 @@ export default {
 				return;
 			}
 
-			const index = this.items.findIndex((item) => item.file === filePath);
+			const index = this.items.findIndex(
+				(item) => item.kind !== 'folder' && item.file === filePath
+			);
 			if (index !== -1) {
 				this.items.splice(index, 1);
 			}
-
-			if (this.items.length === 0) {
-				this.selected = 0;
-				return;
-			}
-
-			this.selected = Math.max(
-				0,
-				Math.min(this.selected, this.items.length - 1)
-			);
-			this.currentURL = this.items[this.selected].file;
+			this.currentURL = '';
+			this.setSelectionFromItems();
 		},
 		setSelectionFromItems() {
 			if (this.items.length === 0) {
@@ -633,19 +1229,25 @@ export default {
 				return;
 			}
 
-			const currentIndex = this.items.findIndex(
-				(item) => item.file === this.currentURL
-			);
+			const currentIndex = this.currentURL
+				? this.items.findIndex(
+						(item) =>
+							item.kind !== 'folder' && item.file === this.currentURL
+					)
+				: -1;
 			if (currentIndex !== -1) {
 				this.selected = currentIndex;
 				return;
 			}
 
-			this.selected = Math.max(
+			const clamped = Math.max(
 				0,
 				Math.min(this.selected, this.items.length - 1)
 			);
-			this.currentURL = this.items[this.selected].file;
+			const image = this.nearestImageIndex(clamped);
+			// Only folders here: no image to show, the strip still lists them.
+			this.selected = image === -1 ? clamped : image;
+			this.currentURL = image === -1 ? '' : this.items[image].file;
 		},
 		async ensureWindowThumbnails(centerIndex: number, loadId: number) {
 			if (this.items.length === 0) {
@@ -676,6 +1278,14 @@ export default {
 						return;
 					}
 					try {
+						if (item.kind === 'folder') {
+							ensureThumbnailDir(
+								fs,
+								getCacheDir(),
+								rootDir,
+								item.folderPath
+							);
+						}
 						await ensureThumbnail(item.sourcePath, item.thumbFsPath);
 						if (loadId !== this.galleryLoadId) {
 							return;
@@ -694,31 +1304,49 @@ export default {
 		async loadGallery() {
 			const loadId = this.galleryLoadId + 1;
 			this.galleryLoadId = loadId;
+			// The image to land on, if one was asked for (openGalleryFolder with a
+			// file): the reset below clears currentURL before the listing is in.
+			const wantedURL = this.currentURL;
 			this.items = [];
 			this.generatingThumbs.clear();
 			this.setSelectionFromItems();
 
-			const entries = (await listGalleryEntries()).map((entry) => {
-				const thumbFsPath = getThumbnailPath(entry.fullPath);
-				return {
-					file: toDisplayPath(entry.fullPath),
-					// Always start blank; ensureWindowThumbnails fills in cached
-					// or freshly-resized thumbs for items in the active window.
-					// For already-cached items, ensureThumbnail returns early
-					// without doing sharp work, so cached thumbs surface
-					// near-instantly once the window includes them.
-					thumb: EMPTY_IMAGE,
-					thumbDisplayPath: toDisplayPath(thumbFsPath),
-					thumbFsPath,
-					sourcePath: entry.fullPath,
-				};
-			});
+			const folder = dir;
+			const listing = await listGalleryEntries();
+			if (loadId !== this.galleryLoadId) {
+				return;
+			}
+			if (listing.missing && !samePath(folder, rootDir)) {
+				// The folder was deleted or renamed from outside: back to the root.
+				void this.openGalleryFolder(rootDir, null, false);
+				return;
+			}
+			this.subfolders = listing.folders;
+
+			// Images and folders in one strip, newest first; a folder sits where
+			// its newest image would.
+			const entries = mergeGalleryEntries(
+				listing.images,
+				listing.folders
+			).map((m) =>
+				m.kind === 'folder'
+					? folderItem(m.entry)
+					: imageItem(m.entry.fullPath)
+			);
 
 			if (loadId !== this.galleryLoadId) {
 				return;
 			}
 
 			this.items = entries;
+			if (wantedURL && this.currentURL === '') {
+				const wantedIndex = entries.findIndex(
+					(entry) => entry.kind !== 'folder' && entry.file === wantedURL
+				);
+				if (wantedIndex !== -1) {
+					this.selected = wantedIndex;
+				}
+			}
 			this.setSelectionFromItems();
 
 			if (this.items.length !== 0) {
@@ -729,7 +1357,7 @@ export default {
 			// stale folder switches via loadId.
 			setTimeout(() => {
 				if (loadId === this.galleryLoadId) {
-					void cleanupThumbnailCache();
+					void cleanupThumbnailCache(folder);
 				}
 			}, 1500);
 		},
@@ -885,6 +1513,288 @@ body {
 
 .gallery-virtual__thumb--active img {
 	filter: brightness(1.08);
+}
+
+/* A folder tile: the cover image, dimmed, with the folder's name over it —
+   across the whole tile and wrapping, because strip tiles are narrow and a
+   grid folder's name ("Daytona grid 2026-11-17_22-42-36") is long. Same
+   footprint as an image thumbnail so the strip keeps its rhythm. */
+.gallery-virtual__thumb--folder {
+	position: relative;
+	border-color: rgba(255, 255, 255, 0.18);
+	background-color: rgba(255, 255, 255, 0.04);
+}
+
+.gallery-virtual__thumb--folder img {
+	filter: brightness(0.4);
+}
+
+.gallery-virtual__thumb--folder:hover {
+	border-color: rgba(255, 255, 255, 0.5);
+}
+
+.gallery-virtual__thumb--folder:hover img {
+	opacity: 1;
+	filter: brightness(0.55);
+}
+
+.gallery-virtual__thumb--folder:focus-visible {
+	outline: 2px solid #ec202a;
+	outline-offset: 2px;
+}
+
+.gallery-virtual__folder-blank {
+	width: 100%;
+	aspect-ratio: 16 / 9;
+}
+
+.gallery-virtual__folder-name {
+	position: absolute;
+	inset: 3px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 0 0.3rem 0.1rem;
+	color: #fff;
+	font-size: 0.62rem;
+	font-weight: 600;
+	line-height: 1.15;
+	text-align: center;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.gallery-virtual__folder-name svg {
+	position: absolute;
+	top: 0;
+	left: 1px;
+	color: #f5c451;
+	font-size: 0.55rem;
+	filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
+}
+
+.gallery-virtual__folder-name span {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	max-width: 100%;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+}
+
+/* Folder navigation bar. Same translucent band as the filename bar above it;
+   every control is a real <button> with a visible focus ring. */
+.gallery-folders {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 2.25rem;
+	padding: 0.25rem 0.5rem;
+	background-color: rgba(0, 0, 0, 0.2);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	font-size: 0.85rem;
+	position: relative;
+	z-index: 2;
+}
+
+.gallery-folders button {
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		border-color 0.15s ease,
+		opacity 0.15s ease;
+}
+
+.gallery-folders button:hover:not(:disabled) {
+	background-color: rgba(255, 255, 255, 0.08);
+}
+
+.gallery-folders button:focus-visible,
+.gallery-empty button:focus-visible {
+	outline: 2px solid #ec202a;
+	outline-offset: 1px;
+}
+
+.gallery-folders button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.gallery-folders__icon-btn {
+	width: 1.9rem;
+	height: 1.9rem;
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.gallery-folders__crumbs {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	/* Takes the free width, so the folder menu and the restore button sit at
+	   the far end in a fixed spot. */
+	flex: 1 1 auto;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	overflow: hidden;
+}
+
+.gallery-folders__crumb {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	flex-shrink: 1;
+}
+
+/* Earlier crumbs give up their width first; the current folder keeps its name
+   for as long as it can. */
+.gallery-folders__crumb:last-child {
+	flex-shrink: 0.15;
+}
+
+.gallery-folders__sep {
+	font-size: 0.6rem;
+	opacity: 0.45;
+	margin: 0 0.35rem;
+	flex-shrink: 0;
+}
+
+.gallery-folders__crumb-btn,
+.gallery-folders__current {
+	padding: 0.2rem 0.4rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+.gallery-folders__crumb-btn {
+	opacity: 0.75;
+}
+
+.gallery-folders__crumb-btn:hover {
+	opacity: 1;
+}
+
+.gallery-folders__current {
+	font-weight: 600;
+}
+
+.gallery-folders__menu {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.gallery-folders__menu-btn,
+.gallery-folders__restore {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	padding: 0.3rem 0.6rem;
+	white-space: nowrap;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.gallery-folders__caret {
+	font-size: 0.65rem;
+	transition: transform 0.15s ease;
+}
+
+.gallery-folders__caret.is-open {
+	transform: rotate(180deg);
+}
+
+.gallery-folders__list {
+	position: absolute;
+	top: calc(100% + 4px);
+	/* The button sits at the right end of the bar: open leftwards. */
+	right: 0;
+	min-width: 16rem;
+	max-width: 28rem;
+	max-height: 50vh;
+	overflow-y: auto;
+	margin: 0;
+	padding: 0.25rem;
+	list-style: none;
+	background: rgb(30, 30, 30);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+.gallery-folders__item {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.45rem 0.6rem;
+	text-align: left;
+}
+
+.gallery-folders__item span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.gallery-folders__item svg {
+	color: #ec202a;
+	flex-shrink: 0;
+}
+
+/* Pushed to the far end; its fixed spot means it is always in the same place
+   to reach for. */
+.gallery-folders__restore {
+	flex-shrink: 0;
+}
+
+.gallery-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.75rem;
+	color: rgba(255, 255, 255, 0.7);
+	text-align: center;
+}
+
+.gallery-empty p {
+	margin: 0;
+}
+
+.gallery-empty__icon {
+	font-size: 2.5rem;
+	opacity: 0.35;
+}
+
+.gallery-empty .gallery-folders__restore {
+	margin-left: 0;
+	font: inherit;
+	font-size: 0.85rem;
+	color: inherit;
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.gallery-empty .gallery-folders__restore:hover {
+	background-color: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.gallery-folders button,
+	.gallery-folders__caret {
+		transition: none;
+	}
 }
 
 /* Takes the leftover height and scrolls inside it. `min-height: 0` is the part

@@ -12,6 +12,7 @@ import {
 	readReplayState,
 } from '../replay-control';
 import type { GridCar } from './roster';
+import { PositionHistory, telemetryAtReplay } from './position-history';
 
 vi.mock('../../utilities/logger', () => ({
 	createLogger: () => ({
@@ -272,6 +273,99 @@ describe('runGrid', () => {
 		await g.run();
 		const tail = g.world.events.slice(-4);
 		expect(tail).toEqual([`seek:${ANCHOR}`, 'speed:1', 'camera:1', 'window']);
+	});
+
+	it('refuses a live session (cars move under a held frame) before touching any car, and still restores', async () => {
+		const g = setup({ 1: 0.3, 2: 0.25, 3: 0.4 });
+		// Live telemetry: the race runs on in wall-clock time whatever the replay
+		// frame says (measured 2026-11-17).
+		g.world.deps.readTelemetry = ((orig) => () => {
+			const t = orig();
+			const ms = g.world.deps.search.now();
+			return {
+				...t,
+				lapDistPct: t.lapDistPct.map((p) =>
+					p < 0 ? p : (p + ms / 100_000) % 1
+				),
+			};
+		})(g.world.deps.readTelemetry);
+		const out = await g.run();
+		expect(out.ok).toBe(false);
+		expect(out.refusal).toBe('live-telemetry');
+		expect(out.results).toEqual([]);
+		expect(g.shots).toEqual([]);
+		expect(g.world.events.some((e) => e.startsWith('camera:2'))).toBe(false);
+		expect(g.restoreWindow).toHaveBeenCalledTimes(1);
+	});
+
+	// The live-session path end to end: iRacing's telemetry follows the live race,
+	// the replay clock follows the frame (not at exactly 60 fps — measured 59.8 to
+	// 60.2), and the grid reads positions from the recording at the replay time.
+	it('shoots every car in a live session from the recorded positions', async () => {
+		const FPS = 59.8;
+		const g = setup({ 1: 0.3, 2: 0.25, 3: 0.4, 4: 0.9 });
+		const history = new PositionHistory();
+		const ids = [1, 2, 3, 4];
+		for (let t = 0; t <= TAPE_END / FPS; t += 0.1) {
+			const lapDistPct = new Array(64).fill(-1);
+			const trackSurface = new Array(64).fill(-1);
+			for (const idx of ids) {
+				lapDistPct[idx] = g.world.pctOf(idx, t * FPS);
+				trackSurface[idx] = 3;
+			}
+			history.record({
+				sessionNum: 0,
+				sessionTime: t,
+				lapDistPct,
+				trackSurface,
+				onPitRoad: new Array(64).fill(false),
+				racePosition: null,
+				lapCompleted: null,
+			});
+		}
+		const liveTelemetry = ((orig) => () => {
+			const t = orig();
+			const ms = g.world.deps.search.now();
+			return {
+				...t,
+				lapDistPct: t.lapDistPct.map((p) =>
+					p < 0 ? p : (p + ms / 100_000) % 1
+				),
+			};
+		})(g.world.deps.readTelemetry);
+		const atReplay = () =>
+			telemetryAtReplay(
+				{ ReplaySessionNum: 0, ReplaySessionTime: g.world.frame() / FPS },
+				liveTelemetry(),
+				'full',
+				history
+			);
+		g.world.deps.readTelemetry = () =>
+			atReplay().telemetry as ReturnType<typeof liveTelemetry>;
+		g.world.deps.search.readSample = (carIdx: number) => ({
+			frame: g.world.frame(),
+			pct: atReplay().telemetry.lapDistPct[carIdx],
+		});
+
+		const out = await g.run();
+		expect(out.refusal).toBe(null);
+		expect(out.results.map((r) => r.status)).toEqual([
+			'shot',
+			'shot',
+			'shot',
+			'shot',
+		]);
+		for (const shot of g.shots) {
+			// Within a frame of the reference distance (1/LAP of a lap).
+			expect(
+				Math.abs(g.world.pctOf(shot.carIdx, shot.frame) - 0.3)
+			).toBeLessThanOrEqual(1 / LAP);
+		}
+	});
+
+	it('a replay is not mistaken for a live session', async () => {
+		const out = await setup({ 1: 0.3, 2: 0.25 }).run();
+		expect(out.refusal).toBe(null);
 	});
 
 	it('records a camera that went to the wrong car and carries on', async () => {

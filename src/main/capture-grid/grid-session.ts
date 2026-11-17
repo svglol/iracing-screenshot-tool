@@ -45,6 +45,7 @@ import {
 	roomier,
 	type Clearance,
 } from './clearance';
+import { probeTelemetrySource } from './live-check';
 import {
 	readDrift,
 	restoreShot,
@@ -184,6 +185,9 @@ export interface GridOutcome {
 	ok: boolean;
 	aborted: boolean;
 	message: string | null;
+	// Why the grid refused before the first car, for the caller to word:
+	// 'live-telemetry' = the telemetry follows the live race, not the replay.
+	refusal: 'live-telemetry' | null;
 	results: GridCarResult[];
 	restore: RestoreResult | null;
 	cameraRestored: boolean;
@@ -250,6 +254,7 @@ export async function runGrid(
 
 	let restore: RestoreResult | null = null;
 	let cameraRestored = false;
+	let refusal: GridOutcome['refusal'] = null;
 
 	try {
 		deps.replay.pause();
@@ -259,6 +264,35 @@ export async function runGrid(
 				ok: false,
 				aborted: false,
 				message: prepared.message,
+				refusal: null,
+				results,
+				restore: null,
+				cameraRestored: false,
+			};
+		}
+
+		// The replay is paused: its telemetry should now hold still. If cars keep
+		// moving under a frame that does not, this is a live session and no seek
+		// will ever put a car where the search needs it (live-check.ts).
+		const probe = await probeTelemetrySource(
+			{
+				readFrame: () => {
+					const sample = deps.search.readSample(plan.cars[0]?.carIdx ?? 0);
+					return sample ? sample.frame : null;
+				},
+				readLapDistPct: () => deps.readTelemetry()?.lapDistPct ?? null,
+				delay: (ms) => deps.delay(ms),
+			},
+			signal
+		);
+		log.info('Grid telemetry source', probe);
+		if (probe.result === 'live') {
+			refusal = 'live-telemetry';
+			return {
+				ok: false,
+				aborted: false,
+				message: null,
+				refusal,
 				results,
 				restore: null,
 				cameraRestored: false,
@@ -586,6 +620,7 @@ export async function runGrid(
 		ok: !fatal,
 		aborted: signal.aborted,
 		message: fatal ? (message ?? 'iRacing stopped responding') : null,
+		refusal,
 		results,
 		restore,
 		cameraRestored,

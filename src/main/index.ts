@@ -22,6 +22,10 @@ const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
 import { listForeignModules } from '../utilities/foreign-modules';
+import {
+	ensureThumbnailDir,
+	galleryThumbnailPath,
+} from '../utilities/gallery-paths';
 import * as irsdk from './iracing-sdk';
 import {
 	resizeIracingWindow,
@@ -96,6 +100,14 @@ import {
 	type GridShotOutcome,
 	type ShotCheck,
 } from './capture-grid/grid-session';
+import {
+	PositionHistory,
+	ReplayClockModel,
+	historySampleFrom,
+	readSimMode,
+	telemetryAtReplay,
+	type ReplayTelemetry,
+} from './capture-grid/position-history';
 import { CaptureOverlay, type OverlayText } from './capture-overlay';
 import {
 	AbortHotkey,
@@ -1928,15 +1940,81 @@ function gridCaptureRequest(): CaptureRequestData {
 	};
 }
 
+// Live sessions: where every car was, recorded while the app runs, because
+// iRacing's per-car telemetry follows the live race and not the replay there
+// (capture-grid/position-history.ts). Saved replays never use it.
+const gridHistory = new PositionHistory();
+// Which session time each replay frame shows (position-history.ts): refined on
+// every telemetry update, so it has settled by the time a grid needs it.
+const gridReplayClock = new ReplayClockModel();
+let gridHistoryLogged = false;
+
+function currentSimMode(): string | null {
+	return readSimMode(iracing.sessionInfo?.data ?? null);
+}
+
+// Called on every telemetry update; keeps a sample ten times a second.
+function recordGridHistory(): void {
+	const values = iracing.telemetry?.values as
+		| Record<string, unknown>
+		| undefined;
+	if (!values || currentSimMode() !== 'full') {
+		return;
+	}
+	// Every frame/time pair sharpens the replay clock (see ReplayClockModel).
+	if (
+		typeof values.ReplaySessionNum === 'number' &&
+		typeof values.ReplayFrameNum === 'number' &&
+		typeof values.ReplaySessionTime === 'number'
+	) {
+		gridReplayClock.timeAt(
+			values.ReplaySessionNum,
+			values.ReplayFrameNum,
+			values.ReplaySessionTime
+		);
+	}
+	const sessionNum = values.SessionNum;
+	const sessionTime = values.SessionTime;
+	if (
+		typeof sessionNum !== 'number' ||
+		typeof sessionTime !== 'number' ||
+		!gridHistory.due(sessionNum, sessionTime)
+	) {
+		return;
+	}
+	const sample = historySampleFrom(values, readGridTelemetry(values));
+	if (sample && gridHistory.record(sample) && !gridHistoryLogged) {
+		gridHistoryLogged = true;
+		log.info('Live session: recording car positions for capture grid', {
+			sessionNum,
+			sessionTime,
+		});
+	}
+}
+
+// The grid's per-car telemetry at the frame the replay is showing.
+function gridTelemetryNow(
+	values: Record<string, unknown> | null
+): ReplayTelemetry {
+	return telemetryAtReplay(
+		values,
+		readGridTelemetry(values),
+		currentSimMode(),
+		gridHistory,
+		gridReplayClock
+	);
+}
+
 function readLiveGrid() {
 	const values =
 		(iracing.telemetry?.values as Record<string, unknown> | undefined) ||
 		null;
 	const session = iracing.sessionInfo?.data ?? null;
 	const drivers = readGridDrivers(session);
-	const roster = buildGridRoster(drivers, readGridTelemetry(values));
+	const replay = gridTelemetryNow(values);
+	const roster = buildGridRoster(drivers, replay.telemetry);
 	const view = readCameraView(values);
-	return { values, session, drivers, roster, view };
+	return { values, session, drivers, roster, view, source: replay.source };
 }
 
 function classColorHex(color: number | null): string | null {
@@ -1956,6 +2034,10 @@ ipcMain.handle('capture-grid:roster', () => {
 	return {
 		connected: iracing.telemetry != null,
 		running: gridSignal !== null,
+		// A live session read from the recording; `notRecorded` when the replay is
+		// on a moment from before the app was recording.
+		liveSession: live.source !== 'telemetry',
+		notRecorded: live.source === 'not-recorded',
 		mode: config.get('reshade') ? 'reshade' : 'standard',
 		reference:
 			reference && live.roster.referencePct !== null
@@ -2035,6 +2117,9 @@ ipcMain.handle(
 		);
 		const live = readLiveGrid();
 		const view = live.view;
+		if (live.source === 'not-recorded') {
+			return refuse(t('captureGrid.errors.notRecorded'));
+		}
 		if (
 			live.roster.referencePct === null ||
 			!view ||
@@ -2134,6 +2219,10 @@ ipcMain.handle(
 			camera: view,
 			cameraKind,
 			minGapMeters: plan.minGapMeters,
+			// 'history' = a live session read from the recording.
+			telemetrySource: live.source,
+			replaySessionTime: replayState.replaySessionTime,
+			recorded: live.source === 'telemetry' ? null : gridHistory.coverage(),
 			request: data,
 			outputDir,
 		});
@@ -2349,9 +2438,12 @@ ipcMain.handle(
 						if (!state) {
 							return null;
 						}
+						const replay = gridTelemetryNow(values);
 						return {
 							frame: state.replayFrameNum,
-							pct: carLapDistPct(readGridTelemetry(values), carIdx),
+							pct: carLapDistPct(replay.telemetry, carIdx),
+							notRecorded: replay.source === 'not-recorded',
+							clock: replay.clock,
 						};
 					},
 					seekAbsolute: (frame) => replayController.seekAbsolute(frame),
@@ -2360,9 +2452,9 @@ ipcMain.handle(
 				},
 				readTelemetry: () =>
 					iracing.telemetry
-						? readGridTelemetry(
+						? gridTelemetryNow(
 								iracing.telemetry.values as Record<string, unknown>
-							)
+							).telemetry
 						: null,
 				camera: {
 					readView: () =>
@@ -2418,9 +2510,15 @@ ipcMain.handle(
 				onProgress,
 			});
 
+			if (outcome.refusal === 'live-telemetry') {
+				log.warn('Capture grid rejected', { reason: 'live-telemetry' });
+			}
 			return {
 				ok: outcome.ok,
-				message: outcome.message,
+				message:
+					outcome.refusal === 'live-telemetry'
+						? t('captureGrid.errors.liveSession')
+						: outcome.message,
 				aborted: outcome.aborted,
 				results: outcome.results,
 				folder: outcome.results.some((r) => r.status === 'shot')
@@ -2776,6 +2874,10 @@ app.on('ready', async () => {
 		if (takingScreenshot) {
 			scheduleCaptureAbortOnDisconnect();
 		}
+		// The replay buffer goes with the sim; so does what was recorded of it.
+		gridHistory.clear();
+		gridReplayClock.reset();
+		gridHistoryLogged = false;
 		// A running grid stops at once: there is no sim left to seek or switch.
 		if (gridSignal) {
 			gridSignal.aborted = true;
@@ -3223,6 +3325,13 @@ app.on('ready', async () => {
 	});
 
 	iracing.on('update', () => {
+		try {
+			recordGridHistory();
+		} catch (error) {
+			log.warn('Capture grid position recording failed', {
+				error: (error as Error)?.message || String(error),
+			});
+		}
 		if (takingScreenshot && iracing.telemetry) {
 			const currentState =
 				(iracing.telemetry.values as { CamCameraState?: string[] })
@@ -3779,7 +3888,11 @@ async function saveWgcFrame(
 				fs.existsSync(path.join(screenshotDir, `${name}${ext}`)),
 		});
 		savedPath = path.join(screenshotDir, `${fileKey}${ext}`);
-		const thumbPath = path.join(cacheDir, `${fileKey}.webp`);
+		// Folder-aware: a grid folder's `Daytona-GNG B-0` must not share a
+		// thumbnail with the same name anywhere else (gallery-paths.ts).
+		const galleryRoot = path.resolve(config.get('screenshotFolder'));
+		ensureThumbnailDir(fs, cacheDir, galleryRoot, screenshotDir);
+		const thumbPath = galleryThumbnailPath(cacheDir, galleryRoot, savedPath);
 
 		const rawOptions = {
 			raw: {

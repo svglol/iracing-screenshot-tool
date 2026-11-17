@@ -53,6 +53,9 @@ import {
 	faDownload,
 	// Capture grid's start button.
 	faTableCells,
+	// Gallery folder bar: up one folder, back to the screenshot folder.
+	faArrowUp,
+	faHouse,
 } from '@fortawesome/free-solid-svg-icons';
 import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -81,6 +84,8 @@ library.add(
 	faFileImport,
 	faDownload,
 	faTableCells,
+	faArrowUp,
+	faHouse,
 	faDiscord
 );
 

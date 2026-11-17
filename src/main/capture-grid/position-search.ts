@@ -78,6 +78,12 @@ export interface CarSample {
 	// Distance around the lap, 0..1. Null when the car is not on the track at
 	// this frame.
 	pct: number | null;
+	// True when the distance is unknown because this moment of a live session
+	// was not recorded (position-history.ts) — not because the car left.
+	notRecorded?: boolean;
+	// The replay session time the distance was read at, when it came from the
+	// live-session recording; absent for iRacing's own telemetry.
+	clock?: number | null;
 }
 
 export interface PositionSearchDeps {
@@ -127,6 +133,7 @@ export function seekBudget(lapOffset: number): number {
 export type PositionSearchFailure =
 	| 'no-telemetry'
 	| 'not-in-world'
+	| 'not-recorded'
 	| 'not-moving'
 	| 'out-of-tape'
 	| 'seek-timeout'
@@ -179,6 +186,26 @@ export async function searchCarPosition(
 	let seeks = 0;
 	let usedOtherCrossing = false;
 	let current: Reading | null = null;
+	// Every seek, for the log: [asked, landed, pct, clock, polls].
+	const trace: Array<
+		[number, number | null, number | null, number | null, number]
+	> = [];
+	const traced = (
+		target: number,
+		landed: CarSample | PositionSearchFailure,
+		polls: number
+	) =>
+		trace.push(
+			typeof landed === 'string'
+				? [target, null, null, null, polls]
+				: [
+						target,
+						landed.frame,
+						landed.pct === null ? null : Number(landed.pct.toFixed(6)),
+						landed.clock ?? null,
+						polls,
+					]
+		);
 
 	const result = (
 		fields: Partial<PositionSearchResult>
@@ -198,6 +225,7 @@ export async function searchCarPosition(
 			targetPct: opts.targetPct,
 			lapOffset,
 			...out,
+			trace,
 		};
 		if (out.found) {
 			log.info('Grid position found', logFields);
@@ -218,7 +246,13 @@ export async function searchCarPosition(
 	let shownFrame = live.frame;
 	const first = opts.start ?? live;
 	if (first.pct === null) {
-		return result({ frame: first.frame, reason: 'not-in-world' });
+		return result({
+			frame: first.frame,
+			reason:
+				'notRecorded' in first && first.notRecorded
+					? 'not-recorded'
+					: 'not-in-world',
+		});
 	}
 	current = { frame: first.frame, pct: first.pct, unwrapped: first.pct };
 
@@ -247,14 +281,15 @@ export async function searchCarPosition(
 			carIdx,
 			toFrame,
 			shownFrame,
-			signal
+			signal,
+			(landed, polls) => traced(toFrame, landed, polls)
 		);
 		if (typeof landed === 'string') {
 			return landed;
 		}
 		shownFrame = landed.frame;
 		if (landed.pct === null) {
-			return 'not-in-world';
+			return landed.notRecorded ? 'not-recorded' : 'not-in-world';
 		}
 		// The step cap keeps real movement under half a lap, so the shortest way
 		// round IS the way the car went.
@@ -358,7 +393,8 @@ export async function searchCarPosition(
 				carIdx,
 				previous.frame,
 				-1,
-				signal
+				signal,
+				(landed, polls) => traced(previous.frame, landed, polls)
 			);
 			if (typeof back === 'string') {
 				return result({ reason: back });
@@ -378,7 +414,8 @@ export async function searchCarPosition(
 			carIdx,
 			previous.frame,
 			next.frame,
-			signal
+			signal,
+			(landed, polls) => traced(previous.frame, landed, polls)
 		);
 		if (typeof back === 'string') {
 			return result({ reason: back });
@@ -401,7 +438,8 @@ export async function searchCarPosition(
 			carIdx,
 			current.frame,
 			shownFrame,
-			signal
+			signal,
+			(landed, polls) => traced(current.frame, landed, polls)
 		);
 		if (typeof landed === 'string') {
 			return result({ reason: landed });
@@ -443,8 +481,14 @@ async function seekAndRead(
 	carIdx: number,
 	target: number,
 	fromFrame: number,
-	signal: { aborted: boolean } | undefined
+	signal: { aborted: boolean } | undefined,
+	onLanded?: (landed: CarSample | PositionSearchFailure, polls: number) => void
 ): Promise<CarSample | PositionSearchFailure> {
+	let polls = 0;
+	const done = (landed: CarSample | PositionSearchFailure) => {
+		onLanded?.(landed, polls);
+		return landed;
+	};
 	deps.seekAbsolute(target);
 	const started = deps.now();
 	let last: CarSample | null = null;
@@ -452,16 +496,20 @@ async function seekAndRead(
 
 	for (;;) {
 		if (signal?.aborted) {
-			return 'aborted';
+			return done('aborted');
 		}
 		const sample = safeRead(deps, carIdx);
+		polls += 1;
 		if (sample && sample.frame === target) {
 			agreeing =
-				last && last.frame === sample.frame && last.pct === sample.pct
+				last &&
+				last.frame === sample.frame &&
+				last.pct === sample.pct &&
+				(last.clock ?? null) === (sample.clock ?? null)
 					? agreeing + 1
 					: 1;
 			if (agreeing >= STABLE_READS) {
-				return sample;
+				return done(sample);
 			}
 		} else {
 			agreeing = 0;
@@ -476,9 +524,9 @@ async function seekAndRead(
 					target,
 					landed: last.frame,
 				});
-				return last;
+				return done(last);
 			}
-			return 'seek-timeout';
+			return done('seek-timeout');
 		}
 		await deps.delay(POLL_INTERVAL_MS);
 	}

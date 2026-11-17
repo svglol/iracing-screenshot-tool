@@ -292,6 +292,10 @@ export default {
 			roster: null as null | {
 				connected: boolean;
 				running: boolean;
+				// A live session, where positions come from the app's own recording;
+				// `notRecorded` when the replay is on a moment before it started.
+				liveSession?: boolean;
+				notRecorded?: boolean;
 				mode: 'standard' | 'reshade';
 				reference: {
 					carIdx: number;
@@ -359,7 +363,8 @@ export default {
 		},
 		unavailableText(): string {
 			const skipped = this.roster?.skipped ?? [];
-			if (skipped.length === 0) {
+			// Off the recording every car reads as off track; the notice says why.
+			if (skipped.length === 0 || this.roster?.notRecorded) {
 				return '';
 			}
 			const list = skipped
@@ -388,10 +393,20 @@ export default {
 				});
 				return notices;
 			}
-			if (!this.roster.reference) {
+			if (this.roster.notRecorded) {
+				notices.push({
+					level: 'warning',
+					text: this.$t('captureGrid.notices.notRecorded'),
+				});
+			} else if (!this.roster.reference) {
 				notices.push({
 					level: 'warning',
 					text: this.$t('captureGrid.notices.noReference'),
+				});
+			} else if (this.roster.liveSession) {
+				notices.push({
+					level: 'info',
+					text: this.$t('captureGrid.notices.liveSession'),
 				});
 			}
 			if (this.roster.cameraKind === 'trackside') {
