@@ -343,6 +343,67 @@ describe('searchCarPosition', () => {
 		expect(r.seeks).toBe(0);
 	});
 
+	// A live session read from the recording, where neighbouring frames can carry
+	// the SAME ReplaySessionTime (measured 2026-11-17: frames 108735 and 108736
+	// both read 1847.5300). Positions come from the clock, so those frames read
+	// identical distances — which must not count as a car that stopped.
+	it('treats frames sharing one replay time as the same moment, not a stopped car', async () => {
+		const tape = makeTape({ startFrame: 10_000, laps: steady(10_000, 0.2) });
+		// Every pair of frames shares a moment; every third pair, three frames do.
+		const momentFrame = (f: number) => {
+			const block = Math.floor(f / 7) * 7;
+			const r = f - block;
+			return block + (r < 2 ? 0 : r < 4 ? 2 : 4);
+		};
+		const deps: PositionSearchDeps = {
+			...tape.deps,
+			readSample: (carIdx) => {
+				const sample = tape.deps.readSample(carIdx);
+				if (!sample) return null;
+				const m = momentFrame(sample.frame);
+				return { frame: sample.frame, pct: tape.pctAt(m), clock: m / 60 };
+			},
+		};
+		for (const targetPct of [0.5, 0.21, 0.95, 0.2005]) {
+			const r = await searchCarPosition(deps, {
+				carIdx: CAR,
+				targetPct,
+				estLapTimeSec: 90,
+				tapeEndFrame: 1_000_000,
+			});
+			expect(r.reason).toBe(null);
+			expect(r.found).toBe(true);
+			// Within the moment step (up to 3 frames) of the target.
+			expect(Math.abs(r.errorLaps)).toBeLessThanOrEqual(3 / LAP_FRAMES);
+		}
+	});
+
+	// A live session read from the recording: frames before the app started
+	// recording have no position, and that is not the car leaving the track.
+	it('reports a spot the live-session recording does not cover', async () => {
+		const tape = makeTape({ startFrame: 10_000, laps: steady(10_000, 0.2) });
+		const recordedFrom = 9_000;
+		const deps: PositionSearchDeps = {
+			...tape.deps,
+			readSample: (carIdx) => {
+				const sample = tape.deps.readSample(carIdx);
+				return sample && sample.frame < recordedFrom
+					? { frame: sample.frame, pct: null, notRecorded: true }
+					: sample;
+			},
+		};
+		// The target is ~0.25 laps (1350 frames) behind: before the recording.
+		const r = await searchCarPosition(deps, {
+			carIdx: CAR,
+			targetPct: 0.95,
+			estLapTimeSec: 90,
+			tapeEndFrame: 1_000_000,
+			allowOtherCrossing: false,
+		});
+		expect(r.found).toBe(false);
+		expect(r.reason).toBe('not-recorded');
+	});
+
 	it('gives up on a car that never moves', async () => {
 		const tape = makeTape({ startFrame: 10_000, laps: () => 0.2 });
 		const r = await tape.search({ targetPct: 0.5 });

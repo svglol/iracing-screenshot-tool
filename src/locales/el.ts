@@ -687,6 +687,10 @@ const el: Catalog = {
 				'This is a TV or scenic camera. iRacing picks its own angle for each car, so the framing will vary. Use a chase or cockpit camera for a matching grid.',
 			reshade:
 				'ReShade mode: the grid lines up each car, then waits for you to press your ReShade screenshot key in iRacing.',
+			liveSession:
+				'Live session: the app records where every car is while it runs, and the grid uses that recording. Only moments from after the app started recording can be used.',
+			notRecorded:
+				'Live session: the replay is on a moment from before the app started recording car positions. Move the replay to a moment while the app was running.',
 		},
 		progress: {
 			positioning:
@@ -720,6 +724,8 @@ const el: Catalog = {
 			positionDidNotConverge: 'could not find the spot',
 			positionSeekTimeout: 'the replay did not respond',
 			positionNotInWorld: 'the car left the track',
+			positionNotRecorded:
+				'that spot is from before the app started recording (live session)',
 		},
 		errors: {
 			busy: 'Another capture is running. Wait for it to finish.',
@@ -727,6 +733,10 @@ const el: Catalog = {
 			noReference:
 				'Put the camera on a car that is on track. Its position is the spot every car is shot at.',
 			nothingSelected: 'Select at least one car.',
+			liveSession:
+				'iRacing is reporting where every car is in the live race, not where it was in the replay, so no car can be placed. Open the replay from the iRacing replay menu and try again.',
+			notRecorded:
+				'Live session: the replay is on a moment from before the app started recording car positions. Move the replay to a moment while the app was running.',
 			needsNativeCapture:
 				'Capture grid needs High-Fidelity Capture. Turn it on in Settings, or use ReShade mode.',
 			windowNotFound: 'iRacing window not found',
