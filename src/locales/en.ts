@@ -46,6 +46,15 @@ export default {
 			delete: 'Delete',
 		},
 		copiedToClipboard: '{name} copied to clipboard',
+		folders: {
+			label: 'Folder',
+			up: 'Up one folder',
+			subfolders: 'Folders ({count})',
+			subfoldersLabel: 'Folders here',
+			open: 'Open folder {name}',
+			backToRoot: 'Back to screenshot folder',
+			empty: 'No screenshots in this folder.',
+		},
 	},
 
 	sidebar: {

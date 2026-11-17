@@ -22,6 +22,10 @@ const loadIniFile = require('read-ini-file');
 
 import configModule from '../utilities/config';
 import { listForeignModules } from '../utilities/foreign-modules';
+import {
+	ensureThumbnailDir,
+	galleryThumbnailPath,
+} from '../utilities/gallery-paths';
 import * as irsdk from './iracing-sdk';
 import {
 	resizeIracingWindow,
@@ -3884,7 +3888,11 @@ async function saveWgcFrame(
 				fs.existsSync(path.join(screenshotDir, `${name}${ext}`)),
 		});
 		savedPath = path.join(screenshotDir, `${fileKey}${ext}`);
-		const thumbPath = path.join(cacheDir, `${fileKey}.webp`);
+		// Folder-aware: a grid folder's `Daytona-GNG B-0` must not share a
+		// thumbnail with the same name anywhere else (gallery-paths.ts).
+		const galleryRoot = path.resolve(config.get('screenshotFolder'));
+		ensureThumbnailDir(fs, cacheDir, galleryRoot, screenshotDir);
+		const thumbPath = galleryThumbnailPath(cacheDir, galleryRoot, savedPath);
 
 		const rawOptions = {
 			raw: {

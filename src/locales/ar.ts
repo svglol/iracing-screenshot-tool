@@ -47,6 +47,15 @@ const ar: Catalog = {
 			delete: 'حذف',
 		},
 		copiedToClipboard: 'تم نسخ {name} إلى الحافظة',
+		folders: {
+			label: 'Folder',
+			up: 'Up one folder',
+			subfolders: 'Folders ({count})',
+			subfoldersLabel: 'Folders here',
+			open: 'Open folder {name}',
+			backToRoot: 'Back to screenshot folder',
+			empty: 'No screenshots in this folder.',
+		},
 	},
 
 	sidebar: {

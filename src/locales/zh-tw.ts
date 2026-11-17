@@ -36,6 +36,15 @@ const zhTW: Catalog = {
 			delete: '刪除',
 		},
 		copiedToClipboard: '已將 {name} 複製到剪貼簿',
+		folders: {
+			label: 'Folder',
+			up: 'Up one folder',
+			subfolders: 'Folders ({count})',
+			subfoldersLabel: 'Folders here',
+			open: 'Open folder {name}',
+			backToRoot: 'Back to screenshot folder',
+			empty: 'No screenshots in this folder.',
+		},
 	},
 
 	sidebar: {

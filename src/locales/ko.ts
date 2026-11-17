@@ -35,6 +35,15 @@ const ko: Catalog = {
 			delete: '삭제',
 		},
 		copiedToClipboard: '{name}을(를) 클립보드에 복사했습니다',
+		folders: {
+			label: 'Folder',
+			up: 'Up one folder',
+			subfolders: 'Folders ({count})',
+			subfoldersLabel: 'Folders here',
+			open: 'Open folder {name}',
+			backToRoot: 'Back to screenshot folder',
+			empty: 'No screenshots in this folder.',
+		},
 	},
 
 	sidebar: {

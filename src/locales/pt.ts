@@ -31,6 +31,15 @@ const pt: Catalog = {
 			delete: 'Eliminar',
 		},
 		copiedToClipboard: '{name} copiado para a área de transferência',
+		folders: {
+			label: 'Folder',
+			up: 'Up one folder',
+			subfolders: 'Folders ({count})',
+			subfoldersLabel: 'Folders here',
+			open: 'Open folder {name}',
+			backToRoot: 'Back to screenshot folder',
+			empty: 'No screenshots in this folder.',
+		},
 	},
 
 	sidebar: {

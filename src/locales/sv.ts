@@ -30,6 +30,15 @@ const sv: Catalog = {
 			delete: 'Ta bort',
 		},
 		copiedToClipboard: '{name} kopierad till urklipp',
+		folders: {
+			label: 'Folder',
+			up: 'Up one folder',
+			subfolders: 'Folders ({count})',
+			subfoldersLabel: 'Folders here',
+			open: 'Open folder {name}',
+			backToRoot: 'Back to screenshot folder',
+			empty: 'No screenshots in this folder.',
+		},
 	},
 
 	sidebar: {
