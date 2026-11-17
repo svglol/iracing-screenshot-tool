@@ -24,7 +24,7 @@
 		"better-sqlite3": "12.9.0",
 		"discord.js": "14.27.0",
 		"dotenv": "17.4.2",
-		"fastify": "5.8.5",
+		"fastify": "5.12.1",
 		"fastify-raw-body": "5.0.0",
 		"pino": "10.3.1",
 		"pino-roll": "4.0.0"
